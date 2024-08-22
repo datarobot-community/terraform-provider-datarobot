@@ -5,11 +5,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
-	mock_client "github.com/omnistrate/terraform-provider-datarobot/mock"
 )
 
 var globalModelNames = []string{

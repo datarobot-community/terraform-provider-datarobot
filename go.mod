@@ -1,4 +1,4 @@
-module github.com/omnistrate/terraform-provider-datarobot
+module github.com/datarobot-community/terraform-provider-datarobot
 
 go 1.21
 

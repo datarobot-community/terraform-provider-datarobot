@@ -1,25 +1,19 @@
 HOSTNAME=registry.terraform.io
-NAMESPACE=omnistrate
+NAMESPACE=datarobot
 NAME=datarobot
 BINARY=terraform-provider-${NAME}
 VERSION=0.0.10
 OS_ARCH=darwin_arm64
 
-default: tidy build lint install
+default: lint install
 
-.PHONY: generate
-generate:
-	go generate
-
-.PHONY: tidy
-tidy:
-	go mod tidy
-
-.PHONY: build
 build:
 	go build -o ${BINARY}
 
-.PHONY: release
+# Generate Terraform Provider docs.
+generate:
+	go generate
+
 release:
 	GOOS=darwin GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_darwin_amd64
 	GOOS=freebsd GOARCH=386 go build -o ./bin/${BINARY}_${VERSION}_freebsd_386
@@ -34,26 +28,16 @@ release:
 	GOOS=windows GOARCH=386 go build -o ./bin/${BINARY}_${VERSION}_windows_386
 	GOOS=windows GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_windows_amd64
 
-.PHONY: install
 install: build
 	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
 	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
 
-.PHONY: clean
-clean:
-	rm -f ${BINARY}
-	rm -rf  ~/.terraform.d/plugins/registry.terraform.io/${NAMESPACE}
-
-.PHONY: test
 test:
 	go test ./... -v $(TESTARGS) -timeout 5m
 
-# Run acceptance tests
-.PHONY: testacc
 testacc:
-	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m
+	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -paralleldot0
 
-.PHONY: lint
 lint:
 	echo "Running checks for service"
 	golangci-lint run ./...
