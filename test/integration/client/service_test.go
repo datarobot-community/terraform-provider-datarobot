@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

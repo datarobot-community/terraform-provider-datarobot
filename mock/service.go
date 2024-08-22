@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	client "github.com/omnistrate/terraform-provider-datarobot/internal/client"
+	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 )
 
 // MockService is a mock of Service interface.
