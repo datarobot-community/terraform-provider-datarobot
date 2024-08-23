@@ -17,6 +17,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_registered_model.test"
+	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	resource.Test(t, resource.TestCase{
@@ -28,6 +29,12 @@ func TestAccRegisteredModelResource(t *testing.T) {
 			// Create and Read
 			{
 				Config: registeredModelResourceConfig("example_name", "example_description", "1"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -41,6 +48,10 @@ func TestAccRegisteredModelResource(t *testing.T) {
 				Config: registeredModelResourceConfig("new_example_name", "new_example_description", "1"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),

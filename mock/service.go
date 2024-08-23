@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
 	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockService is a mock of Service interface.

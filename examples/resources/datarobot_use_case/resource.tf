@@ -1,6 +1,5 @@
 resource "datarobot_use_case" "example" {
-  name        = "An example use case"
-  description = "Description for the example use case"
+  name = "Example use case"
 }
 
 output "example_id" {

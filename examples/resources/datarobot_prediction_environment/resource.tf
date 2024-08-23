@@ -1,5 +1,5 @@
-resource "datarobot_prediction_environment" "toxicity_prediction_environment" {
+resource "datarobot_prediction_environment" "example" {
   name        = "Example Prediction Environment"
   description = "Description for the example prediction environment"
-  platform    = "aws"
+  platform    = "datarobotServerless"
 }

@@ -50,7 +50,7 @@ func (r *ApiTokenCredentialResource) Schema(ctx context.Context, req resource.Sc
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Api Token Credential.",
-				Required:            true,
+				Optional:            true,
 			},
 			"api_token": schema.StringAttribute{
 				MarkdownDescription: "The description of the Api Token Credential.",
@@ -128,7 +128,7 @@ func (r *ApiTokenCredentialResource) Read(ctx context.Context, req resource.Read
 
 	data.Name = types.StringValue(credential.Name)
 	data.Description = types.StringValue(credential.Description)
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ApiTokenCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

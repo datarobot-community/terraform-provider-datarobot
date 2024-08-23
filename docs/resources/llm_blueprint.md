@@ -13,12 +13,21 @@ LLMBlueprint
 ## Example Usage
 
 ```terraform
+resource "datarobot_use_case" "example" {
+  name = "Example use case"
+}
+
+resource "datarobot_playground" "example" {
+  name        = "An example playground"
+  description = "Description for the example playground"
+  use_case_id = datarobot_use_case.example.id
+}
+
 resource "datarobot_llm_blueprint" "example" {
-  name               = "An example LLM blueprint"
-  description        = "Description for the example LLM blueprint"
-  playground_id      = datarobot_playground.example.id
-  vector_database_id = datarobot_vector_database.example.id
-  llm_id             = "azure-openai-gpt-3.5-turbo"
+  name          = "An example LLM blueprint"
+  description   = "Description for the example LLM blueprint"
+  playground_id = datarobot_playground.example.id
+  llm_id        = "azure-openai-gpt-3.5-turbo"
 }
 
 output "example_id" {
@@ -32,13 +41,13 @@ output "example_id" {
 
 ### Required
 
-- `description` (String) The description of the LLM Blueprint.
 - `llm_id` (String) The id of the LLM for the LLM Blueprint.
 - `name` (String) The name of the LLM Blueprint.
 - `playground_id` (String) The id of the Playground for the LLM Blueprint.
 
 ### Optional
 
+- `description` (String) The description of the LLM Blueprint.
 - `vector_database_id` (String) The id of the Vector Database for the LLM Blueprint.
 
 ### Read-Only

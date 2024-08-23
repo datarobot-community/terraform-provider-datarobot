@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestAccDataSourceFromFileResource(t *testing.T) {
+func TestAccDatasetFromFileResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_dataset_from_file.test"
 	resource.Test(t, resource.TestCase{
@@ -21,10 +21,9 @@ func TestAccDataSourceFromFileResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: dataSourceFromFileResourceConfig("example_name", "../../datarobot_english_documentation_docsassist.zip"),
+				Config: datasetFromFileResourceConfig("../../datarobot_english_documentation_docsassist.zip"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDataSourceFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					checkDatasetFromFileResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "source_file", "../../datarobot_english_documentation_docsassist.zip"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
@@ -32,10 +31,9 @@ func TestAccDataSourceFromFileResource(t *testing.T) {
 			},
 			// Update name
 			{
-				Config: dataSourceFromFileResourceConfig("new_example_name", "../../datarobot_english_documentation_docsassist.zip"),
+				Config: datasetFromFileResourceConfig("../../datarobot_english_documentation_docsassist.zip"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDataSourceFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					checkDatasetFromFileResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "source_file", "../../datarobot_english_documentation_docsassist.zip"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
@@ -48,7 +46,7 @@ func TestAccDataSourceFromFileResource(t *testing.T) {
 	})
 }
 
-func dataSourceFromFileResourceConfig(name, source_file string) string {
+func datasetFromFileResourceConfig(source_file string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_datasource" {
 	  name = "test"
@@ -56,14 +54,13 @@ resource "datarobot_use_case" "test_datasource" {
 }
 
 resource "datarobot_dataset_from_file" "test" {
-	  name = "%s"
 	  source_file = "%s"
 	  use_case_id = "${datarobot_use_case.test_datasource.id}"
 }
-`, name, source_file)
+`, source_file)
 }
 
-func checkDataSourceFromFileResourceExists(resourceName string) resource.TestCheckFunc {
+func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {

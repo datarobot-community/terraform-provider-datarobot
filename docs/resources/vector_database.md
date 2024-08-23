@@ -13,6 +13,11 @@ Vector database
 ## Example Usage
 
 ```terraform
+resource "datarobot_use_case" "example" {
+  name        = "An example use case"
+  description = "Description for the example use case"
+}
+
 resource "datarobot_vector_database" "example" {
   name        = "An example vector database"
   use_case_id = datarobot_use_case.example.id

@@ -1,3 +1,24 @@
+resource "datarobot_custom_model" "example" {
+  name                  = "Example Custom Model"
+  description           = "Description for the example custom model"
+  target_type           = "Binary"
+  target                = "my_label"
+  base_environment_name = "[GenAI] Python 3.11 with Moderations"
+  local_files           = ["example.py"]
+}
+
+resource "datarobot_registered_model" "example" {
+  custom_model_version_id = datarobot_custom_model.example.version_id
+  name                    = "Example Registered Model"
+  description             = "Description for the example registered model"
+}
+
+resource "datarobot_prediction_environment" "example" {
+  name        = "Example Prediction Environment"
+  description = "Description for the example prediction environment"
+  platform    = "datarobotServerless"
+}
+
 resource "datarobot_deployment" "example" {
   label                       = "An example deployment"
   prediction_environment_id   = datarobot_prediction_environment.example.id
@@ -6,10 +27,6 @@ resource "datarobot_deployment" "example" {
   # Optional settings
   settings = {
     prediction_row_storage = true
-    association_id = {
-      auto_generate_id = true
-      feature_name     = "example_feature"
-    }
   }
 }
 

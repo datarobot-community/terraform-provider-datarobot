@@ -36,8 +36,11 @@ output "datarobot_registered_model_version_id" {
 ### Required
 
 - `custom_model_version_id` (String) The ID of the custom model version for this Registered Model.
-- `description` (String) The description of the Registered Model.
 - `name` (String) The name of the Registered Model.
+
+### Optional
+
+- `description` (String) The description of the Registered Model.
 
 ### Read-Only
 

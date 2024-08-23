@@ -14,8 +14,7 @@ Use case
 
 ```terraform
 resource "datarobot_use_case" "example" {
-  name        = "An example use case"
-  description = "Description for the example use case"
+  name = "Example use case"
 }
 
 output "example_id" {
@@ -29,8 +28,11 @@ output "example_id" {
 
 ### Required
 
-- `description` (String) The description of the Use Case.
 - `name` (String) The name of the Use Case.
+
+### Optional
+
+- `description` (String) The description of the Use Case.
 
 ### Read-Only
 

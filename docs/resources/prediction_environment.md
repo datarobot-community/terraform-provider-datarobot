@@ -13,10 +13,10 @@ prediction environment
 ## Example Usage
 
 ```terraform
-resource "datarobot_prediction_environment" "toxicity_prediction_environment" {
+resource "datarobot_prediction_environment" "example" {
   name        = "Example Prediction Environment"
   description = "Description for the example prediction environment"
-  platform    = "aws"
+  platform    = "datarobotServerless"
 }
 ```
 
@@ -25,9 +25,12 @@ resource "datarobot_prediction_environment" "toxicity_prediction_environment" {
 
 ### Required
 
-- `description` (String) The description of the Prediction Environment.
 - `name` (String) The name of the Prediction Environment.
 - `platform` (String) The platform for the Prediction Environment.
+
+### Optional
+
+- `description` (String) The description of the Prediction Environment.
 
 ### Read-Only
 
