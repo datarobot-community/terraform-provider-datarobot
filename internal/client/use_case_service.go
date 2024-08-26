@@ -7,7 +7,7 @@ type CreateUseCaseResponse struct {
 type UseCaseResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Description string `json:"description"`
+	Description string `json:"description,omitempty"`
 }
 
 type UseCaseRequest struct {

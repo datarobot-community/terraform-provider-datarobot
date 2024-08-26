@@ -50,7 +50,7 @@ func (r *UseCaseResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Use Case.",
-				Required:            true,
+				Optional:            true,
 			},
 		},
 	}
@@ -72,76 +72,46 @@ func (r *UseCaseResource) Configure(ctx context.Context, req resource.ConfigureR
 }
 
 func (r *UseCaseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data UseCaseResourceModel
 
-	var plan UseCaseResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	traceAPICall("CreateUseCase")
-	name := plan.Name.ValueString()
-	description := plan.Description.ValueString()
 	createResp, err := r.provider.service.CreateUseCase(ctx, &client.UseCaseRequest{
-		Name:        name,
-		Description: description,
+		Name:        data.Name.ValueString(),
+		Description: data.Description.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating Use Case",
-			fmt.Sprintf("Unable to create Use Case, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error creating Use Case", err.Error())
 		return
 	}
+	data.ID = types.StringValue(createResp.ID)
 
-	var state UseCaseResourceModel
-	loadUseCaseToTerraformState(createResp.ID, name, description, &state)
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UseCaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data UseCaseResourceModel
 
-	var state UseCaseResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
+	if data.ID.IsNull() {
 		return
 	}
 
-	id := state.ID.ValueString()
-
 	traceAPICall("GetUseCase")
-	useCase, err := r.provider.service.GetUseCase(ctx, id)
+	useCase, err := r.provider.service.GetUseCase(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
 				"Use Case not found",
-				fmt.Sprintf("Use Case with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("Use Case with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
@@ -151,62 +121,34 @@ func (r *UseCaseResource) Read(ctx context.Context, req resource.ReadRequest, re
 		}
 		return
 	}
-
-	loadUseCaseToTerraformState(useCase.ID, useCase.Name, useCase.Description, &state)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
+	data.Name = types.StringValue(useCase.Name)
+	if useCase.Description != "" {
+		data.Description = types.StringValue(useCase.Description)
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *UseCaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data UseCaseResourceModel
 
-	var plan UseCaseResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	var state UseCaseResourceModel
-
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// If the only fields that can be updated don't change, just return.
-	newName := plan.Name.ValueString()
-	newDescription := plan.Description.ValueString()
-	if state.Name.ValueString() == newName &&
-		state.Description.ValueString() == newDescription {
-		return
-	}
-
-	id := state.ID.ValueString()
 
 	traceAPICall("UpdateUseCase")
-	useCase, err := r.provider.service.UpdateUseCase(ctx,
-		id,
+	_, err := r.provider.service.UpdateUseCase(ctx,
+		data.ID.ValueString(),
 		&client.UseCaseRequest{
-			Name:        plan.Name.ValueString(),
-			Description: plan.Description.ValueString(),
+			Name:        data.Name.ValueString(),
+			Description: data.Description.ValueString(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
 				"Use Case not found",
-				fmt.Sprintf("Use Case with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("Use Case with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
@@ -217,60 +159,27 @@ func (r *UseCaseResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	loadUseCaseToTerraformState(id, useCase.Name, useCase.Description, &state)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UseCaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data UseCaseResourceModel
 
-	var state UseCaseResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
 	traceAPICall("DeleteUseCase")
-	err := r.provider.service.DeleteUseCase(ctx, id)
+	err := r.provider.service.DeleteUseCase(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// use case is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting Use Case info",
-				fmt.Sprintf("Unable to get  example, got error: %s", err),
-			)
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error getting Use Case info", err.Error())
+			return
 		}
-		return
 	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
 }
 
 func (r *UseCaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func loadUseCaseToTerraformState(id, name, description string, state *UseCaseResourceModel) {
-	state.ID = types.StringValue(id)
-	state.Name = types.StringValue(name)
-	state.Description = types.StringValue(description)
 }

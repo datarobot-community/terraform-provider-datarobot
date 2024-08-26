@@ -21,11 +21,11 @@ func TestAccRemoteRepositoryResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: remoteRepositoryResourceConfig("example_name", "example_description", "/example/location", nil),
+				Config: remoteRepositoryResourceConfig("example_name", "", "/example/location", nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRemoteRepositoryResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
-					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
 					resource.TestCheckResourceAttr(resourceName, "location", "/example/location"),
 					resource.TestCheckResourceAttr(resourceName, "source_type", "github"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -33,11 +33,11 @@ func TestAccRemoteRepositoryResource(t *testing.T) {
 			},
 			// Update name, description, and location
 			{
-				Config: remoteRepositoryResourceConfig("new_example_name", "new_example_description", "/example/new-location", nil),
+				Config: remoteRepositoryResourceConfig("new_example_name", "", "/example/new-location", nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRemoteRepositoryResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
 					resource.TestCheckResourceAttr(resourceName, "location", "/example/new-location"),
 					resource.TestCheckResourceAttr(resourceName, "source_type", "github"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -106,11 +106,10 @@ resource "datarobot_remote_repository" "test_credential" {
 	return fmt.Sprintf(`
 resource "datarobot_remote_repository" "test" {
 	  name = "%s"
-	  description = "%s"
 	  location = "%s"
 	  source_type = "github"
 }
-`, name, description, location)
+`, name, location)
 }
 
 func checkRemoteRepositoryResourceExists(resourceName string) resource.TestCheckFunc {

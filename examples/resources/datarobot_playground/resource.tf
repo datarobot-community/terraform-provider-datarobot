@@ -1,6 +1,9 @@
+resource "datarobot_use_case" "example" {
+  name = "Example use case"
+}
+
 resource "datarobot_playground" "example" {
   name        = "An example playground"
-  description = "Description for the example playground"
   use_case_id = datarobot_use_case.example.id
 }
 

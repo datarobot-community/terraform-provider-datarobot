@@ -71,7 +71,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Custom Model.",
-				Required:            true,
+				Optional:            true,
 			},
 			"source_llm_blueprint_id": schema.StringAttribute{
 				Optional:            true,
@@ -103,7 +103,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"runtime_parameters": schema.ListNestedAttribute{
 				Optional:            true,
-				Computed:            true,
+				// Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{

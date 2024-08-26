@@ -49,8 +49,7 @@ resource "datarobot_use_case" "test_chat_application" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_chat_application" {
-	name = "test chat application dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_id = "${datarobot_use_case.test_chat_application.id}"
 }
 resource "datarobot_vector_database" "test_chat_application" {

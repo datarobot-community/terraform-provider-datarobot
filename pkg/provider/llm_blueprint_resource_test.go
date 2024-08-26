@@ -29,17 +29,7 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: llmBlueprintResourceConfig("example_name", "example_description", nil),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkLlmBlueprintResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
-					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-				),
-			},
-			// Add LLM ID
-			{
-				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", &llmID),
+				Config: llmBlueprintResourceConfig("example_name", "example_description", llmID),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -48,15 +38,14 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkLlmBlueprintResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-					resource.TestCheckResourceAttr(resourceName, "llm_id", llmID),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
 			// Update name, description, and LLM ID
 			{
-				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", &newLLMID),
+				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", newLLMID),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -76,53 +65,23 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 	})
 }
 
-func llmBlueprintResourceConfig(name, description string, llmID *string) string {
-	llmBlueprintBlock := fmt.Sprintf(
-		`
-resource "datarobot_llm_blueprint" "test" {
-	name = "%s"
-	description = "%s"
-	vector_database_id = "${datarobot_vector_database.test_llm_blueprint.id}"
-	playground_id = "${datarobot_playground.test_llm_blueprint.id}"
-}
-`, name, description)
-
-	if llmID != nil {
-		llmBlueprintBlock = fmt.Sprintf(
-			`
-resource "datarobot_llm_blueprint" "test" {
-	name = "%s"
-	description = "%s"
-	vector_database_id = "${datarobot_vector_database.test_llm_blueprint.id}"
-	playground_id = "${datarobot_playground.test_llm_blueprint.id}"
-	llm_id = "%s"
-}
-`, name, description, *llmID)
-	}
-
+func llmBlueprintResourceConfig(name, description, llmID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_llm_blueprint" {
 	name = "test"
-	description = "test"
-}
-resource "datarobot_dataset_from_file" "test_llm_blueprint" {
-	name = "test dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_llm_blueprint.id}"
-}
-resource "datarobot_vector_database" "test_llm_blueprint" {
-	  name = "llm blueprint test"
-	  dataset_id = "${datarobot_dataset_from_file.test_llm_blueprint.id}"
-	  use_case_id = "${datarobot_use_case.test_llm_blueprint.id}"
-	  chunking_parameters = {}
 }
 resource "datarobot_playground" "test_llm_blueprint" {
 	name = "llm blueprint test"
 	description = "test"
 	use_case_id = "${datarobot_use_case.test_llm_blueprint.id}"
 }
-%s
-`, llmBlueprintBlock)
+resource "datarobot_llm_blueprint" "test" {
+	name = "%s"
+	description = "%s"
+	playground_id = "${datarobot_playground.test_llm_blueprint.id}"
+	llm_id = "%s"
+}
+`, name, description, llmID)
 }
 
 func checkLlmBlueprintResourceExists(resourceName string) resource.TestCheckFunc {

@@ -161,57 +161,39 @@ func (r *VectorDatabaseResource) Configure(ctx context.Context, req resource.Con
 }
 
 func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data VectorDatabaseResourceModel
 
-	var plan VectorDatabaseResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var datasetID string
-	if IsKnown(plan.DatasetID) {
-		datasetID = plan.DatasetID.ValueString()
+	if IsKnown(data.DatasetID) {
+		datasetID = data.DatasetID.ValueString()
 		_, err := r.provider.service.GetDataset(ctx, datasetID)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error getting Dataset info",
-				fmt.Sprintf("Unable to get Dataset, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
 			return
 		}
 		err = r.waitForDatasetToBeReady(ctx, datasetID)
 		if err != nil {
-			resp.Diagnostics.AddError("Dataset not ready",
-				"Dataset is not ready after 5 minutes or failed to check the status.")
+			resp.Diagnostics.AddError("Dataset not ready", err.Error())
 			return
 		}
 	}
 
 	var useCaseID string
-	if IsKnown(plan.UseCaseID) {
-		useCaseID = plan.UseCaseID.ValueString()
+	if IsKnown(data.UseCaseID) {
+		useCaseID = data.UseCaseID.ValueString()
 		_, err := r.provider.service.GetUseCase(ctx, useCaseID)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error getting Use Case",
-				fmt.Sprintf("Unable to get Use Case, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error getting Use Case", err.Error())
 			return
 		}
 	}
 
-	chunkingParameters := plan.ChunkingParameters
+	chunkingParameters := data.ChunkingParameters
 	separators := make([]string, 0)
 	for _, separator := range chunkingParameters.Separators.Elements() {
 		separators = append(separators, separator.String())
@@ -221,7 +203,7 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 	createResp, err := r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
 		DatasetID: datasetID,
 		UseCaseID: useCaseID,
-		Name:      plan.Name.ValueString(),
+		Name:      data.Name.ValueString(),
 		ChunkingParameters: client.ChunkingParameters{
 			EmbeddingModel:         chunkingParameters.EmbeddingModel.ValueString(),
 			ChunkOverlapPercentage: chunkingParameters.ChunkOverlapPercentage.ValueInt32(),
@@ -232,47 +214,124 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 		},
 	})
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating VectorDatabase",
-			fmt.Sprintf("Unable to create VectorDatabase, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error creating VectorDatabase", err.Error())
+		return
+	}
+	data.ID = types.StringValue(createResp.ID)
+
+	err = r.waitForVectorDatabaseToBeReady(ctx, createResp.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Vector Database not ready", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+}
+
+func (r *VectorDatabaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data VectorDatabaseResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if data.ID.IsNull() {
 		return
 	}
 
 	traceAPICall("GetVectorDatabase")
-	getVectorDatabase, err := r.provider.service.GetVectorDatabase(ctx, createResp.ID)
+	vectorDatabase, err := r.provider.service.GetVectorDatabase(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error getting VectorDatabase info",
-			fmt.Sprintf("Unable to get VectorDatabase, got error: %s", err),
-		)
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"VectorDatabase not found",
+				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", data.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError("Error getting VectorDatabase", err.Error())
+		}
 		return
 	}
+	data.Name = types.StringValue(vectorDatabase.Name)
+	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
+	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)
 
-	// Wait for the VectorDatabase to be ready
-	err = r.waitForVectorDatabaseToBeReady(ctx, createResp.ID)
-	if err != nil {
-		resp.Diagnostics.AddError("Vector Database not ready",
-			"Vector Database is not ready after 5 minutes or failed to check the status.")
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan VectorDatabaseResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var state VectorDatabaseResourceModel
 
-	loadVectorDatabaseFromFileToTerraformState(
-		getVectorDatabase.ID,
-		getVectorDatabase.Name,
-		datasetID,
-		useCaseID,
-		chunkingParameters,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// If the chunking parameters change return an error
+	// TODO : Support what can be changed or handle more gracefully
+	newChunkingParameters := plan.ChunkingParameters
+	if state.ChunkingParameters.EmbeddingModel.ValueString() != newChunkingParameters.EmbeddingModel.ValueString() ||
+		state.ChunkingParameters.ChunkOverlapPercentage.ValueInt32() != newChunkingParameters.ChunkOverlapPercentage.ValueInt32() ||
+		state.ChunkingParameters.ChunkSize.ValueInt32() != newChunkingParameters.ChunkSize.ValueInt32() ||
+		state.ChunkingParameters.ChunkingMethod.ValueString() != newChunkingParameters.ChunkingMethod.ValueString() ||
+		state.ChunkingParameters.IsSeparatorRegex.ValueBool() != newChunkingParameters.IsSeparatorRegex.ValueBool() ||
+		!state.ChunkingParameters.Separators.Equal(newChunkingParameters.Separators) {
+		resp.Diagnostics.AddError(
+			"Chunking parameters change",
+			"Changing the chunking parameters is not supported. Please create a new VectorDatabase.",
+		)
+		return
+	}
+
+	traceAPICall("UpdateVectorDatabase")
+	_, err := r.provider.service.UpdateVectorDatabase(ctx,
+		plan.ID.ValueString(),
+		&client.UpdateVectorDatabaseRequest{
+			Name: plan.Name.ValueString(),
+		})
+	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"VectorDatabase not found",
+				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", plan.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError("Error updating VectorDatabase", err.Error())
+		}
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+func (r *VectorDatabaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data VectorDatabaseResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	traceAPICall("DeleteVectorDatabase")
+	err := r.provider.service.DeleteVectorDatabase(ctx, data.ID.ValueString())
+	if err != nil {
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting VectorDatabase", err.Error())
+			return
+		}
+	}
+}
+
+func (r *VectorDatabaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Context, vectorDatabaseId string) error {
@@ -324,226 +383,4 @@ func (r *VectorDatabaseResource) waitForDatasetToBeReady(ctx context.Context, da
 		return err
 	}
 	return nil
-}
-
-func (r *VectorDatabaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
-	var state VectorDatabaseResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-	useCaseId := state.UseCaseID.ValueString()
-	datasetId := state.DatasetID.ValueString()
-	chunkingParameters := state.ChunkingParameters
-
-	traceAPICall("GetVectorDatabase")
-	vectorDatabase, err := r.provider.service.GetVectorDatabase(ctx, id)
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddWarning(
-				"VectorDatabase not found",
-				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", id))
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting VectorDatabase info",
-				fmt.Sprintf("Unable to get VectorDatabase, got error: %s", err),
-			)
-		}
-		return
-	}
-
-	loadVectorDatabaseFromFileToTerraformState(
-		id,
-		vectorDatabase.Name,
-		datasetId,
-		useCaseId,
-		chunkingParameters,
-		&state)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-}
-
-func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
-	var plan VectorDatabaseResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var state VectorDatabaseResourceModel
-
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// If the use case id changes return and error
-	// TODO : If the use case change we need to recreate the VectorDatabase
-	newUseCaseID := plan.UseCaseID.ValueString()
-	if state.UseCaseID.ValueString() != newUseCaseID {
-		resp.Diagnostics.AddError(
-			"Use Case ID change",
-			"Changing the Use Case ID is not supported. Please create a new VectorDatabase.",
-		)
-		return
-	}
-
-	// If the data source id changes return an error
-	// TODO : If the data source change we need to recreate the VectorDatabase
-	newDatasetID := plan.DatasetID.ValueString()
-	if state.DatasetID.ValueString() != newDatasetID {
-		resp.Diagnostics.AddError(
-			"Source file change",
-			"Changing the source file is not supported. Please create a new VectorDatabase.",
-		)
-		return
-	}
-
-	// It he only fields that can be updated don't change, just return.
-	newName := plan.Name.ValueString()
-	if state.Name.ValueString() == newName {
-		return
-	}
-
-	// If the chunking parameters change return an error
-	// TODO : Support what can be changed or handle more gracefully
-	newChunkingParameters := plan.ChunkingParameters
-	if state.ChunkingParameters.EmbeddingModel.ValueString() != newChunkingParameters.EmbeddingModel.ValueString() ||
-		state.ChunkingParameters.ChunkOverlapPercentage.ValueInt32() != newChunkingParameters.ChunkOverlapPercentage.ValueInt32() ||
-		state.ChunkingParameters.ChunkSize.ValueInt32() != newChunkingParameters.ChunkSize.ValueInt32() ||
-		state.ChunkingParameters.ChunkingMethod.ValueString() != newChunkingParameters.ChunkingMethod.ValueString() ||
-		state.ChunkingParameters.IsSeparatorRegex.ValueBool() != newChunkingParameters.IsSeparatorRegex.ValueBool() ||
-		!state.ChunkingParameters.Separators.Equal(newChunkingParameters.Separators) {
-		resp.Diagnostics.AddError(
-			"Chunking parameters change",
-			"Changing the chunking parameters is not supported. Please create a new VectorDatabase.",
-		)
-		return
-	}
-
-	id := state.ID.ValueString()
-
-	traceAPICall("UpdateVectorDatabase")
-	useCase, err := r.provider.service.UpdateVectorDatabase(ctx,
-		id,
-		&client.UpdateVectorDatabaseRequest{
-			Name: plan.Name.ValueString(),
-		})
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddWarning(
-				"VectorDatabase not found",
-				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", id))
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error updating VectorDatabase",
-				fmt.Sprintf("Unable to update VectorDatabase, got error: %s", err),
-			)
-		}
-		return
-	}
-
-	loadVectorDatabaseFromFileToTerraformState(
-		id,
-		useCase.Name,
-		newDatasetID,
-		newUseCaseID,
-		plan.ChunkingParameters,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-}
-
-func (r *VectorDatabaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
-	var state VectorDatabaseResourceModel
-
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
-	traceAPICall("DeleteVectorDatabase")
-	err := r.provider.service.DeleteVectorDatabase(ctx, id)
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// use case is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting VectorDatabase info",
-				fmt.Sprintf("Unable to get  example, got error: %s", err),
-			)
-		}
-		return
-	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
-}
-
-func (r *VectorDatabaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func loadVectorDatabaseFromFileToTerraformState(
-	id, name, dataSourceId, useCaseId string,
-	chunkingParameters ChunkingParametersModel,
-	state *VectorDatabaseResourceModel,
-) {
-	state.ID = types.StringValue(id)
-	if name != "" {
-		state.Name = types.StringValue(name)
-	} else {
-		state.Name = types.StringNull()
-	}
-	state.DatasetID = types.StringValue(dataSourceId)
-	state.UseCaseID = types.StringValue(useCaseId)
-	state.ChunkingParameters = chunkingParameters
 }

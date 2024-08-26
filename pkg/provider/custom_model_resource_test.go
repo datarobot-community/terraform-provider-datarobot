@@ -309,8 +309,7 @@ resource "datarobot_use_case" "test_custom_model" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_custom_model" {
-	name = "test custom model dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_id = "${datarobot_use_case.test_custom_model.id}"
 }
 resource "datarobot_vector_database" "test_custom_model" {
