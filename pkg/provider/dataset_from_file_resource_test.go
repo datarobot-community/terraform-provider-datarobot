@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -21,20 +22,10 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: datasetFromFileResourceConfig("../../datarobot_english_documentation_docsassist.zip"),
+				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "source_file", "../../datarobot_english_documentation_docsassist.zip"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
-				),
-			},
-			// Update name
-			{
-				Config: datasetFromFileResourceConfig("../../datarobot_english_documentation_docsassist.zip"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "source_file", "../../datarobot_english_documentation_docsassist.zip"),
+					resource.TestCheckResourceAttr(resourceName, "source_file", "../../test/datarobot_english_documentation_docsassist.zip"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
 				),
@@ -83,7 +74,7 @@ func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckF
 			return err
 		}
 
-		if dataset.Name == rs.Primary.Attributes["name"] {
+		if dataset.Name == strings.Split(rs.Primary.Attributes["source_file"], "/")[3] {
 			return nil
 		}
 
