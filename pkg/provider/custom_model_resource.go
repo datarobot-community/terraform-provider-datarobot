@@ -476,7 +476,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	if plan.RuntimeParameters != nil && len(plan.RuntimeParameters) > 0 {
+	if len(plan.RuntimeParameters) > 0 {
 		params := make([]client.RuntimeParameterValueRequest, len(plan.RuntimeParameters))
 		for i, param := range plan.RuntimeParameters {
 			params[i] = client.RuntimeParameterValueRequest{
