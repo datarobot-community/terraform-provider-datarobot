@@ -99,15 +99,23 @@ type Service interface {
 	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, error)
 
 	// Application Source
-	GetChatApplicationSource(ctx context.Context, id string) (*ChatApplicationSourceResponse, error)
-	DeleteChatApplicationSource(ctx context.Context, id string) error
+	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
+	GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error)
+	UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error)
+	ListApplicationSourceVersions(ctx context.Context, id string) (*ListApplicationSourceVersionsResponse, error)
+	CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error)
+	UpdateApplicationSourceVersion(ctx context.Context, id string, versionId string, req *UpdateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error)
+	UpdateApplicationSourceVersionFiles(ctx context.Context, id string, versionId string, files []FileInfo) (*ApplicationSourceVersion, error)
+	GetApplicationSourceVersion(ctx context.Context, id string, versionId string) (*ApplicationSourceVersion, error)
+	DeleteApplicationSource(ctx context.Context, id string) error
 
 	// Application
-	CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ChatApplicationResponse, error)
-	GetChatApplication(ctx context.Context, id string) (*ChatApplicationResponse, error)
-	IsChatApplicationReady(ctx context.Context, id string) (bool, error)
-	UpdateChatApplication(ctx context.Context, id string, req *UpdateChatApplicationRequest) (*ChatApplicationResponse, error)
-	DeleteChatApplication(ctx context.Context, id string) error
+	CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*ApplicationResponse, error)
+	CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ApplicationResponse, error)
+	GetApplication(ctx context.Context, id string) (*ApplicationResponse, error)
+	IsApplicationReady(ctx context.Context, id string) (bool, error)
+	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*ApplicationResponse, error)
+	DeleteApplication(ctx context.Context, id string) error
 
 	// Credential
 	CreateCredential(ctx context.Context, req *CredentialRequest) (*CredentialResponse, error)
@@ -450,10 +458,6 @@ func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/deployments/"+id+"/")
 }
 
-func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ChatApplicationResponse, error) {
-	return Post[ChatApplicationResponse](s.client, ctx, "/customApplications/qanda", req)
-}
-
 func (s *ServiceImpl) IsDeploymentReady(ctx context.Context, id string) (bool, error) {
 	deployment, err := s.GetDeployment(ctx, id)
 	if err != nil {
@@ -470,22 +474,57 @@ func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req 
 	return Patch[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/model", req)
 }
 
-// Application Source Service Implementation.
-func (s *ServiceImpl) GetChatApplicationSource(ctx context.Context, id string) (*ChatApplicationSourceResponse, error) {
-	return Get[ChatApplicationSourceResponse](s.client, ctx, "/customApplicationSources/"+id+"/")
+// Application Service Implementation.
+func (s *ServiceImpl) CreateApplicationSource(ctx context.Context) (*ApplicationSource, error) {
+	return Post[ApplicationSource](s.client, ctx, "/customApplicationSources/", map[string]string{})
 }
 
-func (s *ServiceImpl) DeleteChatApplicationSource(ctx context.Context, id string) error {
+func (s *ServiceImpl) GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error) {
+	return Get[ApplicationSource](s.client, ctx, "/customApplicationSources/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error) {
+	return Patch[ApplicationSource](s.client, ctx, "/customApplicationSources/"+id+"/", req)
+}
+
+func (s *ServiceImpl) ListApplicationSourceVersions(ctx context.Context, id string) (*ListApplicationSourceVersionsResponse, error) {
+	return Get[ListApplicationSourceVersionsResponse](s.client, ctx, "/customApplicationSources/"+id+"/versions/")
+}
+
+func (s *ServiceImpl) CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
+	return Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
+}
+
+func (s *ServiceImpl) UpdateApplicationSourceVersion(ctx context.Context, id string, versionId string, req *UpdateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
+	return Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
+}
+
+func (s *ServiceImpl) UpdateApplicationSourceVersionFiles(ctx context.Context, id string, versionId string, files []FileInfo) (*ApplicationSourceVersion, error) {
+	return uploadFilesFromBinaries[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", http.MethodPatch, files, map[string]string{})
+}
+
+func (s *ServiceImpl) GetApplicationSourceVersion(ctx context.Context, id string, versionId string) (*ApplicationSourceVersion, error) {
+	return Get[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/")
+}
+
+func (s *ServiceImpl) DeleteApplicationSource(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customApplicationSources/"+id+"/")
 }
 
-// Application Service Implementation.
-func (s *ServiceImpl) GetChatApplication(ctx context.Context, id string) (*ChatApplicationResponse, error) {
-	return Get[ChatApplicationResponse](s.client, ctx, "/customApplications/"+id+"/")
+func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*ApplicationResponse, error) {
+	return Post[ApplicationResponse](s.client, ctx, "/customApplications/", req)
 }
 
-func (s *ServiceImpl) IsChatApplicationReady(ctx context.Context, id string) (bool, error) {
-	customApplication, err := s.GetChatApplication(ctx, id)
+func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ApplicationResponse, error) {
+	return Post[ApplicationResponse](s.client, ctx, "/customApplications/qanda", req)
+}
+
+func (s *ServiceImpl) GetApplication(ctx context.Context, id string) (*ApplicationResponse, error) {
+	return Get[ApplicationResponse](s.client, ctx, "/customApplications/"+id+"/")
+}
+
+func (s *ServiceImpl) IsApplicationReady(ctx context.Context, id string) (bool, error) {
+	customApplication, err := s.GetApplication(ctx, id)
 	if err != nil {
 		return false, err
 	}
@@ -493,11 +532,11 @@ func (s *ServiceImpl) IsChatApplicationReady(ctx context.Context, id string) (bo
 	return customApplication.Status == "running", nil
 }
 
-func (s *ServiceImpl) UpdateChatApplication(ctx context.Context, id string, req *UpdateChatApplicationRequest) (*ChatApplicationResponse, error) {
-	return Patch[ChatApplicationResponse](s.client, ctx, "/customApplications/"+id+"/", req)
+func (s *ServiceImpl) UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*ApplicationResponse, error) {
+	return Patch[ApplicationResponse](s.client, ctx, "/customApplications/"+id+"/", req)
 }
 
-func (s *ServiceImpl) DeleteChatApplication(ctx context.Context, id string) error {
+func (s *ServiceImpl) DeleteApplication(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customApplications/"+id+"/")
 }
 
