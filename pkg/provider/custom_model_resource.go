@@ -102,7 +102,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"runtime_parameters": schema.ListNestedAttribute{
-				Optional:            true,
+				Optional: true,
 				// Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
@@ -952,7 +952,7 @@ func loadCustomModelToTerraformState(
 	baseEnvironmentId string,
 	baseEnvironmentVersionId string,
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	state.ID = types.StringValue(id)
@@ -969,7 +969,7 @@ func loadCustomModelToTerraformState(
 
 func loadRuntimeParametersToTerraformState(
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	if len(runtimeParameterValues) == 0 {

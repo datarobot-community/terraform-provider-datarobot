@@ -24,7 +24,6 @@ func NewChatApplicationResource() resource.Resource {
 	return &ChatApplicationResource{}
 }
 
-// VectorDatabaseResource defines the resource implementation.
 type ChatApplicationResource struct {
 	provider *Provider
 }
@@ -36,37 +35,37 @@ func (r *ChatApplicationResource) Metadata(ctx context.Context, req resource.Met
 func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Application",
+		MarkdownDescription: "Chat Application",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The ID of the Application.",
+				MarkdownDescription: "The ID of the Chat Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"version_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The version ID of the Application.",
+				MarkdownDescription: "The version ID of the Chat Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"application_url": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The URL of the Application.",
+				MarkdownDescription: "The URL of the Chat Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The name of the Application.",
+				MarkdownDescription: "The name of the Chat Application.",
 			},
 			"deployment_id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The deployment ID of the Application.",
+				MarkdownDescription: "The deployment ID of the Chat Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -108,9 +107,9 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	traceAPICall("UpdateChatApplication")
-	_, err = r.provider.service.UpdateChatApplication(ctx,
+	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
-		&client.UpdateChatApplicationRequest{
+		&client.UpdateApplicationRequest{
 			Name: data.Name.ValueString(),
 		})
 	if err != nil {
@@ -134,7 +133,7 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 
 	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetChatApplicationSource(ctx, application.CustomApplicationSourceID)
+	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
 		return
@@ -157,7 +156,7 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	traceAPICall("GetChatApplication")
-	application, err := r.provider.service.GetChatApplication(ctx, data.ID.ValueString())
+	application, err := r.provider.service.GetApplication(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
@@ -173,14 +172,21 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 
 	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetChatApplicationSource(ctx, application.CustomApplicationSourceID)
+	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
 		return
 	}
 	data.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
-	// TODO: deployment ID
+	if applicationSource.LatestVersion.RuntimeParameters != nil {
+		for _, runtimeParameter := range applicationSource.LatestVersion.RuntimeParameters {
+			if runtimeParameter.FieldName == "DEPLOYMENT_ID" {
+				data.DeploymentID = types.StringValue(runtimeParameter.CurrentValue.(string))
+				break
+			}
+		}
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -206,9 +212,9 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	traceAPICall("UpdateApplication")
-	_, err := r.provider.service.UpdateChatApplication(ctx,
+	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
-		&client.UpdateChatApplicationRequest{
+		&client.UpdateApplicationRequest{
 			Name: newName,
 		})
 	if err != nil {
@@ -230,7 +236,7 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetChatApplicationSource(ctx, application.CustomApplicationSourceID)
+	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
 		return
@@ -249,7 +255,7 @@ func (r *ChatApplicationResource) Delete(ctx context.Context, req resource.Delet
 	}
 
 	traceAPICall("DeleteChatApplication")
-	err := r.provider.service.DeleteChatApplication(ctx, data.ID.ValueString())
+	err := r.provider.service.DeleteApplication(ctx, data.ID.ValueString())
 	if err != nil {
 		if !errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddError("Error deleting Application", err.Error())
@@ -262,14 +268,14 @@ func (r *ChatApplicationResource) ImportState(ctx context.Context, req resource.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r *ChatApplicationResource) waitForChatApplicationToBeReady(ctx context.Context, id string) (*client.ChatApplicationResponse, error) {
+func (r *ChatApplicationResource) waitForChatApplicationToBeReady(ctx context.Context, id string) (*client.ApplicationResponse, error) {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
 	expBackoff.MaxElapsedTime = 5 * time.Minute
 
 	operation := func() error {
-		ready, err := r.provider.service.IsChatApplicationReady(ctx, id)
+		ready, err := r.provider.service.IsApplicationReady(ctx, id)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
@@ -286,5 +292,5 @@ func (r *ChatApplicationResource) waitForChatApplicationToBeReady(ctx context.Co
 	}
 
 	traceAPICall("GetChatApplication")
-	return r.provider.service.GetChatApplication(ctx, id)
+	return r.provider.service.GetApplication(ctx, id)
 }
