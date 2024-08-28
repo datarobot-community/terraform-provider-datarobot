@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -49,7 +49,7 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the LLM Blueprint.",
-				Required:            true,
+				Optional:            true,
 			},
 			"playground_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the Playground for the LLM Blueprint.",
@@ -69,6 +69,7 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 				MarkdownDescription: "The id of the LLM for the LLM Blueprint.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
+					// in order to generate an update to the custom model resource, we need to force a replace
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -92,27 +93,16 @@ func (r *LLMBlueprintResource) Configure(ctx context.Context, req resource.Confi
 }
 
 func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data LLMBlueprintResourceModel
 
-	var plan LLMBlueprintResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var playgroundID string
-	if IsKnown(plan.PlaygroundID) {
-		playgroundID = plan.PlaygroundID.ValueString()
+	if IsKnown(data.PlaygroundID) {
+		playgroundID = data.PlaygroundID.ValueString()
 		_, err := r.provider.service.GetPlayground(ctx, playgroundID)
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -124,8 +114,8 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	var vectorDatabaseID string
-	if IsKnown(plan.VectorDatabaseID) {
-		vectorDatabaseID = plan.VectorDatabaseID.ValueString()
+	if IsKnown(data.VectorDatabaseID) {
+		vectorDatabaseID = data.VectorDatabaseID.ValueString()
 		_, err := r.provider.service.GetVectorDatabase(ctx, vectorDatabaseID)
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -137,8 +127,8 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	var llmID string
-	if IsKnown(plan.LLMID) {
-		llmID = plan.LLMID.ValueString()
+	if IsKnown(data.LLMID) {
+		llmID = data.LLMID.ValueString()
 		listResp, err := r.provider.service.ListLLMs(ctx)
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -166,234 +156,110 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 		}
 	}
 
-	name := plan.Name.ValueString()
-	description := plan.Description.ValueString()
 	traceAPICall("CreateLLMBlueprint")
 	createResp, err := r.provider.service.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
-		Name:             name,
-		Description:      description,
-		PlaygroundID:     playgroundID,
-		VectorDatabaseID: vectorDatabaseID,
-		LLMID:            llmID,
+		Name:             data.Name.ValueString(),
+		Description:      data.Description.ValueString(),
+		PlaygroundID:     data.PlaygroundID.ValueString(),
+		VectorDatabaseID: data.VectorDatabaseID.ValueString(),
+		LLMID:            data.LLMID.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating LLM Blueprint",
-			fmt.Sprintf("Unable to create LLM Blueprint, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error creating LLM Blueprint", err.Error())
 		return
 	}
 
-	var state LLMBlueprintResourceModel
-	loadLLMBlueprintToTerraformState(
-		createResp.ID,
-		name,
-		description,
-		playgroundID,
-		vectorDatabaseID,
-		llmID,
-		&state,
-	)
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	data.ID = types.StringValue(createResp.ID)
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *LLMBlueprintResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data LLMBlueprintResourceModel
 
-	var state LLMBlueprintResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
+	if data.ID.IsNull() {
 		return
 	}
 
-	id := state.ID.ValueString()
-
 	traceAPICall("GetLLMBlueprint")
-	llmBlueprint, err := r.provider.service.GetLLMBlueprint(ctx, id)
+	llmBlueprint, err := r.provider.service.GetLLMBlueprint(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
 				"LLM Blueprint not found",
-				fmt.Sprintf("LLM Blueprint with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("LLM Blueprint with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError(
-				"Error getting LLM Blueprint info",
-				fmt.Sprintf("Unable to get LLM Blueprint, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error getting LLM Blueprint info", err.Error())
 		}
 		return
 	}
 
-	loadLLMBlueprintToTerraformState(
-		llmBlueprint.ID,
-		llmBlueprint.Name,
-		llmBlueprint.Description,
-		llmBlueprint.PlaygroundID,
-		llmBlueprint.VectorDatabaseID,
-		llmBlueprint.LLMID,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
+	data.Name = types.StringValue(llmBlueprint.Name)
+	data.Description = types.StringValue(llmBlueprint.Description)
+	data.PlaygroundID = types.StringValue(llmBlueprint.PlaygroundID)
+	data.LLMID = types.StringValue(llmBlueprint.LLMID)
+	if llmBlueprint.VectorDatabaseID != "" {
+		data.VectorDatabaseID = types.StringValue(llmBlueprint.VectorDatabaseID)
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *LLMBlueprintResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data LLMBlueprintResourceModel
 
-	var plan LLMBlueprintResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	var state LLMBlueprintResourceModel
-
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// If the only fields that can be updated don't change, just return.
-	newName := plan.Name.ValueString()
-	newDescription := plan.Description.ValueString()
-	newVectorDatabaseID := plan.VectorDatabaseID.ValueString()
-	newLLMID := plan.LLMID.ValueString()
-	if state.Name.ValueString() == newName &&
-		state.Description.ValueString() == newDescription &&
-		state.VectorDatabaseID.ValueString() == newVectorDatabaseID &&
-		state.LLMID.ValueString() == newLLMID {
-		return
-	}
-
-	id := state.ID.ValueString()
 
 	traceAPICall("UpdateLLMBlueprint")
-	llmBlueprint, err := r.provider.service.UpdateLLMBlueprint(ctx,
-		id,
+	_, err := r.provider.service.UpdateLLMBlueprint(ctx,
+		data.ID.ValueString(),
 		&client.UpdateLLMBlueprintRequest{
-			Name:             plan.Name.ValueString(),
-			Description:      plan.Description.ValueString(),
-			VectorDatabaseID: plan.VectorDatabaseID.ValueString(),
-			LLMID:            plan.LLMID.ValueString(),
+			Name:             data.Name.ValueString(),
+			Description:      data.Description.ValueString(),
+			VectorDatabaseID: data.VectorDatabaseID.ValueString(),
+			LLMID:            data.LLMID.ValueString(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
 				"LLM Blueprint not found",
-				fmt.Sprintf("LLM Blueprint with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("LLM Blueprint with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError(
-				"Error updating LLM Blueprint",
-				fmt.Sprintf("Unable to update LLM Blueprint, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error updating LLM Blueprint", err.Error())
 		}
 		return
 	}
 
-	loadLLMBlueprintToTerraformState(
-		id,
-		llmBlueprint.Name,
-		llmBlueprint.Description,
-		llmBlueprint.PlaygroundID,
-		llmBlueprint.VectorDatabaseID,
-		llmBlueprint.LLMID,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *LLMBlueprintResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data LLMBlueprintResourceModel
 
-	var state LLMBlueprintResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
 	traceAPICall("DeleteLLMBlueprint")
-	err := r.provider.service.DeleteLLMBlueprint(ctx, id)
+	err := r.provider.service.DeleteLLMBlueprint(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// LLM Blueprint is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting LLM Blueprint info",
-				fmt.Sprintf("Unable to get  example, got error: %s", err),
-			)
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting LLM Blueprint", err.Error())
+			return
 		}
-		return
 	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
 }
 
 func (r *LLMBlueprintResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func loadLLMBlueprintToTerraformState(
-	id,
-	name,
-	description,
-	playgroundID,
-	vectorDatabaseID,
-	llmID string,
-	state *LLMBlueprintResourceModel,
-) {
-	state.ID = types.StringValue(id)
-	state.Name = types.StringValue(name)
-	state.Description = types.StringValue(description)
-	state.PlaygroundID = types.StringValue(playgroundID)
-	state.VectorDatabaseID = types.StringValue(vectorDatabaseID)
-	if llmID == "" {
-		state.LLMID = types.StringNull()
-	} else {
-		state.LLMID = types.StringValue(llmID)
-	}
 }

@@ -29,13 +29,13 @@ resource "datarobot_remote_repository" "example" {
 
 ### Required
 
-- `description` (String) The description of the Remote Repository.
 - `location` (String) The location of the Remote Repository.
 - `name` (String) The name of the Remote Repository.
 - `source_type` (String) The source type of the Remote Repository.
 
 ### Optional
 
+- `description` (String) The description of the Remote Repository.
 - `personal_access_token` (String) The personal access token for the Remote Repository.
 
 ### Read-Only

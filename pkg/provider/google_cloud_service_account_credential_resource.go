@@ -8,13 +8,13 @@ import (
 	"io"
 	"os"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -92,7 +92,7 @@ func (r *GoogleCloudCredentialResource) Create(ctx context.Context, req resource
 	createResp, err := r.provider.service.CreateCredential(ctx, &client.CredentialRequest{
 		Name:           data.Name.ValueString(),
 		CredentialType: client.CredentialTypeGCP,
-		GCPKey:         gcpKey,
+		GCPKey:         &gcpKey,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Google Cloud Credential", err.Error())
@@ -130,7 +130,7 @@ func (r *GoogleCloudCredentialResource) Read(ctx context.Context, req resource.R
 	}
 
 	data.Name = types.StringValue(credential.Name)
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -152,7 +152,7 @@ func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource
 		data.ID.ValueString(),
 		&client.CredentialRequest{
 			Name:   data.Name.ValueString(),
-			GCPKey: gcpKey,
+			GCPKey: &gcpKey,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {

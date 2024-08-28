@@ -58,35 +58,6 @@ resource "datarobot_custom_model" "example" {
         }
       }
     },
-    {
-      template_name = "Toxicity"
-      name          = "Toxicity"
-      stages        = ["response"]
-      intervention = {
-        action  = "block"
-        message = "response has been blocked by toxicity guard"
-        condition = {
-          comparand  = 0.5
-          comparator = "greaterThan"
-        }
-      }
-      deployment_id = datarobot_deployment.toxicity_classifier_deployment.id
-    },
-    {
-      template_name = "Custom Deployment"
-      name          = "Custom Guard"
-      stages        = ["prompt", "response"]
-      intervention = {
-        action = "report"
-        condition = {
-          comparand  = 0.9
-          comparator = "greaterThan"
-        }
-        input_column_name  = "inputCol"
-        output_column_name = "outputCol"
-      }
-      deployment_id = datarobot_deployment.toxicity_classifier_deployment.id
-    },
   ]
   overall_moderation_configuration = {
     timeout_sec    = 120
@@ -105,7 +76,6 @@ output "example_id" {
 
 ### Required
 
-- `description` (String) The description of the Custom Model.
 - `name` (String) The name of the Custom Model.
 
 ### Optional
@@ -113,6 +83,7 @@ output "example_id" {
 - `base_environment_id` (String) The ID of the base environment for the Custom Model.
 - `base_environment_name` (String) The name of the base environment for the Custom Model.
 - `base_environment_version_id` (String) The ID of the base environment version for the Custom Model.
+- `description` (String) The description of the Custom Model.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) The flag indicating if the Custom Model is a proxy model.
 - `local_files` (List of String) The list of local file paths used to build the Custom Model.

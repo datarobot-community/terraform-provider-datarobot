@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 func TestAccVectorDatabaseResource(t *testing.T) {
@@ -51,8 +51,7 @@ resource "datarobot_use_case" "test_vector_database" {
 }
   
 resource "datarobot_dataset_from_file" "test_vector_database" {
-	name = "test dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_id = "${datarobot_use_case.test_vector_database.id}"
 }
 resource "datarobot_vector_database" "test" {

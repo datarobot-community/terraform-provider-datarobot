@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
@@ -309,8 +309,7 @@ resource "datarobot_use_case" "test_custom_model" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_custom_model" {
-	name = "test custom model dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_id = "${datarobot_use_case.test_custom_model.id}"
 }
 resource "datarobot_vector_database" "test_custom_model" {

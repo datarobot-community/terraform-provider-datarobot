@@ -26,10 +26,13 @@ resource "datarobot_basic_credential" "example" {
 
 ### Required
 
-- `description` (String) The description of the Basic Credential.
 - `name` (String) The name of the Basic Credential.
 - `password` (String, Sensitive) The password of the Basic Credential.
 - `user` (String, Sensitive) The user of the Basic Credential.
+
+### Optional
+
+- `description` (String) The description of the Basic Credential.
 
 ### Read-Only
 

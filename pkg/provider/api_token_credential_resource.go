@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -50,7 +50,7 @@ func (r *ApiTokenCredentialResource) Schema(ctx context.Context, req resource.Sc
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Api Token Credential.",
-				Required:            true,
+				Optional:            true,
 			},
 			"api_token": schema.StringAttribute{
 				MarkdownDescription: "The description of the Api Token Credential.",
@@ -128,7 +128,7 @@ func (r *ApiTokenCredentialResource) Read(ctx context.Context, req resource.Read
 
 	data.Name = types.StringValue(credential.Name)
 	data.Description = types.StringValue(credential.Description)
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ApiTokenCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -52,7 +52,7 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Registered Model.",
-				Required:            true,
+				Optional:            true,
 			},
 			"version_id": schema.StringAttribute{
 				Computed:            true,
@@ -85,210 +85,119 @@ func (r *RegisteredModelResource) Configure(ctx context.Context, req resource.Co
 }
 
 func (r *RegisteredModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data RegisteredModelResourceModel
 
-	var plan RegisteredModelResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	if !IsKnown(plan.CustomModelVersionId) {
-		resp.Diagnostics.AddError(
-			"Invalid Custom Model Version ID",
-			"Custom Model Version ID is required to create a Registered Model.",
-		)
-		return
-	}
-	customModelVersionID := plan.CustomModelVersionId.ValueString()
-
-	if !IsKnown(plan.Name) {
-		resp.Diagnostics.AddError(
-			"Invalid name",
-			"Name is required to create a Registered Model.",
-		)
-		return
-	}
-	name := plan.Name.ValueString()
 
 	traceAPICall("CreateRegisteredModel")
 	registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
-		CustomModelVersionID: customModelVersionID,
-		Name:                 fmt.Sprintf("%s (v1)", name),
-		RegisteredModelName:  name,
+		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
+		Name:                 fmt.Sprintf("%s (v1)", data.Name.ValueString()),
+		RegisteredModelName:  data.Name.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating Registered Model",
-			fmt.Sprintf("Unable to create Registered Model for custom model version id: %s, got error: %s", customModelVersionID, err),
-		)
+		resp.Diagnostics.AddError("Error creating Registered Model", err.Error())
 		return
 	}
+	data.ID = types.StringValue(registeredModelVersion.RegisteredModelID)
+	data.VersionID = types.StringValue(registeredModelVersion.ID)
 
-	var state RegisteredModelResourceModel
-	loadRegisteredModelToTerraformState(
-		registeredModelVersion.RegisteredModelID,
-		registeredModelVersion.ID,
-		name,
-		customModelVersionID,
-		nil,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("UpdateRegisteredModel")
-	registeredModel, err := r.provider.service.UpdateRegisteredModel(ctx,
-		registeredModelVersion.RegisteredModelID,
-		&client.RegisteredModelUpdate{
-			Name:        plan.Name.ValueString(),
-			Description: plan.Description.ValueString(),
-		})
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddWarning(
-				"Registered Model not found",
-				fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", registeredModelVersion.RegisteredModelID))
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error updating Registered Model",
-				fmt.Sprintf("Unable to update Registered Model, got error: %s", err),
-			)
+	if IsKnown(data.Description) {
+		traceAPICall("UpdateRegisteredModel")
+		_, err := r.provider.service.UpdateRegisteredModel(ctx,
+			registeredModelVersion.RegisteredModelID,
+			&client.RegisteredModelUpdate{
+				Name:        data.Name.ValueString(),
+				Description: data.Description.ValueString(),
+			})
+		if err != nil {
+			if errors.Is(err, &client.NotFoundError{}) {
+				resp.Diagnostics.AddWarning(
+					"Registered Model not found",
+					fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", registeredModelVersion.RegisteredModelID))
+				resp.State.RemoveResource(ctx)
+			} else {
+				resp.Diagnostics.AddError("Error updating Registered Model", err.Error())
+			}
+			return
 		}
-		return
 	}
 
-	loadRegisteredModelToTerraformState(
-		registeredModel.ID,
-		registeredModelVersion.ID,
-		registeredModel.Name,
-		customModelVersionID,
-		&registeredModel.Description,
-		&state,
-	)
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Wait for the registered model version to be ready
 	err = r.waitForRegisteredModelVersionToBeReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Registered model version not ready",
-			"Registered model version is not ready after 5 minutes or failed to check the status.")
+		resp.Diagnostics.AddError("Registered model version is not ready", err.Error())
 		return
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data RegisteredModelResourceModel
 
-	var state RegisteredModelResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
+	if data.ID.IsNull() {
 		return
 	}
 
-	id := state.ID.ValueString()
-	customModelVersionID := state.CustomModelVersionId.ValueString()
-
 	traceAPICall("GetRegisteredModel")
-	registeredModel, err := r.provider.service.GetRegisteredModel(ctx, id)
+	registeredModel, err := r.provider.service.GetRegisteredModel(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
 				"Registered Model not found",
-				fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError(
-				"Error getting Registered Model info",
-				fmt.Sprintf("Unable to get Registered Model, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error getting Registered Model info", err.Error())
 		}
 		return
 	}
+	data.Name = types.StringValue(registeredModel.Name)
+	if registeredModel.Description != "" {
+		data.Description = types.StringValue(registeredModel.Description)
+	}
 
 	traceAPICall("ListRegisteredModelVersions")
-	latestRegisteredModelVersion, err := r.provider.service.GetLatestRegisteredModelVersion(ctx, id)
+	latestRegisteredModelVersion, err := r.provider.service.GetLatestRegisteredModelVersion(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error getting Registered Model Version",
-			fmt.Sprintf("Unable to get Registered Model Version, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error getting Registered Model Version", err.Error())
 		return
 	}
+	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 
-	loadRegisteredModelToTerraformState(
-		id,
-		latestRegisteredModelVersion.ID,
-		registeredModel.Name,
-		customModelVersionID,
-		&registeredModel.Description,
-		&state)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *RegisteredModelResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
 	var plan RegisteredModelResourceModel
 
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var state RegisteredModelResourceModel
 
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	id := state.ID.ValueString()
-	newName := plan.Name.ValueString()
-	newDescription := plan.Description.ValueString()
-	if state.Name.ValueString() != newName || state.Description.ValueString() != newDescription {
-		versionId := state.VersionID.ValueString()
-		customModelVersionID := state.CustomModelVersionId.ValueString()
+	plan.VersionID = state.VersionID
 
+	if state.Name.ValueString() != plan.Name.ValueString() || 
+		state.Description.ValueString() != plan.Description.ValueString() {
 		traceAPICall("UpdateRegisteredModel")
-		registeredModel, err := r.provider.service.UpdateRegisteredModel(ctx,
-			id,
+		_, err := r.provider.service.UpdateRegisteredModel(ctx,
+			plan.ID.ValueString(),
 			&client.RegisteredModelUpdate{
 				Name:        plan.Name.ValueString(),
 				Description: plan.Description.ValueString(),
@@ -297,144 +206,65 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			if errors.Is(err, &client.NotFoundError{}) {
 				resp.Diagnostics.AddWarning(
 					"Registered Model not found",
-					fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", id))
+					fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", plan.ID.ValueString()))
 				resp.State.RemoveResource(ctx)
 			} else {
-				resp.Diagnostics.AddError(
-					"Error updating Registered Model",
-					fmt.Sprintf("Unable to update Registered Model, got error: %s", err),
-				)
+				resp.Diagnostics.AddError("Error updating Registered Model", err.Error())
 			}
-			return
-		}
-
-		loadRegisteredModelToTerraformState(
-			id,
-			versionId,
-			registeredModel.Name,
-			customModelVersionID,
-			&registeredModel.Description,
-			&state,
-		)
-
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
 
-	newCustomModelVersionID := plan.CustomModelVersionId.ValueString()
-	if state.CustomModelVersionId.ValueString() != newCustomModelVersionID {
+	if state.CustomModelVersionId.ValueString() != plan.CustomModelVersionId.ValueString() {
 		traceAPICall("GetRegisteredModel")
-		registeredModel, err := r.provider.service.GetRegisteredModel(ctx, id)
+		registeredModel, err := r.provider.service.GetRegisteredModel(ctx, plan.ID.ValueString())
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error getting Registered Model info",
-				fmt.Sprintf("Unable to get Registered Model, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error getting Registered Model info", err.Error())
 			return
 		}
 
 		traceAPICall("CreateRegisteredModelVersion")
 		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
 			RegisteredModelID:    registeredModel.ID,
-			CustomModelVersionID: newCustomModelVersionID,
-			Name:                 fmt.Sprintf("%s (v%d)", newName, registeredModel.LastVersionNum+1),
+			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
+			Name:                 fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), registeredModel.LastVersionNum+1),
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Registered Model Version",
-				fmt.Sprintf("Unable to create Registered Model Version, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error creating Registered Model Version", err.Error())
 			return
 		}
 
 		err = r.waitForRegisteredModelVersionToBeReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Registered model version not ready",
-				fmt.Sprintf("Error waiting for Registered model version: %s", err),
-			)
+			resp.Diagnostics.AddError("Registered model version not ready", err.Error())
 			return
 		}
-
-		loadRegisteredModelToTerraformState(
-			id,
-			registeredModelVersion.ID,
-			newName,
-			newCustomModelVersionID,
-			&newDescription,
-			&state,
-		)
-
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+		plan.VersionID = types.StringValue(registeredModelVersion.ID)
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *RegisteredModelResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data RegisteredModelResourceModel
 
-	var state RegisteredModelResourceModel
-
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
 	traceAPICall("DeleteRegisteredModel")
-	err := r.provider.service.DeleteRegisteredModel(ctx, id)
+	err := r.provider.service.DeleteRegisteredModel(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// registered model is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting Registered Model info",
-				fmt.Sprintf("Unable to get  example, got error: %s", err),
-			)
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting Registered Model", err.Error())
+			return
 		}
-		return
 	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
 }
 
 func (r *RegisteredModelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func loadRegisteredModelToTerraformState(
-	id,
-	versionId,
-	name,
-	customModeVersionId string,
-	description *string,
-	state *RegisteredModelResourceModel,
-) {
-	state.ID = types.StringValue(id)
-	state.VersionID = types.StringValue(versionId)
-	state.Name = types.StringValue(name)
-	if description != nil {
-		state.Description = types.StringValue(*description)
-	}
-	state.CustomModelVersionId = types.StringValue(customModeVersionId)
 }
 
 func (r *RegisteredModelResource) waitForRegisteredModelVersionToBeReady(ctx context.Context, registeredModelId string, versionId string) error {

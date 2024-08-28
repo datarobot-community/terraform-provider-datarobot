@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 func TestAccGoogleCloudCredentialResource(t *testing.T) {

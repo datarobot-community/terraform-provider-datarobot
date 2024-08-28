@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	tf_provider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 var testAccProvider tf_provider.Provider

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 type GlobalModelDataSource struct {
@@ -60,14 +60,9 @@ func (r *GlobalModelDataSource) Configure(ctx context.Context, req datasource.Co
 }
 
 func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
 	var config GlobalModelDataSourceModel
-	diags := req.Config.Get(ctx, &config)
-	resp.Diagnostics.Append(diags...)
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -116,6 +111,5 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 	config.Name = types.StringValue(globalModel.Name)
 	config.VersionID = types.StringValue(globalModelVersion.ID)
 
-	diags = resp.State.Set(ctx, config)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }

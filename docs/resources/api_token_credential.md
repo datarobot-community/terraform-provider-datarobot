@@ -14,9 +14,8 @@ Api Token Credential
 
 ```terraform
 resource "datarobot_api_token_credential" "example" {
-  name        = "An example API token"
-  description = "Description for the example API token"
-  api_token   = "[the API Key value here]"
+  name      = "An example API token 3"
+  api_token = "[the API Key value here]"
 }
 ```
 
@@ -26,8 +25,11 @@ resource "datarobot_api_token_credential" "example" {
 ### Required
 
 - `api_token` (String, Sensitive) The description of the Api Token Credential.
-- `description` (String) The description of the Api Token Credential.
 - `name` (String) The name of the Api Token Credential.
+
+### Optional
+
+- `description` (String) The description of the Api Token Credential.
 
 ### Read-Only
 

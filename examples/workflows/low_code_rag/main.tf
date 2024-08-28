@@ -9,7 +9,7 @@ variable "google_cloud_credential_source_file" {
 terraform {
   required_providers {
     datarobot = {
-      source  = "omnistrate/datarobot"
+      source  = "datarobot/datarobot"
       version = "0.0.10"
     }
   }

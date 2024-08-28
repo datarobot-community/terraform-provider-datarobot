@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 func TestAccChatApplicationResource(t *testing.T) {
@@ -49,8 +49,7 @@ resource "datarobot_use_case" "test_chat_application" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_chat_application" {
-	name = "test chat application dataset"
-	source_file = "../../datarobot_english_documentation_docsassist.zip"
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_id = "${datarobot_use_case.test_chat_application.id}"
 }
 resource "datarobot_vector_database" "test_chat_application" {
@@ -133,7 +132,7 @@ func checkChatApplicationResourceExists(resourceName string) resource.TestCheckF
 		p.service = client.NewService(cl)
 
 		traceAPICall("GetChatApplication")
-		application, err := p.service.GetChatApplication(context.TODO(), rs.Primary.ID)
+		application, err := p.service.GetApplication(context.TODO(), rs.Primary.ID)
 		if err != nil {
 			return err
 		}

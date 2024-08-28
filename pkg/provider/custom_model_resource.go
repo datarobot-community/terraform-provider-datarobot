@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -22,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 )
 
 const (
@@ -71,7 +71,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Custom Model.",
-				Required:            true,
+				Optional:            true,
 			},
 			"source_llm_blueprint_id": schema.StringAttribute{
 				Optional:            true,
@@ -102,8 +102,8 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"runtime_parameters": schema.ListNestedAttribute{
-				Optional:            true,
-				Computed:            true,
+				Optional: true,
+				// Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -952,7 +952,7 @@ func loadCustomModelToTerraformState(
 	baseEnvironmentId string,
 	baseEnvironmentVersionId string,
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	state.ID = types.StringValue(id)
@@ -969,7 +969,7 @@ func loadCustomModelToTerraformState(
 
 func loadRuntimeParametersToTerraformState(
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	if len(runtimeParameterValues) == 0 {

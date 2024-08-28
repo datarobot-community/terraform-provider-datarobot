@@ -21,7 +21,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/omnistrate/terraform-provider-datarobot/pkg/provider"
+	"github.com/datarobot-community/terraform-provider-datarobot/pkg/provider"
 )
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
@@ -50,7 +50,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/omnistrate/datarobot",
+		Address: "registry.terraform.io/datarobot/datarobot",
 		Debug:   debug,
 	}
 

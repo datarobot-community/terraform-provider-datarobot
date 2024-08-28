@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
-	"github.com/omnistrate/terraform-provider-datarobot/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -592,7 +592,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	start = time.Now()
 	for {
-		status, err := s.IsChatApplicationReady(ctx, application.ID)
+		status, err := s.IsApplicationReady(ctx, application.ID)
 		require.NoError(err)
 		if status {
 			break
@@ -604,26 +604,26 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	}
 
 	newName := "Updated Integration Test" + uuid.New().String()
-	_, err = s.UpdateChatApplication(ctx, application.ID, &client.UpdateChatApplicationRequest{
+	_, err = s.UpdateApplication(ctx, application.ID, &client.UpdateApplicationRequest{
 		Name: newName,
 	})
 	require.NoError(err)
 
-	updatedApplication, err := s.GetChatApplication(ctx, application.ID)
+	updatedApplication, err := s.GetApplication(ctx, application.ID)
 	require.NoError(err)
 	require.NotEmpty(updatedApplication.ID)
 	require.Equal(newName, updatedApplication.Name)
 	require.NotEmpty(updatedApplication.ApplicationUrl)
 
-	applicationSource, err := s.GetChatApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
+	applicationSource, err := s.GetApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
 	require.NoError(err)
 	require.NotEmpty(applicationSource.LatestVersion.Label)
 
 	// Delete the entities
-	err = s.DeleteChatApplication(ctx, application.ID)
+	err = s.DeleteApplication(ctx, application.ID)
 	require.NoError(err)
 
-	err = s.DeleteChatApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
+	err = s.DeleteApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
 	require.NoError(err)
 
 	err = s.DeleteDeployment(ctx, deployment.ID)
