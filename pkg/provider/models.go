@@ -176,8 +176,8 @@ type AssociationIDSetting struct {
 }
 
 type PredictionsSetting struct {
-	MinComputes types.Int32 `tfsdk:"min_computes"`
-	MaxComputes types.Int32 `tfsdk:"max_computes"`
+	MinComputes types.Int64 `tfsdk:"min_computes"`
+	MaxComputes types.Int64 `tfsdk:"max_computes"`
 	RealTime    types.Bool  `tfsdk:"real_time"`
 }
 

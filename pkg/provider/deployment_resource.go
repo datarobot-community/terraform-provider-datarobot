@@ -101,11 +101,11 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "Settings for the predictions.",
 						Attributes: map[string]schema.Attribute{
-							"min_computes": schema.NumberAttribute{
+							"min_computes": schema.Int64Attribute{
 								Required:            true,
 								MarkdownDescription: "The minimum number of computes to use for predictions.",
 							},
-							"max_computes": schema.NumberAttribute{
+							"max_computes": schema.Int64Attribute{
 								Required:            true,
 								MarkdownDescription: "The maximum number of computes to use for predictions.",
 							},
@@ -391,9 +391,9 @@ func (r *DeploymentResource) updateDeploymentSettings(
 
 		// Predictions Settings
 		if settings.PredictionsSettings != nil {
-			req.PredictionsSettings = &client.PredictionsSetting{
-				MinComputes: int(settings.PredictionsSettings.MinComputes.ValueInt32()),
-				MaxComputes: int(settings.PredictionsSettings.MaxComputes.ValueInt32()),
+			req.PredictionsSettings = &client.PredictionsSettings{
+				MinComputes: int(settings.PredictionsSettings.MinComputes.ValueInt64()),
+				MaxComputes: int(settings.PredictionsSettings.MaxComputes.ValueInt64()),
 				RealTime:    settings.PredictionsSettings.RealTime.ValueBool(),
 			}
 		}

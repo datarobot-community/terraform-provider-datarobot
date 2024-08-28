@@ -67,7 +67,6 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 	defer resp.Body.Close()
 
 	if req.URL.String() != resp.Request.URL.String() {
-		fmt.Printf("Request was redirected from %s to %s", req.URL.String(), resp.Request.URL.String())
 		return result, nil, NewGenericError("request was redirected")
 	}
 

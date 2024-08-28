@@ -43,7 +43,7 @@ type DeploymentSettings struct {
 	ChallengerModels          *BasicSetting         `json:"challengerModels,omitempty"`
 	FeatureDrift              *BasicSetting         `json:"featureDrift,omitempty"`
 	Humility                  *BasicSetting         `json:"humility,omitempty"`
-	PredictionsSettings       *PredictionsSetting   `json:"predictionsSettings,omitempty"`
+	PredictionsSettings       *PredictionsSettings  `json:"predictionsSettings,omitempty"`
 	PredictionsDataCollection *BasicSetting         `json:"predictionsDataCollection,omitempty"`
 	SegmentAnalysis           *BasicSetting         `json:"segmentAnalysis,omitempty"`
 	TargetDrift               *BasicSetting         `json:"targetDrift,omitempty"`
@@ -59,7 +59,7 @@ type BasicSetting struct {
 	Enabled bool `json:"enabled"`
 }
 
-type PredictionsSetting struct {
+type PredictionsSettings struct {
 	MinComputes int  `json:"minComputes"`
 	MaxComputes int  `json:"maxComputes"`
 	RealTime    bool `json:"realTime"`
