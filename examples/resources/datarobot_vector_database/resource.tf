@@ -3,6 +3,11 @@ resource "datarobot_use_case" "example" {
   description = "Description for the example use case"
 }
 
+resource "datarobot_dataset_from_file" "example" {
+  source_file = "[Path to file to upload]"
+  use_case_id = datarobot_use_case.example.id
+}
+
 resource "datarobot_vector_database" "example" {
   name        = "An example vector database"
   use_case_id = datarobot_use_case.example.id

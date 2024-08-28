@@ -190,6 +190,20 @@ type ChatApplicationResourceModel struct {
 	ApplicationUrl types.String `tfsdk:"application_url"`
 }
 
+type ApplicationSourceResourceModel struct {
+	ID         types.String   `tfsdk:"id"`
+	VersionID  types.String   `tfsdk:"version_id"`
+	Name       types.String   `tfsdk:"name"`
+	LocalFiles []types.String `tfsdk:"local_files"`
+}
+
+type CustomApplicationResourceModel struct {
+	ID              types.String `tfsdk:"id"`
+	SourceVersionID types.String `tfsdk:"source_version_id"`
+	Name            types.String `tfsdk:"name"`
+	ApplicationUrl  types.String `tfsdk:"application_url"`
+}
+
 // CredentialResourceModel describes the credential resource.
 type ApiTokenCredentialResourceModel struct {
 	ID          types.String `tfsdk:"id"`

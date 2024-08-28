@@ -132,7 +132,7 @@ func checkChatApplicationResourceExists(resourceName string) resource.TestCheckF
 		p.service = client.NewService(cl)
 
 		traceAPICall("GetChatApplication")
-		application, err := p.service.GetChatApplication(context.TODO(), rs.Primary.ID)
+		application, err := p.service.GetApplication(context.TODO(), rs.Primary.ID)
 		if err != nil {
 			return err
 		}
