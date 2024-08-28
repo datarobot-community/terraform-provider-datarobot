@@ -147,7 +147,7 @@ func (r *DatasetFromFileResource) waitForDatasetToBeReady(ctx context.Context, d
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 10 * time.Minute
+	expBackoff.MaxElapsedTime = 30 * time.Minute
 
 	operation := func() error {
 		ready, err := r.provider.service.IsDatasetReady(ctx, datasetId)

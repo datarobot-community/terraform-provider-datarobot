@@ -526,7 +526,7 @@ func (s *ServiceImpl) WaitForTaskStatusToComplete(ctx context.Context, id string
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 20 * time.Minute
+	expBackoff.MaxElapsedTime = 30 * time.Minute
 
 	operation := func() error {
 		task, err := s.GetTaskStatus(ctx, id)

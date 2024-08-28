@@ -266,7 +266,7 @@ func (r *ChatApplicationResource) waitForChatApplicationToBeReady(ctx context.Co
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff.MaxElapsedTime = 30 * time.Minute
 
 	operation := func() error {
 		ready, err := r.provider.service.IsChatApplicationReady(ctx, id)

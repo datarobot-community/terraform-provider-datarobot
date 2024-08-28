@@ -141,6 +141,7 @@ type GuardTemplate struct {
 	ErrorMessage  string            `json:"errorMessage,omitempty"`
 	IsValid       bool              `json:"isValid,omitempty"`
 	NemoInfo      NemoInfo          `json:"nemoInfo,omitempty"`
+	ModelInfo     GuardModelInfo    `json:"modelInfo,omitempty"`
 }
 
 type NemoInfo struct {

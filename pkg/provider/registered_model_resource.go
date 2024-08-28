@@ -271,7 +271,7 @@ func (r *RegisteredModelResource) waitForRegisteredModelVersionToBeReady(ctx con
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff.MaxElapsedTime = 60 * time.Minute
 
 	operation := func() error {
 		ready, err := r.provider.service.IsRegisteredModelVersionReady(ctx, registeredModelId, versionId)

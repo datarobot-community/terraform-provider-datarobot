@@ -102,7 +102,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"runtime_parameters": schema.ListNestedAttribute{
-				Optional:            true,
+				Optional: true,
 				// Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
@@ -999,7 +999,7 @@ func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, c
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff.MaxElapsedTime = 60 * time.Minute
 
 	operation := func() error {
 		ready, err := r.provider.service.IsCustomModelReady(ctx, customModelId)
@@ -1216,6 +1216,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 					},
 				},
 			},
+			ModelInfo: guardTemplate.ModelInfo,
 			// TODO: allow user to input Nemo Info
 			NemoInfo:     guardTemplate.NemoInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),

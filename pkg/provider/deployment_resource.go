@@ -102,11 +102,11 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "Settings for the predictions.",
 						Attributes: map[string]schema.Attribute{
-							"min_computes": schema.NumberAttribute{
+							"min_computes": schema.Int32Attribute{
 								Required:            true,
 								MarkdownDescription: "The minimum number of computes to use for predictions.",
 							},
-							"max_computes": schema.NumberAttribute{
+							"max_computes": schema.Int32Attribute{
 								Required:            true,
 								MarkdownDescription: "The maximum number of computes to use for predictions.",
 							},
@@ -486,7 +486,7 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff.MaxElapsedTime = 60 * time.Minute
 
 	operation := func() error {
 		ready, err := r.provider.service.IsDeploymentReady(ctx, id)
