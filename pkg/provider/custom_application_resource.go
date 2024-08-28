@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -113,7 +111,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		data.Name = types.StringValue(application.Name)
 	}
 
-	application, err = r.waitForCustomApplicationToBeReady(ctx, application.ID)
+	application, err = waitForApplicationToBeReady(ctx, r.provider.service, application.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Custom Application is not ready", err.Error())
 		return
@@ -212,32 +210,4 @@ func (r *CustomApplicationResource) Delete(ctx context.Context, req resource.Del
 
 func (r *CustomApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func (r *CustomApplicationResource) waitForCustomApplicationToBeReady(ctx context.Context, id string) (*client.ApplicationResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
-
-	operation := func() error {
-		traceAPICall("IsCustomApplicationReady")
-		ready, err := r.provider.service.IsApplicationReady(ctx, id)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if !ready {
-			return errors.New("application is not ready")
-		}
-		return nil
-	}
-
-	// Retry the operation using the backoff strategy
-	err := backoff.Retry(operation, expBackoff)
-	if err != nil {
-		return nil, err
-	}
-
-	traceAPICall("GetCustomApplication")
-	return r.provider.service.GetApplication(ctx, id)
 }

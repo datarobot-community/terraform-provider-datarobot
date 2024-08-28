@@ -7,6 +7,7 @@ import (
 const (
 	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_KEY"
 	DataRobotEndpointEnvVar string = "DATAROBOT_ENDPOINT"
+	TimeoutMinutesEnvVar    string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent               string = "terraform-provider-datarobot"
 )
 
@@ -36,21 +37,21 @@ type DatasetFromFileResourceModel struct {
 
 // VectorDatabaseResourceModel describes a vector database.
 type VectorDatabaseResourceModel struct {
-	ID                 types.String            `tfsdk:"id"`
-	Name               types.String            `tfsdk:"name"`
-	UseCaseID          types.String            `tfsdk:"use_case_id"`
-	DatasetID          types.String            `tfsdk:"dataset_id"`
-	ChunkingParameters ChunkingParametersModel `tfsdk:"chunking_parameters"`
+	ID                 types.String             `tfsdk:"id"`
+	Name               types.String             `tfsdk:"name"`
+	UseCaseID          types.String             `tfsdk:"use_case_id"`
+	DatasetID          types.String             `tfsdk:"dataset_id"`
+	ChunkingParameters *ChunkingParametersModel `tfsdk:"chunking_parameters"`
 }
 
 // ChunkingParametersModel represents the chunking parameters nested attribute.
 type ChunkingParametersModel struct {
-	EmbeddingModel         types.String `tfsdk:"embedding_model"`
-	ChunkOverlapPercentage types.Int32  `tfsdk:"chunk_overlap_percentage"`
-	ChunkSize              types.Int32  `tfsdk:"chunk_size"`
-	ChunkingMethod         types.String `tfsdk:"chunking_method"`
-	IsSeparatorRegex       types.Bool   `tfsdk:"is_separator_regex"`
-	Separators             types.List   `tfsdk:"separators"`
+	EmbeddingModel         types.String   `tfsdk:"embedding_model"`
+	ChunkOverlapPercentage types.Int64    `tfsdk:"chunk_overlap_percentage"`
+	ChunkSize              types.Int64    `tfsdk:"chunk_size"`
+	ChunkingMethod         types.String   `tfsdk:"chunking_method"`
+	IsSeparatorRegex       types.Bool     `tfsdk:"is_separator_regex"`
+	Separators             []types.String `tfsdk:"separators"`
 }
 
 // PlaygroundResourceModel describes the playground associated to a use case.

@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -996,10 +995,7 @@ func loadRuntimeParametersToTerraformState(
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModelResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
 		ready, err := r.provider.service.IsCustomModelReady(ctx, customModelId)
@@ -1037,7 +1033,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	}
 
 	traceAPICall("CreateCustomModelVersionFromRemoteRepository")
-	_, err := r.provider.service.CreateCustomModelVersionFromRemoteRepository(ctx, customModelID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
+	_, statusID, err := r.provider.service.CreateCustomModelVersionFromRemoteRepository(ctx, customModelID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
 		IsMajorUpdate:     false,
 		BaseEnvironmentID: baseEnvironmentID,
 		RepositoryID:      sourceRemoteRepository.ID.ValueString(),
@@ -1050,16 +1046,12 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 		return
 	}
 
-	// TODO: this is an async task, need to figure out how the status ID is generated
-	time.Sleep(20 * time.Second)
-	// err = r.provider.service.WaitForTaskStatus(ctx, id)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError(
-	// 		"Update Task not completed",
-	// 		fmt.Sprintf("Error replacing model for deployemnt: %s", err),
-	// 	)
-	// 	return
-	// }
+	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	if err != nil {
+		errSummary = "Error waiting for Custom Model version to be created from remote repository"
+		errDetail = err.Error()
+		return
+	}
 
 	return
 }

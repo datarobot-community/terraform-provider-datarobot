@@ -36,10 +36,9 @@ resource "datarobot_playground" "example" {
 }
 
 resource "datarobot_vector_database" "example" {
-  name                = datarobot_use_case.example.name
-  use_case_id         = datarobot_use_case.example.id
-  dataset_id          = datarobot_dataset_from_file.example.id
-  chunking_parameters = {}
+  name        = datarobot_use_case.example.name
+  use_case_id = datarobot_use_case.example.id
+  dataset_id  = datarobot_dataset_from_file.example.id
 }
 
 resource "datarobot_llm_blueprint" "example" {

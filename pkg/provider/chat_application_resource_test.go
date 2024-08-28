@@ -56,7 +56,6 @@ resource "datarobot_vector_database" "test_chat_application" {
 	  name = "test chat application"
 	  dataset_id = "${datarobot_dataset_from_file.test_chat_application.id}"
 	  use_case_id = "${datarobot_use_case.test_chat_application.id}"
-	  chunking_parameters = {}
 }
 resource "datarobot_playground" "test_chat_application" {
 	name = "test chat application"

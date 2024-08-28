@@ -299,7 +299,7 @@ func TestCustomModelFromGitHub(t *testing.T) {
 	require.NoError(err)
 	require.NotEmpty(customModel.ID)
 
-	_, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
+	_, _, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
 		BaseEnvironmentID: environmentID,
 		IsMajorUpdate:     true,
 		RepositoryID:      remoteRepository.ID,
@@ -416,7 +416,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 		require.NoError(err)
 	}()
 
-	timeout := 5 * time.Minute
+	timeout := 15 * time.Minute
 	start := time.Now()
 	for {
 		status, err := s.IsCustomModelReady(ctx, resp.CustomModelID)
@@ -584,6 +584,34 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NotEmpty(deployment.ID)
 	require.Equal(newLabel, deployment.Label)
 
+	// Create new Registered Model in order to replace the model in the Deployment
+	registeredModelVersion2, err := s.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
+		CustomModelVersionID: latestVersion,
+		Name:                 "Integration Test" + uuid.New().String(),
+	})
+	require.NoError(err)
+	require.NotEmpty(registeredModelVersion2.ID)
+
+	start = time.Now()
+	for {
+		status, err := s.IsRegisteredModelVersionReady(ctx, registeredModelVersion2.RegisteredModelID, registeredModelVersion2.ID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for registered model version to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	_, statusId, err := s.UpdateDeploymentModel(ctx, deployment.ID, &client.UpdateDeploymentModelRequest{
+		ModelPackageID: registeredModelVersion2.ID,
+		Reason: "OTHER",
+	})
+	require.NoError(err)
+	require.NotEmpty(statusId)
+
 	application, err := s.CreateChatApplication(ctx, &client.CreateChatApplicationRequest{
 		DeploymentID: deployment.ID,
 	})
@@ -633,6 +661,9 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 
 	err = s.DeleteRegisteredModel(ctx, registeredModelVersion.RegisteredModelID)
+	require.NoError(err)
+
+	err = s.DeleteRegisteredModel(ctx, registeredModelVersion2.RegisteredModelID)
 	require.NoError(err)
 }
 
@@ -749,7 +780,7 @@ func TestVectorDatabase(t *testing.T) {
 	timeout := 5 * time.Minute
 	start := time.Now()
 	for {
-		status, err := s.IsDatasetReadyForVectorDatabase(ctx, dataset.ID)
+		status, err := s.IsDatasetReady(ctx, dataset.ID)
 		require.NoError(err)
 		if status {
 			break

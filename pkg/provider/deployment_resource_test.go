@@ -203,7 +203,9 @@ func checkDeploymentResourceExists() resource.TestCheckFunc {
 			return err
 		}
 
-		if deployment.Label == rs.Primary.Attributes["label"] {
+		if deployment.Label == rs.Primary.Attributes["label"] && 
+			deployment.ModelPackage.ID == rs.Primary.Attributes["registered_model_version_id"] && 
+			deployment.PredictionEnvironment.ID == rs.Primary.Attributes["prediction_environment_id"] {
 			return nil
 		}
 

@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
-
-	"github.com/cenkalti/backoff/v4"
 )
 
 type Service interface {
@@ -33,13 +30,11 @@ type Service interface {
 	LinkDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
 
 	// Vector Database
-	// try out vscode commit
-	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*CreateVectorDatabaseResponse, error)
-	GetVectorDatabase(ctx context.Context, id string) (*VectorDatabaseResponse, error)
-	UpdateVectorDatabase(ctx context.Context, id string, req *UpdateVectorDatabaseRequest) (*VectorDatabaseResponse, error)
+	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error)
+	GetVectorDatabase(ctx context.Context, id string) (*VectorDatabase, error)
+	UpdateVectorDatabase(ctx context.Context, id string, req *UpdateVectorDatabaseRequest) (*VectorDatabase, error)
 	DeleteVectorDatabase(ctx context.Context, id string) error
 	IsVectorDatabaseReady(ctx context.Context, id string) (bool, error)
-	IsDatasetReadyForVectorDatabase(ctx context.Context, id string) (bool, error)
 
 	// Playground
 	CreatePlayground(ctx context.Context, req *CreatePlaygroundRequest) (*CreatePlaygroundResponse, error)
@@ -59,7 +54,7 @@ type Service interface {
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
 	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionCreateFromLatestRequest) (*CreateCustomModelVersionResponse, error)
 	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CreateCustomModelVersionResponse, error)
-	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, error)
+	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, string, error)
 	GetCustomModel(ctx context.Context, id string) (*CustomModelResponse, error)
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
 	UpdateCustomModel(ctx context.Context, id string, req *CustomModelUpdate) (*CustomModelResponse, error)
@@ -96,7 +91,7 @@ type Service interface {
 	DeleteDeployment(ctx context.Context, id string) error
 	IsDeploymentReady(ctx context.Context, id string) (bool, error)
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
-	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, error)
+	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, string, error)
 
 	// Application Source
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
@@ -125,7 +120,6 @@ type Service interface {
 
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
-	WaitForTaskStatusToComplete(ctx context.Context, id string) error
 
 	// Add your service methods here
 }
@@ -174,15 +168,15 @@ func (s *ServiceImpl) CreateDatasetVersionFromFile(ctx context.Context, id strin
 }
 
 func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*DatasetResponse, error) {
-	return Get[DatasetResponse](s.client, ctx, "/datasets/"+id)
+	return Get[DatasetResponse](s.client, ctx, "/datasets/"+id+"/")
 }
 
 func (s *ServiceImpl) UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*DatasetResponse, error) {
-	return Patch[DatasetResponse](s.client, ctx, "/datasets/"+id, req)
+	return Patch[DatasetResponse](s.client, ctx, "/datasets/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteDataset(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/datasets/"+id)
+	return Delete(s.client, ctx, "/datasets/"+id+"/")
 }
 
 func (s *ServiceImpl) IsDatasetReady(ctx context.Context, id string) (bool, error) {
@@ -196,23 +190,9 @@ func (s *ServiceImpl) IsDatasetReady(ctx context.Context, id string) (bool, erro
 	return dataset.Status == "COMPLETED", nil
 }
 
-func (s *ServiceImpl) IsDatasetReadyForVectorDatabase(ctx context.Context, id string) (bool, error) {
-	dataset, err := s.GetDataset(ctx, id)
-	if err != nil {
-		return false, err
-	}
-	if dataset.Status == "ERROR" {
-		return false, NewGenericError("Dataset execution failed")
-	}
-	if dataset.Status == "COMPLETED" {
-		return dataset.IsVectorDatabaseEligible, nil
-	}
-	return false, nil
-}
-
 // Use Case Service Implementation.
 func (s *ServiceImpl) LinkDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
-	_, err := Post[CreateVoidResponse](s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID, &CreateVoidRequest{})
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID+"/", &CreateVoidRequest{})
 	return err
 }
 
@@ -221,15 +201,15 @@ func (s *ServiceImpl) CreateUseCase(ctx context.Context, req *UseCaseRequest) (r
 }
 
 func (s *ServiceImpl) GetUseCase(ctx context.Context, id string) (*UseCaseResponse, error) {
-	return Get[UseCaseResponse](s.client, ctx, "/useCases/"+id)
+	return Get[UseCaseResponse](s.client, ctx, "/useCases/"+id+"/")
 }
 
 func (s *ServiceImpl) UpdateUseCase(ctx context.Context, id string, req *UseCaseRequest) (*UseCaseResponse, error) {
-	return Patch[UseCaseResponse](s.client, ctx, "/useCases/"+id, req)
+	return Patch[UseCaseResponse](s.client, ctx, "/useCases/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteUseCase(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/useCases/"+id)
+	return Delete(s.client, ctx, "/useCases/"+id+"/")
 }
 
 // Remote Repository Service Implementation.
@@ -238,28 +218,28 @@ func (s *ServiceImpl) CreateRemoteRepository(ctx context.Context, req *CreateRem
 }
 
 func (s *ServiceImpl) GetRemoteRepository(ctx context.Context, id string) (*RemoteRepositoryResponse, error) {
-	return Get[RemoteRepositoryResponse](s.client, ctx, "/remoteRepositories/"+id)
+	return Get[RemoteRepositoryResponse](s.client, ctx, "/remoteRepositories/"+id+"/")
 }
 
 func (s *ServiceImpl) UpdateRemoteRepository(ctx context.Context, id string, req *UpdateRemoteRepositoryRequest) (*RemoteRepositoryResponse, error) {
-	return Patch[RemoteRepositoryResponse](s.client, ctx, "/remoteRepositories/"+id, req)
+	return Patch[RemoteRepositoryResponse](s.client, ctx, "/remoteRepositories/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteRemoteRepository(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/remoteRepositories/"+id)
+	return Delete(s.client, ctx, "/remoteRepositories/"+id+"/")
 }
 
 // Vector Database Service Implementation.
-func (s *ServiceImpl) CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*CreateVectorDatabaseResponse, error) {
-	return Post[CreateVectorDatabaseResponse](s.client, ctx, "/genai/vectorDatabases/", req)
+func (s *ServiceImpl) CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error) {
+	return Post[VectorDatabase](s.client, ctx, "/genai/vectorDatabases/", req)
 }
 
-func (s *ServiceImpl) GetVectorDatabase(ctx context.Context, id string) (*VectorDatabaseResponse, error) {
-	return Get[VectorDatabaseResponse](s.client, ctx, "/genai/vectorDatabases/"+id+"/")
+func (s *ServiceImpl) GetVectorDatabase(ctx context.Context, id string) (*VectorDatabase, error) {
+	return Get[VectorDatabase](s.client, ctx, "/genai/vectorDatabases/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateVectorDatabase(ctx context.Context, id string, req *UpdateVectorDatabaseRequest) (*VectorDatabaseResponse, error) {
-	return Patch[VectorDatabaseResponse](s.client, ctx, "/genai/vectorDatabases/"+id+"/", req)
+func (s *ServiceImpl) UpdateVectorDatabase(ctx context.Context, id string, req *UpdateVectorDatabaseRequest) (*VectorDatabase, error) {
+	return Patch[VectorDatabase](s.client, ctx, "/genai/vectorDatabases/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteVectorDatabase(ctx context.Context, id string) error {
@@ -313,8 +293,8 @@ func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id 
 	return uploadFilesFromBinaries[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/", http.MethodPatch, req.Files, map[string]string{"baseEnvironmentId": req.BaseEnvironmentID, "isMajorUpdate": "false"})
 }
 
-func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, error) {
-	return Patch[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
+func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, string, error) {
+	return PatchAndExpectStatus[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
 }
 
 func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModelResponse, error) {
@@ -467,11 +447,11 @@ func (s *ServiceImpl) IsDeploymentReady(ctx context.Context, id string) (bool, e
 }
 
 func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error) {
-	return Post[ValidateDeployemntModelReplacementResponse](s.client, ctx, "/deployments/"+id+"/model/validation", req)
+	return Post[ValidateDeployemntModelReplacementResponse](s.client, ctx, "/deployments/"+id+"/model/validation/", req)
 }
 
-func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, error) {
-	return Patch[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/model", req)
+func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, string, error) {
+	return PatchAndExpectStatus[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/model/", req)
 }
 
 // Application Service Implementation.
@@ -516,7 +496,7 @@ func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *Crea
 }
 
 func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ApplicationResponse, error) {
-	return Post[ApplicationResponse](s.client, ctx, "/customApplications/qanda", req)
+	return Post[ApplicationResponse](s.client, ctx, "/customApplications/qanda/", req)
 }
 
 func (s *ServiceImpl) GetApplication(ctx context.Context, id string) (*ApplicationResponse, error) {
@@ -559,25 +539,4 @@ func (s *ServiceImpl) DeleteCredential(ctx context.Context, id string) error {
 
 func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {
 	return Get[TaskStatusResponse](s.client, ctx, "/status/"+id+"/")
-}
-
-func (s *ServiceImpl) WaitForTaskStatusToComplete(ctx context.Context, id string) error {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 20 * time.Minute
-
-	operation := func() error {
-		task, err := s.GetTaskStatus(ctx, id)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if task.Status != "COMPLETED" {
-			return errors.New("task is not completed")
-		}
-		return nil
-	}
-
-	// Retry the operation using the backoff strategy
-	return backoff.Retry(operation, expBackoff)
 }

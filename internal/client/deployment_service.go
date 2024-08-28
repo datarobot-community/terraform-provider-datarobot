@@ -12,10 +12,12 @@ type DeploymentCreateResponse struct {
 }
 
 type DeploymentRetrieveResponse struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Model  Model  `json:"model"`
+	ID                    string                `json:"id"`
+	Label                 string                `json:"label"`
+	Status                string                `json:"status"`
+	Model                 Model                 `json:"model"`
+	ModelPackage          ModelPackage          `json:"modelPackage"`
+	PredictionEnvironment PredictionEnvironment `json:"predictionEnvironment"`
 }
 
 type Model struct {
@@ -23,6 +25,12 @@ type Model struct {
 	Type       string `json:"type"`
 	TargetName string `json:"targetName"`
 	TargetType string `json:"targetType"`
+}
+
+type ModelPackage struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	RegisteredModelID string `json:"registeredModelId"`
 }
 
 type UpdateDeploymentRequest struct {
