@@ -137,13 +137,15 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	traceAPICall("GetCustomApplication")
 	application, err := r.provider.service.GetApplication(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Custom Application not found",
 				fmt.Sprintf("Custom Application with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Custom Application", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Custom Application with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}

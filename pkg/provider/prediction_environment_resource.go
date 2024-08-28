@@ -116,13 +116,15 @@ func (r *PredictionEnvironmentResource) Read(ctx context.Context, req resource.R
 	traceAPICall("GetPredictionEnvironment")
 	predictionEnvironment, err := r.provider.service.GetPredictionEnvironment(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Prediction Environment not found",
 				fmt.Sprintf("Prediction Environment with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Prediction Environment info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Prediction Environment with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}

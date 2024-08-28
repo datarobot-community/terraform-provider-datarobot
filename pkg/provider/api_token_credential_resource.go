@@ -115,13 +115,15 @@ func (r *ApiTokenCredentialResource) Read(ctx context.Context, req resource.Read
 	traceAPICall("GetApiTokenCredential")
 	credential, err := r.provider.service.GetCredential(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Api Token Credential not found",
 				fmt.Sprintf("Api Token Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Api Token Credential info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Api Token Credential with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}

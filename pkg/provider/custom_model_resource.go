@@ -591,16 +591,15 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	traceAPICall("GetCustomModel")
 	customModel, err := r.provider.service.GetCustomModel(ctx, id)
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Custom Model not found",
 				fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				"Error getting Custom Model info",
-				fmt.Sprintf("Unable to get Custom Model, got error: %s", err),
-			)
+				fmt.Sprintf("Error getting Custom Model with ID %s", id),
+				err.Error())
 		}
 		return
 	}

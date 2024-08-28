@@ -173,13 +173,15 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	traceAPICall("GetApplicationSource")
 	applicationSource, err := r.provider.service.GetApplicationSource(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Application Source not found",
 				fmt.Sprintf("Application Source with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Application Source", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Application Source with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}

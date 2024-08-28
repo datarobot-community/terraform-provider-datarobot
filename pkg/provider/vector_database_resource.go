@@ -283,13 +283,15 @@ func (r *VectorDatabaseResource) Read(ctx context.Context, req resource.ReadRequ
 	traceAPICall("GetVectorDatabase")
 	vectorDatabase, err := r.provider.service.GetVectorDatabase(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"VectorDatabase not found",
 				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting VectorDatabase", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting VectorDatabase with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}

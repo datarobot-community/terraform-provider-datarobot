@@ -156,13 +156,15 @@ func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadReq
 	traceAPICall("GetDataset")
 	_, err := r.provider.service.GetDataset(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Dataset not found",
 				fmt.Sprintf("Dataset with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Dataset with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}

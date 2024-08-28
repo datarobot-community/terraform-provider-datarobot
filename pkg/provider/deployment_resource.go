@@ -194,7 +194,9 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 				fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Deployment", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Deployment with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}
