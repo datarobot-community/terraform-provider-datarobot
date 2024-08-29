@@ -31,8 +31,8 @@ resource "datarobot_deployment" "example" {
 }
 
 resource "datarobot_chat_application" "example" {
-  name          = "An example chat application"
-  deployment_id = datarobot_deployment.example.id
+  name                    = "An example chat application"
+  deployment_id           = datarobot_deployment.example.id
   external_access_enabled = true
   external_access_recipients = [
     "recipient@example.com",

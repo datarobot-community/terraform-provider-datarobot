@@ -1,16 +1,16 @@
 resource "datarobot_application_source" "example" {
-	local_files = ["start-app.sh", "streamlit-app.py"]
+  local_files = ["start-app.sh", "streamlit-app.py"]
 }
 
 resource "datarobot_custom_application" "example" {
-	name = "example custom application"
-	source_version_id = datarobot_application_source.example.version_id
+  name              = "example custom application"
+  source_version_id = datarobot_application_source.example.version_id
 
-    # optional settings
-    external_access_enabled = true
-    external_access_recipients = [
-        "recipient@example.com",
-    ]
+  # optional settings
+  external_access_enabled = true
+  external_access_recipients = [
+    "recipient@example.com",
+  ]
 }
 
 output "datarobot_custom_application_id" {
