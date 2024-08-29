@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -85,6 +84,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
@@ -93,6 +93,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
@@ -105,6 +106,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
@@ -117,6 +119,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 	mockService.EXPECT().UpdateApplication(gomock.Any(), id, &client.UpdateApplicationRequest{
@@ -133,6 +136,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -146,6 +150,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -193,6 +198,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -205,6 +211,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -214,6 +221,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -227,6 +235,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
 		ExternalAccessEnabled:            true,
 	}, nil)
@@ -287,8 +296,11 @@ if __name__ == "__main__":
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
+					resource.TestCheckNoResourceAttr(resourceName, "external_access_recipients"),
 				),
 			},
 			// Update name and external access
@@ -312,8 +324,11 @@ if __name__ == "__main__":
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
 				),
 			},
 			// Update Application source version
@@ -337,8 +352,11 @@ if __name__ == "__main__":
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
 				),
 			},
 			// Delete is tested automatically
@@ -411,18 +429,21 @@ func checkCustomApplicationResourceExists(resourceName string) resource.TestChec
 
 		if application.Name == rs.Primary.Attributes["name"] &&
 			application.ApplicationUrl == rs.Primary.Attributes["application_url"] &&
+			application.CustomApplicationSourceID == rs.Primary.Attributes["source_id"] &&
 			application.CustomApplicationSourceVersionID == rs.Primary.Attributes["source_version_id"] {
-				b, err := strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"]); if err == nil {
-					if application.ExternalAccessEnabled == b {
-						if len(application.ExternalAccessRecipients) > 0 {
-							if strings.Join(application.ExternalAccessRecipients, ",") == rs.Primary.Attributes["external_access_recipients"] {
-								return nil
-							}
-						} else {
+			b, err := strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"])
+			if err == nil {
+				if application.ExternalAccessEnabled == b {
+					if len(application.ExternalAccessRecipients) > 0 {
+						if application.ExternalAccessRecipients[0] == rs.Primary.Attributes["external_access_recipients.0"] {
 							return nil
 						}
+					} else if rs.Primary.Attributes["external_access_recipients.0"] == "" {
+						return nil
 					}
 				}
+			}
+			return nil
 		}
 
 		return fmt.Errorf("Custom Application not found")

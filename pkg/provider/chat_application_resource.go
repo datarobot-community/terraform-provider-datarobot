@@ -44,9 +44,16 @@ func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"version_id": schema.StringAttribute{
+			"source_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The version ID of the Chat Application.",
+				MarkdownDescription: "The ID of the Chat Application Source.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"source_version_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The version ID of the Chat Application Source.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -149,16 +156,10 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 	data.ID = types.StringValue(application.ID)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
-		return
-	}
-	data.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -193,17 +194,21 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
+	traceAPICall("GetApplicationSourceVersion")
+	applicationSourceVersion, err := r.provider.service.GetApplicationSourceVersion(
+		ctx, 
+		application.CustomApplicationSourceID, 
+		application.CustomApplicationSourceVersionID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
+		resp.Diagnostics.AddError("Error getting Application Source version", err.Error())
 		return
 	}
-	data.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
-	if applicationSource.LatestVersion.RuntimeParameters != nil {
-		for _, runtimeParameter := range applicationSource.LatestVersion.RuntimeParameters {
+	if applicationSourceVersion.RuntimeParameters != nil {
+		for _, runtimeParameter := range applicationSourceVersion.RuntimeParameters {
 			if runtimeParameter.FieldName == "DEPLOYMENT_ID" {
 				data.DeploymentID = types.StringValue(runtimeParameter.CurrentValue.(string))
 				break
@@ -259,19 +264,11 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
+	_, err = waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
 	}
-
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
-		return
-	}
-	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

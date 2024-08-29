@@ -44,6 +44,13 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"source_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The ID of the Custom Application Source.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"source_version_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The version ID of the Custom Application Source.",
@@ -119,7 +126,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		for i, recipient := range data.ExternalAccessRecipients {
 			recipients[i] = recipient.ValueString()
 		}
-		
+
 		updateRequest := &client.UpdateApplicationRequest{
 			ExternalAccessEnabled:    enableExternalAccess,
 			ExternalAccessRecipients: recipients,
@@ -145,6 +152,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 	data.ID = types.StringValue(application.ID)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
@@ -180,6 +188,7 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	}
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 

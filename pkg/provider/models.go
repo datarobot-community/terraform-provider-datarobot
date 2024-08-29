@@ -185,7 +185,8 @@ type PredictionsSetting struct {
 
 type ChatApplicationResourceModel struct {
 	ID                       types.String   `tfsdk:"id"`
-	VersionID                types.String   `tfsdk:"version_id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
+	SourceVersionID          types.String   `tfsdk:"source_version_id"`
 	Name                     types.String   `tfsdk:"name"`
 	DeploymentID             types.String   `tfsdk:"deployment_id"`
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
@@ -202,6 +203,7 @@ type ApplicationSourceResourceModel struct {
 
 type CustomApplicationResourceModel struct {
 	ID                       types.String   `tfsdk:"id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
 	SourceVersionID          types.String   `tfsdk:"source_version_id"`
 	Name                     types.String   `tfsdk:"name"`
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
