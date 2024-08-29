@@ -145,7 +145,8 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 				fmt.Sprintf("Application with ID %s is not found. Removing from state.", createResp.ID))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Application", err.Error())
+			errMessage := checkApplicationNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error adding details to Chat Application", errMessage)
 		}
 		return
 	}
@@ -259,7 +260,8 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 				fmt.Sprintf("Application with ID %s is not found. Removing from state.", plan.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Application", err.Error())
+			errMessage := checkApplicationNameAlreadyExists(err, plan.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Application", errMessage)
 		}
 		return
 	}

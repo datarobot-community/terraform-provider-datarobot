@@ -214,9 +214,15 @@ func checkCredentialNameAlreadyExists(err error, name string) string {
 	return checkNameAlreadyExists(err, name, "Credential")
 }
 
+func checkApplicationNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Application")
+}
+
 func checkNameAlreadyExists(err error, name string, resourceType string) string {
 	errMessage := err.Error()
-	if strings.Contains(errMessage, "already in use") || strings.Contains(errMessage, "already exist") {
+	if strings.Contains(errMessage, "already in use") || 
+		strings.Contains(errMessage, "already exist") || 
+		strings.Contains(errMessage, "is already used") {
 		errMessage = fmt.Sprintf("%s name must be unique, and name '%s' is already in use", resourceType, name)
 	}
 
