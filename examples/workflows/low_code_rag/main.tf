@@ -10,7 +10,7 @@ terraform {
   required_providers {
     datarobot = {
       source  = "datarobot/datarobot"
-      version = "0.0.10"
+      version = "0.0.15"
     }
   }
 }
