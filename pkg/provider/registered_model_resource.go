@@ -98,7 +98,8 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		RegisteredModelName:  data.Name.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Registered Model", err.Error())
+		errMessage := checkNameAlreadyExists(err, data.Name.ValueString(), "Registered Model")
+		resp.Diagnostics.AddError("Error creating Registered Model", errMessage)
 		return
 	}
 	data.ID = types.StringValue(registeredModelVersion.RegisteredModelID)
@@ -210,7 +211,8 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 					fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", plan.ID.ValueString()))
 				resp.State.RemoveResource(ctx)
 			} else {
-				resp.Diagnostics.AddError("Error updating Registered Model", err.Error())
+				errMessage := checkNameAlreadyExists(err, plan.Name.ValueString(), "Registered Model")
+				resp.Diagnostics.AddError("Error updating Registered Model", errMessage)
 			}
 			return
 		}

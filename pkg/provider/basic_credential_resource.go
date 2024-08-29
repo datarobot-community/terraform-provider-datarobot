@@ -98,7 +98,8 @@ func (r *BasicCredentialResource) Create(ctx context.Context, req resource.Creat
 		Password:       data.Password.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Basic Credential", err.Error())
+		errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Basic Credential", errMessage)
 		return
 	}
 	data.ID = types.StringValue(createResp.ID)
@@ -163,7 +164,8 @@ func (r *BasicCredentialResource) Update(ctx context.Context, req resource.Updat
 				fmt.Sprintf("Basic Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Basic Credential", err.Error())
+			errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Basic Credential", errMessage)
 		}
 		return
 	}

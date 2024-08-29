@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -207,4 +208,17 @@ func waitForApplicationToBeReady(ctx context.Context, service client.Service, id
 
 	traceAPICall("GetCustomApplication")
 	return service.GetApplication(ctx, id)
+}
+
+func checkCredentialNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Credential")
+}
+
+func checkNameAlreadyExists(err error, name string, resourceType string) string {
+	errMessage := err.Error()
+	if strings.Contains(errMessage, "already in use") || strings.Contains(errMessage, "already exist") {
+		errMessage = fmt.Sprintf("%s name must be unique, and name '%s' is already in use", resourceType, name)
+	}
+
+	return errMessage
 }

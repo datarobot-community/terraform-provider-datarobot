@@ -92,7 +92,8 @@ func (r *ApiTokenCredentialResource) Create(ctx context.Context, req resource.Cr
 		ApiToken:       data.ApiToken.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Api Token Credential", err.Error())
+		errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Api Token Credential", errMessage)
 		return
 	}
 
@@ -156,7 +157,8 @@ func (r *ApiTokenCredentialResource) Update(ctx context.Context, req resource.Up
 				fmt.Sprintf("Api Token Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Api Token Credential", err.Error())
+			errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Api Token Credential", errMessage)
 		}
 		return
 	}
