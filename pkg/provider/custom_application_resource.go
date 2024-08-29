@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -62,6 +63,19 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"external_access_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether external access is enabled for the Custom Application.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"external_access_recipients": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of external email addresses that have access to the Custom Application.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -98,13 +112,27 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	if IsKnown(data.Name) {
+	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
+
+	if IsKnown(data.Name) || enableExternalAccess {
+		recipients := make([]string, len(data.ExternalAccessRecipients))
+		for i, recipient := range data.ExternalAccessRecipients {
+			recipients[i] = recipient.ValueString()
+		}
+		
+		updateRequest := &client.UpdateApplicationRequest{
+			ExternalAccessEnabled:    enableExternalAccess,
+			ExternalAccessRecipients: recipients,
+		}
+
+		if IsKnown(data.Name) {
+			updateRequest.Name = data.Name.ValueString()
+		}
+
 		traceAPICall("UpdateCustomApplication")
-		_, err = r.provider.service.UpdateApplication(ctx, application.ID, &client.UpdateApplicationRequest{
-			Name: data.Name.ValueString(),
-		})
+		_, err = r.provider.service.UpdateApplication(ctx, application.ID, updateRequest)
 		if err != nil {
-			resp.Diagnostics.AddError("Error adding name to Custom Application", err.Error())
+			resp.Diagnostics.AddError("Error adding details to Custom Application", err.Error())
 			return
 		}
 	} else {
@@ -118,6 +146,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	}
 	data.ID = types.StringValue(application.ID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -144,7 +173,7 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Custom Application with ID %s", data.ID.ValueString()), 
+				fmt.Sprintf("Error getting Custom Application with ID %s", data.ID.ValueString()),
 				err.Error())
 		}
 		return
@@ -152,6 +181,7 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -171,12 +201,24 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
+	recipients := make([]string, len(plan.ExternalAccessRecipients))
+	for i, recipient := range plan.ExternalAccessRecipients {
+		recipients[i] = recipient.ValueString()
+	}
+
+	updateRequest := &client.UpdateApplicationRequest{
+		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessRecipients: recipients,
+	}
+
+	if state.Name.ValueString() != plan.Name.ValueString() {
+		updateRequest.Name = plan.Name.ValueString()
+	}
+
 	traceAPICall("UpdateCustomApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
-		&client.UpdateApplicationRequest{
-			Name: plan.Name.ValueString(),
-		})
+		updateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(

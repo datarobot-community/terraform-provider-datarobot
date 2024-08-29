@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -68,6 +69,19 @@ func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"external_access_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether external access is enabled for the Chat Application.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"external_access_recipients": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of external email addresses that have access to the Chat Application.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -104,11 +118,18 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	recipients := make([]string, len(data.ExternalAccessRecipients))
+	for i, recipient := range data.ExternalAccessRecipients {
+		recipients[i] = recipient.ValueString()
+	}
+
 	traceAPICall("UpdateChatApplication")
 	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
 		&client.UpdateApplicationRequest{
-			Name: data.Name.ValueString(),
+			Name:                     data.Name.ValueString(),
+			ExternalAccessEnabled:    IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool(),
+			ExternalAccessRecipients: recipients,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -129,6 +150,7 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 	}
 	data.ID = types.StringValue(application.ID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	traceAPICall("GetChatApplicationSource")
 	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
@@ -170,6 +192,7 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	traceAPICall("GetChatApplicationSource")
 	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
@@ -206,17 +229,24 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	newName := plan.Name.ValueString()
-	if state.Name.ValueString() == newName {
-		return
+	recipients := make([]string, len(plan.ExternalAccessRecipients))
+	for i, recipient := range plan.ExternalAccessRecipients {
+		recipients[i] = recipient.ValueString()
 	}
 
-	traceAPICall("UpdateApplication")
+	updateRequest := &client.UpdateApplicationRequest{
+		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessRecipients: recipients,
+	}
+
+	if state.Name.ValueString() != plan.Name.ValueString() {
+		updateRequest.Name = plan.Name.ValueString()
+	}
+
+	traceAPICall("UpdateChatApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
-		&client.UpdateApplicationRequest{
-			Name: newName,
-		})
+		updateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(

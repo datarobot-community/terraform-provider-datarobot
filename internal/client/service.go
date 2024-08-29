@@ -105,11 +105,11 @@ type Service interface {
 	DeleteApplicationSource(ctx context.Context, id string) error
 
 	// Application
-	CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*ApplicationResponse, error)
-	CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ApplicationResponse, error)
-	GetApplication(ctx context.Context, id string) (*ApplicationResponse, error)
+	CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*Application, error)
+	CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*Application, error)
+	GetApplication(ctx context.Context, id string) (*Application, error)
 	IsApplicationReady(ctx context.Context, id string) (bool, error)
-	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*ApplicationResponse, error)
+	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error)
 	DeleteApplication(ctx context.Context, id string) error
 
 	// Credential
@@ -491,16 +491,16 @@ func (s *ServiceImpl) DeleteApplicationSource(ctx context.Context, id string) er
 	return Delete(s.client, ctx, "/customApplicationSources/"+id+"/")
 }
 
-func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*ApplicationResponse, error) {
-	return Post[ApplicationResponse](s.client, ctx, "/customApplications/", req)
+func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*Application, error) {
+	return Post[Application](s.client, ctx, "/customApplications/", req)
 }
 
-func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*ApplicationResponse, error) {
-	return Post[ApplicationResponse](s.client, ctx, "/customApplications/qanda/", req)
+func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*Application, error) {
+	return Post[Application](s.client, ctx, "/customApplications/qanda/", req)
 }
 
-func (s *ServiceImpl) GetApplication(ctx context.Context, id string) (*ApplicationResponse, error) {
-	return Get[ApplicationResponse](s.client, ctx, "/customApplications/"+id+"/")
+func (s *ServiceImpl) GetApplication(ctx context.Context, id string) (*Application, error) {
+	return Get[Application](s.client, ctx, "/customApplications/"+id+"/")
 }
 
 func (s *ServiceImpl) IsApplicationReady(ctx context.Context, id string) (bool, error) {
@@ -512,8 +512,8 @@ func (s *ServiceImpl) IsApplicationReady(ctx context.Context, id string) (bool, 
 	return customApplication.Status == "running", nil
 }
 
-func (s *ServiceImpl) UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*ApplicationResponse, error) {
-	return Patch[ApplicationResponse](s.client, ctx, "/customApplications/"+id+"/", req)
+func (s *ServiceImpl) UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error) {
+	return Patch[Application](s.client, ctx, "/customApplications/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteApplication(ctx context.Context, id string) error {

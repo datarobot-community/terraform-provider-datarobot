@@ -185,7 +185,7 @@ func waitForDatasetToBeReady(ctx context.Context, service client.Service, datase
 	return service.GetDataset(ctx, datasetId)
 }
 
-func waitForApplicationToBeReady(ctx context.Context, service client.Service, id string) (*client.ApplicationResponse, error) {
+func waitForApplicationToBeReady(ctx context.Context, service client.Service, id string) (*client.Application, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
