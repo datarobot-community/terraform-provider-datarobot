@@ -118,13 +118,15 @@ func (r *GoogleCloudCredentialResource) Read(ctx context.Context, req resource.R
 	traceAPICall("GetGoogleCloudCredential")
 	credential, err := r.provider.service.GetCredential(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Google Cloud Credential not found",
 				fmt.Sprintf("Google Cloud Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Google Cloud Credential info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Google Cloud Credential with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}

@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -124,7 +122,7 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	application, err := r.waitForChatApplicationToBeReady(ctx, createResp.ID)
+	application, err := waitForApplicationToBeReady(ctx, r.provider.service, createResp.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
@@ -158,13 +156,15 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	traceAPICall("GetChatApplication")
 	application, err := r.provider.service.GetApplication(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Application not found",
 				fmt.Sprintf("Application with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Application info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Application with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
@@ -229,7 +229,7 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	application, err := r.waitForChatApplicationToBeReady(ctx, plan.ID.ValueString())
+	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
@@ -266,31 +266,4 @@ func (r *ChatApplicationResource) Delete(ctx context.Context, req resource.Delet
 
 func (r *ChatApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func (r *ChatApplicationResource) waitForChatApplicationToBeReady(ctx context.Context, id string) (*client.ApplicationResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
-
-	operation := func() error {
-		ready, err := r.provider.service.IsApplicationReady(ctx, id)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if !ready {
-			return errors.New("application is not ready")
-		}
-		return nil
-	}
-
-	// Retry the operation using the backoff strategy
-	err := backoff.Retry(operation, expBackoff)
-	if err != nil {
-		return nil, err
-	}
-
-	traceAPICall("GetChatApplication")
-	return r.provider.service.GetApplication(ctx, id)
 }

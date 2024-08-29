@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -14,15 +14,26 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int32default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int32planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+const (
+	defaultEmbeddingModel         = "jinaai/jina-embedding-t-en-v1"
+	defaultChunkOverlapPercentage = 0
+	defaultChunkSize              = 256
+	defaultChunkingMethod         = "recursive"
+	defaultIsSeparatorRegex       = false
+)
+
+var defaultSeparators = []string{"\n\n", "\n", " ", ""}
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &VectorDatabaseResource{}
@@ -73,41 +84,68 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"chunking_parameters": schema.SingleNestedAttribute{
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The chunking parameters for the Model.",
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					map[string]attr.Type{
+						"embedding_model":          types.StringType,
+						"chunk_overlap_percentage": types.Int64Type,
+						"chunk_size":               types.Int64Type,
+						"chunking_method":          types.StringType,
+						"is_separator_regex":       types.BoolType,
+						"separators":               types.ListType{ElemType: types.StringType},
+					},
+					map[string]attr.Value{
+						"embedding_model":          types.StringValue(defaultEmbeddingModel),
+						"chunk_overlap_percentage": types.Int64Value(defaultChunkOverlapPercentage),
+						"chunk_size":               types.Int64Value(defaultChunkSize),
+						"chunking_method":          types.StringValue(defaultChunkingMethod),
+						"is_separator_regex":       types.BoolValue(defaultIsSeparatorRegex),
+						"separators": types.ListValueMust(
+							types.StringType,
+							[]attr.Value{
+								types.StringValue(defaultSeparators[0]),
+								types.StringValue(defaultSeparators[1]),
+								types.StringValue(defaultSeparators[2]),
+								types.StringValue(defaultSeparators[3]),
+							},
+						),
+					},
+				)),
 				Attributes: map[string]schema.Attribute{
 					"embedding_model": schema.StringAttribute{
 						MarkdownDescription: "The id of the Embedding Model.",
 						Optional:            true,
 						Computed:            true,
-						Default:             stringdefault.StaticString("jinaai/jina-embedding-t-en-v1"),
+						Default:             stringdefault.StaticString(defaultEmbeddingModel),
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
 					},
-					"chunk_overlap_percentage": schema.Int32Attribute{
+					"chunk_overlap_percentage": schema.Int64Attribute{
 						MarkdownDescription: "The percentage of overlap between chunks.",
 						Optional:            true,
 						Computed:            true,
-						Default:             int32default.StaticInt32(0),
-						PlanModifiers: []planmodifier.Int32{
-							int32planmodifier.UseStateForUnknown(),
+						Default:             int64default.StaticInt64(defaultChunkOverlapPercentage),
+						PlanModifiers: []planmodifier.Int64{
+							int64planmodifier.UseStateForUnknown(),
 						},
 					},
-					"chunk_size": schema.Int32Attribute{
+					"chunk_size": schema.Int64Attribute{
 						MarkdownDescription: "The size of the chunks.",
 						Optional:            true,
 						Computed:            true,
-						Default:             int32default.StaticInt32(256),
-						PlanModifiers: []planmodifier.Int32{
-							int32planmodifier.UseStateForUnknown(),
+						Default:             int64default.StaticInt64(defaultChunkSize),
+						PlanModifiers: []planmodifier.Int64{
+							int64planmodifier.UseStateForUnknown(),
 						},
 					},
 					"chunking_method": schema.StringAttribute{
 						MarkdownDescription: "The method used to chunk the data.",
 						Optional:            true,
 						Computed:            true,
-						Default:             stringdefault.StaticString("recursive"),
+						Default:             stringdefault.StaticString(defaultChunkingMethod),
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -116,7 +154,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						MarkdownDescription: "Whether the separator is a regex.",
 						Optional:            true,
 						Computed:            true,
-						Default:             booldefault.StaticBool(false),
+						Default:             booldefault.StaticBool(defaultIsSeparatorRegex),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),
 						},
@@ -129,10 +167,10 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						Default: listdefault.StaticValue(types.ListValueMust(
 							types.StringType,
 							[]attr.Value{
-								types.StringValue("↵↵"),
-								types.StringValue("↵"),
-								types.StringValue(" "),
-								types.StringValue(""),
+								types.StringValue(defaultSeparators[0]),
+								types.StringValue(defaultSeparators[1]),
+								types.StringValue(defaultSeparators[2]),
+								types.StringValue(defaultSeparators[3]),
 							},
 						)),
 						PlanModifiers: []planmodifier.List{
@@ -176,9 +214,13 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
 			return
 		}
-		err = r.waitForDatasetToBeReady(ctx, datasetID)
+		dataset, err := waitForDatasetToBeReady(ctx, r.provider.service, datasetID)
 		if err != nil {
 			resp.Diagnostics.AddError("Dataset not ready", err.Error())
+			return
+		}
+		if !dataset.IsVectorDatabaseEligible {
+			resp.Diagnostics.AddError("Dataset not eligible for VectorDatabase", "Dataset is not eligible for VectorDatabase")
 			return
 		}
 	}
@@ -193,23 +235,22 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
-	chunkingParameters := data.ChunkingParameters
 	separators := make([]string, 0)
-	for _, separator := range chunkingParameters.Separators.Elements() {
-		separators = append(separators, separator.String())
+	for _, separator := range data.ChunkingParameters.Separators {
+		separators = append(separators, separator.ValueString())
 	}
 
 	traceAPICall("CreateVectorDatabase")
-	createResp, err := r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
+	vectorDatabase, err := r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
 		DatasetID: datasetID,
 		UseCaseID: useCaseID,
 		Name:      data.Name.ValueString(),
 		ChunkingParameters: client.ChunkingParameters{
-			EmbeddingModel:         chunkingParameters.EmbeddingModel.ValueString(),
-			ChunkOverlapPercentage: chunkingParameters.ChunkOverlapPercentage.ValueInt32(),
-			ChunkSize:              chunkingParameters.ChunkSize.ValueInt32(),
-			ChunkingMethod:         chunkingParameters.ChunkingMethod.ValueString(),
-			IsSeparatorRegex:       chunkingParameters.IsSeparatorRegex.ValueBool(),
+			EmbeddingModel:         data.ChunkingParameters.EmbeddingModel.ValueString(),
+			ChunkOverlapPercentage: data.ChunkingParameters.ChunkOverlapPercentage.ValueInt64(),
+			ChunkSize:              data.ChunkingParameters.ChunkSize.ValueInt64(),
+			ChunkingMethod:         data.ChunkingParameters.ChunkingMethod.ValueString(),
+			IsSeparatorRegex:       data.ChunkingParameters.IsSeparatorRegex.ValueBool(),
 			Separators:             separators,
 		},
 	})
@@ -217,15 +258,14 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError("Error creating VectorDatabase", err.Error())
 		return
 	}
-	data.ID = types.StringValue(createResp.ID)
+	loadVectorDatabaseToTerraformState(vectorDatabase, &data)
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 
-	err = r.waitForVectorDatabaseToBeReady(ctx, createResp.ID)
+	err = r.waitForVectorDatabaseToBeReady(ctx, vectorDatabase.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Vector Database not ready", err.Error())
 		return
 	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *VectorDatabaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -243,19 +283,19 @@ func (r *VectorDatabaseResource) Read(ctx context.Context, req resource.ReadRequ
 	traceAPICall("GetVectorDatabase")
 	vectorDatabase, err := r.provider.service.GetVectorDatabase(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"VectorDatabase not found",
 				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting VectorDatabase", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting VectorDatabase with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
-	data.Name = types.StringValue(vectorDatabase.Name)
-	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
-	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)
+	loadVectorDatabaseToTerraformState(vectorDatabase, &data)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -275,15 +315,8 @@ func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// If the chunking parameters change return an error
-	// TODO : Support what can be changed or handle more gracefully
-	newChunkingParameters := plan.ChunkingParameters
-	if state.ChunkingParameters.EmbeddingModel.ValueString() != newChunkingParameters.EmbeddingModel.ValueString() ||
-		state.ChunkingParameters.ChunkOverlapPercentage.ValueInt32() != newChunkingParameters.ChunkOverlapPercentage.ValueInt32() ||
-		state.ChunkingParameters.ChunkSize.ValueInt32() != newChunkingParameters.ChunkSize.ValueInt32() ||
-		state.ChunkingParameters.ChunkingMethod.ValueString() != newChunkingParameters.ChunkingMethod.ValueString() ||
-		state.ChunkingParameters.IsSeparatorRegex.ValueBool() != newChunkingParameters.IsSeparatorRegex.ValueBool() ||
-		!state.ChunkingParameters.Separators.Equal(newChunkingParameters.Separators) {
+	// TODO : Support what can be changed or handle more gracefully, possibly with a custom plan modifier ?
+	if !reflect.DeepEqual(state.ChunkingParameters, plan.ChunkingParameters) {
 		resp.Diagnostics.AddError(
 			"Chunking parameters change",
 			"Changing the chunking parameters is not supported. Please create a new VectorDatabase.",
@@ -335,10 +368,7 @@ func (r *VectorDatabaseResource) ImportState(ctx context.Context, req resource.I
 }
 
 func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Context, vectorDatabaseId string) error {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
 		traceAPICall("IsVectorDatabaseReady")
@@ -360,27 +390,21 @@ func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Cont
 	return nil
 }
 
-func (r *VectorDatabaseResource) waitForDatasetToBeReady(ctx context.Context, datasetId string) error {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
-
-	operation := func() error {
-		ready, err := r.provider.service.IsDatasetReadyForVectorDatabase(ctx, datasetId)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if !ready {
-			return errors.New("dataset is not ready")
-		}
-		return nil
+func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, data *VectorDatabaseResourceModel) {
+	data.ID = types.StringValue(vectorDatabase.ID)
+	data.Name = types.StringValue(vectorDatabase.Name)
+	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
+	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)
+	data.ChunkingParameters = &ChunkingParametersModel{
+		EmbeddingModel:         types.StringValue(vectorDatabase.EmbeddingModel),
+		ChunkOverlapPercentage: types.Int64Value(vectorDatabase.ChunkOverlapPercentage),
+		ChunkSize:              types.Int64Value(vectorDatabase.ChunkSize),
+		ChunkingMethod:         types.StringValue(vectorDatabase.ChunkingMethod),
+		IsSeparatorRegex:       types.BoolValue(vectorDatabase.IsSeparatorRegex),
 	}
-
-	// Retry the operation using the backoff strategy
-	err := backoff.Retry(operation, expBackoff)
-	if err != nil {
-		return err
+	separatorList := make([]types.String, 0)
+	for _, separator := range vectorDatabase.Separators {
+		separatorList = append(separatorList, types.StringValue(separator))
 	}
-	return nil
+	data.ChunkingParameters.Separators = separatorList
 }

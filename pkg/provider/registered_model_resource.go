@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -150,13 +149,15 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	traceAPICall("GetRegisteredModel")
 	registeredModel, err := r.provider.service.GetRegisteredModel(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Registered Model not found",
 				fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Registered Model info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Registered Model with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
@@ -193,7 +194,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 
 	plan.VersionID = state.VersionID
 
-	if state.Name.ValueString() != plan.Name.ValueString() || 
+	if state.Name.ValueString() != plan.Name.ValueString() ||
 		state.Description.ValueString() != plan.Description.ValueString() {
 		traceAPICall("UpdateRegisteredModel")
 		_, err := r.provider.service.UpdateRegisteredModel(ctx,
@@ -268,10 +269,7 @@ func (r *RegisteredModelResource) ImportState(ctx context.Context, req resource.
 }
 
 func (r *RegisteredModelResource) waitForRegisteredModelVersionToBeReady(ctx context.Context, registeredModelId string, versionId string) error {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
 		ready, err := r.provider.service.IsRegisteredModelVersionReady(ctx, registeredModelId, versionId)

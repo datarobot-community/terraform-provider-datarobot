@@ -186,12 +186,13 @@ func (mr *MockServiceMockRecorder) CreateCustomModelVersionFromGuardConfiguratio
 }
 
 // CreateCustomModelVersionFromRemoteRepository mocks base method.
-func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CreateCustomModelVersionResponse, error) {
+func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CreateCustomModelVersionResponse, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModelVersionFromRemoteRepository", ctx, id, req)
 	ret0, _ := ret[0].(*client.CreateCustomModelVersionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // CreateCustomModelVersionFromRemoteRepository indicates an expected call of CreateCustomModelVersionFromRemoteRepository.
@@ -351,10 +352,10 @@ func (mr *MockServiceMockRecorder) CreateUseCase(ctx, req interface{}) *gomock.C
 }
 
 // CreateVectorDatabase mocks base method.
-func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.CreateVectorDatabaseRequest) (*client.CreateVectorDatabaseResponse, error) {
+func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.CreateVectorDatabaseRequest) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateVectorDatabase", ctx, req)
-	ret0, _ := ret[0].(*client.CreateVectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -833,10 +834,10 @@ func (mr *MockServiceMockRecorder) GetUseCase(ctx, id interface{}) *gomock.Call 
 }
 
 // GetVectorDatabase mocks base method.
-func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client.VectorDatabaseResponse, error) {
+func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVectorDatabase", ctx, id)
-	ret0, _ := ret[0].(*client.VectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -890,21 +891,6 @@ func (m *MockService) IsDatasetReady(ctx context.Context, id string) (bool, erro
 func (mr *MockServiceMockRecorder) IsDatasetReady(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReady", reflect.TypeOf((*MockService)(nil).IsDatasetReady), ctx, id)
-}
-
-// IsDatasetReadyForVectorDatabase mocks base method.
-func (m *MockService) IsDatasetReadyForVectorDatabase(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDatasetReadyForVectorDatabase", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsDatasetReadyForVectorDatabase indicates an expected call of IsDatasetReadyForVectorDatabase.
-func (mr *MockServiceMockRecorder) IsDatasetReadyForVectorDatabase(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReadyForVectorDatabase", reflect.TypeOf((*MockService)(nil).IsDatasetReadyForVectorDatabase), ctx, id)
 }
 
 // IsDeploymentReady mocks base method.
@@ -1177,12 +1163,13 @@ func (mr *MockServiceMockRecorder) UpdateDeployment(ctx, id, req interface{}) *g
 }
 
 // UpdateDeploymentModel mocks base method.
-func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.DeploymentRetrieveResponse, error) {
+func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.DeploymentRetrieveResponse, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentModel", ctx, id, req)
 	ret0, _ := ret[0].(*client.DeploymentRetrieveResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // UpdateDeploymentModel indicates an expected call of UpdateDeploymentModel.
@@ -1297,10 +1284,10 @@ func (mr *MockServiceMockRecorder) UpdateUseCase(ctx, id, req interface{}) *gomo
 }
 
 // UpdateVectorDatabase mocks base method.
-func (m *MockService) UpdateVectorDatabase(ctx context.Context, id string, req *client.UpdateVectorDatabaseRequest) (*client.VectorDatabaseResponse, error) {
+func (m *MockService) UpdateVectorDatabase(ctx context.Context, id string, req *client.UpdateVectorDatabaseRequest) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateVectorDatabase", ctx, id, req)
-	ret0, _ := ret[0].(*client.VectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1324,18 +1311,4 @@ func (m *MockService) ValidateDeploymentModelReplacement(ctx context.Context, id
 func (mr *MockServiceMockRecorder) ValidateDeploymentModelReplacement(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDeploymentModelReplacement", reflect.TypeOf((*MockService)(nil).ValidateDeploymentModelReplacement), ctx, id, req)
-}
-
-// WaitForTaskStatusToComplete mocks base method.
-func (m *MockService) WaitForTaskStatusToComplete(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForTaskStatusToComplete", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WaitForTaskStatusToComplete indicates an expected call of WaitForTaskStatusToComplete.
-func (mr *MockServiceMockRecorder) WaitForTaskStatusToComplete(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForTaskStatusToComplete", reflect.TypeOf((*MockService)(nil).WaitForTaskStatusToComplete), ctx, id)
 }

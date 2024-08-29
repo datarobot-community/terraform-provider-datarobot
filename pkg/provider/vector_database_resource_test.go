@@ -43,7 +43,6 @@ func TestAccVectorDatabaseResource(t *testing.T) {
 }
 
 func vectorDatabaseResourceConfig(name string) string {
-	// TODO: test chunking parameters
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_vector_database" {
 	name = "test"
@@ -58,7 +57,10 @@ resource "datarobot_vector_database" "test" {
 	  name = "%s"
 	  dataset_id = "${datarobot_dataset_from_file.test_vector_database.id}"
 	  use_case_id = "${datarobot_use_case.test_vector_database.id}"
-	  chunking_parameters = {}
+	  chunking_parameters = {
+		chunk_size = 500
+		separators = ["\n"]
+	  }
 }
 `, name)
 }

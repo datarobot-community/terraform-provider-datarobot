@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -102,11 +101,11 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "Settings for the predictions.",
 						Attributes: map[string]schema.Attribute{
-							"min_computes": schema.NumberAttribute{
+							"min_computes": schema.Int64Attribute{
 								Required:            true,
 								MarkdownDescription: "The minimum number of computes to use for predictions.",
 							},
-							"max_computes": schema.NumberAttribute{
+							"max_computes": schema.Int64Attribute{
 								Required:            true,
 								MarkdownDescription: "The maximum number of computes to use for predictions.",
 							},
@@ -138,173 +137,89 @@ func (r *DeploymentResource) Configure(ctx context.Context, req resource.Configu
 }
 
 func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data DeploymentResourceModel
 
-	var plan DeploymentResourceModel
-
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !IsKnown(plan.RegisteredModelVersionID) {
-		resp.Diagnostics.AddError(
-			"Invalid registered model version ID",
-			"Registered Model Version ID is required to create a Deployment.",
-		)
-		return
-	}
-	registeredModelVersionID := plan.RegisteredModelVersionID.ValueString()
-
-	if !IsKnown(plan.PredictionEnvironmentID) {
-		resp.Diagnostics.AddError(
-			"Invalid prediction environment ID",
-			"Prediction Environment ID is required to create a Deployment.",
-		)
-		return
-	}
-	predictionEnvironmentID := plan.PredictionEnvironmentID.ValueString()
-
-	if !IsKnown(plan.Label) {
-		resp.Diagnostics.AddError(
-			"Invalid label",
-			"Label is required to create a Deployment.",
-		)
-		return
-	}
-	label := plan.Label.ValueString()
 
 	traceAPICall("CreateDeployment")
 	createResp, err := r.provider.service.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
-		ModelPackageID:          registeredModelVersionID,
-		PredictionEnvironmentID: predictionEnvironmentID,
-		Label:                   label,
+		ModelPackageID:          data.RegisteredModelVersionID.ValueString(),
+		PredictionEnvironmentID: data.PredictionEnvironmentID.ValueString(),
+		Label:                   data.Label.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating Deployment",
-			fmt.Sprintf("Unable to create Deployment, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error creating Deployment", err.Error())
 		return
 	}
 
 	deployment, err := r.waitForDeploymentToBeReady(ctx, createResp.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Deployment not ready",
-			"Deployment is not ready after 5 minutes or failed to check the status.")
+		resp.Diagnostics.AddError("Deployment is not ready", err.Error())
 		return
 	}
+	data.ID = types.StringValue(deployment.ID)
 
-	if plan.Settings != nil {
-		deployment, err = r.updateDeploymentSettings(ctx, createResp.ID, plan.Settings)
+	if data.Settings != nil {
+		_, err = r.updateDeploymentSettings(ctx, createResp.ID, data.Settings)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error updating Deployment settings",
-				fmt.Sprintf("Unable to update Deployment settings, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 			return
 		}
 	}
 
-	var state DeploymentResourceModel
-	loadDeploymentToTerraformState(
-		deployment.ID,
-		deployment.Label,
-		registeredModelVersionID,
-		predictionEnvironmentID,
-		plan.Settings,
-		&state,
-	)
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data DeploymentResourceModel
 
-	var state DeploymentResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
+	if data.ID.IsNull() {
 		return
 	}
 
-	id := state.ID.ValueString()
-	registeredModelVersionID := state.RegisteredModelVersionID.ValueString()
-	predictionEnvironmentID := state.PredictionEnvironmentID.ValueString()
-
 	traceAPICall("GetDeployment")
-	deployment, err := r.provider.service.GetDeployment(ctx, id)
+	deployment, err := r.provider.service.GetDeployment(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Deployment not found",
-				fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", id))
+				fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				"Error getting Deployment info",
-				fmt.Sprintf("Unable to get Deployment, got error: %s", err),
-			)
+				fmt.Sprintf("Error getting Deployment with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}
+	data.Label = types.StringValue(deployment.Label)
+	data.RegisteredModelVersionID = types.StringValue(deployment.ModelPackage.ID)
+	data.PredictionEnvironmentID = types.StringValue(deployment.PredictionEnvironment.ID)
 
-	loadDeploymentToTerraformState(
-		id,
-		deployment.Label,
-		registeredModelVersionID,
-		predictionEnvironmentID,
-		state.Settings,
-		&state)
+	// TODO: read deployment settings from various sources
 
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
 	var plan DeploymentResourceModel
 
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var state DeploymentResourceModel
 
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -325,18 +240,14 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 					fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", id))
 				resp.State.RemoveResource(ctx)
 			} else {
-				resp.Diagnostics.AddError(
-					"Error updating Deployment",
-					fmt.Sprintf("Unable to update Deployment, got error: %s", err),
-				)
+				resp.Diagnostics.AddError("Error updating Deployment", err.Error())
 			}
 			return
 		}
 
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
-			resp.Diagnostics.AddError("Deployment not ready",
-				"Deployment is not ready after 5 minutes or failed to check the status.")
+			resp.Diagnostics.AddError("Deployment not ready", err.Error())
 			return
 		}
 	}
@@ -347,50 +258,38 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 			ModelPackageID: plan.RegisteredModelVersionID.ValueString(),
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error validating model replacement",
-				fmt.Sprintf("Unable to validate model replacement, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error validating Deployment model replacement", err.Error())
 			return
 		}
 
 		if validateModelReplacementResp.Status != "passing" {
-			// TODO: should we try to replace the entire Deployment here?
-			resp.Diagnostics.AddError(
-				"Invalid model replacement",
-				fmt.Sprintf("Model Replacement is invalid for the Deployment, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Invalid Deployment model replacement", validateModelReplacementResp.Message)
 			return
 		}
 
 		traceAPICall("UpdateDeploymentModel")
-		_, err = r.provider.service.UpdateDeploymentModel(ctx, id, &client.UpdateDeploymentModelRequest{
+		_, statusId, err := r.provider.service.UpdateDeploymentModel(ctx, id, &client.UpdateDeploymentModelRequest{
 			ModelPackageID: plan.RegisteredModelVersionID.ValueString(),
 			Reason:         "OTHER",
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error updating Deployment model",
-				fmt.Sprintf("Unable to update Deployment model, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error replacing Deployment model", err.Error())
+			return
+		}
+		if statusId == "" {
+			resp.Diagnostics.AddError("Unable to find Deployment model replacement task", "Status ID is empty")
+		}
+
+		// model replacement is an async operation, separate from waiting for the deployment to be ready
+		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
+		if err != nil {
+			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
 			return
 		}
 
-		// TODO: where does this status ID come from?
-		// model replacement is an async operation, separate from waiting for the deployment to be ready
-		// err = r.provider.service.WaitForTaskStatus(ctx, id)
-		// if err != nil {
-		// 	resp.Diagnostics.AddError(
-		// 		"Update Task not completed",
-		// 		fmt.Sprintf("Error replacing model for deployemnt: %s", err),
-		// 	)
-		// 	return
-		// }
-
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
-			resp.Diagnostics.AddError("Deployment not ready",
-				"Deployment is not ready after 5 minutes or failed to check the status.")
+			resp.Diagnostics.AddError("Deployment not ready after model replacement", err.Error())
 			return
 		}
 	}
@@ -398,95 +297,39 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.Settings != state.Settings {
 		_, err := r.updateDeploymentSettings(ctx, id, plan.Settings)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error updating Deployment settings",
-				fmt.Sprintf("Unable to update Deployment settings, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 			return
 		}
 		state.Settings = plan.Settings
 	}
 
-	loadDeploymentToTerraformState(
-		id,
-		plan.Label.ValueString(),
-		plan.RegisteredModelVersionID.ValueString(),
-		plan.PredictionEnvironmentID.ValueString(),
-		plan.Settings,
-		&state,
-	)
-
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data DeploymentResourceModel
 
-	var state DeploymentResourceModel
-
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
 	traceAPICall("DeleteDeployment")
-	err := r.provider.service.DeleteDeployment(ctx, id)
+	err := r.provider.service.DeleteDeployment(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// Deployment is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error deleting Deployment",
-				fmt.Sprintf("Unable to delete Deployment, got error: %s", err),
-			)
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting Deployment", err.Error())
+			return
 		}
-		return
 	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
 }
 
 func (r *DeploymentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func loadDeploymentToTerraformState(
-	id string,
-	label string,
-	registeredModelVersionId string,
-	predictionEnvironmentId string,
-	settings *DeploymentSettings,
-	state *DeploymentResourceModel,
-) {
-	state.ID = types.StringValue(id)
-	state.Label = types.StringValue(label)
-	state.RegisteredModelVersionID = types.StringValue(registeredModelVersionId)
-	state.PredictionEnvironmentID = types.StringValue(predictionEnvironmentId)
-	state.Settings = settings
-}
-
 func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id string) (*client.DeploymentRetrieveResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
 		ready, err := r.provider.service.IsDeploymentReady(ctx, id)
@@ -550,9 +393,9 @@ func (r *DeploymentResource) updateDeploymentSettings(
 
 		// Predictions Settings
 		if settings.PredictionsSettings != nil {
-			req.PredictionsSettings = &client.PredictionsSetting{
-				MinComputes: int(settings.PredictionsSettings.MinComputes.ValueInt32()),
-				MaxComputes: int(settings.PredictionsSettings.MaxComputes.ValueInt32()),
+			req.PredictionsSettings = &client.PredictionsSettings{
+				MinComputes: int(settings.PredictionsSettings.MinComputes.ValueInt64()),
+				MaxComputes: int(settings.PredictionsSettings.MaxComputes.ValueInt64()),
 				RealTime:    settings.PredictionsSettings.RealTime.ValueBool(),
 			}
 		}
@@ -561,12 +404,12 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	traceAPICall("UpdateDeploymentSettings")
 	_, err := r.provider.service.UpdateDeploymentSettings(ctx, id, req)
 	if err != nil {
-		return nil, fmt.Errorf("unable to update Deployment settings, got error: %s", err)
+		return nil, err
 	}
 
 	deployment, err := r.waitForDeploymentToBeReady(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("deployment is not ready after 5 minutes or failed to check the status")
+		return nil, err
 	}
 
 	return deployment, nil

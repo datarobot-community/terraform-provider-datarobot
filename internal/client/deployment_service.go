@@ -12,10 +12,12 @@ type DeploymentCreateResponse struct {
 }
 
 type DeploymentRetrieveResponse struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Model  Model  `json:"model"`
+	ID                    string                `json:"id"`
+	Label                 string                `json:"label"`
+	Status                string                `json:"status"`
+	Model                 Model                 `json:"model"`
+	ModelPackage          ModelPackage          `json:"modelPackage"`
+	PredictionEnvironment PredictionEnvironment `json:"predictionEnvironment"`
 }
 
 type Model struct {
@@ -23,6 +25,12 @@ type Model struct {
 	Type       string `json:"type"`
 	TargetName string `json:"targetName"`
 	TargetType string `json:"targetType"`
+}
+
+type ModelPackage struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	RegisteredModelID string `json:"registeredModelId"`
 }
 
 type UpdateDeploymentRequest struct {
@@ -35,7 +43,7 @@ type DeploymentSettings struct {
 	ChallengerModels          *BasicSetting         `json:"challengerModels,omitempty"`
 	FeatureDrift              *BasicSetting         `json:"featureDrift,omitempty"`
 	Humility                  *BasicSetting         `json:"humility,omitempty"`
-	PredictionsSettings       *PredictionsSetting   `json:"predictionsSettings,omitempty"`
+	PredictionsSettings       *PredictionsSettings  `json:"predictionsSettings,omitempty"`
 	PredictionsDataCollection *BasicSetting         `json:"predictionsDataCollection,omitempty"`
 	SegmentAnalysis           *BasicSetting         `json:"segmentAnalysis,omitempty"`
 	TargetDrift               *BasicSetting         `json:"targetDrift,omitempty"`
@@ -51,7 +59,7 @@ type BasicSetting struct {
 	Enabled bool `json:"enabled"`
 }
 
-type PredictionsSetting struct {
+type PredictionsSettings struct {
 	MinComputes int  `json:"minComputes"`
 	MaxComputes int  `json:"maxComputes"`
 	RealTime    bool `json:"realTime"`

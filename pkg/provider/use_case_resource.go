@@ -108,16 +108,15 @@ func (r *UseCaseResource) Read(ctx context.Context, req resource.ReadRequest, re
 	traceAPICall("GetUseCase")
 	useCase, err := r.provider.service.GetUseCase(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Use Case not found",
 				fmt.Sprintf("Use Case with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				"Error getting Use Case info",
-				fmt.Sprintf("Unable to get Use Case, got error: %s", err),
-			)
+				fmt.Sprintf("Error getting Use Case with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}

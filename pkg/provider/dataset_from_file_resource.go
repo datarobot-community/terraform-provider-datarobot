@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -120,7 +118,7 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	dataset, err := r.waitForDatasetToBeReady(ctx, createResp.ID)
+	dataset, err := waitForDatasetToBeReady(ctx, r.provider.service, createResp.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
 		return
@@ -134,40 +132,13 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	_, err = r.waitForDatasetToBeReady(ctx, dataset.ID)
+	_, err = waitForDatasetToBeReady(ctx, r.provider.service, dataset.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Dataset not ready", err.Error())
 		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
-}
-
-func (r *DatasetFromFileResource) waitForDatasetToBeReady(ctx context.Context, datasetId string) (*client.DatasetResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 10 * time.Minute
-
-	operation := func() error {
-		ready, err := r.provider.service.IsDatasetReady(ctx, datasetId)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if !ready {
-			return errors.New("dataset is not ready")
-		}
-		return nil
-	}
-
-	// Retry the operation using the backoff strategy
-	err := backoff.Retry(operation, expBackoff)
-	if err != nil {
-		return nil, err
-	}
-
-	traceAPICall("GetDataset")
-	return r.provider.service.GetDataset(ctx, datasetId)
 }
 
 func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -185,13 +156,15 @@ func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadReq
 	traceAPICall("GetDataset")
 	_, err := r.provider.service.GetDataset(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Dataset not found",
 				fmt.Sprintf("Dataset with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Dataset with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}

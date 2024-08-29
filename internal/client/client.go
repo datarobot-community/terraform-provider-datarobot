@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 )
 
 type Client struct {
@@ -31,10 +32,15 @@ func (c *Client) addAuthHeader(req *http.Request) {
 }
 
 func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, body any) (result *T, err error) {
+	result, _, err = doRequestWithResponseHeaders[T](c, ctx, method, apiPath, body)
+	return
+}
+
+func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method, apiPath string, body any) (result *T, respHeader *http.Header, err error) {
 	// Marshal the body to JSON
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return result, WrapGenericError("failed to marshal body", err)
+		return result, nil, WrapGenericError("failed to marshal body", err)
 	}
 
 	// Create a new HTTP request
@@ -42,7 +48,7 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(jsonBody))
 	req = req.WithContext(ctx)
 	if err != nil {
-		return result, WrapGenericError("failed to create request", err)
+		return result, nil, WrapGenericError("failed to create request", err)
 	}
 
 	req.Header.Add("Accept", "application/json")
@@ -56,16 +62,20 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 		if c.cfg.Debug {
 			errorMessage += getCurlCommand(req, jsonBody)
 		}
-		return result, WrapGenericError(errorMessage, err)
+		return result, nil, WrapGenericError(errorMessage, err)
 	}
 	defer resp.Body.Close()
 
+	if req.URL.String() != resp.Request.URL.String() {
+		return result, nil, NewGenericError("request was redirected")
+	}
+
 	if resp.StatusCode == http.StatusNotFound {
-		return result, NewNotFoundError(req.URL.String())
+		return result, nil, NewNotFoundError(req.URL.String())
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return result, NewUnauthorizedError(req.URL.String())
+		return result, nil, NewUnauthorizedError(req.URL.String())
 	}
 
 	// Read the response body
@@ -73,7 +83,7 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 	if resp.Body != nil {
 		respBody, err = io.ReadAll(resp.Body)
 		if err != nil {
-			return result, WrapGenericError("failed to read response body", err)
+			return result, &resp.Header, WrapGenericError("failed to read response body", err)
 		}
 	}
 
@@ -82,16 +92,16 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 		if c.cfg.Debug {
 			errorMessage += getCurlCommand(req, jsonBody)
 		}
-		return result, NewGenericError(errorMessage)
+		return result, &resp.Header, NewGenericError(errorMessage)
 	}
 
 	if (req.Method == http.MethodDelete || req.Method == http.MethodPatch) &&
 		resp.StatusCode == http.StatusNoContent {
-		return result, nil
+		return result, &resp.Header, nil
 	}
 
 	if req.Method == http.MethodPatch && resp.StatusCode == http.StatusAccepted {
-		return result, nil
+		return result, &resp.Header, nil
 	}
 
 	if c.cfg.Debug {
@@ -101,10 +111,10 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 	// Deserialize the response into the provided result type
 	result = new(T)
 	if err := json.Unmarshal(respBody, result); err != nil {
-		return result, WrapGenericError("failed to unmarshal response", err)
+		return result, &resp.Header, WrapGenericError("failed to unmarshal response", err)
 	}
 
-	return result, nil
+	return result, &resp.Header, nil
 }
 
 func Get[T any](c *Client, ctx context.Context, path string) (*T, error) {
@@ -126,6 +136,23 @@ func Delete(c *Client, ctx context.Context, path string) (err error) {
 
 func Patch[T any](c *Client, ctx context.Context, path string, body any) (*T, error) {
 	return doRequest[T](c, ctx, http.MethodPatch, path, body)
+}
+
+func PatchAndExpectStatus[T any](c *Client, ctx context.Context, path string, body any) (*T, string, error) {
+	resp, header, err := doRequestWithResponseHeaders[T](c, ctx, http.MethodPatch, path, body)
+
+	if header != nil {
+		url := (*header).Get("Location")
+		if url != "" {
+			urlParts := strings.Split(url, "/")
+			if len(urlParts) > 6 {
+				statusId := urlParts[6] // e.g. https://app.datarobot.com/api/v2/status/<statusId>/
+				return resp, statusId, err
+			}
+		}
+	}
+
+	return resp, "", err
 }
 
 func getCurlCommand(req *http.Request, jsonBody []byte) string {
