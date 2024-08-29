@@ -1207,6 +1207,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 					},
 				},
 			},
+			ModelInfo: guardTemplate.ModelInfo,
 			// TODO: allow user to input Nemo Info
 			NemoInfo:     guardTemplate.NemoInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),

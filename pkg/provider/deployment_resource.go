@@ -188,7 +188,7 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 	traceAPICall("GetDeployment")
 	deployment, err := r.provider.service.GetDeployment(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Deployment not found",
 				fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", data.ID.ValueString()))
