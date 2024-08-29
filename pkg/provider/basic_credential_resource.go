@@ -136,7 +136,10 @@ func (r *BasicCredentialResource) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	data.Name = types.StringValue(credential.Name)
-	data.Description = types.StringValue(credential.Description)
+	if credential.Description != "" {
+		data.Description = types.StringValue(credential.Description)
+	}
+	
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

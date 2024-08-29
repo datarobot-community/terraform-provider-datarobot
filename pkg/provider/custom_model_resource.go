@@ -956,7 +956,9 @@ func loadCustomModelToTerraformState(
 	state.ID = types.StringValue(id)
 	state.VersionID = types.StringValue(versionID)
 	state.Name = types.StringValue(name)
-	state.Description = types.StringValue(description)
+	if description != "" {
+		state.Description = types.StringValue(description)
+	}
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}

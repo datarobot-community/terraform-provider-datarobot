@@ -202,7 +202,9 @@ func (r *LLMBlueprintResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	data.Name = types.StringValue(llmBlueprint.Name)
-	data.Description = types.StringValue(llmBlueprint.Description)
+	if llmBlueprint.Description != "" {
+		data.Description = types.StringValue(llmBlueprint.Description)
+	}
 	data.PlaygroundID = types.StringValue(llmBlueprint.PlaygroundID)
 	data.LLMID = types.StringValue(llmBlueprint.LLMID)
 	if llmBlueprint.VectorDatabaseID != "" {
