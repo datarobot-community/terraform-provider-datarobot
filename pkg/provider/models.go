@@ -87,6 +87,8 @@ type CustomModelResourceModel struct {
 	LocalFiles                     []types.String                  `tfsdk:"local_files"`
 	Target                         types.String                    `tfsdk:"target"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
+	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
+	NegativeClassLabel             types.String                    `tfsdk:"negative_class_label"`
 	IsProxy                        types.Bool                      `tfsdk:"is_proxy"`
 	GuardConfigurations            []GuardConfiguration            `tfsdk:"guard_configurations"`
 	OverallModerationConfiguration *OverallModerationConfiguration `tfsdk:"overall_moderation_configuration"`

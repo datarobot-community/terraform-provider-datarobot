@@ -222,6 +222,14 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
+			"positive_class_label": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The positive class label of the model.",
+			},
+			"negative_class_label": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The negative class label of the model.",
+			},
 			"overall_moderation_configuration": schema.SingleNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "The overall moderation configuration for the Custom Model.",
