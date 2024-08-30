@@ -2,7 +2,7 @@ HOSTNAME=registry.terraform.io
 NAMESPACE=datarobot
 NAME=datarobot
 BINARY=terraform-provider-${NAME}
-VERSION=0.0.10
+VERSION=0.0.15
 OS_ARCH=linux_amd64
 
 default: lint install

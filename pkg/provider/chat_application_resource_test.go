@@ -26,6 +26,8 @@ func TestAccChatApplicationResource(t *testing.T) {
 					checkChatApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 				),
 			},
 			// Update name
@@ -35,6 +37,8 @@ func TestAccChatApplicationResource(t *testing.T) {
 					checkChatApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 				),
 			},
 			// Delete is tested automatically
@@ -56,7 +60,6 @@ resource "datarobot_vector_database" "test_chat_application" {
 	  name = "test chat application"
 	  dataset_id = "${datarobot_dataset_from_file.test_chat_application.id}"
 	  use_case_id = "${datarobot_use_case.test_chat_application.id}"
-	  chunking_parameters = {}
 }
 resource "datarobot_playground" "test_chat_application" {
 	name = "test chat application"
@@ -132,13 +135,15 @@ func checkChatApplicationResourceExists(resourceName string) resource.TestCheckF
 		p.service = client.NewService(cl)
 
 		traceAPICall("GetChatApplication")
-		application, err := p.service.GetChatApplication(context.TODO(), rs.Primary.ID)
+		application, err := p.service.GetApplication(context.TODO(), rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
 		if application.Name == rs.Primary.Attributes["name"] &&
-			application.ApplicationUrl == rs.Primary.Attributes["application_url"] {
+			application.ApplicationUrl == rs.Primary.Attributes["application_url"] && 
+			application.CustomApplicationSourceID == rs.Primary.Attributes["source_id"] &&
+			application.CustomApplicationSourceVersionID == rs.Primary.Attributes["source_version_id"] {
 			return nil
 		}
 

@@ -2,15 +2,25 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+)
+
+const (
+	defaultTimeoutMinutes = 30
 )
 
 func addConfigureProviderErr(diagnostics *diag.Diagnostics) {
@@ -107,4 +117,114 @@ func contains[T any](s []T, value T) bool {
 		}
 	}
 	return false
+}
+
+func getExponentialBackoff() backoff.BackOff {
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.InitialInterval = 1 * time.Second
+	expBackoff.MaxInterval = 30 * time.Second
+
+	timeout, err := strconv.Atoi(os.Getenv(TimeoutMinutesEnvVar))
+	if err != nil || timeout <= 0 {
+		timeout = defaultTimeoutMinutes
+	}
+	expBackoff.MaxElapsedTime = time.Duration(timeout) * time.Minute
+
+	return expBackoff
+}
+
+func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("GetTaskStatus")
+		task, err := s.GetTaskStatus(ctx, id)
+		if err != nil {
+			if err.Error() == "request was redirected" { // the task was completed, so the request got redirected
+				return nil
+			}
+			return backoff.Permanent(err)
+		}
+
+		if task.Status == "ERROR" {
+			return backoff.Permanent(errors.New(task.Message))
+		}
+
+		if task.Status != "COMPLETED" {
+			return errors.New("task is not completed")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	return backoff.Retry(operation, expBackoff)
+}
+
+func waitForDatasetToBeReady(ctx context.Context, service client.Service, datasetId string) (*client.DatasetResponse, error) {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		ready, err := service.IsDatasetReady(ctx, datasetId)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if !ready {
+			return errors.New("dataset is not ready")
+		}
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return nil, err
+	}
+
+	traceAPICall("GetDataset")
+	return service.GetDataset(ctx, datasetId)
+}
+
+func waitForApplicationToBeReady(ctx context.Context, service client.Service, id string) (*client.Application, error) {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("IsCustomApplicationReady")
+		ready, err := service.IsApplicationReady(ctx, id)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if !ready {
+			return errors.New("application is not ready")
+		}
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return nil, err
+	}
+
+	traceAPICall("GetCustomApplication")
+	return service.GetApplication(ctx, id)
+}
+
+func checkCredentialNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Credential")
+}
+
+func checkApplicationNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Application")
+}
+
+func checkNameAlreadyExists(err error, name string, resourceType string) string {
+	errMessage := err.Error()
+	if strings.Contains(errMessage, "already in use") || 
+		strings.Contains(errMessage, "already exist") || 
+		strings.Contains(errMessage, "is already used") {
+		errMessage = fmt.Sprintf("%s name must be unique, and name '%s' is already in use", resourceType, name)
+	}
+
+	return errMessage
 }

@@ -3,19 +3,70 @@
 page_title: "datarobot_chat_application Resource - datarobot"
 subcategory: ""
 description: |-
-  Application
+  Chat Application
 ---
 
 # datarobot_chat_application (Resource)
 
-Application
+Chat Application
 
 ## Example Usage
 
 ```terraform
+resource "datarobot_custom_model" "example" {
+  name                  = "Example Custom Model"
+  description           = "Description for the example custom model"
+  target_type           = "Binary"
+  target                = "my_label"
+  base_environment_name = "[GenAI] Python 3.11 with Moderations"
+  local_files           = ["example.py"]
+}
+
+resource "datarobot_registered_model" "example" {
+  custom_model_version_id = datarobot_custom_model.example.version_id
+  name                    = "Example Registered Model"
+  description             = "Description for the example registered model"
+}
+
+resource "datarobot_prediction_environment" "example" {
+  name        = "Example Prediction Environment"
+  description = "Description for the example prediction environment"
+  platform    = "datarobotServerless"
+}
+
+resource "datarobot_deployment" "example" {
+  label                       = "An example deployment"
+  prediction_environment_id   = datarobot_prediction_environment.example.id
+  registered_model_version_id = datarobot_registered_model.example.version_id
+
+  # Optional settings
+  settings = {
+    prediction_row_storage = true
+  }
+}
+
 resource "datarobot_chat_application" "example" {
-  name          = "An example chat application"
-  deployment_id = datarobot_deployment.example.id
+  name                    = "An example chat application"
+  deployment_id           = datarobot_deployment.example.id
+  external_access_enabled = true
+  external_access_recipients = [
+    "recipient@example.com",
+  ]
+}
+
+output "datarobot_chat_application_id" {
+  value       = datarobot_chat_application.example.id
+  description = "The ID of the example chat application"
+}
+
+output "datarobot_chat_application_source_id" {
+  value       = datarobot_chat_application.example.source_id
+  description = "The ID of the application source for the example chat application"
+}
+
+output "datarobot_chat_application_source_version_id" {
+  value       = datarobot_chat_application.example.source_version_id
+  description = "The version ID of the application source for the example chat application"
 }
 
 output "datarobot_chat_application_url" {
@@ -29,11 +80,17 @@ output "datarobot_chat_application_url" {
 
 ### Required
 
-- `deployment_id` (String) The deployment ID of the Application.
-- `name` (String) The name of the Application.
+- `deployment_id` (String) The deployment ID of the Chat Application.
+- `name` (String) The name of the Chat Application.
+
+### Optional
+
+- `external_access_enabled` (Boolean) Whether external access is enabled for the Chat Application.
+- `external_access_recipients` (List of String) The list of external email addresses that have access to the Chat Application.
 
 ### Read-Only
 
-- `application_url` (String) The URL of the Application.
-- `id` (String) The ID of the Application.
-- `version_id` (String) The version ID of the Application.
+- `application_url` (String) The URL of the Chat Application.
+- `id` (String) The ID of the Chat Application.
+- `source_id` (String) The ID of the Chat Application Source.
+- `source_version_id` (String) The version ID of the Chat Application Source.

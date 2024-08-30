@@ -188,19 +188,23 @@ func (r *LLMBlueprintResource) Read(ctx context.Context, req resource.ReadReques
 	traceAPICall("GetLLMBlueprint")
 	llmBlueprint, err := r.provider.service.GetLLMBlueprint(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"LLM Blueprint not found",
 				fmt.Sprintf("LLM Blueprint with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting LLM Blueprint info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting LLM Blueprint with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
 
 	data.Name = types.StringValue(llmBlueprint.Name)
-	data.Description = types.StringValue(llmBlueprint.Description)
+	if llmBlueprint.Description != "" {
+		data.Description = types.StringValue(llmBlueprint.Description)
+	}
 	data.PlaygroundID = types.StringValue(llmBlueprint.PlaygroundID)
 	data.LLMID = types.StringValue(llmBlueprint.LLMID)
 	if llmBlueprint.VectorDatabaseID != "" {

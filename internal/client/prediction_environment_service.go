@@ -14,6 +14,6 @@ type UpdatePredictionEnvironmentRequest struct {
 type PredictionEnvironment struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Description string `json:"description"`
+	Description string `json:"description,omitempty"`
 	Platform    string `json:"platform"`
 }

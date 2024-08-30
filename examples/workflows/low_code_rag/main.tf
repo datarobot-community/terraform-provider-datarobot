@@ -10,7 +10,7 @@ terraform {
   required_providers {
     datarobot = {
       source  = "datarobot/datarobot"
-      version = "0.0.10"
+      version = "0.0.15"
     }
   }
 }
@@ -36,10 +36,9 @@ resource "datarobot_playground" "example" {
 }
 
 resource "datarobot_vector_database" "example" {
-  name                = datarobot_use_case.example.name
-  use_case_id         = datarobot_use_case.example.id
-  dataset_id          = datarobot_dataset_from_file.example.id
-  chunking_parameters = {}
+  name        = datarobot_use_case.example.name
+  use_case_id = datarobot_use_case.example.id
+  dataset_id  = datarobot_dataset_from_file.example.id
 }
 
 resource "datarobot_llm_blueprint" "example" {
@@ -51,7 +50,7 @@ resource "datarobot_llm_blueprint" "example" {
 }
 
 resource "datarobot_google_cloud_credential" "example" {
-  name        = "Google Cloud Service Account"
+  name        = "${var.use_case_name} Google Cloud Service Account"
   source_file = var.google_cloud_credential_source_file
 }
 

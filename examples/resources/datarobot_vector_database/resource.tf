@@ -3,15 +3,21 @@ resource "datarobot_use_case" "example" {
   description = "Description for the example use case"
 }
 
+resource "datarobot_dataset_from_file" "example" {
+  source_file = "[Path to file to upload]"
+  use_case_id = datarobot_use_case.example.id
+}
+
 resource "datarobot_vector_database" "example" {
   name        = "An example vector database"
   use_case_id = datarobot_use_case.example.id
   dataset_id  = datarobot_dataset_from_file.example.id
   chunking_parameters = {
     chunk_overlap_percentage = 0
-    chunk_size               = 256
+    chunk_size               = 512
     chunking_method          = "recursive"
     embedding_model          = "jinaai/jina-embedding-t-en-v1"
+    separators               = ["\n", " "]
   }
 }
 

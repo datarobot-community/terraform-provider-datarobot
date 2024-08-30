@@ -98,7 +98,8 @@ func (r *BasicCredentialResource) Create(ctx context.Context, req resource.Creat
 		Password:       data.Password.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Basic Credential", err.Error())
+		errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Basic Credential", errMessage)
 		return
 	}
 	data.ID = types.StringValue(createResp.ID)
@@ -121,19 +122,24 @@ func (r *BasicCredentialResource) Read(ctx context.Context, req resource.ReadReq
 	traceAPICall("GetBasicCredential")
 	credential, err := r.provider.service.GetCredential(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Basic Credential not found",
 				fmt.Sprintf("Basic Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Basic Credential info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Basic Credential with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}
 
 	data.Name = types.StringValue(credential.Name)
-	data.Description = types.StringValue(credential.Description)
+	if credential.Description != "" {
+		data.Description = types.StringValue(credential.Description)
+	}
+	
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -161,7 +167,8 @@ func (r *BasicCredentialResource) Update(ctx context.Context, req resource.Updat
 				fmt.Sprintf("Basic Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Basic Credential", err.Error())
+			errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Basic Credential", errMessage)
 		}
 		return
 	}

@@ -43,16 +43,16 @@ type CustomModelResponse struct {
 }
 
 type CustomModelVersionResponse struct {
-	ID                       string                     `json:"id"`
-	Description              string                     `json:"description"`
-	CustomModelID            string                     `json:"customModelId"`
-	BaseEnvironmentID        string                     `json:"baseEnvironmentId"`
-	BaseEnvironmentVersionID string                     `json:"baseEnvironmentVersionId"`
-	RuntimeParameters        []RuntimeParameterResponse `json:"runtimeParameters"`
-	Items                    []CustomModelVersionItem   `json:"items"`
+	ID                       string             `json:"id"`
+	Description              string             `json:"description"`
+	CustomModelID            string             `json:"customModelId"`
+	BaseEnvironmentID        string             `json:"baseEnvironmentId"`
+	BaseEnvironmentVersionID string             `json:"baseEnvironmentVersionId"`
+	RuntimeParameters        []RuntimeParameter `json:"runtimeParameters"`
+	Items                    []FileItem         `json:"items"`
 }
 
-type CustomModelVersionItem struct {
+type FileItem struct {
 	ID                 string `json:"id"`
 	FileName           string `json:"fileName"`
 	FileSource         string `json:"fileSource"`
@@ -71,7 +71,7 @@ type CustomModelUpdate struct {
 	Description string `json:"description"`
 }
 
-type RuntimeParameterResponse struct {
+type RuntimeParameter struct {
 	FieldName      string  `json:"fieldName"`
 	Type           string  `json:"type,omitempty"`
 	DefaultValue   any     `json:"defaultValue,omitempty"`
@@ -141,6 +141,7 @@ type GuardTemplate struct {
 	ErrorMessage  string            `json:"errorMessage,omitempty"`
 	IsValid       bool              `json:"isValid,omitempty"`
 	NemoInfo      NemoInfo          `json:"nemoInfo,omitempty"`
+	ModelInfo     GuardModelInfo    `json:"modelInfo,omitempty"`
 }
 
 type NemoInfo struct {

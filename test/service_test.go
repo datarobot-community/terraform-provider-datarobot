@@ -299,7 +299,7 @@ func TestCustomModelFromGitHub(t *testing.T) {
 	require.NoError(err)
 	require.NotEmpty(customModel.ID)
 
-	_, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
+	_, _, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
 		BaseEnvironmentID: environmentID,
 		IsMajorUpdate:     true,
 		RepositoryID:      remoteRepository.ID,
@@ -416,7 +416,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 		require.NoError(err)
 	}()
 
-	timeout := 5 * time.Minute
+	timeout := 15 * time.Minute
 	start := time.Now()
 	for {
 		status, err := s.IsCustomModelReady(ctx, resp.CustomModelID)
@@ -584,6 +584,34 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NotEmpty(deployment.ID)
 	require.Equal(newLabel, deployment.Label)
 
+	// Create new Registered Model in order to replace the model in the Deployment
+	registeredModelVersion2, err := s.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
+		CustomModelVersionID: latestVersion,
+		Name:                 "Integration Test" + uuid.New().String(),
+	})
+	require.NoError(err)
+	require.NotEmpty(registeredModelVersion2.ID)
+
+	start = time.Now()
+	for {
+		status, err := s.IsRegisteredModelVersionReady(ctx, registeredModelVersion2.RegisteredModelID, registeredModelVersion2.ID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for registered model version to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	_, statusId, err := s.UpdateDeploymentModel(ctx, deployment.ID, &client.UpdateDeploymentModelRequest{
+		ModelPackageID: registeredModelVersion2.ID,
+		Reason: "OTHER",
+	})
+	require.NoError(err)
+	require.NotEmpty(statusId)
+
 	application, err := s.CreateChatApplication(ctx, &client.CreateChatApplicationRequest{
 		DeploymentID: deployment.ID,
 	})
@@ -592,7 +620,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	start = time.Now()
 	for {
-		status, err := s.IsChatApplicationReady(ctx, application.ID)
+		status, err := s.IsApplicationReady(ctx, application.ID)
 		require.NoError(err)
 		if status {
 			break
@@ -604,26 +632,26 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	}
 
 	newName := "Updated Integration Test" + uuid.New().String()
-	_, err = s.UpdateChatApplication(ctx, application.ID, &client.UpdateChatApplicationRequest{
+	_, err = s.UpdateApplication(ctx, application.ID, &client.UpdateApplicationRequest{
 		Name: newName,
 	})
 	require.NoError(err)
 
-	updatedApplication, err := s.GetChatApplication(ctx, application.ID)
+	updatedApplication, err := s.GetApplication(ctx, application.ID)
 	require.NoError(err)
 	require.NotEmpty(updatedApplication.ID)
 	require.Equal(newName, updatedApplication.Name)
 	require.NotEmpty(updatedApplication.ApplicationUrl)
 
-	applicationSource, err := s.GetChatApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
+	applicationSource, err := s.GetApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
 	require.NoError(err)
 	require.NotEmpty(applicationSource.LatestVersion.Label)
 
 	// Delete the entities
-	err = s.DeleteChatApplication(ctx, application.ID)
+	err = s.DeleteApplication(ctx, application.ID)
 	require.NoError(err)
 
-	err = s.DeleteChatApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
+	err = s.DeleteApplicationSource(ctx, updatedApplication.CustomApplicationSourceID)
 	require.NoError(err)
 
 	err = s.DeleteDeployment(ctx, deployment.ID)
@@ -633,6 +661,9 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 
 	err = s.DeleteRegisteredModel(ctx, registeredModelVersion.RegisteredModelID)
+	require.NoError(err)
+
+	err = s.DeleteRegisteredModel(ctx, registeredModelVersion2.RegisteredModelID)
 	require.NoError(err)
 }
 
@@ -749,7 +780,7 @@ func TestVectorDatabase(t *testing.T) {
 	timeout := 5 * time.Minute
 	start := time.Now()
 	for {
-		status, err := s.IsDatasetReadyForVectorDatabase(ctx, dataset.ID)
+		status, err := s.IsDatasetReady(ctx, dataset.ID)
 		require.NoError(err)
 		if status {
 			break

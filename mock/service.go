@@ -35,11 +35,56 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// CreateApplicationFromSource mocks base method.
+func (m *MockService) CreateApplicationFromSource(ctx context.Context, req *client.CreateApplicationFromSourceRequest) (*client.Application, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApplicationFromSource", ctx, req)
+	ret0, _ := ret[0].(*client.Application)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateApplicationFromSource indicates an expected call of CreateApplicationFromSource.
+func (mr *MockServiceMockRecorder) CreateApplicationFromSource(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationFromSource", reflect.TypeOf((*MockService)(nil).CreateApplicationFromSource), ctx, req)
+}
+
+// CreateApplicationSource mocks base method.
+func (m *MockService) CreateApplicationSource(ctx context.Context) (*client.ApplicationSource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApplicationSource", ctx)
+	ret0, _ := ret[0].(*client.ApplicationSource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateApplicationSource indicates an expected call of CreateApplicationSource.
+func (mr *MockServiceMockRecorder) CreateApplicationSource(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSource", reflect.TypeOf((*MockService)(nil).CreateApplicationSource), ctx)
+}
+
+// CreateApplicationSourceVersion mocks base method.
+func (m *MockService) CreateApplicationSourceVersion(ctx context.Context, id string, req *client.CreateApplicationSourceVersionRequest) (*client.ApplicationSourceVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApplicationSourceVersion", ctx, id, req)
+	ret0, _ := ret[0].(*client.ApplicationSourceVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateApplicationSourceVersion indicates an expected call of CreateApplicationSourceVersion.
+func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).CreateApplicationSourceVersion), ctx, id, req)
+}
+
 // CreateChatApplication mocks base method.
-func (m *MockService) CreateChatApplication(ctx context.Context, req *client.CreateChatApplicationRequest) (*client.ChatApplicationResponse, error) {
+func (m *MockService) CreateChatApplication(ctx context.Context, req *client.CreateChatApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateChatApplication", ctx, req)
-	ret0, _ := ret[0].(*client.ChatApplicationResponse)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -141,12 +186,13 @@ func (mr *MockServiceMockRecorder) CreateCustomModelVersionFromGuardConfiguratio
 }
 
 // CreateCustomModelVersionFromRemoteRepository mocks base method.
-func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CreateCustomModelVersionResponse, error) {
+func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CreateCustomModelVersionResponse, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModelVersionFromRemoteRepository", ctx, id, req)
 	ret0, _ := ret[0].(*client.CreateCustomModelVersionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // CreateCustomModelVersionFromRemoteRepository indicates an expected call of CreateCustomModelVersionFromRemoteRepository.
@@ -306,10 +352,10 @@ func (mr *MockServiceMockRecorder) CreateUseCase(ctx, req interface{}) *gomock.C
 }
 
 // CreateVectorDatabase mocks base method.
-func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.CreateVectorDatabaseRequest) (*client.CreateVectorDatabaseResponse, error) {
+func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.CreateVectorDatabaseRequest) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateVectorDatabase", ctx, req)
-	ret0, _ := ret[0].(*client.CreateVectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -320,32 +366,32 @@ func (mr *MockServiceMockRecorder) CreateVectorDatabase(ctx, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVectorDatabase", reflect.TypeOf((*MockService)(nil).CreateVectorDatabase), ctx, req)
 }
 
-// DeleteChatApplication mocks base method.
-func (m *MockService) DeleteChatApplication(ctx context.Context, id string) error {
+// DeleteApplication mocks base method.
+func (m *MockService) DeleteApplication(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteChatApplication", ctx, id)
+	ret := m.ctrl.Call(m, "DeleteApplication", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteChatApplication indicates an expected call of DeleteChatApplication.
-func (mr *MockServiceMockRecorder) DeleteChatApplication(ctx, id interface{}) *gomock.Call {
+// DeleteApplication indicates an expected call of DeleteApplication.
+func (mr *MockServiceMockRecorder) DeleteApplication(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteChatApplication", reflect.TypeOf((*MockService)(nil).DeleteChatApplication), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplication", reflect.TypeOf((*MockService)(nil).DeleteApplication), ctx, id)
 }
 
-// DeleteChatApplicationSource mocks base method.
-func (m *MockService) DeleteChatApplicationSource(ctx context.Context, id string) error {
+// DeleteApplicationSource mocks base method.
+func (m *MockService) DeleteApplicationSource(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteChatApplicationSource", ctx, id)
+	ret := m.ctrl.Call(m, "DeleteApplicationSource", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteChatApplicationSource indicates an expected call of DeleteChatApplicationSource.
-func (mr *MockServiceMockRecorder) DeleteChatApplicationSource(ctx, id interface{}) *gomock.Call {
+// DeleteApplicationSource indicates an expected call of DeleteApplicationSource.
+func (mr *MockServiceMockRecorder) DeleteApplicationSource(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteChatApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteChatApplicationSource), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteApplicationSource), ctx, id)
 }
 
 // DeleteCredential mocks base method.
@@ -502,34 +548,49 @@ func (mr *MockServiceMockRecorder) DeleteVectorDatabase(ctx, id interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVectorDatabase", reflect.TypeOf((*MockService)(nil).DeleteVectorDatabase), ctx, id)
 }
 
-// GetChatApplication mocks base method.
-func (m *MockService) GetChatApplication(ctx context.Context, id string) (*client.ChatApplicationResponse, error) {
+// GetApplication mocks base method.
+func (m *MockService) GetApplication(ctx context.Context, id string) (*client.Application, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChatApplication", ctx, id)
-	ret0, _ := ret[0].(*client.ChatApplicationResponse)
+	ret := m.ctrl.Call(m, "GetApplication", ctx, id)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetChatApplication indicates an expected call of GetChatApplication.
-func (mr *MockServiceMockRecorder) GetChatApplication(ctx, id interface{}) *gomock.Call {
+// GetApplication indicates an expected call of GetApplication.
+func (mr *MockServiceMockRecorder) GetApplication(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChatApplication", reflect.TypeOf((*MockService)(nil).GetChatApplication), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplication", reflect.TypeOf((*MockService)(nil).GetApplication), ctx, id)
 }
 
-// GetChatApplicationSource mocks base method.
-func (m *MockService) GetChatApplicationSource(ctx context.Context, id string) (*client.ChatApplicationSourceResponse, error) {
+// GetApplicationSource mocks base method.
+func (m *MockService) GetApplicationSource(ctx context.Context, id string) (*client.ApplicationSource, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChatApplicationSource", ctx, id)
-	ret0, _ := ret[0].(*client.ChatApplicationSourceResponse)
+	ret := m.ctrl.Call(m, "GetApplicationSource", ctx, id)
+	ret0, _ := ret[0].(*client.ApplicationSource)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetChatApplicationSource indicates an expected call of GetChatApplicationSource.
-func (mr *MockServiceMockRecorder) GetChatApplicationSource(ctx, id interface{}) *gomock.Call {
+// GetApplicationSource indicates an expected call of GetApplicationSource.
+func (mr *MockServiceMockRecorder) GetApplicationSource(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChatApplicationSource", reflect.TypeOf((*MockService)(nil).GetChatApplicationSource), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicationSource", reflect.TypeOf((*MockService)(nil).GetApplicationSource), ctx, id)
+}
+
+// GetApplicationSourceVersion mocks base method.
+func (m *MockService) GetApplicationSourceVersion(ctx context.Context, id, versionId string) (*client.ApplicationSourceVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetApplicationSourceVersion", ctx, id, versionId)
+	ret0, _ := ret[0].(*client.ApplicationSourceVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetApplicationSourceVersion indicates an expected call of GetApplicationSourceVersion.
+func (mr *MockServiceMockRecorder) GetApplicationSourceVersion(ctx, id, versionId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).GetApplicationSourceVersion), ctx, id, versionId)
 }
 
 // GetCredential mocks base method.
@@ -773,10 +834,10 @@ func (mr *MockServiceMockRecorder) GetUseCase(ctx, id interface{}) *gomock.Call 
 }
 
 // GetVectorDatabase mocks base method.
-func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client.VectorDatabaseResponse, error) {
+func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVectorDatabase", ctx, id)
-	ret0, _ := ret[0].(*client.VectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -787,19 +848,19 @@ func (mr *MockServiceMockRecorder) GetVectorDatabase(ctx, id interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVectorDatabase", reflect.TypeOf((*MockService)(nil).GetVectorDatabase), ctx, id)
 }
 
-// IsChatApplicationReady mocks base method.
-func (m *MockService) IsChatApplicationReady(ctx context.Context, id string) (bool, error) {
+// IsApplicationReady mocks base method.
+func (m *MockService) IsApplicationReady(ctx context.Context, id string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsChatApplicationReady", ctx, id)
+	ret := m.ctrl.Call(m, "IsApplicationReady", ctx, id)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// IsChatApplicationReady indicates an expected call of IsChatApplicationReady.
-func (mr *MockServiceMockRecorder) IsChatApplicationReady(ctx, id interface{}) *gomock.Call {
+// IsApplicationReady indicates an expected call of IsApplicationReady.
+func (mr *MockServiceMockRecorder) IsApplicationReady(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChatApplicationReady", reflect.TypeOf((*MockService)(nil).IsChatApplicationReady), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsApplicationReady", reflect.TypeOf((*MockService)(nil).IsApplicationReady), ctx, id)
 }
 
 // IsCustomModelReady mocks base method.
@@ -830,21 +891,6 @@ func (m *MockService) IsDatasetReady(ctx context.Context, id string) (bool, erro
 func (mr *MockServiceMockRecorder) IsDatasetReady(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReady", reflect.TypeOf((*MockService)(nil).IsDatasetReady), ctx, id)
-}
-
-// IsDatasetReadyForVectorDatabase mocks base method.
-func (m *MockService) IsDatasetReadyForVectorDatabase(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDatasetReadyForVectorDatabase", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsDatasetReadyForVectorDatabase indicates an expected call of IsDatasetReadyForVectorDatabase.
-func (mr *MockServiceMockRecorder) IsDatasetReadyForVectorDatabase(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReadyForVectorDatabase", reflect.TypeOf((*MockService)(nil).IsDatasetReadyForVectorDatabase), ctx, id)
 }
 
 // IsDeploymentReady mocks base method.
@@ -904,6 +950,21 @@ func (m *MockService) LinkDatasetToUseCase(ctx context.Context, useCaseID, datas
 func (mr *MockServiceMockRecorder) LinkDatasetToUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkDatasetToUseCase", reflect.TypeOf((*MockService)(nil).LinkDatasetToUseCase), ctx, useCaseID, datasetID)
+}
+
+// ListApplicationSourceVersions mocks base method.
+func (m *MockService) ListApplicationSourceVersions(ctx context.Context, id string) (*client.ListApplicationSourceVersionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListApplicationSourceVersions", ctx, id)
+	ret0, _ := ret[0].(*client.ListApplicationSourceVersionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListApplicationSourceVersions indicates an expected call of ListApplicationSourceVersions.
+func (mr *MockServiceMockRecorder) ListApplicationSourceVersions(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListApplicationSourceVersions", reflect.TypeOf((*MockService)(nil).ListApplicationSourceVersions), ctx, id)
 }
 
 // ListExecutionEnvironments mocks base method.
@@ -981,19 +1042,64 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx)
 }
 
-// UpdateChatApplication mocks base method.
-func (m *MockService) UpdateChatApplication(ctx context.Context, id string, req *client.UpdateChatApplicationRequest) (*client.ChatApplicationResponse, error) {
+// UpdateApplication mocks base method.
+func (m *MockService) UpdateApplication(ctx context.Context, id string, req *client.UpdateApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateChatApplication", ctx, id, req)
-	ret0, _ := ret[0].(*client.ChatApplicationResponse)
+	ret := m.ctrl.Call(m, "UpdateApplication", ctx, id, req)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateChatApplication indicates an expected call of UpdateChatApplication.
-func (mr *MockServiceMockRecorder) UpdateChatApplication(ctx, id, req interface{}) *gomock.Call {
+// UpdateApplication indicates an expected call of UpdateApplication.
+func (mr *MockServiceMockRecorder) UpdateApplication(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChatApplication", reflect.TypeOf((*MockService)(nil).UpdateChatApplication), ctx, id, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApplication", reflect.TypeOf((*MockService)(nil).UpdateApplication), ctx, id, req)
+}
+
+// UpdateApplicationSource mocks base method.
+func (m *MockService) UpdateApplicationSource(ctx context.Context, id string, req *client.UpdateApplicationSourceRequest) (*client.ApplicationSource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateApplicationSource", ctx, id, req)
+	ret0, _ := ret[0].(*client.ApplicationSource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateApplicationSource indicates an expected call of UpdateApplicationSource.
+func (mr *MockServiceMockRecorder) UpdateApplicationSource(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApplicationSource", reflect.TypeOf((*MockService)(nil).UpdateApplicationSource), ctx, id, req)
+}
+
+// UpdateApplicationSourceVersion mocks base method.
+func (m *MockService) UpdateApplicationSourceVersion(ctx context.Context, id, versionId string, req *client.UpdateApplicationSourceVersionRequest) (*client.ApplicationSourceVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateApplicationSourceVersion", ctx, id, versionId, req)
+	ret0, _ := ret[0].(*client.ApplicationSourceVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateApplicationSourceVersion indicates an expected call of UpdateApplicationSourceVersion.
+func (mr *MockServiceMockRecorder) UpdateApplicationSourceVersion(ctx, id, versionId, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).UpdateApplicationSourceVersion), ctx, id, versionId, req)
+}
+
+// UpdateApplicationSourceVersionFiles mocks base method.
+func (m *MockService) UpdateApplicationSourceVersionFiles(ctx context.Context, id, versionId string, files []client.FileInfo) (*client.ApplicationSourceVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateApplicationSourceVersionFiles", ctx, id, versionId, files)
+	ret0, _ := ret[0].(*client.ApplicationSourceVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateApplicationSourceVersionFiles indicates an expected call of UpdateApplicationSourceVersionFiles.
+func (mr *MockServiceMockRecorder) UpdateApplicationSourceVersionFiles(ctx, id, versionId, files interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApplicationSourceVersionFiles", reflect.TypeOf((*MockService)(nil).UpdateApplicationSourceVersionFiles), ctx, id, versionId, files)
 }
 
 // UpdateCredential mocks base method.
@@ -1057,12 +1163,13 @@ func (mr *MockServiceMockRecorder) UpdateDeployment(ctx, id, req interface{}) *g
 }
 
 // UpdateDeploymentModel mocks base method.
-func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.DeploymentRetrieveResponse, error) {
+func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.DeploymentRetrieveResponse, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentModel", ctx, id, req)
 	ret0, _ := ret[0].(*client.DeploymentRetrieveResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // UpdateDeploymentModel indicates an expected call of UpdateDeploymentModel.
@@ -1177,10 +1284,10 @@ func (mr *MockServiceMockRecorder) UpdateUseCase(ctx, id, req interface{}) *gomo
 }
 
 // UpdateVectorDatabase mocks base method.
-func (m *MockService) UpdateVectorDatabase(ctx context.Context, id string, req *client.UpdateVectorDatabaseRequest) (*client.VectorDatabaseResponse, error) {
+func (m *MockService) UpdateVectorDatabase(ctx context.Context, id string, req *client.UpdateVectorDatabaseRequest) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateVectorDatabase", ctx, id, req)
-	ret0, _ := ret[0].(*client.VectorDatabaseResponse)
+	ret0, _ := ret[0].(*client.VectorDatabase)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1204,18 +1311,4 @@ func (m *MockService) ValidateDeploymentModelReplacement(ctx context.Context, id
 func (mr *MockServiceMockRecorder) ValidateDeploymentModelReplacement(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDeploymentModelReplacement", reflect.TypeOf((*MockService)(nil).ValidateDeploymentModelReplacement), ctx, id, req)
-}
-
-// WaitForTaskStatusToComplete mocks base method.
-func (m *MockService) WaitForTaskStatusToComplete(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForTaskStatusToComplete", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WaitForTaskStatusToComplete indicates an expected call of WaitForTaskStatusToComplete.
-func (mr *MockServiceMockRecorder) WaitForTaskStatusToComplete(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForTaskStatusToComplete", reflect.TypeOf((*MockService)(nil).WaitForTaskStatusToComplete), ctx, id)
 }

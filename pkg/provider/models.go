@@ -7,6 +7,7 @@ import (
 const (
 	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_KEY"
 	DataRobotEndpointEnvVar string = "DATAROBOT_ENDPOINT"
+	TimeoutMinutesEnvVar    string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent               string = "terraform-provider-datarobot"
 )
 
@@ -36,21 +37,21 @@ type DatasetFromFileResourceModel struct {
 
 // VectorDatabaseResourceModel describes a vector database.
 type VectorDatabaseResourceModel struct {
-	ID                 types.String            `tfsdk:"id"`
-	Name               types.String            `tfsdk:"name"`
-	UseCaseID          types.String            `tfsdk:"use_case_id"`
-	DatasetID          types.String            `tfsdk:"dataset_id"`
-	ChunkingParameters ChunkingParametersModel `tfsdk:"chunking_parameters"`
+	ID                 types.String             `tfsdk:"id"`
+	Name               types.String             `tfsdk:"name"`
+	UseCaseID          types.String             `tfsdk:"use_case_id"`
+	DatasetID          types.String             `tfsdk:"dataset_id"`
+	ChunkingParameters *ChunkingParametersModel `tfsdk:"chunking_parameters"`
 }
 
 // ChunkingParametersModel represents the chunking parameters nested attribute.
 type ChunkingParametersModel struct {
-	EmbeddingModel         types.String `tfsdk:"embedding_model"`
-	ChunkOverlapPercentage types.Int32  `tfsdk:"chunk_overlap_percentage"`
-	ChunkSize              types.Int32  `tfsdk:"chunk_size"`
-	ChunkingMethod         types.String `tfsdk:"chunking_method"`
-	IsSeparatorRegex       types.Bool   `tfsdk:"is_separator_regex"`
-	Separators             types.List   `tfsdk:"separators"`
+	EmbeddingModel         types.String   `tfsdk:"embedding_model"`
+	ChunkOverlapPercentage types.Int64    `tfsdk:"chunk_overlap_percentage"`
+	ChunkSize              types.Int64    `tfsdk:"chunk_size"`
+	ChunkingMethod         types.String   `tfsdk:"chunking_method"`
+	IsSeparatorRegex       types.Bool     `tfsdk:"is_separator_regex"`
+	Separators             []types.String `tfsdk:"separators"`
 }
 
 // PlaygroundResourceModel describes the playground associated to a use case.
@@ -175,19 +176,39 @@ type AssociationIDSetting struct {
 }
 
 type PredictionsSetting struct {
-	MinComputes types.Int32 `tfsdk:"min_computes"`
-	MaxComputes types.Int32 `tfsdk:"max_computes"`
+	MinComputes types.Int64 `tfsdk:"min_computes"`
+	MaxComputes types.Int64 `tfsdk:"max_computes"`
 	RealTime    types.Bool  `tfsdk:"real_time"`
 }
 
 // ApplicationResourceModel describes the chat application resource.
 
 type ChatApplicationResourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	VersionID      types.String `tfsdk:"version_id"`
-	Name           types.String `tfsdk:"name"`
-	DeploymentID   types.String `tfsdk:"deployment_id"`
-	ApplicationUrl types.String `tfsdk:"application_url"`
+	ID                       types.String   `tfsdk:"id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
+	SourceVersionID          types.String   `tfsdk:"source_version_id"`
+	Name                     types.String   `tfsdk:"name"`
+	DeploymentID             types.String   `tfsdk:"deployment_id"`
+	ApplicationUrl           types.String   `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
+}
+
+type ApplicationSourceResourceModel struct {
+	ID         types.String   `tfsdk:"id"`
+	VersionID  types.String   `tfsdk:"version_id"`
+	Name       types.String   `tfsdk:"name"`
+	LocalFiles []types.String `tfsdk:"local_files"`
+}
+
+type CustomApplicationResourceModel struct {
+	ID                       types.String   `tfsdk:"id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
+	SourceVersionID          types.String   `tfsdk:"source_version_id"`
+	Name                     types.String   `tfsdk:"name"`
+	ApplicationUrl           types.String   `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
 }
 
 // CredentialResourceModel describes the credential resource.

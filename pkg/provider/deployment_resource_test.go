@@ -35,6 +35,11 @@ func TestAccDeploymentResource(t *testing.T) {
 					PredictionsDataCollection: &client.BasicSetting{
 						Enabled: true,
 					},
+					PredictionsSettings: &client.PredictionsSettings{
+						MinComputes: 1,
+						MaxComputes: 2,
+						RealTime:    true,
+					},
 				}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentResourceExists(),
@@ -54,6 +59,11 @@ func TestAccDeploymentResource(t *testing.T) {
 					},
 					PredictionsDataCollection: &client.BasicSetting{
 						Enabled: false,
+					},
+					PredictionsSettings: &client.PredictionsSettings{
+						MinComputes: 2,
+						MaxComputes: 3,
+						RealTime:    false,
 					},
 				}),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -108,6 +118,7 @@ func deploymentResourceConfig(label, guardName string, settings *client.Deployme
 		settings := *settings
 		associationID := *settings.AssociationID
 		predictionsDataCollection := *settings.PredictionsDataCollection
+		predictionsSettings := *settings.PredictionsSettings
 		deploymentSettings = fmt.Sprintf(`
 	settings = {
 		association_id = {
@@ -115,11 +126,19 @@ func deploymentResourceConfig(label, guardName string, settings *client.Deployme
 			feature_name = "%s"
 		}
 		prediction_row_storage = %t
+		predictions_settings = {
+			min_computes = %d
+			max_computes = %d
+			real_time = %t
+		}
 	}
 `,
 			associationID.AutoGenerateID,
 			associationID.ColumnNames[0],
-			predictionsDataCollection.Enabled)
+			predictionsDataCollection.Enabled,
+			predictionsSettings.MinComputes,
+			predictionsSettings.MaxComputes,
+			predictionsSettings.RealTime)
 	}
 
 	return fmt.Sprintf(`
@@ -168,7 +187,7 @@ resource "datarobot_registered_model" "test_deployment" {
 resource "datarobot_prediction_environment" "test_deployment" {
 	name = "test deployment"
 	description = "test"
-	platform = "aws"
+	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "test" {
 	label = "%s"
@@ -203,7 +222,9 @@ func checkDeploymentResourceExists() resource.TestCheckFunc {
 			return err
 		}
 
-		if deployment.Label == rs.Primary.Attributes["label"] {
+		if deployment.Label == rs.Primary.Attributes["label"] &&
+			deployment.ModelPackage.ID == rs.Primary.Attributes["registered_model_version_id"] &&
+			deployment.PredictionEnvironment.ID == rs.Primary.Attributes["prediction_environment_id"] {
 			return nil
 		}
 

@@ -316,7 +316,6 @@ resource "datarobot_vector_database" "test_custom_model" {
 	  name = "test custom model"
 	  dataset_id = "${datarobot_dataset_from_file.test_custom_model.id}"
 	  use_case_id = "${datarobot_use_case.test_custom_model.id}"
-	  chunking_parameters = {}
 }
 resource "datarobot_playground" "test_custom_model" {
 	name = "test custom model"

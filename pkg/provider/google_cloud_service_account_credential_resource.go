@@ -95,7 +95,8 @@ func (r *GoogleCloudCredentialResource) Create(ctx context.Context, req resource
 		GCPKey:         &gcpKey,
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Google Cloud Credential", err.Error())
+		errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Google Cloud Credential", errMessage)
 		return
 	}
 
@@ -118,13 +119,15 @@ func (r *GoogleCloudCredentialResource) Read(ctx context.Context, req resource.R
 	traceAPICall("GetGoogleCloudCredential")
 	credential, err := r.provider.service.GetCredential(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Google Cloud Credential not found",
 				fmt.Sprintf("Google Cloud Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Google Cloud Credential info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Google Cloud Credential with ID %s", data.ID.ValueString()), 
+				err.Error())
 		}
 		return
 	}
@@ -161,7 +164,8 @@ func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource
 				fmt.Sprintf("Google Cloud Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Google Cloud Credential", err.Error())
+			errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Google Cloud Credential", errMessage)
 		}
 		return
 	}

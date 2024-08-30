@@ -116,13 +116,15 @@ func (r *PlaygroundResource) Read(ctx context.Context, req resource.ReadRequest,
 	traceAPICall("GetPlayground")
 	playground, err := r.provider.service.GetPlayground(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Playground not found",
 				fmt.Sprintf("Playground with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Playground info", err.Error())
+			resp.Diagnostics.AddError(
+			fmt.Sprintf("Error getting Playground with ID %s", data.ID.ValueString()),
+			err.Error())
 		}
 		return
 	}

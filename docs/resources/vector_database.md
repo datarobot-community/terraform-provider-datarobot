@@ -18,15 +18,21 @@ resource "datarobot_use_case" "example" {
   description = "Description for the example use case"
 }
 
+resource "datarobot_dataset_from_file" "example" {
+  source_file = "[Path to file to upload]"
+  use_case_id = datarobot_use_case.example.id
+}
+
 resource "datarobot_vector_database" "example" {
   name        = "An example vector database"
   use_case_id = datarobot_use_case.example.id
   dataset_id  = datarobot_dataset_from_file.example.id
   chunking_parameters = {
     chunk_overlap_percentage = 0
-    chunk_size               = 256
+    chunk_size               = 512
     chunking_method          = "recursive"
     embedding_model          = "jinaai/jina-embedding-t-en-v1"
+    separators               = ["\n", " "]
   }
 }
 
@@ -41,10 +47,13 @@ output "example_id" {
 
 ### Required
 
-- `chunking_parameters` (Attributes) The chunking parameters for the Model. (see [below for nested schema](#nestedatt--chunking_parameters))
 - `dataset_id` (String) The id of the Vector Database.
 - `name` (String) The name of the VectorDatabase.
 - `use_case_id` (String) The id of the Use Case.
+
+### Optional
+
+- `chunking_parameters` (Attributes) The chunking parameters for the Model. (see [below for nested schema](#nestedatt--chunking_parameters))
 
 ### Read-Only
 

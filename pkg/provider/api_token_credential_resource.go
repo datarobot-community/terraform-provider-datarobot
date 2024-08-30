@@ -92,7 +92,8 @@ func (r *ApiTokenCredentialResource) Create(ctx context.Context, req resource.Cr
 		ApiToken:       data.ApiToken.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Api Token Credential", err.Error())
+		errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Api Token Credential", errMessage)
 		return
 	}
 
@@ -115,19 +116,25 @@ func (r *ApiTokenCredentialResource) Read(ctx context.Context, req resource.Read
 	traceAPICall("GetApiTokenCredential")
 	credential, err := r.provider.service.GetCredential(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Api Token Credential not found",
 				fmt.Sprintf("Api Token Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error getting Api Token Credential info", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Api Token Credential with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
 
 	data.Name = types.StringValue(credential.Name)
 	data.Description = types.StringValue(credential.Description)
+	if credential.Description != "" {
+		data.Description = types.StringValue(credential.Description)
+	}
+	
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -154,7 +161,8 @@ func (r *ApiTokenCredentialResource) Update(ctx context.Context, req resource.Up
 				fmt.Sprintf("Api Token Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Api Token Credential", err.Error())
+			errMessage := checkCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Api Token Credential", errMessage)
 		}
 		return
 	}

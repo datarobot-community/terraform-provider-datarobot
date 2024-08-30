@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -102,7 +101,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"runtime_parameters": schema.ListNestedAttribute{
-				Optional:            true,
+				Optional: true,
 				// Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
@@ -592,16 +591,15 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	traceAPICall("GetCustomModel")
 	customModel, err := r.provider.service.GetCustomModel(ctx, id)
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Custom Model not found",
 				fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				"Error getting Custom Model info",
-				fmt.Sprintf("Unable to get Custom Model, got error: %s", err),
-			)
+				fmt.Sprintf("Error getting Custom Model with ID %s", id),
+				err.Error())
 		}
 		return
 	}
@@ -952,13 +950,15 @@ func loadCustomModelToTerraformState(
 	baseEnvironmentId string,
 	baseEnvironmentVersionId string,
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	state.ID = types.StringValue(id)
 	state.VersionID = types.StringValue(versionID)
 	state.Name = types.StringValue(name)
-	state.Description = types.StringValue(description)
+	if description != "" {
+		state.Description = types.StringValue(description)
+	}
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}
@@ -969,7 +969,7 @@ func loadCustomModelToTerraformState(
 
 func loadRuntimeParametersToTerraformState(
 	paramKeys []string,
-	runtimeParameterValues []client.RuntimeParameterResponse,
+	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
 	if len(runtimeParameterValues) == 0 {
@@ -996,10 +996,7 @@ func loadRuntimeParametersToTerraformState(
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModelResponse, error) {
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
-	expBackoff.MaxElapsedTime = 5 * time.Minute
+	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
 		ready, err := r.provider.service.IsCustomModelReady(ctx, customModelId)
@@ -1037,7 +1034,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	}
 
 	traceAPICall("CreateCustomModelVersionFromRemoteRepository")
-	_, err := r.provider.service.CreateCustomModelVersionFromRemoteRepository(ctx, customModelID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
+	_, statusID, err := r.provider.service.CreateCustomModelVersionFromRemoteRepository(ctx, customModelID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
 		IsMajorUpdate:     false,
 		BaseEnvironmentID: baseEnvironmentID,
 		RepositoryID:      sourceRemoteRepository.ID.ValueString(),
@@ -1050,16 +1047,12 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 		return
 	}
 
-	// TODO: this is an async task, need to figure out how the status ID is generated
-	time.Sleep(20 * time.Second)
-	// err = r.provider.service.WaitForTaskStatus(ctx, id)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError(
-	// 		"Update Task not completed",
-	// 		fmt.Sprintf("Error replacing model for deployemnt: %s", err),
-	// 	)
-	// 	return
-	// }
+	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	if err != nil {
+		errSummary = "Error waiting for Custom Model version to be created from remote repository"
+		errDetail = err.Error()
+		return
+	}
 
 	return
 }
@@ -1216,6 +1209,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 					},
 				},
 			},
+			ModelInfo: guardTemplate.ModelInfo,
 			// TODO: allow user to input Nemo Info
 			NemoInfo:     guardTemplate.NemoInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
