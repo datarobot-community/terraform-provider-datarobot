@@ -183,11 +183,12 @@ func TestCustomModel(t *testing.T) {
 	})
 	require.NoError(err)
 
+	value := "https://api.openai.com"
 	params := []client.RuntimeParameterValueRequest{
 		{
 			FieldName: "OPENAI_API_BASE",
 			Type:      client.RuntimeParameterTypeString,
-			Value:     "https://api.openai.com",
+			Value:     &value,
 		},
 	}
 

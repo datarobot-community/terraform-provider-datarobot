@@ -338,7 +338,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	name = "%s"
 	description = "%s"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
-	runtime_parameters = [
+	runtime_parameter_values = [
 	  { 
 		  key="OPENAI_API_BASE", 
 		  type="string", 
@@ -413,10 +413,12 @@ resource "datarobot_remote_repository" "test_custom_model_from_remote_repository
 	}
 	
 resource "datarobot_custom_model" "test_without_llm_blueprint" {
-	name        = "%s"
-	description = "%s"
+	name        		  = "%s"
+	description 		  = "%s"
 	target_type           = "Binary"
 	target                = "my_label"
+	positive_class_label  = "yes"
+	negative_class_label  = "no"
 	base_environment_name = "[GenAI] Python 3.11 with Moderations"
 	%s
 	%s

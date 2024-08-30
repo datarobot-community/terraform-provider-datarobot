@@ -87,20 +87,22 @@ type CustomModelResourceModel struct {
 	BaseEnvironmentName            types.String                    `tfsdk:"base_environment_name"`
 	BaseEnvironmentID              types.String                    `tfsdk:"base_environment_id"`
 	BaseEnvironmentVersionID       types.String                    `tfsdk:"base_environment_version_id"`
-	RuntimeParameters              []RuntimeParameterValueModel    `tfsdk:"runtime_parameters"`
+	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	LocalFiles                     []types.String                  `tfsdk:"local_files"`
 	Target                         types.String                    `tfsdk:"target"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
+	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
+	NegativeClassLabel             types.String                    `tfsdk:"negative_class_label"`
 	IsProxy                        types.Bool                      `tfsdk:"is_proxy"`
 	GuardConfigurations            []GuardConfiguration            `tfsdk:"guard_configurations"`
 	OverallModerationConfiguration *OverallModerationConfiguration `tfsdk:"overall_moderation_configuration"`
 }
 
-type RuntimeParameterValueModel struct {
-	Key   types.String `tfsdk:"key"`
-	Type  types.String `tfsdk:"type"`
-	Value types.String `tfsdk:"value"`
+type RuntimeParameterValue struct {
+	Key   types.String `json:"key" tfsdk:"key"`
+	Type  types.String `json:"type" tfsdk:"type"`
+	Value types.String `json:"value" tfsdk:"value"`
 }
 
 type SourceRemoteRepository struct {

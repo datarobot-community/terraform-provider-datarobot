@@ -13,35 +13,49 @@ Data set from file
 ## Example Usage
 
 ```terraform
-resource "datarobot_remote_repository" "example" {
-  name        = "Datarobot User Models"
-  description = "GitHub repository with Datarobot user models"
-  location    = "https://github.com/datarobot/datarobot-user-models"
-  source_type = "github"
-
-  # set the credential id for private repositories
-  # credential_id = datarobot_api_token_credential.example.id
+terraform {
+  required_providers {
+    datarobot = {
+      source  = "datarobot/datarobot"
+      version = "0.0.15"
+    }
+  }
 }
+
+
+# resource "datarobot_remote_repository" "example" {
+#   name        = "Datarobot User Models"
+#   description = "GitHub repository with Datarobot user models"
+#   location    = "https://github.com/datarobot/datarobot-user-models"
+#   source_type = "github"
+
+#   # set the credential id for private repositories
+#   # credential_id = datarobot_api_token_credential.example.id
+# }
 
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  source_remote_repositories = [
-    {
-      id  = datarobot_remote_repository.example.id
-      ref = "master"
-      source_paths = [
-        "model_templates/python3_dummy_binary",
-      ]
-    }
-  ]
+  # source_remote_repositories = [
+  #   {
+  #     id  = datarobot_remote_repository.example.id
+  #     ref = "master"
+  #     source_paths = [
+  #       "model_templates/python3_dummy_binary",
+  #     ]
+  #   }
+  # ]
   local_files = [
-    "file1.py",
-    "file2.py",
+    "model-metadata.yaml",
   ]
   target_type           = "Binary"
-  target                = "my_label"
+  target                = "flagged"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
+  runtime_parameter_values = [{
+    key   = "DEPLOYMENT_PARAMETER"
+    type  = "deployment"
+    value = "66d0b5250daefa35938f1881"
+  }]
 
   # Guards
   guard_configurations = [
@@ -87,8 +101,10 @@ output "example_id" {
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) The flag indicating if the Custom Model is a proxy model.
 - `local_files` (List of String) The list of local file paths used to build the Custom Model.
+- `negative_class_label` (String) The negative class label of the Custom Model.
 - `overall_moderation_configuration` (Attributes) The overall moderation configuration for the Custom Model. (see [below for nested schema](#nestedatt--overall_moderation_configuration))
-- `runtime_parameters` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameters))
+- `positive_class_label` (String) The positive class label of the Custom Model.
+- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
 - `target` (String) The target of the Custom Model.
@@ -147,8 +163,8 @@ Optional:
 - `timeout_sec` (Number) The timeout in seconds of the overall moderation configuration.
 
 
-<a id="nestedatt--runtime_parameters"></a>
-### Nested Schema for `runtime_parameters`
+<a id="nestedatt--runtime_parameter_values"></a>
+### Nested Schema for `runtime_parameter_values`
 
 Required:
 

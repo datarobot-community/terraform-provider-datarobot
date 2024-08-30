@@ -82,7 +82,7 @@ resource "datarobot_custom_model" "test_chat_application" {
 	name = "test chat application"
 	description = "test"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_chat_application.id}"
-	runtime_parameters = [
+	runtime_parameter_values = [
 	  { 
 		  key="OPENAI_API_BASE", 
 		  type="string", 
