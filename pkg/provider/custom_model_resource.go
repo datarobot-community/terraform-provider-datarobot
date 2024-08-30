@@ -390,12 +390,14 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
-			Name:            plan.Name.ValueString(),
-			Description:     plan.Description.ValueString(),
-			TargetType:      plan.TargetType.ValueString(),
-			TargetName:      plan.Target.ValueString(),
-			CustomModelType: defaultCustomModelType,
-			IsProxyModel:    plan.IsProxy.ValueBool(),
+			Name:               plan.Name.ValueString(),
+			Description:        plan.Description.ValueString(),
+			TargetType:         plan.TargetType.ValueString(),
+			TargetName:         plan.Target.ValueString(),
+			CustomModelType:    defaultCustomModelType,
+			NegativeClassLabel: plan.NegativeClassLabel.ValueString(),
+			PositiveClassLabel: plan.PositiveClassLabel.ValueString(),
+			IsProxyModel:       plan.IsProxy.ValueBool(),
 			IsTrainingDataForVersionsPermanentlyEnabled: true,
 		})
 		if err != nil {
@@ -412,6 +414,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.Description = types.StringValue(description)
 		state.Target = types.StringValue(plan.Target.ValueString())
 		state.TargetType = types.StringValue(plan.TargetType.ValueString())
+		state.NegativeClassLabel = types.StringValue(plan.NegativeClassLabel.ValueString())
+		state.PositiveClassLabel = types.StringValue(plan.PositiveClassLabel.ValueString())
 		if IsKnown(plan.IsProxy) {
 			state.IsProxy = plan.IsProxy
 		}
