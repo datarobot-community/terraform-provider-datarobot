@@ -26,6 +26,8 @@ func TestAccChatApplicationResource(t *testing.T) {
 					checkChatApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 				),
 			},
 			// Update name
@@ -35,6 +37,8 @@ func TestAccChatApplicationResource(t *testing.T) {
 					checkChatApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 				),
 			},
 			// Delete is tested automatically
@@ -137,7 +141,9 @@ func checkChatApplicationResourceExists(resourceName string) resource.TestCheckF
 		}
 
 		if application.Name == rs.Primary.Attributes["name"] &&
-			application.ApplicationUrl == rs.Primary.Attributes["application_url"] {
+			application.ApplicationUrl == rs.Primary.Attributes["application_url"] && 
+			application.CustomApplicationSourceID == rs.Primary.Attributes["source_id"] &&
+			application.CustomApplicationSourceVersionID == rs.Primary.Attributes["source_version_id"] {
 			return nil
 		}
 

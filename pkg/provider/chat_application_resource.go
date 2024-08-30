@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -43,9 +44,16 @@ func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"version_id": schema.StringAttribute{
+			"source_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The version ID of the Chat Application.",
+				MarkdownDescription: "The ID of the Chat Application Source.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"source_version_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The version ID of the Chat Application Source.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -67,6 +75,19 @@ func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.Schem
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+			},
+			"external_access_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether external access is enabled for the Chat Application.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"external_access_recipients": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of external email addresses that have access to the Chat Application.",
+				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -104,11 +125,18 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	recipients := make([]string, len(data.ExternalAccessRecipients))
+	for i, recipient := range data.ExternalAccessRecipients {
+		recipients[i] = recipient.ValueString()
+	}
+
 	traceAPICall("UpdateChatApplication")
 	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
 		&client.UpdateApplicationRequest{
-			Name: data.Name.ValueString(),
+			Name:                     data.Name.ValueString(),
+			ExternalAccessEnabled:    IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool(),
+			ExternalAccessRecipients: recipients,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -117,7 +145,8 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 				fmt.Sprintf("Application with ID %s is not found. Removing from state.", createResp.ID))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Application", err.Error())
+			errMessage := checkApplicationNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error adding details to Chat Application", errMessage)
 		}
 		return
 	}
@@ -128,15 +157,10 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 	data.ID = types.StringValue(application.ID)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
-		return
-	}
-	data.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -170,17 +194,22 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
+	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
+	traceAPICall("GetApplicationSourceVersion")
+	applicationSourceVersion, err := r.provider.service.GetApplicationSourceVersion(
+		ctx, 
+		application.CustomApplicationSourceID, 
+		application.CustomApplicationSourceVersionID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
+		resp.Diagnostics.AddError("Error getting Application Source version", err.Error())
 		return
 	}
-	data.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
-	if applicationSource.LatestVersion.RuntimeParameters != nil {
-		for _, runtimeParameter := range applicationSource.LatestVersion.RuntimeParameters {
+	if applicationSourceVersion.RuntimeParameters != nil {
+		for _, runtimeParameter := range applicationSourceVersion.RuntimeParameters {
 			if runtimeParameter.FieldName == "DEPLOYMENT_ID" {
 				data.DeploymentID = types.StringValue(runtimeParameter.CurrentValue.(string))
 				break
@@ -206,17 +235,24 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	newName := plan.Name.ValueString()
-	if state.Name.ValueString() == newName {
-		return
+	recipients := make([]string, len(plan.ExternalAccessRecipients))
+	for i, recipient := range plan.ExternalAccessRecipients {
+		recipients[i] = recipient.ValueString()
 	}
 
-	traceAPICall("UpdateApplication")
+	updateRequest := &client.UpdateApplicationRequest{
+		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessRecipients: recipients,
+	}
+
+	if state.Name.ValueString() != plan.Name.ValueString() {
+		updateRequest.Name = plan.Name.ValueString()
+	}
+
+	traceAPICall("UpdateChatApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
-		&client.UpdateApplicationRequest{
-			Name: newName,
-		})
+		updateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
@@ -224,24 +260,17 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 				fmt.Sprintf("Application with ID %s is not found. Removing from state.", plan.ID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Application", err.Error())
+			errMessage := checkApplicationNameAlreadyExists(err, plan.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Application", errMessage)
 		}
 		return
 	}
 
-	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
+	_, err = waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
 	}
-
-	traceAPICall("GetChatApplicationSource")
-	applicationSource, err := r.provider.service.GetApplicationSource(ctx, application.CustomApplicationSourceID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Application Source info", err.Error())
-		return
-	}
-	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

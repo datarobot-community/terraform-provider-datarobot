@@ -31,8 +31,27 @@ resource "datarobot_deployment" "example" {
 }
 
 resource "datarobot_chat_application" "example" {
-  name          = "An example chat application"
-  deployment_id = datarobot_deployment.example.id
+  name                    = "An example chat application"
+  deployment_id           = datarobot_deployment.example.id
+  external_access_enabled = true
+  external_access_recipients = [
+    "recipient@example.com",
+  ]
+}
+
+output "datarobot_chat_application_id" {
+  value       = datarobot_chat_application.example.id
+  description = "The ID of the example chat application"
+}
+
+output "datarobot_chat_application_source_id" {
+  value       = datarobot_chat_application.example.source_id
+  description = "The ID of the application source for the example chat application"
+}
+
+output "datarobot_chat_application_source_version_id" {
+  value       = datarobot_chat_application.example.source_version_id
+  description = "The version ID of the application source for the example chat application"
 }
 
 output "datarobot_chat_application_url" {

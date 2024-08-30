@@ -184,11 +184,14 @@ type PredictionsSetting struct {
 // ApplicationResourceModel describes the chat application resource.
 
 type ChatApplicationResourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	VersionID      types.String `tfsdk:"version_id"`
-	Name           types.String `tfsdk:"name"`
-	DeploymentID   types.String `tfsdk:"deployment_id"`
-	ApplicationUrl types.String `tfsdk:"application_url"`
+	ID                       types.String   `tfsdk:"id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
+	SourceVersionID          types.String   `tfsdk:"source_version_id"`
+	Name                     types.String   `tfsdk:"name"`
+	DeploymentID             types.String   `tfsdk:"deployment_id"`
+	ApplicationUrl           types.String   `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
 }
 
 type ApplicationSourceResourceModel struct {
@@ -199,10 +202,13 @@ type ApplicationSourceResourceModel struct {
 }
 
 type CustomApplicationResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	SourceVersionID types.String `tfsdk:"source_version_id"`
-	Name            types.String `tfsdk:"name"`
-	ApplicationUrl  types.String `tfsdk:"application_url"`
+	ID                       types.String   `tfsdk:"id"`
+	SourceID                 types.String   `tfsdk:"source_id"`
+	SourceVersionID          types.String   `tfsdk:"source_version_id"`
+	Name                     types.String   `tfsdk:"name"`
+	ApplicationUrl           types.String   `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
 }
 
 // CredentialResourceModel describes the credential resource.

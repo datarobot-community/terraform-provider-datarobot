@@ -8,17 +8,21 @@ type CreateApplicationFromSourceRequest struct {
 	ApplicationSourceVersionID string `json:"applicationSourceVersionId"`
 }
 
-type ApplicationResponse struct {
-	ID                               string `json:"id"`
-	Name                             string `json:"name"`
-	Status                           string `json:"status"`
-	CustomApplicationSourceID        string `json:"customApplicationSourceId"`
-	CustomApplicationSourceVersionID string `json:"customApplicationSourceVersionId"`
-	ApplicationUrl                   string `json:"applicationUrl"`
+type Application struct {
+	ID                               string   `json:"id"`
+	Name                             string   `json:"name"`
+	Status                           string   `json:"status"`
+	CustomApplicationSourceID        string   `json:"customApplicationSourceId"`
+	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId"`
+	ApplicationUrl                   string   `json:"applicationUrl"`
+	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
+	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
 }
 
 type UpdateApplicationRequest struct {
-	Name string `json:"name"`
+	Name                     string   `json:"name,omitempty"`
+	ExternalAccessEnabled    bool     `json:"externalAccessEnabled"`
+	ExternalAccessRecipients []string `json:"externalAccessRecipients"`
 }
 
 type UpdateApplicationSourceRequest struct {

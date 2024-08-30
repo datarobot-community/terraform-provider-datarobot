@@ -46,8 +46,27 @@ resource "datarobot_deployment" "example" {
 }
 
 resource "datarobot_chat_application" "example" {
-  name          = "An example chat application"
-  deployment_id = datarobot_deployment.example.id
+  name                    = "An example chat application"
+  deployment_id           = datarobot_deployment.example.id
+  external_access_enabled = true
+  external_access_recipients = [
+    "recipient@example.com",
+  ]
+}
+
+output "datarobot_chat_application_id" {
+  value       = datarobot_chat_application.example.id
+  description = "The ID of the example chat application"
+}
+
+output "datarobot_chat_application_source_id" {
+  value       = datarobot_chat_application.example.source_id
+  description = "The ID of the application source for the example chat application"
+}
+
+output "datarobot_chat_application_source_version_id" {
+  value       = datarobot_chat_application.example.source_version_id
+  description = "The version ID of the application source for the example chat application"
 }
 
 output "datarobot_chat_application_url" {
@@ -64,8 +83,14 @@ output "datarobot_chat_application_url" {
 - `deployment_id` (String) The deployment ID of the Chat Application.
 - `name` (String) The name of the Chat Application.
 
+### Optional
+
+- `external_access_enabled` (Boolean) Whether external access is enabled for the Chat Application.
+- `external_access_recipients` (List of String) The list of external email addresses that have access to the Chat Application.
+
 ### Read-Only
 
 - `application_url` (String) The URL of the Chat Application.
 - `id` (String) The ID of the Chat Application.
-- `version_id` (String) The version ID of the Chat Application.
+- `source_id` (String) The ID of the Chat Application Source.
+- `source_version_id` (String) The version ID of the Chat Application Source.

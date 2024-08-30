@@ -36,10 +36,10 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // CreateApplicationFromSource mocks base method.
-func (m *MockService) CreateApplicationFromSource(ctx context.Context, req *client.CreateApplicationFromSourceRequest) (*client.ApplicationResponse, error) {
+func (m *MockService) CreateApplicationFromSource(ctx context.Context, req *client.CreateApplicationFromSourceRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateApplicationFromSource", ctx, req)
-	ret0, _ := ret[0].(*client.ApplicationResponse)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -81,10 +81,10 @@ func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req i
 }
 
 // CreateChatApplication mocks base method.
-func (m *MockService) CreateChatApplication(ctx context.Context, req *client.CreateChatApplicationRequest) (*client.ApplicationResponse, error) {
+func (m *MockService) CreateChatApplication(ctx context.Context, req *client.CreateChatApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateChatApplication", ctx, req)
-	ret0, _ := ret[0].(*client.ApplicationResponse)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -549,10 +549,10 @@ func (mr *MockServiceMockRecorder) DeleteVectorDatabase(ctx, id interface{}) *go
 }
 
 // GetApplication mocks base method.
-func (m *MockService) GetApplication(ctx context.Context, id string) (*client.ApplicationResponse, error) {
+func (m *MockService) GetApplication(ctx context.Context, id string) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetApplication", ctx, id)
-	ret0, _ := ret[0].(*client.ApplicationResponse)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1043,10 +1043,10 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx interface{}) *gomock
 }
 
 // UpdateApplication mocks base method.
-func (m *MockService) UpdateApplication(ctx context.Context, id string, req *client.UpdateApplicationRequest) (*client.ApplicationResponse, error) {
+func (m *MockService) UpdateApplication(ctx context.Context, id string, req *client.UpdateApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateApplication", ctx, id, req)
-	ret0, _ := ret[0].(*client.ApplicationResponse)
+	ret0, _ := ret[0].(*client.Application)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

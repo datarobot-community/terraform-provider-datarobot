@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -74,23 +75,25 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 	// Create
 	mockService.EXPECT().CreateApplicationFromSource(gomock.Any(), &client.CreateApplicationFromSourceRequest{
 		ApplicationSourceVersionID: sourceVersionID,
-	}).Return(&client.ApplicationResponse{
+	}).Return(&client.Application{
 		ID:   id,
 		Name: name,
 	}, nil)
 	mockService.EXPECT().IsApplicationReady(gomock.Any(), id).Return(true, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
 	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
@@ -99,10 +102,11 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:   sourceID,
 		Name: name,
 	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 
@@ -111,25 +115,30 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:   sourceID,
 		Name: name,
 	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             name,
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
 	}, nil)
 	mockService.EXPECT().UpdateApplication(gomock.Any(), id, &client.UpdateApplicationRequest{
-		Name: "new_example_name",
-	}).Return(&client.ApplicationResponse{
+		Name:                     "new_example_name",
+		ExternalAccessEnabled:    true,
+		ExternalAccessRecipients: []string{"test@test.com"},
+	}).Return(&client.Application{
 		ID:   id,
 		Name: "new_example_name",
 	}, nil)
 
 	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
+		ExternalAccessEnabled:            true,
 	}, nil)
 
 	// Update application source version
@@ -137,13 +146,15 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		ID:   sourceID,
 		Name: name,
 	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
+		ExternalAccessEnabled:            true,
 	}, nil)
-	mockService.EXPECT().DeleteApplication(gomock.Any(), id).Return(nil)	
+	mockService.EXPECT().DeleteApplication(gomock.Any(), id).Return(nil)
 	mockService.EXPECT().DeleteApplicationSource(gomock.Any(), sourceID).Return(nil)
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
 		&client.ListExecutionEnvironmentsResponse{
@@ -168,55 +179,65 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 		&client.ApplicationSourceVersion{
 			ID: sourceVersionID,
 		}, nil)
-	
+
 	mockService.EXPECT().CreateApplicationFromSource(gomock.Any(), &client.CreateApplicationFromSourceRequest{
 		ApplicationSourceVersionID: sourceVersionID2,
-	}).Return(&client.ApplicationResponse{
+	}).Return(&client.Application{
 		ID:   id2,
 		Name: "new_example_name",
 	}, nil)
 	mockService.EXPECT().UpdateApplication(gomock.Any(), id2, &client.UpdateApplicationRequest{
-		Name: "new_example_name",
-	}).Return(&client.ApplicationResponse{
-		ID: id2,
+		Name:                     "new_example_name",
+		ExternalAccessEnabled:    true,
+		ExternalAccessRecipients: []string{"test2@test.com"},
+	}).Return(&client.Application{
+		ID:   id2,
 		Name: "new_example_name",
 	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
+		ExternalAccessEnabled:            true,
 	}, nil)
 	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
 		ID:   sourceID,
 		Name: name,
 	}, nil)
-	mockService.EXPECT().IsApplicationReady(gomock.Any(), id2).Return(true, nil)	
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.ApplicationResponse{
+	mockService.EXPECT().IsApplicationReady(gomock.Any(), id2).Return(true, nil)
+	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
 		ID:                               id,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID,
+		ExternalAccessEnabled:            true,
 	}, nil)
 
 	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
+		ExternalAccessEnabled:            true,
 	}, nil)
-	
+
 	// Delete
 	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
 		ID:   sourceID,
 		Name: name,
 	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.ApplicationResponse{
+	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
 		ID:                               id2,
 		Name:                             "new_example_name",
 		ApplicationUrl:                   applicationUrl,
+		CustomApplicationSourceID:        sourceID,
 		CustomApplicationSourceVersionID: sourceVersionID2,
+		ExternalAccessEnabled:            true,
 	}, nil)
 	mockService.EXPECT().DeleteApplication(gomock.Any(), id2).Return(nil)
 	mockService.EXPECT().DeleteApplicationSource(gomock.Any(), sourceID).Return(nil)
@@ -270,18 +291,21 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customApplicationResourceConfig("", "test"),
+				Config: customApplicationResourceConfig("", "test", false, []string{}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
+					resource.TestCheckNoResourceAttr(resourceName, "external_access_recipients"),
 				),
 			},
-			// Update name
+			// Update name and external access
 			{
-				Config: customApplicationResourceConfig("new_example_name", "test"),
+				Config: customApplicationResourceConfig("new_example_name", "test", true, []string{"test@test.com"}),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -300,13 +324,16 @@ if __name__ == "__main__":
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
 				),
 			},
 			// Update Application source version
 			{
-				Config: customApplicationResourceConfig("new_example_name", "new_test"),
+				Config: customApplicationResourceConfig("new_example_name", "new_test", true, []string{"test2@test.com"}),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -325,8 +352,11 @@ if __name__ == "__main__":
 					checkCustomApplicationResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
 				),
 			},
 			// Delete is tested automatically
@@ -334,7 +364,19 @@ if __name__ == "__main__":
 	})
 }
 
-func customApplicationResourceConfig(name string, application_source_resource_name string) string {
+func customApplicationResourceConfig(
+	name string,
+	applicationSourceResourceName string,
+	externalAccess bool,
+	externalAccessRecipients []string,
+) string {
+	recipients := ""
+	if len(externalAccessRecipients) > 0 {
+		recipients = fmt.Sprintf(`
+		external_access_recipients = %q
+		`, externalAccessRecipients)
+	}
+
 	if name == "" {
 		return fmt.Sprintf(`
 resource "datarobot_application_source" "%s" {
@@ -343,7 +385,9 @@ resource "datarobot_application_source" "%s" {
 
 resource "datarobot_custom_application" "test" {
 	source_version_id = "${datarobot_application_source.%s.version_id}"
-}`, application_source_resource_name, application_source_resource_name)
+	external_access_enabled = %t
+	%s
+}`, applicationSourceResourceName, applicationSourceResourceName, externalAccess, recipients)
 	}
 
 	return fmt.Sprintf(`
@@ -354,8 +398,10 @@ resource "datarobot_application_source" "%s" {
 resource "datarobot_custom_application" "test" {
 	name = "%s"
 	source_version_id = "${datarobot_application_source.%s.version_id}"
+	external_access_enabled = %t
+	%s
 }
-`, application_source_resource_name, name, application_source_resource_name)
+`, applicationSourceResourceName, name, applicationSourceResourceName, externalAccess, recipients)
 }
 
 func checkCustomApplicationResourceExists(resourceName string) resource.TestCheckFunc {
@@ -383,7 +429,20 @@ func checkCustomApplicationResourceExists(resourceName string) resource.TestChec
 
 		if application.Name == rs.Primary.Attributes["name"] &&
 			application.ApplicationUrl == rs.Primary.Attributes["application_url"] &&
+			application.CustomApplicationSourceID == rs.Primary.Attributes["source_id"] &&
 			application.CustomApplicationSourceVersionID == rs.Primary.Attributes["source_version_id"] {
+			b, err := strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"])
+			if err == nil {
+				if application.ExternalAccessEnabled == b {
+					if len(application.ExternalAccessRecipients) > 0 {
+						if application.ExternalAccessRecipients[0] == rs.Primary.Attributes["external_access_recipients.0"] {
+							return nil
+						}
+					} else if rs.Primary.Attributes["external_access_recipients.0"] == "" {
+						return nil
+					}
+				}
+			}
 			return nil
 		}
 

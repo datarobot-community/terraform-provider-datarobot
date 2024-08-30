@@ -10,7 +10,7 @@ terraform {
   required_providers {
     datarobot = {
       source  = "datarobot/datarobot"
-      version = "0.0.10"
+      version = "0.0.15"
     }
   }
 }
@@ -50,7 +50,7 @@ resource "datarobot_llm_blueprint" "example" {
 }
 
 resource "datarobot_google_cloud_credential" "example" {
-  name        = "Google Cloud Service Account"
+  name        = "${var.use_case_name} Google Cloud Service Account"
   source_file = var.google_cloud_credential_source_file
 }
 
