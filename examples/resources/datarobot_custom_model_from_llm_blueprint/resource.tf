@@ -2,7 +2,7 @@ resource "datarobot_custom_model" "example_from_llm_blueprint" {
   name                    = "Example Custom Model from LLM Blueprint"
   description             = "example description"
   source_llm_blueprint_id = datarobot_llm_blueprint.example.id
-  runtime_parameters = [
+  runtime_parameter_values = [
     {
       key   = "OPENAI_API_BASE",
       type  = "string",

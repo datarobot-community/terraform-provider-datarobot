@@ -15,20 +15,12 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
 	defaultTimeoutMinutes = 30
 )
-
-func addConfigureProviderErr(diagnostics *diag.Diagnostics) {
-	diagnostics.AddError(
-		"Provider not configured",
-		"The provider hasn't been configured before apply, likely because it depends on an unknown value from another resource. This leads to weird stuff happening, so we'd prefer if you didn't do that. Thanks!",
-	)
-}
 
 type Knowable interface {
 	IsUnknown() bool

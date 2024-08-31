@@ -11,6 +11,8 @@ type CreateCustomModelRequest struct {
 	Name                                        string `json:"name"`
 	TargetType                                  string `json:"targetType"`
 	TargetName                                  string `json:"targetName"`
+	NegativeClassLabel                          string `json:"negativeClassLabel,omitempty"`
+	PositiveClassLabel                          string `json:"positiveClassLabel,omitempty"`
 	CustomModelType                             string `json:"customModelType"`
 	Description                                 string `json:"description,omitempty"`
 	IsProxyModel                                bool   `json:"isProxyModel,omitempty"`
@@ -104,9 +106,9 @@ type CreateCustomModelVersionFromRemoteRepositoryRequest struct {
 }
 
 type RuntimeParameterValueRequest struct {
-	FieldName string `json:"fieldName"`
-	Type      string `json:"type,omitempty"`
-	Value     string `json:"value"`
+	FieldName string  `json:"fieldName"`
+	Type      string  `json:"type,omitempty"`
+	Value     *string `json:"value"`
 }
 
 type ListExecutionEnvironmentsResponse struct {

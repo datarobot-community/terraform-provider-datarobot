@@ -54,7 +54,7 @@ func (r *RemoteRepositoryResource) Schema(ctx context.Context, req resource.Sche
 				Optional:            true,
 			},
 			"location": schema.StringAttribute{
-				MarkdownDescription: "The location of the Remote Repository.",
+				MarkdownDescription: "The location of the Remote Repository. (Bucket name for S3)",
 				Required:            true,
 			},
 			"source_type": schema.StringAttribute{
@@ -63,6 +63,20 @@ func (r *RemoteRepositoryResource) Schema(ctx context.Context, req resource.Sche
 			},
 			"personal_access_token": schema.StringAttribute{
 				MarkdownDescription: "The personal access token for the Remote Repository.",
+				Optional:            true,
+			},
+
+			// S3 remote repository specific attributes
+			"aws_access_key_id": schema.StringAttribute{
+				MarkdownDescription: "The AWS access key ID for the Remote Repository.",
+				Optional:            true,
+			},
+			"aws_secret_access_key": schema.StringAttribute{
+				MarkdownDescription: "The AWS secret access key for the Remote Repository.",
+				Optional:            true,
+			},
+			"aws_session_token": schema.StringAttribute{
+				MarkdownDescription: "The AWS session token for the Remote Repository.",
 				Optional:            true,
 			},
 		},
@@ -103,6 +117,20 @@ func (r *RemoteRepositoryResource) Create(ctx context.Context, req resource.Crea
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating personal access token Credential", err.Error())
+			return
+		}
+		credentialID = credential.ID
+	} else if data.SourceType.ValueString() == "s3" && IsKnown(data.AWSAccessKeyID) && IsKnown(data.AWSSecretAccessKey) {
+		traceAPICall("CreateCredential")
+		credential, err := r.provider.service.CreateCredential(ctx, &client.CredentialRequest{
+			Name:               fmt.Sprintf("%s_%s_%d", data.Name.ValueString(), data.Location.ValueString(), time.Now().UnixNano()),
+			CredentialType:     "s3",
+			AWSAccessKeyID:     data.AWSAccessKeyID.ValueString(),
+			AWSSecretAccessKey: data.AWSSecretAccessKey.ValueString(),
+			AWSSessionToken:    data.AWSSessionToken.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating S3 Credential", err.Error())
 			return
 		}
 		credentialID = credential.ID
@@ -210,6 +238,22 @@ func (r *RemoteRepositoryResource) Update(ctx context.Context, req resource.Upda
 		}
 	}
 
+	if state.AWSAccessKeyID.ValueString() != plan.AWSAccessKeyID.ValueString() ||
+		state.AWSSecretAccessKey.ValueString() != plan.AWSSecretAccessKey.ValueString() ||
+		state.AWSSessionToken.ValueString() != plan.AWSSessionToken.ValueString() {
+		traceAPICall("UpdateCredential")
+		_, err = r.provider.service.UpdateCredential(ctx, remoteRepository.CredentialID, &client.CredentialRequest{
+			Name:               fmt.Sprintf("%s_%s_%d", remoteRepository.Name, remoteRepository.Location, time.Now().UnixNano()),
+			AWSAccessKeyID:     plan.AWSAccessKeyID.ValueString(),
+			AWSSecretAccessKey: plan.AWSSecretAccessKey.ValueString(),
+			AWSSessionToken:    plan.AWSSessionToken.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating S3 Credential", err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -243,7 +287,7 @@ func (r *RemoteRepositoryResource) Delete(ctx context.Context, req resource.Dele
 		traceAPICall("DeleteCredential")
 		err = r.provider.service.DeleteCredential(ctx, remoteRepository.CredentialID)
 		if err != nil {
-			resp.Diagnostics.AddError("Error deleting personal access token Credential", err.Error())
+			resp.Diagnostics.AddError("Error deleting Credential", err.Error())
 			return
 		}
 	}

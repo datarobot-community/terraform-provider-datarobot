@@ -9,10 +9,11 @@ import (
 	"os"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -100,9 +101,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"runtime_parameters": schema.ListNestedAttribute{
-				Optional: true,
-				// Computed:            true,
+			"runtime_parameter_values": schema.ListNestedAttribute{
+				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The runtime parameter values for the Custom Model.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -128,6 +129,14 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"target": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The target of the Custom Model.",
+			},
+			"positive_class_label": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The positive class label of the Custom Model.",
+			},
+			"negative_class_label": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The negative class label of the Custom Model.",
 			},
 			"is_proxy": schema.BoolAttribute{
 				Optional:            true,
@@ -260,25 +269,10 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 }
 
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
 	var plan CustomModelResourceModel
 
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !IsKnown(plan.Name) {
-		resp.Diagnostics.AddError(
-			"Invalid name",
-			"Name is required to create a Custom Model.",
-		)
 		return
 	}
 
@@ -306,11 +300,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		state.ID = types.StringValue(createResp.CustomModelID)
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintID)
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 
 		traceAPICall("UpdateCustomModel")
 		_, err = r.provider.service.UpdateCustomModel(ctx,
@@ -320,31 +309,20 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 				Description: description,
 			})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error updating Custom Model",
-				fmt.Sprintf("Unable to update Custom Model, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
 			return
 		}
 
 		traceAPICall("WaitForCustomModelToBeReady")
 		customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error waiting for Custom Model to be ready",
-				fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 			return
 		}
 		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
 
 		state.Name = types.StringValue(name)
 		state.Description = types.StringValue(description)
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 	} else {
 		if !IsKnown(plan.Target) || !IsKnown(plan.TargetType) || !IsKnown(plan.BaseEnvironmentName) {
 			resp.Diagnostics.AddError(
@@ -358,10 +336,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		traceAPICall("ListExecutionEnvironments")
 		listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error listing Execution Environments",
-				fmt.Sprintf("Unable to list Execution Environments, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error listing Execution Environments", err.Error())
 			return
 		}
 
@@ -382,12 +357,14 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
-			Name:            plan.Name.ValueString(),
-			Description:     plan.Description.ValueString(),
-			TargetType:      plan.TargetType.ValueString(),
-			TargetName:      plan.Target.ValueString(),
-			CustomModelType: defaultCustomModelType,
-			IsProxyModel:    plan.IsProxy.ValueBool(),
+			Name:               plan.Name.ValueString(),
+			Description:        plan.Description.ValueString(),
+			TargetType:         plan.TargetType.ValueString(),
+			TargetName:         plan.Target.ValueString(),
+			CustomModelType:    defaultCustomModelType,
+			PositiveClassLabel: plan.PositiveClassLabel.ValueString(),
+			NegativeClassLabel: plan.NegativeClassLabel.ValueString(),
+			IsProxyModel:       plan.IsProxy.ValueBool(),
 			IsTrainingDataForVersionsPermanentlyEnabled: true,
 		})
 		if err != nil {
@@ -404,13 +381,14 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.Description = types.StringValue(description)
 		state.Target = types.StringValue(plan.Target.ValueString())
 		state.TargetType = types.StringValue(plan.TargetType.ValueString())
+		if IsKnown(plan.PositiveClassLabel) {
+			state.PositiveClassLabel = types.StringValue(plan.PositiveClassLabel.ValueString())
+		}
+		if IsKnown(plan.NegativeClassLabel) {
+			state.NegativeClassLabel = types.StringValue(plan.NegativeClassLabel.ValueString())
+		}
 		if IsKnown(plan.IsProxy) {
 			state.IsProxy = plan.IsProxy
-		}
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
 		}
 
 		if plan.SourceRemoteRepositories == nil && plan.LocalFiles == nil {
@@ -456,10 +434,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	traceAPICall("WaitForCustomModelToBeReady")
 	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error waiting for Custom Model to be ready",
-			fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
 
@@ -469,27 +444,25 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.LocalFiles = plan.LocalFiles
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 
-	if len(plan.RuntimeParameters) > 0 {
-		params := make([]client.RuntimeParameterValueRequest, len(plan.RuntimeParameters))
-		for i, param := range plan.RuntimeParameters {
+	if IsKnown(plan.RuntimeParameterValues) {
+		runtimeParameterValues := make([]RuntimeParameterValue, 0)
+		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+		for i, param := range runtimeParameterValues {
+			value := param.Value.ValueString()
 			params[i] = client.RuntimeParameterValueRequest{
 				FieldName: param.Key.ValueString(),
 				Type:      param.Type.ValueString(),
-				Value:     param.Value.ValueString(),
+				Value:     &value,
 			}
 		}
 		jsonParams, err := json.Marshal(params)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating runtime parameters",
-				fmt.Sprintf("Unable to create runtime parameters, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error creating runtime parameter values", err.Error())
 			return
 		}
 
@@ -501,34 +474,18 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			RuntimeParameterValues:   string(jsonParams),
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Custom Model version",
-				fmt.Sprintf("Unable to create Custom Model version, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
 		}
 
 		traceAPICall("WaitForCustomModelToBeReady")
 		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error waiting for Custom Model to be ready",
-				fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 			return
 		}
 
-		paramKeys := make([]string, 0)
-		for _, param := range plan.RuntimeParameters {
-			paramKeys = append(paramKeys, param.Key.ValueString())
-		}
-		loadRuntimeParametersToTerraformState(paramKeys, customModel.LatestVersion.RuntimeParameters, &state)
 		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 	}
 
 	if len(plan.GuardConfigurations) > 0 {
@@ -550,43 +507,36 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.VersionID = types.StringValue(newVersion)
 		state.GuardConfigurations = plan.GuardConfigurations
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		_, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error waiting for Custom Model to be ready",
-				fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-			)
-			return
-		}
 	}
-}
 
-func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
+	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
+	if err != nil {
+		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
 
-	var state CustomModelResourceModel
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	diags := loadRuntimeParametersToTerraformState(ctx, customModel.LatestVersion.RuntimeParameters, &state)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+}
+
+func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data CustomModelResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
+	if data.ID.IsNull() {
 		return
 	}
 
-	id := state.ID.ValueString()
+	id := data.ID.ValueString()
 
 	traceAPICall("GetCustomModel")
 	customModel, err := r.provider.service.GetCustomModel(ctx, id)
@@ -604,49 +554,32 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	paramKeys := make([]string, 0)
-	for _, param := range state.RuntimeParameters {
-		paramKeys = append(paramKeys, param.Key.ValueString())
-	}
 	loadCustomModelToTerraformState(
+		ctx,
 		id,
 		customModel.LatestVersion.ID,
 		customModel.Name,
 		customModel.Description,
-		state.SourceLLMBlueprintID.ValueString(),
+		data.SourceLLMBlueprintID.ValueString(),
 		customModel.LatestVersion.BaseEnvironmentID,
 		customModel.LatestVersion.BaseEnvironmentVersionID,
-		paramKeys,
 		customModel.LatestVersion.RuntimeParameters,
-		&state)
+		&data)
 
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
-
 	var plan CustomModelResourceModel
 
-	// Read Terraform plan data into the model
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var state CustomModelResourceModel
 
-	// Read Terraform state data into the model
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -671,18 +604,14 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 					fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
 				resp.State.RemoveResource(ctx)
 			} else {
-				resp.Diagnostics.AddError(
-					"Error updating Custom Model",
-					fmt.Sprintf("Unable to update Custom Model, got error: %s", err),
-				)
+				resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
 			}
 			return
 		}
 
 		state.Name = types.StringValue(customModel.Name)
 		state.Description = types.StringValue(customModel.Description)
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -691,21 +620,16 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	traceAPICall("WaitForCustomModelToBeReady")
 	customModel, err := r.waitForCustomModelToBeReady(ctx, id)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error waiting for Custom Model to be ready",
-			fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
 
-	if len(plan.RuntimeParameters) > 0 ||
+	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) ||
 		state.BaseEnvironmentName.ValueString() != plan.BaseEnvironmentName.ValueString() {
+		traceAPICall("ListExecutionEnvironments")
 		listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error listing Execution Environments",
-				fmt.Sprintf("Unable to list Execution Environments, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error listing Execution Environments", err.Error())
 			return
 		}
 
@@ -735,23 +659,55 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 			baseEnvironmentVersionID = newBaseEnvironmentVersionID
 		}
 
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		params := make([]client.RuntimeParameterValueRequest, len(plan.RuntimeParameters))
-		for i, param := range plan.RuntimeParameters {
+		runtimeParameterValues := make([]RuntimeParameterValue, 0)
+		if IsKnown(plan.RuntimeParameterValues) {
+			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+		}
+
+		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+		for i, param := range runtimeParameterValues {
+			value := param.Value.ValueString()
 			params[i] = client.RuntimeParameterValueRequest{
 				FieldName: param.Key.ValueString(),
 				Type:      param.Type.ValueString(),
-				Value:     param.Value.ValueString(),
+				Value:     &value,
 			}
 		}
-		jsonParams, err := json.Marshal(params)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating runtime parameters",
-				fmt.Sprintf("Unable to create runtime parameters, got error: %s", err),
-			)
+
+		// compute the runtime parameter values to reset
+		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
+		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
 			return
 		}
+
+		for _, param := range runtimeParametersToReset {
+			found := false
+			for _, newParam := range runtimeParameterValues {
+				if param.Key.ValueString() == newParam.Key.ValueString() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				params = append(params, client.RuntimeParameterValueRequest{
+					FieldName: param.Key.ValueString(),
+					Type:      param.Type.ValueString(),
+					Value:     nil,
+				})
+			}
+		}
+
+		jsonParams, err := json.Marshal(params)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
+			return
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionCreateFromLatestRequest{
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
@@ -759,32 +715,20 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 			RuntimeParameterValues:   string(jsonParams),
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Custom Model version",
-				fmt.Sprintf("Unable to create Custom Model version, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
 		}
 
 		traceAPICall("WaitForCustomModelToBeReady")
 		customModel, err = r.waitForCustomModelToBeReady(ctx, id)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error waiting for Custom Model to be ready",
-				fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 			return
 		}
 		latestVersion := customModel.LatestVersion.ID
 
-		paramKeys := make([]string, 0)
-		for _, param := range plan.RuntimeParameters {
-			paramKeys = append(paramKeys, param.Key.ValueString())
-		}
-		loadRuntimeParametersToTerraformState(paramKeys, customModel.LatestVersion.RuntimeParameters, &state)
 		state.VersionID = types.StringValue(latestVersion)
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -801,8 +745,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 
 		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -819,8 +762,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 
 		state.LocalFiles = plan.LocalFiles
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -873,8 +815,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		state.VersionID = types.StringValue(newVersion)
 		state.GuardConfigurations = plan.GuardConfigurations
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
-		diags = resp.State.Set(ctx, state)
-		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -883,58 +824,36 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	traceAPICall("WaitForCustomModelToBeReady")
 	customModel, err = r.waitForCustomModelToBeReady(ctx, id)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error waiting for Custom Model to be ready",
-			fmt.Sprintf("Unable to wait for Custom Model to be ready, got error: %s", err),
-		)
+		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
-	diags = resp.State.Set(ctx, state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+
+	diags := loadRuntimeParametersToTerraformState(ctx, customModel.LatestVersion.RuntimeParameters, &state)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
 		return
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *CustomModelResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if r.provider == nil || !r.provider.configured {
-		addConfigureProviderErr(&resp.Diagnostics)
-		return
-	}
+	var data CustomModelResourceModel
 
-	var state CustomModelResourceModel
-
-	// Read Terraform prior state data into the model
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if state.ID.IsNull() {
-		return
-	}
-
-	id := state.ID.ValueString()
-
 	traceAPICall("DeleteCustomModel")
-	err := r.provider.service.DeleteCustomModel(ctx, id)
+	err := r.provider.service.DeleteCustomModel(ctx, data.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			// custom model is already gone, ignore the error and remove from state
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError(
-				"Error getting Custom Model info",
-				fmt.Sprintf("Unable to get  example, got error: %s", err),
-			)
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting Custom Model", err.Error())
+			return
 		}
-		return
 	}
-
-	// Remove resource from state
-	resp.State.RemoveResource(ctx)
 }
 
 func (r *CustomModelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -942,6 +861,7 @@ func (r *CustomModelResource) ImportState(ctx context.Context, req resource.Impo
 }
 
 func loadCustomModelToTerraformState(
+	ctx context.Context,
 	id,
 	versionID,
 	name,
@@ -949,7 +869,6 @@ func loadCustomModelToTerraformState(
 	sourceBlueprintId string,
 	baseEnvironmentId string,
 	baseEnvironmentVersionId string,
-	paramKeys []string,
 	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
 ) {
@@ -964,35 +883,41 @@ func loadCustomModelToTerraformState(
 	}
 	state.BaseEnvironmentID = types.StringValue(baseEnvironmentId)
 	state.BaseEnvironmentVersionID = types.StringValue(baseEnvironmentVersionId)
-	loadRuntimeParametersToTerraformState(paramKeys, runtimeParameterValues, state)
+	loadRuntimeParametersToTerraformState(ctx, runtimeParameterValues, state)
 }
 
 func loadRuntimeParametersToTerraformState(
-	paramKeys []string,
+	ctx context.Context,
 	runtimeParameterValues []client.RuntimeParameter,
 	state *CustomModelResourceModel,
+) (
+	diag diag.Diagnostics,
 ) {
-	if len(runtimeParameterValues) == 0 {
-		return
-	}
-
-	// copy parameter in stable order
-	parameters := make([]RuntimeParameterValueModel, 0)
+	// copy parameters in stable order
+	parameters := make([]RuntimeParameterValue, 0)
 	sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
 		return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
 	})
 	for _, param := range runtimeParameterValues {
-		for _, key := range paramKeys {
-			if strings.EqualFold(key, param.FieldName) {
-				parameters = append(parameters, RuntimeParameterValueModel{
-					Key:   types.StringValue(param.FieldName),
-					Type:  types.StringValue(param.Type),
-					Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
-				})
-			}
+		// only include parameters that have been set
+		if param.CurrentValue != nil && param.CurrentValue != param.DefaultValue {
+			parameters = append(parameters, RuntimeParameterValue{
+				Key:   types.StringValue(param.FieldName),
+				Type:  types.StringValue(param.Type),
+				Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
+			})
 		}
 	}
-	state.RuntimeParameters = parameters
+
+	state.RuntimeParameterValues, diag = types.ListValueFrom(
+		ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		}, parameters)
+	return
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModelResponse, error) {
@@ -1043,7 +968,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	})
 	if err != nil {
 		errSummary = "Error creating Custom Model version from remote repository"
-		errDetail = fmt.Sprintf("Unable to create Custom Model version from remote repository, got error: %s", err)
+		errDetail = err.Error()
 		return
 	}
 
@@ -1076,14 +1001,14 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		fileReader, err := os.Open(filePath)
 		if err != nil {
 			errSummary = "Error opening local file"
-			errDetail = fmt.Sprintf("Error opening local file: %v", err)
+			errDetail = err.Error()
 			return
 		}
 		defer fileReader.Close()
 		fileContent, err := io.ReadAll(fileReader)
 		if err != nil {
 			errSummary = "Error reading local file"
-			errDetail = fmt.Sprintf("Error reading local file: %v", err)
+			errDetail = err.Error()
 			return
 		}
 
@@ -1101,7 +1026,7 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	})
 	if err != nil {
 		errSummary = "Error creating Custom Model version from local files"
-		errDetail = fmt.Sprintf("Unable to create Custom Model version from local files, got error: %s", err)
+		errDetail = err.Error()
 		return
 	}
 
@@ -1123,7 +1048,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	getGuardConfigsResp, err := r.provider.service.GetGuardConfigurationsForCustomModelVersion(ctx, customModelVersion)
 	if err != nil {
 		errSummary = "Error getting guard configurations"
-		errDetail = fmt.Sprintf("Unable to get guard configurations, got error: %s", err)
+		errDetail = err.Error()
 		return
 	}
 
@@ -1168,7 +1093,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	guardTemplates, err := r.provider.service.ListGuardTemplates(ctx)
 	if err != nil {
 		errSummary = "Error listing guard templates"
-		errDetail = fmt.Sprintf("Unable to list guard templates, got error: %s", err)
+		errDetail = err.Error()
 		return
 	}
 
@@ -1223,8 +1148,8 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			traceAPICall("GetDeployment")
 			deployment, err := r.provider.service.GetDeployment(ctx, guardConfigToAdd.DeploymentID.ValueString())
 			if err != nil {
-				errSummary = "Error getting deployment"
-				errDetail = fmt.Sprintf("Unable to get deployment info for guard, got error: %s", err)
+				errSummary = fmt.Sprintf("Error getting deployment with ID %s", guardConfigToAdd.DeploymentID.ValueString())
+				errDetail = err.Error()
 				return
 			}
 
@@ -1256,7 +1181,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	})
 	if err != nil {
 		errSummary = "Error creating Custom Model version from guard configurations"
-		errDetail = fmt.Sprintf("Unable to create Custom Model version from guard configurations, got error: %s", err)
+		errDetail = err.Error()
 		return
 	}
 
@@ -1291,7 +1216,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 				remoteRepository, err := r.provider.service.GetRemoteRepository(ctx, oldSourceRemoteRepository.ID.ValueString())
 				if err != nil {
 					errSummary = "Error getting remote repository"
-					errDetail = fmt.Sprintf("Unable to get remote repository, got error: %s", err)
+					errDetail = err.Error()
 					return
 				}
 
@@ -1316,7 +1241,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 		})
 		if err != nil {
 			errSummary = "Error creating Custom Model version"
-			errDetail = fmt.Sprintf("Unable to create Custom Model version, got error: %s", err)
+			errDetail = err.Error()
 			return
 		}
 	}
@@ -1385,7 +1310,7 @@ func (r *CustomModelResource) updateLocalFiles(
 		})
 		if err != nil {
 			errSummary = "Error creating Custom Model version"
-			errDetail = fmt.Sprintf("Unable to create Custom Model version, got error: %s", err)
+			errDetail = err.Error()
 			return
 		}
 	}
