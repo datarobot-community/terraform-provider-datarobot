@@ -8,16 +8,15 @@ import (
 	"io"
 	"os"
 	"reflect"
-	"sort"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -26,14 +25,19 @@ import (
 )
 
 const (
-	defaultCustomModelType         = "inference"
+	defaultCustomModelType = "inference"
+
 	defaultModerationTimeout       = 60
 	defaultModerationTimeoutAction = "score"
+
+	defaultMemoryMB      = 2048
+	defaultReplicas      = 1
+	defaultNetworkAccess = "PUBLIC"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &CustomModelResource{}
 var _ resource.ResourceWithImportState = &CustomModelResource{}
+var _ resource.ResourceWithModifyPlan = &CustomModelResource{}
 
 func NewCustomModelResource() resource.Resource {
 	return &CustomModelResource{}
@@ -249,6 +253,43 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
+			"resource_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The resource settings for the Custom Model.",
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					map[string]attr.Type{
+						"memory_mb":      types.Int64Type,
+						"replicas":       types.Int64Type,
+						"network_access": types.StringType,
+					},
+					map[string]attr.Value{
+						"memory_mb":      types.Int64Value(defaultMemoryMB),
+						"replicas":       types.Int64Value(defaultReplicas),
+						"network_access": types.StringValue(defaultNetworkAccess),
+					},
+				)),
+				Attributes: map[string]schema.Attribute{
+					"memory_mb": schema.Int64Attribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             int64default.StaticInt64(defaultMemoryMB),
+						MarkdownDescription: "The memory in MB for the Custom Model.",
+					},
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             int64default.StaticInt64(defaultReplicas),
+						MarkdownDescription: "The replicas for the Custom Model.",
+					},
+					"network_access": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString(defaultNetworkAccess),
+						MarkdownDescription: "The network access for the Custom Model.",
+					},
+				},
+			},
 		},
 	}
 }
@@ -271,7 +312,8 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan CustomModelResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -509,13 +551,37 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 	}
 
+	if plan.ResourceSettings != nil {
+		resourceSettings := *plan.ResourceSettings
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+			IsMajorUpdate:       "false",
+			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
+			Replicas:            resourceSettings.Replicas.ValueInt64(),
+			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
+			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			return
+		}
+		state.ResourceSettings = plan.ResourceSettings
+
+		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
+			return
+		}
+		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	}
+
 	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
 
-	diags := loadRuntimeParametersToTerraformState(ctx, customModel.LatestVersion.RuntimeParameters, &state)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -527,7 +593,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data CustomModelResourceModel
 
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	diags := req.State.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -554,16 +621,19 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
 	loadCustomModelToTerraformState(
 		ctx,
 		id,
-		customModel.LatestVersion.ID,
 		customModel.Name,
 		customModel.Description,
 		data.SourceLLMBlueprintID.ValueString(),
-		customModel.LatestVersion.BaseEnvironmentID,
-		customModel.LatestVersion.BaseEnvironmentVersionID,
-		customModel.LatestVersion.RuntimeParameters,
+		customModel.LatestVersion,
 		&data)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -572,7 +642,8 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CustomModelResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -624,8 +695,22 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) ||
+	planRuntimeParametersValues, _ := types.ListValueFrom(
+		ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		}, []RuntimeParameterValue{})
+
+	if IsKnown(plan.RuntimeParameterValues) {
+		planRuntimeParametersValues = plan.RuntimeParameterValues
+	}
+
+	if !reflect.DeepEqual(planRuntimeParametersValues, state.RuntimeParameterValues) ||
 		state.BaseEnvironmentName.ValueString() != plan.BaseEnvironmentName.ValueString() {
+
 		traceAPICall("ListExecutionEnvironments")
 		listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
 		if err != nil {
@@ -707,7 +792,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 			return
 		}
 
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionCreateFromLatestRequest{
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
@@ -821,6 +906,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
+	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
+		resourceSettings := *plan.ResourceSettings
+		traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+			IsMajorUpdate:       "false",
+			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
+			Replicas:            resourceSettings.Replicas.ValueInt64(),
+			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
+			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			return
+		}
+		state.ResourceSettings = plan.ResourceSettings
+	}
+
 	traceAPICall("WaitForCustomModelToBeReady")
 	customModel, err = r.waitForCustomModelToBeReady(ctx, id)
 	if err != nil {
@@ -829,7 +931,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
-	diags := loadRuntimeParametersToTerraformState(ctx, customModel.LatestVersion.RuntimeParameters, &state)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -860,20 +962,45 @@ func (r *CustomModelResource) ImportState(ctx context.Context, req resource.Impo
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		// Resource is being created or destroyed
+		return
+	}
+
+	var plan CustomModelResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !IsKnown(plan.RuntimeParameterValues) {
+		// use empty list if runtime parameter values are unknown
+		plan.RuntimeParameterValues, _ = types.ListValueFrom(
+			ctx, types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"key":   types.StringType,
+					"type":  types.StringType,
+					"value": types.StringType,
+				},
+			}, []RuntimeParameterValue{})
+	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
 func loadCustomModelToTerraformState(
 	ctx context.Context,
 	id,
-	versionID,
 	name,
-	description string,
+	description,
 	sourceBlueprintId string,
-	baseEnvironmentId string,
-	baseEnvironmentVersionId string,
-	runtimeParameterValues []client.RuntimeParameter,
+	latestVersion client.CustomModelVersionResponse,
 	state *CustomModelResourceModel,
 ) {
 	state.ID = types.StringValue(id)
-	state.VersionID = types.StringValue(versionID)
+	state.VersionID = types.StringValue(latestVersion.ID)
 	state.Name = types.StringValue(name)
 	if description != "" {
 		state.Description = types.StringValue(description)
@@ -881,49 +1008,39 @@ func loadCustomModelToTerraformState(
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}
-	state.BaseEnvironmentID = types.StringValue(baseEnvironmentId)
-	state.BaseEnvironmentVersionID = types.StringValue(baseEnvironmentVersionId)
-	loadRuntimeParametersToTerraformState(ctx, runtimeParameterValues, state)
+	state.BaseEnvironmentID = types.StringValue(latestVersion.BaseEnvironmentID)
+	state.BaseEnvironmentVersionID = types.StringValue(latestVersion.BaseEnvironmentVersionID)
+	loadResourceSettingsToTerraformState(latestVersion, state)
 }
 
-func loadRuntimeParametersToTerraformState(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
+func loadResourceSettingsToTerraformState(
+	customModelVersion client.CustomModelVersionResponse,
 	state *CustomModelResourceModel,
-) (
-	diag diag.Diagnostics,
 ) {
-	// copy parameters in stable order
-	parameters := make([]RuntimeParameterValue, 0)
-	sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
-		return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
-	})
-	for _, param := range runtimeParameterValues {
-		// only include parameters that have been set
-		if param.CurrentValue != nil && param.CurrentValue != param.DefaultValue {
-			parameters = append(parameters, RuntimeParameterValue{
-				Key:   types.StringValue(param.FieldName),
-				Type:  types.StringValue(param.Type),
-				Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
-			})
-		}
+	resourceSettings := &CustomModelResourceSettings{
+		MemoryMB:      types.Int64Value(defaultMemoryMB),
+		Replicas:      types.Int64Value(defaultReplicas),
+		NetworkAccess: types.StringValue(defaultNetworkAccess),
 	}
 
-	state.RuntimeParameterValues, diag = types.ListValueFrom(
-		ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"key":   types.StringType,
-				"type":  types.StringType,
-				"value": types.StringType,
-			},
-		}, parameters)
-	return
+	if customModelVersion.MaximumMemory != nil {
+		resourceSettings.MemoryMB = types.Int64Value(*customModelVersion.MaximumMemory / 1024 / 1024) // convert bytes to MB
+	}
+	if customModelVersion.Replicas != nil {
+		resourceSettings.Replicas = types.Int64Value(*customModelVersion.Replicas)
+	}
+	if customModelVersion.NetworkEgressPolicy != nil {
+		resourceSettings.NetworkAccess = types.StringValue(*customModelVersion.NetworkEgressPolicy)
+	}
+
+	state.ResourceSettings = resourceSettings
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModelResponse, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
+		traceAPICall("IsCustomModelReady")
 		ready, err := r.provider.service.IsCustomModelReady(ctx, customModelId)
 		if err != nil {
 			return backoff.Permanent(err)
@@ -1233,7 +1350,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 	}
 
 	if len(filesToDelete) > 0 {
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
 		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
@@ -1302,7 +1419,7 @@ func (r *CustomModelResource) updateLocalFiles(
 	}
 
 	if len(filesToDelete) > 0 {
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
 		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
