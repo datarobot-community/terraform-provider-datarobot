@@ -91,7 +91,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								},
 							},
 						},
-					}),
+					},
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -113,6 +114,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0.2"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "lessThan"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "2048"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "PUBLIC"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -177,7 +181,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								},
 							},
 						},
-					}),
+					},
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -202,6 +207,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					sourceRemoteRepositories,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -226,6 +232,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 						},
 					},
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -247,6 +254,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					nil,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -266,6 +274,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					nil,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource.go")},
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -285,6 +294,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					nil,
 					nil,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -295,6 +305,32 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckNoResourceAttr(resourceName, "local_files.0"),
+				),
+			},
+			// Add resource settings
+			{
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					nil,
+					nil,
+					nil,
+					&CustomModelResourceSettings{
+						MemoryMB:      basetypes.NewInt64Value(256),
+						Replicas:      basetypes.NewInt64Value(2),
+						NetworkAccess: basetypes.NewStringValue("NONE"),
+					}),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "256"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "NONE"),
 				),
 			},
 			// Delete is tested automatically
@@ -360,6 +396,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	remoteRepositories []SourceRemoteRepository,
 	localFiles []basetypes.StringValue,
 	guards []GuardConfiguration,
+	resourceSettings *CustomModelResourceSettings,
 ) string {
 	remoteRepositoriesStr := ""
 	if len(remoteRepositories) > 0 {
@@ -404,6 +441,17 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		guardsStr += "]"
 	}
 
+	resourceSettingsStr := ""
+	if resourceSettings != nil {
+		resourceSettingsStr = fmt.Sprintf(`
+		resource_settings = {
+			memory_mb	    = %d
+			replicas 	    = %d
+			network_access  = %s
+		}
+		`, resourceSettings.MemoryMB.ValueInt64(), resourceSettings.Replicas.ValueInt64(), resourceSettings.NetworkAccess)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_remote_repository" "test_custom_model_from_remote_repository" {
 	name        = "Test Custom Model from Remote Repository"
@@ -423,8 +471,9 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 	%s
+	%s
 	}
-`, name, description, remoteRepositoriesStr, localFilesStr, guardsStr)
+`, name, description, remoteRepositoriesStr, localFilesStr, guardsStr, resourceSettingsStr)
 }
 
 func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc {

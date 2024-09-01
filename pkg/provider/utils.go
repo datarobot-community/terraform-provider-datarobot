@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,10 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -219,4 +224,32 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 	}
 
 	return errMessage
+}
+
+func formatRuntimeParameterValues(ctx context.Context, runtimeParameterValues []client.RuntimeParameter) (basetypes.ListValue, diag.Diagnostics) {
+		// copy parameters in stable order
+		parameters := make([]RuntimeParameterValue, 0)
+		sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
+			return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
+		})
+		for _, param := range runtimeParameterValues {
+			parameter := RuntimeParameterValue{
+				Key:   types.StringValue(param.FieldName),
+				Type:  types.StringValue(param.Type),
+				Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
+			}
+	
+			if param.CurrentValue != nil && param.CurrentValue != param.DefaultValue {
+				parameters = append(parameters, parameter)
+			}
+		}
+	
+		return types.ListValueFrom(
+			ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		}, parameters)
 }

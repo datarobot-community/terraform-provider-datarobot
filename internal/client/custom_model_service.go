@@ -52,6 +52,9 @@ type CustomModelVersionResponse struct {
 	BaseEnvironmentVersionID string             `json:"baseEnvironmentVersionId"`
 	RuntimeParameters        []RuntimeParameter `json:"runtimeParameters"`
 	Items                    []FileItem         `json:"items"`
+	MaximumMemory            *int64             `json:"maximumMemory"`
+	NetworkEgressPolicy      *string            `json:"networkEgressPolicy"`
+	Replicas                 *int64             `json:"replicas"`
 }
 
 type FileItem struct {
@@ -90,6 +93,9 @@ type CreateCustomModelVersionCreateFromLatestRequest struct {
 	BaseEnvironmentVersionID string   `json:"baseEnvironmentVersionId,omitempty"`
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
+	Replicas                 int64    `json:"replicas,omitempty"`
+	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
+	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
 }
 
 type CreateCustomModelVersionFromFilesRequest struct {

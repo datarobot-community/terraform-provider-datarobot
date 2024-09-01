@@ -48,6 +48,12 @@ resource "datarobot_custom_model" "example" {
     timeout_sec    = 120
     timeout_action = "score"
   }
+
+  resource_settings = {
+    memory_mb      = 512
+    replicas       = 2
+    network_access = "NONE"
+  }
 }
 
 output "example_id" {
