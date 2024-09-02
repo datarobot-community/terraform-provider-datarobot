@@ -10,7 +10,7 @@ terraform {
   required_providers {
     datarobot = {
       source  = "datarobot/datarobot"
-      version = "0.0.15"
+      version = "0.0.17"
     }
   }
 }
@@ -58,7 +58,7 @@ resource "datarobot_custom_model" "example" {
   name                    = datarobot_use_case.example.name
   description             = datarobot_use_case.example.description
   source_llm_blueprint_id = datarobot_llm_blueprint.example.id
-  runtime_parameters = [
+  runtime_parameter_values = [
     {
       key   = "GOOGLE_SERVICE_ACCOUNT",
       type  = "credential",

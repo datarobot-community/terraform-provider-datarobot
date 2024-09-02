@@ -22,6 +22,16 @@ Before you use `terraform-provider-datarobot` you must [install Terraform](https
     git clone https://github.com/datarobot-community/terraform-provider-datarobot.git
     ~~~
 
+Since the provider has not been published to the Terraform Registry yet, you must also:
+
+1. Ensure [Go](https://go.dev/doc/install) >= 1.16 is installed.
+
+1. Run `cd terraform-provider-datarobot` and then `go mod tidy`
+
+1. Run `make install` to build the provider locally. 
+
+Now you can continue with the Low Code RAG example:
+
 1. Go to the `examples/workflows/low_code_rag` directory.
 
     ~~~ shell
