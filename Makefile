@@ -2,8 +2,10 @@ HOSTNAME=registry.terraform.io
 NAMESPACE=datarobot
 NAME=datarobot
 BINARY=terraform-provider-${NAME}
-VERSION=0.0.15
-OS_ARCH=darwin_arm64
+VERSION=0.0.17
+
+OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
+ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 
 default: lint install
 
@@ -29,8 +31,8 @@ release:
 	GOOS=windows GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_windows_amd64
 
 install: build
-	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
-	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/${OS_ARCH}
+	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/$(OS)_$(ARCH)
+	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/$(OS)_$(ARCH)
 
 test:
 	go test ./... -v $(TESTARGS) -timeout 5m

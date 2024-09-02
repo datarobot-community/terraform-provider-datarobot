@@ -39,8 +39,27 @@ output "datarobot_application_source_version_id" {
 ### Optional
 
 - `name` (String) The name of the Application Source.
+- `resource_settings` (Attributes) The resource settings for the Application Source. (see [below for nested schema](#nestedatt--resource_settings))
+- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 
 ### Read-Only
 
 - `id` (String) The ID of the Application Source.
 - `version_id` (String) The version ID of the Application Source.
+
+<a id="nestedatt--resource_settings"></a>
+### Nested Schema for `resource_settings`
+
+Optional:
+
+- `replicas` (Number) The replicas for the Application Source.
+
+
+<a id="nestedatt--runtime_parameter_values"></a>
+### Nested Schema for `runtime_parameter_values`
+
+Required:
+
+- `key` (String) The name of the runtime parameter.
+- `type` (String) The type of the runtime parameter.
+- `value` (String) The value of the runtime parameter.

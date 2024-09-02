@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -41,7 +42,7 @@ func TestIntegrationApplicationSourceResource(t *testing.T) {
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
 		&client.ListExecutionEnvironmentsResponse{
 			Data: []client.ExecutionEnvironment{
-				client.ExecutionEnvironment{
+				{
 					ID:   envID,
 					Name: baseEnvironmentName,
 				},
@@ -55,6 +56,9 @@ func TestIntegrationApplicationSourceResource(t *testing.T) {
 	mockService.EXPECT().CreateApplicationSourceVersion(gomock.Any(), id, &client.CreateApplicationSourceVersionRequest{
 		Label:             "v1",
 		BaseEnvironmentID: envID,
+		Resources: client.ApplicationResources{
+			Replicas: 1,
+		},
 	}).Return(&client.ApplicationSourceVersion{
 		ID: versionID,
 	}, nil)
@@ -62,6 +66,14 @@ func TestIntegrationApplicationSourceResource(t *testing.T) {
 		&client.ApplicationSourceVersion{
 			ID: versionID,
 		}, nil)
+	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
+		ID:   id,
+		Name: name,
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:       versionID,
+			IsFrozen: false,
+		},
+	}, nil)
 
 	// Test check
 	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
@@ -69,11 +81,14 @@ func TestIntegrationApplicationSourceResource(t *testing.T) {
 		Name: name,
 	}, nil)
 	mockService.EXPECT().GetApplicationSourceVersion(gomock.Any(), id, versionID).Return(&client.ApplicationSourceVersion{
-		ID:   versionID,
+		ID: versionID,
 		Items: []client.FileItem{
-			client.FileItem{
+			{
 				FileName: "start-app.sh",
 			},
+		},
+		Resources: client.ApplicationResources{
+			Replicas: 1,
 		},
 	}, nil)
 
@@ -87,35 +102,59 @@ func TestIntegrationApplicationSourceResource(t *testing.T) {
 	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
 		ID:   id,
 		Name: name,
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:       versionID,
+			IsFrozen: false,
+		},
 	}, nil)
 	mockService.EXPECT().UpdateApplicationSource(gomock.Any(), id, &client.UpdateApplicationSourceRequest{
 		Name: "new_example_name",
+	}).Return(nil, nil)
+	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
+		ID:   id,
+		Name: "new_example_name",
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:       versionID,
+			IsFrozen: false,
+		},
+	}, nil)
+	mockService.EXPECT().UpdateApplicationSourceVersion(gomock.Any(), id, versionID, &client.UpdateApplicationSourceVersionRequest{
+		Resources: client.ApplicationResources{
+			Replicas: 2,
+		},
 	}).Return(nil, nil)
 	mockService.EXPECT().GetApplicationSourceVersion(gomock.Any(), id, versionID).Return(
 		&client.ApplicationSourceVersion{
 			ID: versionID,
 			Items: []client.FileItem{
-				client.FileItem{
+				{
 					FileName: "streamlit-app.py",
 				},
+			},
+			Resources: client.ApplicationResources{
+				Replicas: 2,
 			},
 		}, nil)
 	mockService.EXPECT().UpdateApplicationSourceVersionFiles(gomock.Any(), id, versionID, gomock.Any()).Return(
 		&client.ApplicationSourceVersion{
 			ID: versionID,
 		}, nil)
+	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
+		ID:   id,
+		Name: "new_example_name",
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:       versionID,
+			IsFrozen: false,
+		},
+	}, nil)
 
 	// Test check
 	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
 		ID:   id,
 		Name: "new_example_name",
-	}, nil)
-	mockService.EXPECT().GetApplicationSourceVersion(gomock.Any(), id, versionID).Return(&client.ApplicationSourceVersion{
-		ID:   versionID,
-		Items: []client.FileItem{
-			client.FileItem{
-				FileName: "streamlit-app.py",
-			},
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:       versionID,
+			IsFrozen: false,
 		},
 	}, nil)
 
@@ -174,22 +213,25 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: applicationSourceResourceConfig("", "start-app.sh"),
+				Config: applicationSourceResourceConfig("", "start-app.sh", 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttr(resourceName, "local_files.0", "start-app.sh"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update name and local file
+			// Update name, local file, and replicas
 			{
-				Config: applicationSourceResourceConfig("new_example_name", "streamlit-app.py"),
+				Config: applicationSourceResourceConfig("new_example_name", "streamlit-app.py", 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "local_files.0", "streamlit-app.py"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -199,21 +241,30 @@ if __name__ == "__main__":
 	})
 }
 
-func applicationSourceResourceConfig(name string, localFile string) string {
-	if name == "" {
-		return fmt.Sprintf(`
-resource "datarobot_application_source" "test" {
-	local_files = ["%s"]
-  }
-`, localFile)	
+func applicationSourceResourceConfig(name, localFile string, replicas int) string {
+	resourceSettingsStr := ""
+	if replicas > 1 {
+		resourceSettingsStr = fmt.Sprintf(`
+	resource_settings = {
+		replicas = %d
+	}
+`, replicas)
+	}
+
+	nameStr := ""
+	if name != "" {
+		nameStr = fmt.Sprintf(`
+	name = "%s"
+`, name)
 	}
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
-	name = "%s"
 	local_files = ["%s"]
+	%s
+	%s
   }
-`, name, localFile)
+`, localFile, nameStr, resourceSettingsStr)
 }
 
 func checkApplicationSourceResourceExists(resourceName string) resource.TestCheckFunc {
@@ -239,15 +290,15 @@ func checkApplicationSourceResourceExists(resourceName string) resource.TestChec
 			return err
 		}
 
-
 		traceAPICall("GetApplicationSourceVersionInTest")
-		applicationSourceVersion, err := p.service.GetApplicationSourceVersion(context.TODO(), rs.Primary.ID, rs.Primary.Attributes["version_id"] )
+		applicationSourceVersion, err := p.service.GetApplicationSourceVersion(context.TODO(), rs.Primary.ID, rs.Primary.Attributes["version_id"])
 		if err != nil {
 			return err
 		}
-		
-		if applicationSource.Name == rs.Primary.Attributes["name"] && 
-			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["local_files.0"] {
+
+		if applicationSource.Name == rs.Primary.Attributes["name"] &&
+			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["local_files.0"] &&
+			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
 			return nil
 		}
 

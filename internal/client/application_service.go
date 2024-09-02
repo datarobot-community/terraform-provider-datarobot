@@ -36,9 +36,11 @@ type ApplicationSource struct {
 }
 
 type CreateApplicationSourceVersionRequest struct {
-	Label             string `json:"label"`
-	BaseVersion       string `json:"baseVersion,omitempty"`
-	BaseEnvironmentID string `json:"baseEnvironmentId,omitempty"`
+	Label                  string               `json:"label"`
+	BaseVersion            string               `json:"baseVersion,omitempty"`
+	BaseEnvironmentID      string               `json:"baseEnvironmentId,omitempty"`
+	Resources              ApplicationResources `json:"resources,omitempty"`
+	RuntimeParameterValues string               `json:"runtimeParameterValues,omitempty"`
 }
 
 type ListApplicationSourceVersionsResponse struct {
@@ -57,16 +59,12 @@ type ApplicationSourceVersion struct {
 }
 
 type UpdateApplicationSourceVersionRequest struct {
-	BaseEnvironmentID string               `json:"baseEnvironmentId,omitempty"`
-	Resources         ApplicationResources `json:"resources,omitempty"`
-	FilesToDelete     []string             `json:"filesToDelete,omitempty"`
+	BaseEnvironmentID            string               `json:"baseEnvironmentId,omitempty"`
+	Resources                    ApplicationResources `json:"resources,omitempty"`
+	FilesToDelete                []string             `json:"filesToDelete,omitempty"`
+	RuntimeParameterValueRequest string               `json:"runtimeParameterValues,omitempty"`
 }
 
 type ApplicationResources struct {
-	Replicas      int     `json:"replicas,omitempty"`
-	ResourceLabel string  `json:"resourceLabel,omitempty"`
-	MemoryRequest int     `json:"memoryRequest,omitempty"`
-	MemoryLimit   int     `json:"memoryLimit,omitempty"`
-	CpuRequest    float64 `json:"cpuRequest,omitempty"`
-	CpuLimit      float64 `json:"cpuLimit,omitempty"`
+	Replicas int64 `json:"replicas,omitempty"`
 }

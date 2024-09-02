@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,9 +10,12 @@ import (
 	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -21,8 +25,8 @@ import (
 const baseEnvironmentName = "[Experimental] Python 3.9 Streamlit"
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &ApplicationSourceResource{}
 var _ resource.ResourceWithImportState = &ApplicationSourceResource{}
+var _ resource.ResourceWithModifyPlan = &ApplicationSourceResource{}
 
 func NewApplicationSourceResource() resource.Resource {
 	return &ApplicationSourceResource{}
@@ -69,6 +73,48 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				ElementType:         types.StringType,
 				MarkdownDescription: "The list of local file paths used to build the Application Source.",
 			},
+			"resource_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The resource settings for the Application Source.",
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					map[string]attr.Type{
+						"replicas": types.Int64Type,
+					},
+					map[string]attr.Value{
+						"replicas": types.Int64Value(defaultReplicas),
+					},
+				)),
+				Attributes: map[string]schema.Attribute{
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             int64default.StaticInt64(defaultReplicas),
+						MarkdownDescription: "The replicas for the Application Source.",
+					},
+				},
+			},
+			"runtime_parameter_values": schema.ListNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The runtime parameter values for the Application Source.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"key": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the runtime parameter.",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The type of the runtime parameter.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the runtime parameter.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -91,7 +137,8 @@ func (r *ApplicationSourceResource) Configure(ctx context.Context, req resource.
 func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ApplicationSourceResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -138,6 +185,9 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		&client.CreateApplicationSourceVersionRequest{
 			Label:             "v1",
 			BaseEnvironmentID: baseEnvironmentID,
+			Resources: client.ApplicationResources{
+				Replicas: data.ResourceSettings.Replicas.ValueInt64(),
+			},
 		})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application source version", err.Error())
@@ -155,13 +205,62 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	// runtime parameter values must be set after local files are added,
+	// because the runtime parameter definitions are created in the metadata.yaml file
+	if IsKnown(data.RuntimeParameterValues) {
+		runtimeParameterValues := make([]RuntimeParameterValue, 0)
+		if diags := data.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+		for i, param := range runtimeParameterValues {
+			value := param.Value.ValueString()
+			params[i] = client.RuntimeParameterValueRequest{
+				FieldName: param.Key.ValueString(),
+				Type:      param.Type.ValueString(),
+				Value:     &value,
+			}
+		}
+		jsonParams, err := json.Marshal(params)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating runtime parameter values", err.Error())
+			return
+		}
+
+		traceAPICall("UpdateApplicationSourceVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
+			createApplicationSourceResp.ID,
+			createApplicationSourceVersionResp.ID,
+			&client.UpdateApplicationSourceVersionRequest{
+				RuntimeParameterValueRequest: string(jsonParams),
+			})
+		if err != nil {
+			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())
+			return
+		}
+	}
+
+	applicationSource, err := r.provider.service.GetApplicationSource(ctx, createApplicationSourceResp.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting Application Source", err.Error())
+		return
+	}
+
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data ApplicationSourceResourceModel
 
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	diags := req.State.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -187,13 +286,20 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	}
 	data.Name = types.StringValue(applicationSource.Name)
 
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan ApplicationSourceResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -225,13 +331,122 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		}
 	}
 
+	applicationSource, err := r.provider.service.GetApplicationSource(ctx, plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting Application Source", err.Error())
+		return
+	}
+	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
+	applicationSourceVersion := applicationSource.LatestVersion
+
+	if (!reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) ||
+		!reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) ||
+		!reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues)) &&
+		applicationSource.LatestVersion.IsFrozen {
+		// must create a new version if the latest version is frozen
+		currentVersionNum := int([]rune(applicationSource.LatestVersion.Label)[1] - '0') // v1 -> 1
+		traceAPICall("CreateApplicationSourceVersion")
+		createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(),
+			&client.CreateApplicationSourceVersionRequest{
+				BaseVersion: applicationSource.LatestVersion.ID,
+				Label:       fmt.Sprintf("v%d", currentVersionNum+1),
+			})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Application Source version", err.Error())
+			return
+		}
+		plan.VersionID = types.StringValue(applicationSourceVersion.ID)
+		applicationSourceVersion = *createApplicationSourceVersionResp
+	}
+
 	if !reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) {
-		applicationSourceVersion, errSummary, errDetail := r.updateLocalFiles(ctx, state, plan)
+		errSummary, errDetail := r.updateLocalFiles(ctx, state, plan, applicationSourceVersion)
 		if errSummary != "" {
 			resp.Diagnostics.AddError(errSummary, errDetail)
 			return
 		}
-		plan.VersionID = types.StringValue(applicationSourceVersion)
+	}
+
+	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
+	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
+		updateVersionRequest.Resources = client.ApplicationResources{
+			Replicas: plan.ResourceSettings.Replicas.ValueInt64(),
+		}
+	}
+
+	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) {
+		runtimeParameterValues := make([]RuntimeParameterValue, 0)
+		if IsKnown(plan.RuntimeParameterValues) {
+			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+		}
+
+		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+		for i, param := range runtimeParameterValues {
+			value := param.Value.ValueString()
+			params[i] = client.RuntimeParameterValueRequest{
+				FieldName: param.Key.ValueString(),
+				Type:      param.Type.ValueString(),
+				Value:     &value,
+			}
+		}
+
+		// compute the runtime parameter values to reset
+		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
+		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+
+		for _, param := range runtimeParametersToReset {
+			found := false
+			for _, newParam := range runtimeParameterValues {
+				if param.Key.ValueString() == newParam.Key.ValueString() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				params = append(params, client.RuntimeParameterValueRequest{
+					FieldName: param.Key.ValueString(),
+					Type:      param.Type.ValueString(),
+					Value:     nil,
+				})
+			}
+		}
+
+		jsonParams, err := json.Marshal(params)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
+			return
+		}
+		updateVersionRequest.RuntimeParameterValueRequest = string(jsonParams)
+	}
+
+	if !reflect.DeepEqual(updateVersionRequest, &client.UpdateApplicationSourceVersionRequest{}) {
+		traceAPICall("UpdateApplicationSourceVersion")
+		_, err := r.provider.service.UpdateApplicationSourceVersion(ctx,
+			plan.ID.ValueString(),
+			plan.VersionID.ValueString(),
+			updateVersionRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
+			return
+		}
+	}
+
+	applicationSource, err = r.provider.service.GetApplicationSource(ctx, plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting Application Source", err.Error())
+		return
+	}
+
+	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -257,6 +472,34 @@ func (r *ApplicationSourceResource) Delete(ctx context.Context, req resource.Del
 
 func (r *ApplicationSourceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		// Resource is being created or destroyed
+		return
+	}
+
+	var plan ApplicationSourceResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !IsKnown(plan.RuntimeParameterValues) {
+		// use empty list if runtime parameter values are unknown
+		plan.RuntimeParameterValues, _ = types.ListValueFrom(
+			ctx, types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"key":   types.StringType,
+					"type":  types.StringType,
+					"value": types.StringType,
+				},
+			}, []RuntimeParameterValue{})
+	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func (r *ApplicationSourceResource) getBaseEnvironmentID(ctx context.Context) (baseEnvironmentID string, err error) {
@@ -328,42 +571,11 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 	ctx context.Context,
 	state ApplicationSourceResourceModel,
 	plan ApplicationSourceResourceModel,
+	applicationSourceVersion client.ApplicationSourceVersion,
 ) (
-	applicationSourceVersionID string,
 	errSummary string,
 	errDetail string,
 ) {
-	traceAPICall("GetApplicationSourceVersion")
-	applicationSourceVersion, err := r.provider.service.GetApplicationSourceVersion(
-		ctx,
-		state.ID.ValueString(),
-		state.VersionID.ValueString(),
-	)
-	if err != nil {
-		errSummary = "Error getting Application Source version"
-		errDetail = err.Error()
-		return
-	}
-	applicationSourceVersionID = applicationSourceVersion.ID
-
-	if applicationSourceVersion.IsFrozen {
-		currentVersionNum := int([]rune(applicationSourceVersion.Label)[1] - '0') // v1 -> 1
-		traceAPICall("CreateApplicationSourceVersion")
-		newApplicationSourceVersion, err := r.provider.service.CreateApplicationSourceVersion(
-			ctx,
-			state.ID.ValueString(),
-			&client.CreateApplicationSourceVersionRequest{
-				Label:             fmt.Sprintf("v%d", currentVersionNum+1),
-				BaseEnvironmentID: applicationSourceVersion.BaseEnvironmentID,
-			})
-		if err != nil {
-			errSummary = "Error creating new Application Source version"
-			errDetail = err.Error()
-			return
-		}
-		applicationSourceVersionID = newApplicationSourceVersion.ID
-	}
-
 	filesToDelete := make([]string, 0)
 	for _, file := range state.LocalFiles {
 		if !contains(plan.LocalFiles, file) {
@@ -380,7 +592,7 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 		_, err := r.provider.service.UpdateApplicationSourceVersion(
 			ctx,
 			state.ID.ValueString(),
-			applicationSourceVersionID,
+			applicationSourceVersion.ID,
 			&client.UpdateApplicationSourceVersionRequest{
 				FilesToDelete: filesToDelete,
 			})
@@ -402,7 +614,7 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 		errSummary, errDetail = r.addLocalFilesToApplicationSource(
 			ctx,
 			state.ID.ValueString(),
-			applicationSourceVersionID,
+			applicationSourceVersion.ID,
 			plan.LocalFiles,
 		)
 	}

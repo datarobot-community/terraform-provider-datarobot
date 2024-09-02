@@ -97,6 +97,7 @@ type CustomModelResourceModel struct {
 	IsProxy                        types.Bool                      `tfsdk:"is_proxy"`
 	GuardConfigurations            []GuardConfiguration            `tfsdk:"guard_configurations"`
 	OverallModerationConfiguration *OverallModerationConfiguration `tfsdk:"overall_moderation_configuration"`
+	ResourceSettings               *CustomModelResourceSettings    `tfsdk:"resource_settings"`
 }
 
 type RuntimeParameterValue struct {
@@ -135,6 +136,12 @@ type GuardCondition struct {
 type OverallModerationConfiguration struct {
 	TimeoutSec    types.Int64  `tfsdk:"timeout_sec"`
 	TimeoutAction types.String `tfsdk:"timeout_action"`
+}
+
+type CustomModelResourceSettings struct {
+	MemoryMB      types.Int64  `tfsdk:"memory_mb"`
+	Replicas      types.Int64  `tfsdk:"replicas"`
+	NetworkAccess types.String `tfsdk:"network_access"`
 }
 
 // RegisteredModelResourceModel describes the registered model resource.
@@ -202,10 +209,16 @@ type ChatApplicationResourceModel struct {
 }
 
 type ApplicationSourceResourceModel struct {
-	ID         types.String   `tfsdk:"id"`
-	VersionID  types.String   `tfsdk:"version_id"`
-	Name       types.String   `tfsdk:"name"`
-	LocalFiles []types.String `tfsdk:"local_files"`
+	ID                     types.String                 `tfsdk:"id"`
+	VersionID              types.String                 `tfsdk:"version_id"`
+	Name                   types.String                 `tfsdk:"name"`
+	LocalFiles             []types.String               `tfsdk:"local_files"`
+	ResourceSettings       *ApplicationResourceSettings `tfsdk:"resource_settings"`
+	RuntimeParameterValues types.List                   `tfsdk:"runtime_parameter_values"`
+}
+
+type ApplicationResourceSettings struct {
+	Replicas types.Int64 `tfsdk:"replicas"`
 }
 
 type CustomApplicationResourceModel struct {
