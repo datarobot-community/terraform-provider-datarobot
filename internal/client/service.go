@@ -89,7 +89,6 @@ type Service interface {
 	UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error)
 	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
 	DeleteDeployment(ctx context.Context, id string) error
-	IsDeploymentReady(ctx context.Context, id string) (bool, error)
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
 	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, string, error)
 
@@ -106,7 +105,7 @@ type Service interface {
 
 	// Application
 	CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*Application, error)
-	CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*Application, error)
+	CreateQAApplication(ctx context.Context, req *CreateQAApplicationRequest) (*Application, error)
 	GetApplication(ctx context.Context, id string) (*Application, error)
 	IsApplicationReady(ctx context.Context, id string) (bool, error)
 	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error)
@@ -438,14 +437,6 @@ func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/deployments/"+id+"/")
 }
 
-func (s *ServiceImpl) IsDeploymentReady(ctx context.Context, id string) (bool, error) {
-	deployment, err := s.GetDeployment(ctx, id)
-	if err != nil {
-		return false, err
-	}
-	return deployment.Status == "active", nil
-}
-
 func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error) {
 	return Post[ValidateDeployemntModelReplacementResponse](s.client, ctx, "/deployments/"+id+"/model/validation/", req)
 }
@@ -495,7 +486,7 @@ func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *Crea
 	return Post[Application](s.client, ctx, "/customApplications/", req)
 }
 
-func (s *ServiceImpl) CreateChatApplication(ctx context.Context, req *CreateChatApplicationRequest) (*Application, error) {
+func (s *ServiceImpl) CreateQAApplication(ctx context.Context, req *CreateQAApplicationRequest) (*Application, error) {
 	return Post[Application](s.client, ctx, "/customApplications/qanda/", req)
 }
 

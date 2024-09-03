@@ -205,13 +205,13 @@ func checkRemoteRepositoryResourceExists(resourceName string) resource.TestCheck
 			// Check for credentials
 			if remoteRepository.CredentialID != "" {
 				if remoteRepository.SourceType == "s3" {
-					if rs.Primary.Attributes["aws_access_key_id"] != "" && rs.Primary.Attributes["aws_secret_access_key"] != "" { 
+					if rs.Primary.Attributes["aws_access_key_id"] != "" && rs.Primary.Attributes["aws_secret_access_key"] != "" {
 						return nil
 					}
 				} else if rs.Primary.Attributes["personal_access_token"] != "" {
 					return nil
 				}
-			} else  {
+			} else {
 				return nil
 			}
 		}

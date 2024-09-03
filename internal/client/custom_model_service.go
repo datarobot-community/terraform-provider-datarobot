@@ -112,9 +112,9 @@ type CreateCustomModelVersionFromRemoteRepositoryRequest struct {
 }
 
 type RuntimeParameterValueRequest struct {
-	FieldName string  `json:"fieldName"`
-	Type      string  `json:"type,omitempty"`
-	Value     *string `json:"value"`
+	FieldName string `json:"fieldName"`
+	Type      string `json:"type,omitempty"`
+	Value     *any   `json:"value"`
 }
 
 type ListExecutionEnvironmentsResponse struct {

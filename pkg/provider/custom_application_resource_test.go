@@ -50,7 +50,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
 		&client.ListExecutionEnvironmentsResponse{
 			Data: []client.ExecutionEnvironment{
-				client.ExecutionEnvironment{
+				{
 					ID:   envID,
 					Name: baseEnvironmentName,
 				},
@@ -159,7 +159,7 @@ func TestIntegrationCustomApplicationResource(t *testing.T) {
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
 		&client.ListExecutionEnvironmentsResponse{
 			Data: []client.ExecutionEnvironment{
-				client.ExecutionEnvironment{
+				{
 					ID:   envID,
 					Name: baseEnvironmentName,
 				},

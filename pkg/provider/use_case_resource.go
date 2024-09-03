@@ -115,7 +115,7 @@ func (r *UseCaseResource) Read(ctx context.Context, req resource.ReadRequest, re
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Use Case with ID %s", data.ID.ValueString()), 
+				fmt.Sprintf("Error getting Use Case with ID %s", data.ID.ValueString()),
 				err.Error())
 		}
 		return

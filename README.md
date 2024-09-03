@@ -52,7 +52,7 @@ Now you can continue with the Low Code RAG example:
 
      ~~~
     use_case_name = "<use case name>"
-    google_cloud_service_account_credential_source_file = "<source_file>"
+    google_cloud_credential_source_file = "<source_file>"
     ~~~
 
     Where:  
@@ -81,14 +81,14 @@ Now you can continue with the Low Code RAG example:
 
     Enter `yes` when prompted to apply the plan and create the resources.
 
-1. Once the creation is complete, navigate to the `datarobot_chat_application_url` to view your chat application.
+1. Once the creation is complete, navigate to the `datarobot_qa_application_url` to view your Q&A application.
 
     ~~~ shell
     Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
 
     Outputs:
 
-    datarobot_chat_application_url = "<your_chat_application_url>"
+    datarobot_qa_application_url = "<your_qa_application_url>"
     ~~~
 
 1. (optional) Delete the resources when you are done.

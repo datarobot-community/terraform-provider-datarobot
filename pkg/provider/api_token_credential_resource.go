@@ -134,7 +134,7 @@ func (r *ApiTokenCredentialResource) Read(ctx context.Context, req resource.Read
 	if credential.Description != "" {
 		data.Description = types.StringValue(credential.Description)
 	}
-	
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

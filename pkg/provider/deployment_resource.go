@@ -163,7 +163,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	data.ID = types.StringValue(deployment.ID)
 
 	if data.Settings != nil {
-		_, err = r.updateDeploymentSettings(ctx, createResp.ID, data.Settings)
+		err = r.updateDeploymentSettings(ctx, createResp.ID, data.Settings)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 			return
@@ -195,7 +195,7 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Deployment with ID %s", data.ID.ValueString()), 
+				fmt.Sprintf("Error getting Deployment with ID %s", data.ID.ValueString()),
 				err.Error())
 		}
 		return
@@ -295,7 +295,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if plan.Settings != state.Settings {
-		_, err := r.updateDeploymentSettings(ctx, id, plan.Settings)
+		err := r.updateDeploymentSettings(ctx, id, plan.Settings)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 			return
@@ -332,14 +332,18 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
-		ready, err := r.provider.service.IsDeploymentReady(ctx, id)
+		deployment, err := r.provider.service.GetDeployment(ctx, id)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
-		if !ready {
-			return errors.New("deployment is not ready")
+
+		if deployment.Status == "active" {
+			return nil
+		} else if deployment.Status == "errored" {
+			return backoff.Permanent(errors.New("deployment has errored"))
 		}
-		return nil
+
+		return errors.New("deployment is not ready")
 	}
 
 	// Retry the operation using the backoff strategy
@@ -356,7 +360,7 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	ctx context.Context,
 	id string,
 	settings *DeploymentSettings,
-) (*client.DeploymentRetrieveResponse, error) {
+) (err error) {
 	req := &client.DeploymentSettings{}
 	if settings != nil {
 		// Association ID
@@ -402,15 +406,15 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	}
 
 	traceAPICall("UpdateDeploymentSettings")
-	_, err := r.provider.service.UpdateDeploymentSettings(ctx, id, req)
+	_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	deployment, err := r.waitForDeploymentToBeReady(ctx, id)
+	_, err = r.waitForDeploymentToBeReady(ctx, id)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return deployment, nil
+	return
 }

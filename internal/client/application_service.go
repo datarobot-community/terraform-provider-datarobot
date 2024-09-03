@@ -1,6 +1,6 @@
 package client
 
-type CreateChatApplicationRequest struct {
+type CreateQAApplicationRequest struct {
 	DeploymentID string `json:"deploymentId"`
 }
 

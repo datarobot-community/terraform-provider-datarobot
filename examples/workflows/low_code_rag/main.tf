@@ -88,12 +88,12 @@ resource "datarobot_deployment" "example" {
   }
 }
 
-resource "datarobot_chat_application" "example" {
+resource "datarobot_qa_application" "example" {
   name          = datarobot_use_case.example.name
   deployment_id = datarobot_deployment.example.id
 }
 
-output "datarobot_chat_application_url" {
-  value       = datarobot_chat_application.example.application_url
-  description = "The URL for the example chat application"
+output "datarobot_qa_application_url" {
+  value       = datarobot_qa_application.example.application_url
+  description = "The URL for the example Q&A application"
 }
