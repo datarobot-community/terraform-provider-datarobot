@@ -80,21 +80,6 @@ func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).CreateApplicationSourceVersion), ctx, id, req)
 }
 
-// CreateChatApplication mocks base method.
-func (m *MockService) CreateChatApplication(ctx context.Context, req *client.CreateChatApplicationRequest) (*client.Application, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateChatApplication", ctx, req)
-	ret0, _ := ret[0].(*client.Application)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateChatApplication indicates an expected call of CreateChatApplication.
-func (mr *MockServiceMockRecorder) CreateChatApplication(ctx, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChatApplication", reflect.TypeOf((*MockService)(nil).CreateChatApplication), ctx, req)
-}
-
 // CreateCredential mocks base method.
 func (m *MockService) CreateCredential(ctx context.Context, req *client.CredentialRequest) (*client.CredentialResponse, error) {
 	m.ctrl.T.Helper()
@@ -304,6 +289,21 @@ func (m *MockService) CreatePredictionEnvironment(ctx context.Context, req *clie
 func (mr *MockServiceMockRecorder) CreatePredictionEnvironment(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePredictionEnvironment", reflect.TypeOf((*MockService)(nil).CreatePredictionEnvironment), ctx, req)
+}
+
+// CreateQAApplication mocks base method.
+func (m *MockService) CreateQAApplication(ctx context.Context, req *client.CreateQAApplicationRequest) (*client.Application, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateQAApplication", ctx, req)
+	ret0, _ := ret[0].(*client.Application)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateQAApplication indicates an expected call of CreateQAApplication.
+func (mr *MockServiceMockRecorder) CreateQAApplication(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQAApplication", reflect.TypeOf((*MockService)(nil).CreateQAApplication), ctx, req)
 }
 
 // CreateRegisteredModelFromCustomModelVersion mocks base method.

@@ -195,9 +195,9 @@ type PredictionsSetting struct {
 	RealTime    types.Bool  `tfsdk:"real_time"`
 }
 
-// ApplicationResourceModel describes the chat application resource.
+// QAApplicationResourceModel describes the Q&A application resource.
 
-type ChatApplicationResourceModel struct {
+type QAApplicationResourceModel struct {
 	ID                       types.String   `tfsdk:"id"`
 	SourceID                 types.String   `tfsdk:"source_id"`
 	SourceVersionID          types.String   `tfsdk:"source_version_id"`

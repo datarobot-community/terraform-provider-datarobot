@@ -121,7 +121,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 						},
 						"value": schema.StringAttribute{
 							Required:            true,
-							MarkdownDescription: "The value of the runtime parameter.",
+							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
 						},
 					},
 				},
@@ -495,7 +495,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
 		for i, param := range runtimeParameterValues {
-			value := param.Value.ValueString()
+			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
+				return
+			}
 			params[i] = client.RuntimeParameterValueRequest{
 				FieldName: param.Key.ValueString(),
 				Type:      param.Type.ValueString(),
@@ -751,14 +755,18 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 			}
 		}
 
-		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
-		for i, param := range runtimeParameterValues {
-			value := param.Value.ValueString()
-			params[i] = client.RuntimeParameterValueRequest{
+		params := make([]client.RuntimeParameterValueRequest, 0)
+		for _, param := range runtimeParameterValues {
+			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
+				return
+			}
+			params = append(params, client.RuntimeParameterValueRequest{
 				FieldName: param.Key.ValueString(),
 				Type:      param.Type.ValueString(),
 				Value:     &value,
-			}
+			})
 		}
 
 		// compute the runtime parameter values to reset

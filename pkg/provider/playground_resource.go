@@ -123,8 +123,8 @@ func (r *PlaygroundResource) Read(ctx context.Context, req resource.ReadRequest,
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-			fmt.Sprintf("Error getting Playground with ID %s", data.ID.ValueString()),
-			err.Error())
+				fmt.Sprintf("Error getting Playground with ID %s", data.ID.ValueString()),
+				err.Error())
 		}
 		return
 	}
@@ -163,7 +163,6 @@ func (r *PlaygroundResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 		return
 	}
-
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
