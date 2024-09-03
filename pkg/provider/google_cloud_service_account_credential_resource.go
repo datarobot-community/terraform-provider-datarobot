@@ -126,7 +126,7 @@ func (r *GoogleCloudCredentialResource) Read(ctx context.Context, req resource.R
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Google Cloud Credential with ID %s", data.ID.ValueString()), 
+				fmt.Sprintf("Error getting Google Cloud Credential with ID %s", data.ID.ValueString()),
 				err.Error())
 		}
 		return

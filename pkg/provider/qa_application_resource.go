@@ -16,62 +16,62 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &ChatApplicationResource{}
-var _ resource.ResourceWithImportState = &ChatApplicationResource{}
+var _ resource.Resource = &QAApplicationResource{}
+var _ resource.ResourceWithImportState = &QAApplicationResource{}
 
-func NewChatApplicationResource() resource.Resource {
-	return &ChatApplicationResource{}
+func NewQAApplicationResource() resource.Resource {
+	return &QAApplicationResource{}
 }
 
-type ChatApplicationResource struct {
+type QAApplicationResource struct {
 	provider *Provider
 }
 
-func (r *ChatApplicationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_chat_application"
+func (r *QAApplicationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_qa_application"
 }
 
-func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *QAApplicationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Chat Application",
+		MarkdownDescription: "Q&A Application",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The ID of the Chat Application.",
+				MarkdownDescription: "The ID of the Q&A Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"source_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The ID of the Chat Application Source.",
+				MarkdownDescription: "The ID of the Q&A Application Source.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"source_version_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The version ID of the Chat Application Source.",
+				MarkdownDescription: "The version ID of the Q&A Application Source.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"application_url": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The URL of the Chat Application.",
+				MarkdownDescription: "The URL of the Q&A Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The name of the Chat Application.",
+				MarkdownDescription: "The name of the Q&A Application.",
 			},
 			"deployment_id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The deployment ID of the Chat Application.",
+				MarkdownDescription: "The deployment ID of the Q&A Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -79,21 +79,21 @@ func (r *ChatApplicationResource) Schema(ctx context.Context, req resource.Schem
 			"external_access_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether external access is enabled for the Chat Application.",
+				MarkdownDescription: "Whether external access is enabled for the Q&A Application.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"external_access_recipients": schema.ListAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of external email addresses that have access to the Chat Application.",
+				MarkdownDescription: "The list of external email addresses that have access to the Q&A Application.",
 				ElementType:         types.StringType,
 			},
 		},
 	}
 }
 
-func (r *ChatApplicationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *QAApplicationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -108,16 +108,16 @@ func (r *ChatApplicationResource) Configure(ctx context.Context, req resource.Co
 	}
 }
 
-func (r *ChatApplicationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data ChatApplicationResourceModel
+func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data QAApplicationResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	traceAPICall("CreateChatApplication")
-	createResp, err := r.provider.service.CreateChatApplication(ctx, &client.CreateChatApplicationRequest{
+	traceAPICall("CreateQAApplication")
+	createResp, err := r.provider.service.CreateQAApplication(ctx, &client.CreateQAApplicationRequest{
 		DeploymentID: data.DeploymentID.ValueString(),
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 		recipients[i] = recipient.ValueString()
 	}
 
-	traceAPICall("UpdateChatApplication")
+	traceAPICall("UpdateApplication")
 	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
 		&client.UpdateApplicationRequest{
@@ -146,7 +146,7 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 			resp.State.RemoveResource(ctx)
 		} else {
 			errMessage := checkApplicationNameAlreadyExists(err, data.Name.ValueString())
-			resp.Diagnostics.AddError("Error adding details to Chat Application", errMessage)
+			resp.Diagnostics.AddError("Error adding details to Q&A Application", errMessage)
 		}
 		return
 	}
@@ -165,8 +165,8 @@ func (r *ChatApplicationResource) Create(ctx context.Context, req resource.Creat
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data ChatApplicationResourceModel
+func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data QAApplicationResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -177,7 +177,7 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	traceAPICall("GetChatApplication")
+	traceAPICall("GetApplication")
 	application, err := r.provider.service.GetApplication(ctx, data.ID.ValueString())
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); ok {
@@ -200,8 +200,8 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 
 	traceAPICall("GetApplicationSourceVersion")
 	applicationSourceVersion, err := r.provider.service.GetApplicationSourceVersion(
-		ctx, 
-		application.CustomApplicationSourceID, 
+		ctx,
+		application.CustomApplicationSourceID,
 		application.CustomApplicationSourceVersionID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Application Source version", err.Error())
@@ -211,7 +211,15 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	if applicationSourceVersion.RuntimeParameters != nil {
 		for _, runtimeParameter := range applicationSourceVersion.RuntimeParameters {
 			if runtimeParameter.FieldName == "DEPLOYMENT_ID" {
-				data.DeploymentID = types.StringValue(runtimeParameter.CurrentValue.(string))
+				if runtimeParameter.CurrentValue == nil {
+					data.DeploymentID = types.StringNull()
+				}
+				if currentValue, ok := runtimeParameter.CurrentValue.(string); ok {
+					data.DeploymentID = types.StringValue(currentValue)
+				} else {
+					resp.Diagnostics.AddError("Invalid Deployment ID", fmt.Sprintf("Deployment ID is not a string: %v", runtimeParameter.CurrentValue))
+					return
+				}
 				break
 			}
 		}
@@ -220,15 +228,15 @@ func (r *ChatApplicationResource) Read(ctx context.Context, req resource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *ChatApplicationResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan ChatApplicationResourceModel
+func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan QAApplicationResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var state ChatApplicationResourceModel
+	var state QAApplicationResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -249,7 +257,7 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 		updateRequest.Name = plan.Name.ValueString()
 	}
 
-	traceAPICall("UpdateChatApplication")
+	traceAPICall("UpdateApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
 		updateRequest)
@@ -275,15 +283,15 @@ func (r *ChatApplicationResource) Update(ctx context.Context, req resource.Updat
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func (r *ChatApplicationResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data ChatApplicationResourceModel
+func (r *QAApplicationResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data QAApplicationResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	traceAPICall("DeleteChatApplication")
+	traceAPICall("DeleteApplication")
 	err := r.provider.service.DeleteApplication(ctx, data.ID.ValueString())
 	if err != nil {
 		if !errors.Is(err, &client.NotFoundError{}) {
@@ -291,8 +299,17 @@ func (r *ChatApplicationResource) Delete(ctx context.Context, req resource.Delet
 			return
 		}
 	}
+
+	traceAPICall("DeleteApplicationSource")
+	err = r.provider.service.DeleteApplicationSource(ctx, data.SourceID.ValueString())
+	if err != nil {
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting Application Source", err.Error())
+			return
+		}
+	}
 }
 
-func (r *ChatApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *QAApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

@@ -183,7 +183,7 @@ func TestCustomModel(t *testing.T) {
 	})
 	require.NoError(err)
 
-	value := "https://api.openai.com"
+	var value any = "https://api.openai.com"
 	params := []client.RuntimeParameterValueRequest{
 		{
 			FieldName: "OPENAI_API_BASE",
@@ -608,12 +608,12 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	_, statusId, err := s.UpdateDeploymentModel(ctx, deployment.ID, &client.UpdateDeploymentModelRequest{
 		ModelPackageID: registeredModelVersion2.ID,
-		Reason: "OTHER",
+		Reason:         "OTHER",
 	})
 	require.NoError(err)
 	require.NotEmpty(statusId)
 
-	application, err := s.CreateChatApplication(ctx, &client.CreateChatApplicationRequest{
+	application, err := s.CreateQAApplication(ctx, &client.CreateQAApplicationRequest{
 		DeploymentID: deployment.ID,
 	})
 	require.NoError(err)

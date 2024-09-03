@@ -173,7 +173,7 @@ Required:
 
 - `key` (String) The name of the runtime parameter.
 - `type` (String) The type of the runtime parameter.
-- `value` (String) The value of the runtime parameter.
+- `value` (String) The value of the runtime parameter (type conversion is handled internally).
 
 
 <a id="nestedatt--source_remote_repositories"></a>

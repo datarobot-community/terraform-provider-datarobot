@@ -129,7 +129,7 @@ func (r *BasicCredentialResource) Read(ctx context.Context, req resource.ReadReq
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Basic Credential with ID %s", data.ID.ValueString()), 
+				fmt.Sprintf("Error getting Basic Credential with ID %s", data.ID.ValueString()),
 				err.Error())
 		}
 		return
@@ -139,7 +139,7 @@ func (r *BasicCredentialResource) Read(ctx context.Context, req resource.ReadReq
 	if credential.Description != "" {
 		data.Description = types.StringValue(credential.Description)
 	}
-	
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

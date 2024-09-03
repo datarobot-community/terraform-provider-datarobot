@@ -217,8 +217,8 @@ func checkApplicationNameAlreadyExists(err error, name string) string {
 
 func checkNameAlreadyExists(err error, name string, resourceType string) string {
 	errMessage := err.Error()
-	if strings.Contains(errMessage, "already in use") || 
-		strings.Contains(errMessage, "already exist") || 
+	if strings.Contains(errMessage, "already in use") ||
+		strings.Contains(errMessage, "already exist") ||
 		strings.Contains(errMessage, "is already used") {
 		errMessage = fmt.Sprintf("%s name must be unique, and name '%s' is already in use", resourceType, name)
 	}
@@ -227,29 +227,50 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 }
 
 func formatRuntimeParameterValues(ctx context.Context, runtimeParameterValues []client.RuntimeParameter) (basetypes.ListValue, diag.Diagnostics) {
-		// copy parameters in stable order
-		parameters := make([]RuntimeParameterValue, 0)
-		sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
-			return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
-		})
-		for _, param := range runtimeParameterValues {
-			parameter := RuntimeParameterValue{
-				Key:   types.StringValue(param.FieldName),
-				Type:  types.StringValue(param.Type),
-				Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
-			}
-	
-			if param.CurrentValue != nil && param.CurrentValue != param.DefaultValue {
-				parameters = append(parameters, parameter)
+	// copy parameters in stable order
+	parameters := make([]RuntimeParameterValue, 0)
+	sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
+		return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
+	})
+	for _, param := range runtimeParameterValues {
+		parameter := RuntimeParameterValue{
+			Key:   types.StringValue(param.FieldName),
+			Type:  types.StringValue(param.Type),
+			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
+		}
+
+		var defaultValue any = param.DefaultValue
+		if param.DefaultValue == nil {
+			switch param.Type {
+			case "numeric":
+				defaultValue = 0.0
+			case "boolean":
+				defaultValue = false
 			}
 		}
-	
-		return types.ListValueFrom(
-			ctx, types.ObjectType{
+
+		if param.CurrentValue != defaultValue {
+			parameters = append(parameters, parameter)
+		}
+	}
+
+	return types.ListValueFrom(
+		ctx, types.ObjectType{
 			AttrTypes: map[string]attr.Type{
 				"key":   types.StringType,
 				"type":  types.StringType,
 				"value": types.StringType,
 			},
 		}, parameters)
+}
+
+func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
+	switch paramType {
+	case "boolean":
+		return strconv.ParseBool(paramValue)
+	case "numeric":
+		return strconv.ParseFloat(paramValue, 64)
+	default:
+		return paramValue, nil
+	}
 }
