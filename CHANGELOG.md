@@ -1,3 +1,3 @@
-## 0.0.17 (Unreleased)
+## 0.0.18 (Unreleased)
 
 FEATURES:
