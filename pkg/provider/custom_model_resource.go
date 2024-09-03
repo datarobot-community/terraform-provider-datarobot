@@ -628,7 +628,6 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	loadCustomModelToTerraformState(
-		ctx,
 		id,
 		customModel.Name,
 		customModel.Description,
@@ -991,7 +990,6 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 }
 
 func loadCustomModelToTerraformState(
-	ctx context.Context,
 	id,
 	name,
 	description,
