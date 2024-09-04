@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -132,15 +133,30 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"target": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The target of the Custom Model.",
+				Computed:            true,
+				MarkdownDescription: "The target name of the Custom Model.",
 			},
 			"positive_class_label": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("1"),
 				MarkdownDescription: "The positive class label of the Custom Model.",
 			},
 			"negative_class_label": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("0"),
 				MarkdownDescription: "The negative class label of the Custom Model.",
+			},
+			"prediction_threshold": schema.Float64Attribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             float64default.StaticFloat64(0.5),
+				MarkdownDescription: "The prediction threshold of the Custom Model.",
+			},
+			"language": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The language used to build the Custom Model.",
 			},
 			"is_proxy": schema.BoolAttribute{
 				Optional:            true,
@@ -332,10 +348,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			LLMBlueprintID: sourceBlueprintID,
 		})
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Custom Model",
-				fmt.Sprintf("Unable to create Custom Model, got error: %s", err),
-			)
+			resp.Diagnostics.AddError("Error creating Custom Model", err.Error())
 			return
 		}
 		customModelID = createResp.CustomModelID
@@ -346,9 +359,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		traceAPICall("UpdateCustomModel")
 		_, err = r.provider.service.UpdateCustomModel(ctx,
 			createResp.CustomModelID,
-			&client.CustomModelUpdate{
+			&client.UpdateCustomModelRequest{
 				Name:        name,
 				Description: description,
+				TargetName:  plan.Target.ValueString(),
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
@@ -399,14 +413,16 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
-			Name:               plan.Name.ValueString(),
-			Description:        plan.Description.ValueString(),
-			TargetType:         plan.TargetType.ValueString(),
-			TargetName:         plan.Target.ValueString(),
-			CustomModelType:    defaultCustomModelType,
-			PositiveClassLabel: plan.PositiveClassLabel.ValueString(),
-			NegativeClassLabel: plan.NegativeClassLabel.ValueString(),
-			IsProxyModel:       plan.IsProxy.ValueBool(),
+			Name:                plan.Name.ValueString(),
+			Description:         plan.Description.ValueString(),
+			TargetType:          plan.TargetType.ValueString(),
+			TargetName:          plan.Target.ValueString(),
+			CustomModelType:     defaultCustomModelType,
+			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
+			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
+			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+			Language:            plan.Language.ValueString(),
+			IsProxyModel:        plan.IsProxy.ValueBool(),
 			IsTrainingDataForVersionsPermanentlyEnabled: true,
 		})
 		if err != nil {
@@ -421,16 +437,12 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.ID = types.StringValue(customModelID)
 		state.Name = types.StringValue(name)
 		state.Description = types.StringValue(description)
-		state.Target = types.StringValue(plan.Target.ValueString())
 		state.TargetType = types.StringValue(plan.TargetType.ValueString())
-		if IsKnown(plan.PositiveClassLabel) {
-			state.PositiveClassLabel = types.StringValue(plan.PositiveClassLabel.ValueString())
-		}
-		if IsKnown(plan.NegativeClassLabel) {
-			state.NegativeClassLabel = types.StringValue(plan.NegativeClassLabel.ValueString())
-		}
 		if IsKnown(plan.IsProxy) {
 			state.IsProxy = plan.IsProxy
+		}
+		if IsKnown(plan.Language) {
+			state.Language = plan.Language
 		}
 
 		if plan.SourceRemoteRepositories == nil && plan.LocalFiles == nil {
@@ -486,6 +498,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.LocalFiles = plan.LocalFiles
+	state.Target = types.StringValue(customModel.TargetName)
+	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
+	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
+	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
 
 	if IsKnown(plan.RuntimeParameterValues) {
 		runtimeParameterValues := make([]RuntimeParameterValue, 0)
@@ -632,11 +648,8 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	loadCustomModelToTerraformState(
-		id,
-		customModel.Name,
-		customModel.Description,
+		*customModel,
 		data.SourceLLMBlueprintID.ValueString(),
-		customModel.LatestVersion,
 		&data)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -659,42 +672,37 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	id := state.ID.ValueString()
-	newName := plan.Name.ValueString()
-	newDescription := plan.Description.ValueString()
 
-	if state.Name.ValueString() != newName ||
-		state.Description.ValueString() != newDescription {
-		traceAPICall("UpdateCustomModel")
-		customModel, err := r.provider.service.UpdateCustomModel(ctx,
-			id,
-			&client.CustomModelUpdate{
-				Name:        plan.Name.ValueString(),
-				Description: plan.Description.ValueString(),
-			})
-		if err != nil {
-			if errors.Is(err, &client.NotFoundError{}) {
-				resp.Diagnostics.AddWarning(
-					"Custom Model not found",
-					fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
-				resp.State.RemoveResource(ctx)
-			} else {
-				resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
-			}
-			return
-		}
-
-		state.Name = types.StringValue(customModel.Name)
-		state.Description = types.StringValue(customModel.Description)
-		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	}
-
-	traceAPICall("WaitForCustomModelToBeReady")
-	customModel, err := r.waitForCustomModelToBeReady(ctx, id)
+	traceAPICall("UpdateCustomModel")
+	customModel, err := r.provider.service.UpdateCustomModel(ctx,
+		id,
+		&client.UpdateCustomModelRequest{
+			Name:                plan.Name.ValueString(),
+			Description:         plan.Description.ValueString(),
+			TargetName:          plan.Target.ValueString(),
+			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
+			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
+			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+		})
 	if err != nil {
-		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"Custom Model not found",
+				fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
+		}
+		return
+	}
+	state.Name = types.StringValue(customModel.Name)
+	state.Description = types.StringValue(customModel.Description)
+	state.Target = types.StringValue(customModel.TargetName)
+	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
+	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
+	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -800,7 +808,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 
 		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		createVersionFromLatestResp, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionCreateFromLatestRequest{
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
@@ -810,14 +818,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
 		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err = r.waitForCustomModelToBeReady(ctx, id)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-		latestVersion := customModel.LatestVersion.ID
+		latestVersion := createVersionFromLatestResp.ID
 
 		state.VersionID = types.StringValue(latestVersion)
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -998,25 +999,26 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 }
 
 func loadCustomModelToTerraformState(
-	id,
-	name,
-	description,
+	customModel client.CustomModel,
 	sourceBlueprintId string,
-	latestVersion client.CustomModelVersionResponse,
 	state *CustomModelResourceModel,
 ) {
-	state.ID = types.StringValue(id)
-	state.VersionID = types.StringValue(latestVersion.ID)
-	state.Name = types.StringValue(name)
-	if description != "" {
-		state.Description = types.StringValue(description)
+	state.ID = types.StringValue(customModel.ID)
+	state.Name = types.StringValue(customModel.Name)
+	if customModel.Description != "" {
+		state.Description = types.StringValue(customModel.Description)
 	}
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}
-	state.BaseEnvironmentID = types.StringValue(latestVersion.BaseEnvironmentID)
-	state.BaseEnvironmentVersionID = types.StringValue(latestVersion.BaseEnvironmentVersionID)
-	loadResourceSettingsToTerraformState(latestVersion, state)
+	state.Target = types.StringValue(customModel.TargetName)
+	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
+	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
+	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
+	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
+	loadResourceSettingsToTerraformState(customModel.LatestVersion, state)
 }
 
 func loadResourceSettingsToTerraformState(
@@ -1042,7 +1044,7 @@ func loadResourceSettingsToTerraformState(
 	state.ResourceSettings = resourceSettings
 }
 
-func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModelResponse, error) {
+func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModel, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
@@ -1314,7 +1316,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 func (r *CustomModelResource) updateRemoteRepositories(
 	ctx context.Context,
-	customModel *client.CustomModelResponse,
+	customModel *client.CustomModel,
 	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
@@ -1406,7 +1408,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 
 func (r *CustomModelResource) updateLocalFiles(
 	ctx context.Context,
-	customModel *client.CustomModelResponse,
+	customModel *client.CustomModel,
 	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (

@@ -96,10 +96,10 @@ func (mr *MockServiceMockRecorder) CreateCredential(ctx, req interface{}) *gomoc
 }
 
 // CreateCustomModel mocks base method.
-func (m *MockService) CreateCustomModel(ctx context.Context, req *client.CreateCustomModelRequest) (*client.CustomModelResponse, error) {
+func (m *MockService) CreateCustomModel(ctx context.Context, req *client.CreateCustomModelRequest) (*client.CustomModel, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModel", ctx, req)
-	ret0, _ := ret[0].(*client.CustomModelResponse)
+	ret0, _ := ret[0].(*client.CustomModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -609,10 +609,10 @@ func (mr *MockServiceMockRecorder) GetCredential(ctx, id interface{}) *gomock.Ca
 }
 
 // GetCustomModel mocks base method.
-func (m *MockService) GetCustomModel(ctx context.Context, id string) (*client.CustomModelResponse, error) {
+func (m *MockService) GetCustomModel(ctx context.Context, id string) (*client.CustomModel, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCustomModel", ctx, id)
-	ret0, _ := ret[0].(*client.CustomModelResponse)
+	ret0, _ := ret[0].(*client.CustomModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -893,21 +893,6 @@ func (mr *MockServiceMockRecorder) IsDatasetReady(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReady", reflect.TypeOf((*MockService)(nil).IsDatasetReady), ctx, id)
 }
 
-// IsDeploymentReady mocks base method.
-func (m *MockService) IsDeploymentReady(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDeploymentReady", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsDeploymentReady indicates an expected call of IsDeploymentReady.
-func (mr *MockServiceMockRecorder) IsDeploymentReady(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDeploymentReady", reflect.TypeOf((*MockService)(nil).IsDeploymentReady), ctx, id)
-}
-
 // IsRegisteredModelVersionReady mocks base method.
 func (m *MockService) IsRegisteredModelVersionReady(ctx context.Context, registeredModelId, versionId string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -1118,10 +1103,10 @@ func (mr *MockServiceMockRecorder) UpdateCredential(ctx, id, req interface{}) *g
 }
 
 // UpdateCustomModel mocks base method.
-func (m *MockService) UpdateCustomModel(ctx context.Context, id string, req *client.CustomModelUpdate) (*client.CustomModelResponse, error) {
+func (m *MockService) UpdateCustomModel(ctx context.Context, id string, req *client.UpdateCustomModelRequest) (*client.CustomModel, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateCustomModel", ctx, id, req)
-	ret0, _ := ret[0].(*client.CustomModelResponse)
+	ret0, _ := ret[0].(*client.CustomModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

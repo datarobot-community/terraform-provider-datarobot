@@ -94,6 +94,8 @@ type CustomModelResourceModel struct {
 	TargetType                     types.String                    `tfsdk:"target_type"`
 	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
 	NegativeClassLabel             types.String                    `tfsdk:"negative_class_label"`
+	PredictionThreshold            types.Float64                   `tfsdk:"prediction_threshold"`
+	Language                       types.String                    `tfsdk:"language"`
 	IsProxy                        types.Bool                      `tfsdk:"is_proxy"`
 	GuardConfigurations            []GuardConfiguration            `tfsdk:"guard_configurations"`
 	OverallModerationConfiguration *OverallModerationConfiguration `tfsdk:"overall_moderation_configuration"`

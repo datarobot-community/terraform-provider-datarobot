@@ -104,6 +104,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "target", "my_label"),
+					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "yes"),
+					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.4"),
+					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
@@ -488,6 +493,8 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	target                = "my_label"
 	positive_class_label  = "yes"
 	negative_class_label  = "no"
+	prediction_threshold  = 0.4
+	language = "Python"
 	base_environment_name = "[GenAI] Python 3.11 with Moderations"
 	%s
 	%s

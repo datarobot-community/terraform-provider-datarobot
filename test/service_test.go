@@ -177,7 +177,7 @@ func TestCustomModel(t *testing.T) {
 
 	name = "Updated Integration Test" + uuid.New().String()
 	description = "This is an updated test custom model."
-	_, err = s.UpdateCustomModel(ctx, resp.CustomModelID, &client.CustomModelUpdate{
+	_, err = s.UpdateCustomModel(ctx, resp.CustomModelID, &client.UpdateCustomModelRequest{
 		Name:        name,
 		Description: description,
 	})
