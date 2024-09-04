@@ -163,7 +163,9 @@ func getCurlCommand(req *http.Request, jsonBody []byte) string {
 		}
 	}
 	if jsonBody != nil {
-		curlCommand += fmt.Sprintf(" -d '%s'", jsonBody)
+		santizedJsonBody := strings.ReplaceAll(string(jsonBody), `\`, `\\`)
+		santizedJsonBody = strings.ReplaceAll(santizedJsonBody, "'", "\\'")
+		curlCommand += fmt.Sprintf(" -d '%s'", santizedJsonBody)
 	}
 	return fmt.Sprintf(" (%s)", curlCommand)
 }
