@@ -1,3 +1,11 @@
+## 0.0.20
+
+FEATURES:
+
+- Fix phantom updates for Custom Model and API Token Credential resources
+- Add `language` and `prediction_threshold` parameters to Custom Model resource
+- Fix CodeQL security warning
+
 ## 0.0.19
 
 FEATURES:

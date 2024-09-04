@@ -50,14 +50,14 @@ type Service interface {
 	ListLLMs(ctx context.Context) (*ListLLMsResponse, error)
 
 	// Custom Model
-	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModelResponse, error)
+	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
 	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionCreateFromLatestRequest) (*CreateCustomModelVersionResponse, error)
 	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CreateCustomModelVersionResponse, error)
 	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, string, error)
-	GetCustomModel(ctx context.Context, id string) (*CustomModelResponse, error)
+	GetCustomModel(ctx context.Context, id string) (*CustomModel, error)
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
-	UpdateCustomModel(ctx context.Context, id string, req *CustomModelUpdate) (*CustomModelResponse, error)
+	UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error)
 	DeleteCustomModel(ctx context.Context, id string) error
 	ListExecutionEnvironments(ctx context.Context) (*ListExecutionEnvironmentsResponse, error)
 	ListGuardTemplates(ctx context.Context) (*ListGuardTemplatesResponse, error)
@@ -276,8 +276,8 @@ func (s *ServiceImpl) ListLLMs(ctx context.Context) (*ListLLMsResponse, error) {
 	return Get[ListLLMsResponse](s.client, ctx, "/genai/llms/")
 }
 
-func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModelResponse, error) {
-	return Post[CustomModelResponse](s.client, ctx, "/customModels/", req)
+func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {
+	return Post[CustomModel](s.client, ctx, "/customModels/", req)
 }
 
 func (s *ServiceImpl) CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error) {
@@ -296,8 +296,8 @@ func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.C
 	return PatchAndExpectStatus[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
 }
 
-func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModelResponse, error) {
-	return Get[CustomModelResponse](s.client, ctx, "/customModels/"+id+"/")
+func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModel, error) {
+	return Get[CustomModel](s.client, ctx, "/customModels/"+id+"/")
 }
 
 func (s *ServiceImpl) IsCustomModelReady(ctx context.Context, id string) (bool, error) {
@@ -308,8 +308,8 @@ func (s *ServiceImpl) IsCustomModelReady(ctx context.Context, id string) (bool, 
 	return customModel.LatestVersion.ID != "", nil
 }
 
-func (s *ServiceImpl) UpdateCustomModel(ctx context.Context, id string, req *CustomModelUpdate) (*CustomModelResponse, error) {
-	return Patch[CustomModelResponse](s.client, ctx, "/customModels/"+id+"/", req)
+func (s *ServiceImpl) UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error) {
+	return Patch[CustomModel](s.client, ctx, "/customModels/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteCustomModel(ctx context.Context, id string) error {

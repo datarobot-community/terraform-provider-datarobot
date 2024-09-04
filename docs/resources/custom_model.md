@@ -92,15 +92,17 @@ output "example_id" {
 - `description` (String) The description of the Custom Model.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) The flag indicating if the Custom Model is a proxy model.
+- `language` (String) The language used to build the Custom Model.
 - `local_files` (List of String) The list of local file paths used to build the Custom Model.
 - `negative_class_label` (String) The negative class label of the Custom Model.
 - `overall_moderation_configuration` (Attributes) The overall moderation configuration for the Custom Model. (see [below for nested schema](#nestedatt--overall_moderation_configuration))
 - `positive_class_label` (String) The positive class label of the Custom Model.
+- `prediction_threshold` (Number) The prediction threshold of the Custom Model.
 - `resource_settings` (Attributes) The resource settings for the Custom Model. (see [below for nested schema](#nestedatt--resource_settings))
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
-- `target` (String) The target of the Custom Model.
+- `target` (String) The target name of the Custom Model.
 - `target_type` (String) The target type of the Custom Model.
 
 ### Read-Only

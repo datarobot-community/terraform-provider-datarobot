@@ -8,16 +8,17 @@ const (
 )
 
 type CreateCustomModelRequest struct {
-	Name                                        string `json:"name"`
-	TargetType                                  string `json:"targetType"`
-	TargetName                                  string `json:"targetName"`
-	NegativeClassLabel                          string `json:"negativeClassLabel,omitempty"`
-	PositiveClassLabel                          string `json:"positiveClassLabel,omitempty"`
-	CustomModelType                             string `json:"customModelType"`
-	Description                                 string `json:"description,omitempty"`
-	IsProxyModel                                bool   `json:"isProxyModel,omitempty"`
-	IsTrainingDataForVersionsPermanentlyEnabled bool   `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
-	Language                                    string `json:"language,omitempty"`
+	Name                                        string  `json:"name"`
+	TargetType                                  string  `json:"targetType"`
+	TargetName                                  string  `json:"targetName"`
+	NegativeClassLabel                          string  `json:"negativeClassLabel,omitempty"`
+	PositiveClassLabel                          string  `json:"positiveClassLabel,omitempty"`
+	PredictionThreshold                         float64 `json:"predictionThreshold,omitempty"`
+	CustomModelType                             string  `json:"customModelType"`
+	Description                                 string  `json:"description,omitempty"`
+	IsProxyModel                                bool    `json:"isProxyModel,omitempty"`
+	IsTrainingDataForVersionsPermanentlyEnabled bool    `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
+	Language                                    string  `json:"language,omitempty"`
 }
 
 type CreateCustomModelFromLLMBlueprintRequest struct {
@@ -33,15 +34,18 @@ type CreateCustomModelVersionResponse struct {
 	ID            string `json:"id"`
 }
 
-type CustomModelResponse struct {
-	ID              string                     `json:"id"`
-	Name            string                     `json:"name"`
-	Description     string                     `json:"description"`
-	LatestVersion   CustomModelVersionResponse `json:"latestVersion"`
-	TargetType      string                     `json:"targetType"`
-	TargetName      string                     `json:"targetName"`
-	CustomModelType string                     `json:"customModelType"`
-	Language        string                     `json:"language"`
+type CustomModel struct {
+	ID                  string                     `json:"id"`
+	Name                string                     `json:"name"`
+	Description         string                     `json:"description"`
+	LatestVersion       CustomModelVersionResponse `json:"latestVersion"`
+	TargetType          string                     `json:"targetType"`
+	TargetName          string                     `json:"targetName"`
+	CustomModelType     string                     `json:"customModelType"`
+	Language            string                     `json:"language"`
+	PositiveClassLabel  string                     `json:"positiveClassLabel"`
+	NegativeClassLabel  string                     `json:"negativeClassLabel"`
+	PredictionThreshold float64                    `json:"predictionThreshold"`
 }
 
 type CustomModelVersionResponse struct {
@@ -71,9 +75,13 @@ type FileItem struct {
 	WorkspaceID        string `json:"workspaceId"`
 }
 
-type CustomModelUpdate struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+type UpdateCustomModelRequest struct {
+	Name                string  `json:"name,omitempty"`
+	Description         string  `json:"description,omitempty"`
+	TargetName          string  `json:"targetName,omitempty"`
+	PositiveClassLabel  string  `json:"positiveClassLabel,omitempty"`
+	NegativeClassLabel  string  `json:"negativeClassLabel,omitempty"`
+	PredictionThreshold float64 `json:"predictionThreshold,omitempty"`
 }
 
 type RuntimeParameter struct {

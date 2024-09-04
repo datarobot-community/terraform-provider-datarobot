@@ -50,7 +50,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/datarobot/datarobot",
+		Address: "registry.terraform.io/datarobot-community/datarobot",
 		Debug:   debug,
 	}
 
