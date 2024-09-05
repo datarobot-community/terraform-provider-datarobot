@@ -1,3 +1,9 @@
+## 0.0.22
+
+FEATURES:
+
+- Fix Custom Model runtime parameter ordering
+
 ## 0.0.21
 
 FEATURES:
