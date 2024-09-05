@@ -666,7 +666,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -706,7 +709,10 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -785,14 +791,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	planRuntimeParametersValues, _ := types.ListValueFrom(
-		ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"key":   types.StringType,
-				"type":  types.StringType,
-				"value": types.StringType,
-			},
-		}, []RuntimeParameterValue{})
+	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 
 	if IsKnown(plan.RuntimeParameterValues) {
 		planRuntimeParametersValues = plan.RuntimeParameterValues
@@ -1045,7 +1044,10 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -1098,14 +1100,7 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 
 	if !IsKnown(plan.RuntimeParameterValues) {
 		// use empty list if runtime parameter values are unknown
-		plan.RuntimeParameterValues, _ = types.ListValueFrom(
-			ctx, types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"key":   types.StringType,
-					"type":  types.StringType,
-					"value": types.StringType,
-				},
-			}, []RuntimeParameterValue{})
+		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
 
 	if plan.TrainingDatasetID == state.TrainingDatasetID &&

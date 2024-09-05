@@ -226,13 +226,39 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 	return errMessage
 }
 
-func formatRuntimeParameterValues(ctx context.Context, runtimeParameterValues []client.RuntimeParameter) (basetypes.ListValue, diag.Diagnostics) {
+func formatRuntimeParameterValues(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
 	// copy parameters in stable order
 	parameters := make([]RuntimeParameterValue, 0)
+
+	if IsKnown(parametersInPlan) {
+		if diags := parametersInPlan.ElementsAs(ctx, &parameters, false); diags.HasError() {
+			return basetypes.ListValue{}, diags
+		}
+	}
+
 	sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
 		return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
 	})
 	for _, param := range runtimeParameterValues {
+		// skip the parameter if it already exists in the plan
+		found := false
+		for _, p := range parameters {
+			if p.Key == types.StringValue(param.FieldName) {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+
 		parameter := RuntimeParameterValue{
 			Key:   types.StringValue(param.FieldName),
 			Type:  types.StringValue(param.Type),
@@ -254,14 +280,7 @@ func formatRuntimeParameterValues(ctx context.Context, runtimeParameterValues []
 		}
 	}
 
-	return types.ListValueFrom(
-		ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"key":   types.StringType,
-				"type":  types.StringType,
-				"value": types.StringType,
-			},
-		}, parameters)
+	return listValueFromRuntimParameters(ctx, parameters)
 }
 
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
@@ -273,4 +292,15 @@ func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
 	default:
 		return paramValue, nil
 	}
+}
+
+func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
+	return types.ListValueFrom(
+		ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		}, runtimeParameterValues)
 }

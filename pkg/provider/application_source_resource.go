@@ -251,7 +251,10 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -290,7 +293,10 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	}
 	data.Name = types.StringValue(applicationSource.Name)
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -451,7 +457,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, applicationSource.LatestVersion.RuntimeParameters)
+	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
