@@ -197,7 +197,7 @@ func TestCustomModel(t *testing.T) {
 		log.Fatalf("Error encoding JSON: %v", err)
 	}
 
-	newVersion, err := s.CreateCustomModelVersionCreateFromLatest(ctx, resp.CustomModelID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+	newVersion, err := s.CreateCustomModelVersionCreateFromLatest(ctx, resp.CustomModelID, &client.CreateCustomModelVersionFromLatestRequest{
 		BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 		BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 		IsMajorUpdate:            "false",

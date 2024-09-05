@@ -126,10 +126,10 @@ func (mr *MockServiceMockRecorder) CreateCustomModelFromLLMBlueprint(ctx, req in
 }
 
 // CreateCustomModelVersionCreateFromLatest mocks base method.
-func (m *MockService) CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *client.CreateCustomModelVersionCreateFromLatestRequest) (*client.CreateCustomModelVersionResponse, error) {
+func (m *MockService) CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *client.CreateCustomModelVersionFromLatestRequest) (*client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModelVersionCreateFromLatest", ctxc, id, req)
-	ret0, _ := ret[0].(*client.CreateCustomModelVersionResponse)
+	ret0, _ := ret[0].(*client.CustomModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -141,10 +141,10 @@ func (mr *MockServiceMockRecorder) CreateCustomModelVersionCreateFromLatest(ctxc
 }
 
 // CreateCustomModelVersionFromFiles mocks base method.
-func (m *MockService) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *client.CreateCustomModelVersionFromFilesRequest) (*client.CreateCustomModelVersionResponse, error) {
+func (m *MockService) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *client.CreateCustomModelVersionFromFilesRequest) (*client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModelVersionFromFiles", ctx, id, req)
-	ret0, _ := ret[0].(*client.CreateCustomModelVersionResponse)
+	ret0, _ := ret[0].(*client.CustomModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -171,10 +171,10 @@ func (mr *MockServiceMockRecorder) CreateCustomModelVersionFromGuardConfiguratio
 }
 
 // CreateCustomModelVersionFromRemoteRepository mocks base method.
-func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CreateCustomModelVersionResponse, string, error) {
+func (m *MockService) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *client.CreateCustomModelVersionFromRemoteRepositoryRequest) (*client.CustomModelVersion, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomModelVersionFromRemoteRepository", ctx, id, req)
-	ret0, _ := ret[0].(*client.CreateCustomModelVersionResponse)
+	ret0, _ := ret[0].(*client.CustomModelVersion)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

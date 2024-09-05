@@ -52,9 +52,9 @@ type Service interface {
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
-	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionCreateFromLatestRequest) (*CreateCustomModelVersionResponse, error)
-	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CreateCustomModelVersionResponse, error)
-	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, string, error)
+	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error)
+	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error)
+	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error)
 	GetCustomModel(ctx context.Context, id string) (*CustomModel, error)
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
 	UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error)
@@ -284,16 +284,16 @@ func (s *ServiceImpl) CreateCustomModelFromLLMBlueprint(ctx context.Context, req
 	return Post[CreateCustomModelVersionFromLLMBlueprintResponse](s.client, ctx, "/genai/customModelVersions/", req)
 }
 
-func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionCreateFromLatestRequest) (*CreateCustomModelVersionResponse, error) {
-	return Patch[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/", req)
+func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error) {
+	return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
 }
 
-func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CreateCustomModelVersionResponse, error) {
-	return uploadFilesFromBinaries[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/", http.MethodPatch, req.Files, map[string]string{"baseEnvironmentId": req.BaseEnvironmentID, "isMajorUpdate": "false"})
+func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error) {
+	return uploadFilesFromBinaries[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", http.MethodPatch, req.Files, map[string]string{"baseEnvironmentId": req.BaseEnvironmentID, "isMajorUpdate": "false"})
 }
 
-func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CreateCustomModelVersionResponse, string, error) {
-	return PatchAndExpectStatus[CreateCustomModelVersionResponse](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
+func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error) {
+	return PatchAndExpectStatus[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
 }
 
 func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModel, error) {

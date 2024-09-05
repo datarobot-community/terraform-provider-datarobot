@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -93,7 +94,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							},
 						},
 					},
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -104,10 +106,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
-					resource.TestCheckResourceAttr(resourceName, "target", "my_label"),
-					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "yes"),
-					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
-					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.4"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "document"),
 					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
@@ -188,7 +187,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							},
 						},
 					},
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -206,7 +206,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
 				),
 			},
-			// Remove guards
+			// // Remove guards
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -214,7 +214,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					sourceRemoteRepositories,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
 					nil,
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -239,7 +240,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					},
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
 					nil,
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -261,7 +263,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					nil,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
 					nil,
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -273,7 +276,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(resourceName, "source_remote_repositories.0.id"),
 				),
 			},
-			// Update local files
+			// // Update local files
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -281,7 +284,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					nil,
 					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource.go")},
 					nil,
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -301,7 +305,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					nil,
 					nil,
 					nil,
-					nil),
+					nil,
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -325,7 +330,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 						MemoryMB:      basetypes.NewInt64Value(256),
 						Replicas:      basetypes.NewInt64Value(2),
 						NetworkAccess: basetypes.NewStringValue("NONE"),
-					}),
+					},
+					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -337,6 +343,245 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "256"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "NONE"),
+				),
+			},
+			// Add training dataset
+			{
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					sourceRemoteRepositories,
+					nil,
+					nil,
+					&CustomModelResourceSettings{
+						MemoryMB:      basetypes.NewInt64Value(256),
+						Replicas:      basetypes.NewInt64Value(2),
+						NetworkAccess: basetypes.NewStringValue("NONE"),
+					},
+					true),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttrSet(resourceName, "training_dataset_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "training_dataset_version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "training_dataset_name"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccBinaryCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_binary"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: binaryCustomModelResourceConfig("example_name", "target", "python", "1", "0", 0.5),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "1"),
+					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "0"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.5"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: binaryCustomModelResourceConfig("new_example_name", "new_target", "r", "yes", "no", 0.8),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "yes"),
+					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccMulticlassCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_multiclass"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: multiclassCustomModelResourceConfig("example_name", "target", "python", []string{"class1", "class2", "class3"}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.0", "class1"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.1", "class2"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.2", "class3"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: multiclassCustomModelResourceConfig("new_example_name", "new_target", "r", []string{"class1", "class8", "class3"}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.0", "class1"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.1", "class8"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.2", "class3"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccRegressionCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_regression"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: regressionCustomModelResourceConfig("example_name", "target", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: regressionCustomModelResourceConfig("new_example_name", "new_target", "r"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccTextGenerationCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_text_generation"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: textGenerationCustomModelResourceConfig("example_name", "target", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: textGenerationCustomModelResourceConfig("new_example_name", "new_target", "r"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccUnstructuredCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_unstructured"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: unstructuredCustomModelResourceConfig("example_name", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: unstructuredCustomModelResourceConfig("new_example_name", "r"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
 			// Delete is tested automatically
@@ -423,6 +668,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	localFiles []basetypes.StringValue,
 	guards []GuardConfiguration,
 	resourceSettings *CustomModelResourceSettings,
+	addTrainingData bool,
 ) string {
 	remoteRepositoriesStr := ""
 	if len(remoteRepositories) > 0 {
@@ -478,30 +724,175 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		`, resourceSettings.MemoryMB.ValueInt64(), resourceSettings.Replicas.ValueInt64(), resourceSettings.NetworkAccess)
 	}
 
+	trainingDatasetStr := ""
+	if addTrainingData {
+		trainingDatasetStr = `
+		training_dataset_id = "${datarobot_dataset_from_file.test_without_llm_blueprint.id}"
+		`
+	}
+
 	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_without_llm_blueprint" {
+	name = "test custom model without llm blueprint"
+}
+
+resource "datarobot_dataset_from_file" "test_without_llm_blueprint" {
+	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_id = "${datarobot_use_case.test_without_llm_blueprint.id}"
+}
+
 resource "datarobot_remote_repository" "test_custom_model_from_remote_repository" {
 	name        = "Test Custom Model from Remote Repository"
 	description = "test"
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
-	}
+}
 	
 resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	name        		  = "%s"
 	description 		  = "%s"
-	target_type           = "Binary"
-	target                = "my_label"
-	positive_class_label  = "yes"
-	negative_class_label  = "no"
-	prediction_threshold  = 0.4
-	language = "Python"
+	target_type           = "TextGeneration"
+	target_name           = "document"
+	language 			  = "Python"
 	base_environment_name = "[GenAI] Python 3.11 with Moderations"
 	%s
 	%s
 	%s
 	%s
-	}
-`, name, description, remoteRepositoriesStr, localFilesStr, guardsStr, resourceSettingsStr)
+	%s
+}
+`, name, description, remoteRepositoriesStr, localFilesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+}
+
+func binaryCustomModelResourceConfig(
+	name,
+	targetName,
+	language,
+	positiveClassLabel,
+	negativeClassLabel string,
+	predictionThreshold float64) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_binary")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_binary" {
+	name        		  = "%s"
+	target_type           = "Binary"
+	target_name           = "%s"
+	language 			  = "%s"
+	positive_class_label  = "%s"
+	negative_class_label  = "%s"
+	prediction_threshold  = %f
+	base_environment_name = "[GenAI] Python 3.11 with Moderations"
+	%s
+}
+`, resourceBlock, name, targetName, language, positiveClassLabel, negativeClassLabel, predictionThreshold, customModelBlock)
+}
+
+func multiclassCustomModelResourceConfig(
+	name,
+	targetName,
+	language string,
+	classLabels []string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_multiclass")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_multiclass" {
+	name        		  							  = "%s"
+	target_type           							  = "Multiclass"
+	target_name           							  = "%s"
+	language 			  							  = "%s"
+	class_labels  		  							  = [%s]
+	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	is_proxy 										  = true
+	%s
+}
+`, resourceBlock, name, targetName, language, "\""+strings.Join(classLabels, "\",\"")+"\"", customModelBlock)
+}
+
+func regressionCustomModelResourceConfig(
+	name,
+	targetName,
+	language string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_regression")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_regression" {
+	name        		  							  = "%s"
+	target_type           							  = "Regression"
+	target_name           							  = "%s"
+	language 			  							  = "%s"
+	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	%s
+}
+`, resourceBlock, name, targetName, language, customModelBlock)
+}
+
+func textGenerationCustomModelResourceConfig(
+	name,
+	targetName,
+	language string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_text_generation")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_text_generation" {
+	name        		  							  = "%s"
+	target_type           							  = "TextGeneration"
+	target_name           							  = "%s"
+	language 			  							  = "%s"
+	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	is_proxy 										  = true
+	%s
+}
+`, resourceBlock, name, targetName, language, customModelBlock)
+}
+
+func unstructuredCustomModelResourceConfig(
+	name,
+	language string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_unstructured")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_unstructured" {
+	name        		  							  = "%s"
+	target_type           							  = "Unstructured"
+	language 			  							  = "%s"
+	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	%s
+}
+`, resourceBlock, name, language, customModelBlock)
+}
+
+func remoteRepositoryResource(resourceName string) (string, string) {
+	resourceBlock := fmt.Sprintf(`
+resource "datarobot_remote_repository" "%s" {
+	name        = "Test Custom Model from Remote Repository"
+	description = "test"
+	location    = "https://github.com/datarobot-community/custom-models"
+	source_type = "github"
+}
+		`, resourceName)
+
+	customModelBlock := fmt.Sprintf(`
+	source_remote_repositories = [
+		{
+			id  = datarobot_remote_repository.%s.id
+			ref = "master"
+			source_paths = ["custom_inference/python/gan_mnist/custom.py"]
+		}
+	]
+	`, resourceName)
+
+	return resourceBlock, customModelBlock
 }
 
 func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc {
