@@ -11,21 +11,12 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  source_remote_repositories = [
-    {
-      id  = datarobot_remote_repository.example.id
-      ref = "master"
-      source_paths = [
-        "model_templates/python3_dummy_binary",
-      ]
-    }
-  ]
   local_files = [
     "file1.py",
     "file2.py",
   ]
   target_type           = "Binary"
-  target                = "my_label"
+  target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
 
   # Guards
@@ -54,6 +45,17 @@ resource "datarobot_custom_model" "example" {
     replicas       = 2
     network_access = "NONE"
   }
+
+  # Optional
+  # source_remote_repositories = [
+  #   {
+  #     id  = datarobot_remote_repository.example.id
+  #     ref = "master"
+  #     source_paths = [
+  #       "model_templates/python3_dummy_binary",
+  #     ]
+  #   }
+  # ]
 }
 
 output "example_id" {

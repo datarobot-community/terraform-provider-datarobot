@@ -1,3 +1,9 @@
+## 0.0.21
+
+FEATURES:
+
+- Add Custom Model training data and class labels
+
 ## 0.0.20
 
 FEATURES:

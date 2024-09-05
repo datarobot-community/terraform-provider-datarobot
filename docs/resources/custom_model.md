@@ -26,21 +26,12 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  source_remote_repositories = [
-    {
-      id  = datarobot_remote_repository.example.id
-      ref = "master"
-      source_paths = [
-        "model_templates/python3_dummy_binary",
-      ]
-    }
-  ]
   local_files = [
     "file1.py",
     "file2.py",
   ]
   target_type           = "Binary"
-  target                = "my_label"
+  target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
 
   # Guards
@@ -69,6 +60,17 @@ resource "datarobot_custom_model" "example" {
     replicas       = 2
     network_access = "NONE"
   }
+
+  # Optional
+  # source_remote_repositories = [
+  #   {
+  #     id  = datarobot_remote_repository.example.id
+  #     ref = "master"
+  #     source_paths = [
+  #       "model_templates/python3_dummy_binary",
+  #     ]
+  #   }
+  # ]
 }
 
 output "example_id" {
@@ -89,9 +91,11 @@ output "example_id" {
 - `base_environment_id` (String) The ID of the base environment for the Custom Model.
 - `base_environment_name` (String) The name of the base environment for the Custom Model.
 - `base_environment_version_id` (String) The ID of the base environment version for the Custom Model.
+- `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
+- `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
-- `is_proxy` (Boolean) The flag indicating if the Custom Model is a proxy model.
+- `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
 - `language` (String) The language used to build the Custom Model.
 - `local_files` (List of String) The list of local file paths used to build the Custom Model.
 - `negative_class_label` (String) The negative class label of the Custom Model.
@@ -102,12 +106,17 @@ output "example_id" {
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
-- `target` (String) The target name of the Custom Model.
+- `target_name` (String) The target name of the Custom Model.
 - `target_type` (String) The target type of the Custom Model.
+- `training_data_partition_column` (String) The name of the partition column in the training dataset assigned to the Custom Model.
+- `training_dataset_id` (String) The ID of the training dataset assigned to the Custom Model.
 
 ### Read-Only
 
+- `deployments_count` (Number) The number of deployments for the Custom Model.
 - `id` (String) The ID of the Custom Model.
+- `training_dataset_name` (String) The name of the training dataset assigned to the Custom Model.
+- `training_dataset_version_id` (String) The version ID of the training dataset assigned to the Custom Model.
 - `version_id` (String) The ID of the latest Custom Model version.
 
 <a id="nestedatt--guard_configurations"></a>
