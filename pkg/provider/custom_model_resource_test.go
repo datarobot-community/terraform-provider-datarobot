@@ -111,7 +111,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "local_files.0", "custom_model_resource_test.go"),
+					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource_test.go"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -276,7 +276,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(resourceName, "source_remote_repositories.0.id"),
 				),
 			},
-			// // Update local files
+			// // Update files
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -294,10 +294,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "local_files.0", "custom_model_resource.go"),
+					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource.go"),
 				),
 			},
-			// Remove local files
+			// Remove files
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -315,7 +315,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "local_files.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0"),
 				),
 			},
 			// Add resource settings
@@ -665,7 +665,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	name,
 	description string,
 	remoteRepositories []SourceRemoteRepository,
-	localFiles []basetypes.StringValue,
+	files []basetypes.StringValue,
 	guards []GuardConfiguration,
 	resourceSettings *CustomModelResourceSettings,
 	addTrainingData bool,
@@ -684,11 +684,11 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		remoteRepositoriesStr += "]"
 	}
 
-	localFilesStr := ""
-	if len(localFiles) > 0 {
-		localFilesStr = fmt.Sprintf(`
-		local_files = %v
-		`, localFiles)
+	filesStr := ""
+	if len(files) > 0 {
+		filesStr = fmt.Sprintf(`
+		files = %v
+		`, files)
 	}
 
 	guardsStr := ""
@@ -761,7 +761,7 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 }
-`, name, description, remoteRepositoriesStr, localFilesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+`, name, description, remoteRepositoriesStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
 }
 
 func binaryCustomModelResourceConfig(

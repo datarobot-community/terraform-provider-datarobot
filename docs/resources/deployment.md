@@ -19,7 +19,7 @@ resource "datarobot_custom_model" "example" {
   target_type           = "Binary"
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
-  local_files           = ["example.py"]
+  files                 = ["example.py"]
 }
 
 resource "datarobot_registered_model" "example" {

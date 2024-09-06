@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -303,4 +305,72 @@ func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues [
 				"value": types.StringType,
 			},
 		}, runtimeParameterValues)
+}
+
+func formatFiles(files types.Dynamic) ([]FileTuple, error) {
+	fileTuples := make([]FileTuple, 0)
+	switch value := files.UnderlyingValue().(type) {
+	case types.Tuple:
+		if len(value.Elements()) == 0 {
+			return fileTuples, nil
+		}
+
+		for i, item := range value.Elements() {
+			switch v := item.(type) {
+			case types.String:
+				filePath := v.ValueString()
+				fileTuples = append(fileTuples, FileTuple{
+					LocalPath:   filePath,
+					PathInModel: filepath.Base(filePath),
+				})
+			case types.Tuple:
+				if len(v.Elements()) > 2 {
+					return nil, fmt.Errorf("files[%d] has more than 2 elements", i)
+				}
+
+				localPath, isString1 := v.Elements()[0].(types.String)
+				pathInModel, isString2 := v.Elements()[1].(types.String)
+
+				if isString1 && isString2 {
+					fileTuples = append(fileTuples, FileTuple{
+						LocalPath:   localPath.ValueString(),
+						PathInModel: pathInModel.ValueString(),
+					})
+				} else {
+					return nil, fmt.Errorf("files[%d] has element that is not a string", i)
+				}
+			default:
+				return nil, errors.New("files must be a tuple of strings or tuples")
+			}
+		}
+	default:
+		return nil, errors.New("files must be a tuple")
+	}
+
+	return fileTuples, nil
+}
+
+func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {
+	fmt.Println("Reading file: ", localPath)
+
+	var fileReader *os.File
+	fileReader, err = os.Open(localPath)
+	if err != nil {
+		fmt.Println("Error opening file", err)
+		return
+	}
+	defer fileReader.Close()
+
+	var fileContent []byte
+	fileContent, err = io.ReadAll(fileReader)
+	if err != nil {
+		return
+	}
+
+	fileInfo = client.FileInfo{
+		Name:    filepath.Base(localPath),
+		Path:    pathInModel,
+		Content: fileContent,
+	}
+	return
 }
