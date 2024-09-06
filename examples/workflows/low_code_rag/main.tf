@@ -9,7 +9,7 @@ variable "google_cloud_credential_source_file" {
 terraform {
   required_providers {
     datarobot = {
-      source  = "datarobot-community/datarobot"
+      source = "datarobot-community/datarobot"
     }
   }
 }
