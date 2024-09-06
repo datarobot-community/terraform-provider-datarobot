@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,12 +12,15 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -39,6 +43,7 @@ const (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.ResourceWithImportState = &CustomModelResource{}
 var _ resource.ResourceWithModifyPlan = &CustomModelResource{}
+var _ resource.ResourceWithConfigValidators = &CustomModelResource{}
 
 func NewCustomModelResource() resource.Resource {
 	return &CustomModelResource{}
@@ -131,28 +136,37 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				MarkdownDescription: "The target type of the Custom Model.",
 			},
-			"target": schema.StringAttribute{
+			"target_name": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The target name of the Custom Model.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"positive_class_label": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				Default:             stringdefault.StaticString("1"),
 				MarkdownDescription: "The positive class label of the Custom Model.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"negative_class_label": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				Default:             stringdefault.StaticString("0"),
 				MarkdownDescription: "The negative class label of the Custom Model.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"prediction_threshold": schema.Float64Attribute{
 				Optional:            true,
 				Computed:            true,
-				Default:             float64default.StaticFloat64(0.5),
 				MarkdownDescription: "The prediction threshold of the Custom Model.",
+				PlanModifiers: []planmodifier.Float64{
+					float64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"language": schema.StringAttribute{
 				Optional:            true,
@@ -160,7 +174,27 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"is_proxy": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "The flag indicating if the Custom Model is a proxy model.",
+				Computed:            true,
+				MarkdownDescription: "Flag indicating if the Custom Model is a proxy model.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"class_labels": schema.ListAttribute{
+				Optional:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "Class labels for multiclass classification. Cannot be used with class_labels_file.",
+			},
+			"class_labels_file": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.",
+			},
+			"deployments_count": schema.Int64Attribute{
+				Computed:            true,
+				MarkdownDescription: "The number of deployments for the Custom Model.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"source_remote_repositories": schema.ListNestedAttribute{
 				Optional:            true,
@@ -269,6 +303,22 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
+			"training_dataset_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The ID of the training dataset assigned to the Custom Model.",
+			},
+			"training_dataset_version_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The version ID of the training dataset assigned to the Custom Model.",
+			},
+			"training_dataset_name": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The name of the training dataset assigned to the Custom Model.",
+			},
+			"training_data_partition_column": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The name of the partition column in the training dataset assigned to the Custom Model.",
+			},
 			"resource_settings": schema.SingleNestedAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -362,7 +412,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			&client.UpdateCustomModelRequest{
 				Name:        name,
 				Description: description,
-				TargetName:  plan.Target.ValueString(),
+				TargetName:  plan.TargetName.ValueString(),
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
@@ -378,12 +428,12 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
 
 		state.Name = types.StringValue(name)
-		state.Description = types.StringValue(description)
+		state.Description = plan.Description
 	} else {
-		if !IsKnown(plan.Target) || !IsKnown(plan.TargetType) || !IsKnown(plan.BaseEnvironmentName) {
+		if !IsKnown(plan.TargetType) || !IsKnown(plan.BaseEnvironmentName) {
 			resp.Diagnostics.AddError(
 				"Invalid Custom Model configuration",
-				"Target, Target Type, and Base Environment Name are required to create a Custom Model without a Source LLM Blueprint.",
+				"Target Type, and Base Environment Name are required to create a Custom Model without a Source LLM Blueprint.",
 			)
 			return
 		}
@@ -411,19 +461,24 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			return
 		}
 
+		classLabels, err := getClassLabels(plan)
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
+		}
+
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
 			Name:                plan.Name.ValueString(),
 			Description:         plan.Description.ValueString(),
 			TargetType:          plan.TargetType.ValueString(),
-			TargetName:          plan.Target.ValueString(),
+			TargetName:          plan.TargetName.ValueString(),
 			CustomModelType:     defaultCustomModelType,
 			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
 			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
 			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
 			Language:            plan.Language.ValueString(),
 			IsProxyModel:        plan.IsProxy.ValueBool(),
-			IsTrainingDataForVersionsPermanentlyEnabled: true,
+			ClassLabels:         classLabels,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -436,14 +491,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		state.ID = types.StringValue(customModelID)
 		state.Name = types.StringValue(name)
-		state.Description = types.StringValue(description)
+		state.Description = plan.Description
 		state.TargetType = types.StringValue(plan.TargetType.ValueString())
-		if IsKnown(plan.IsProxy) {
-			state.IsProxy = plan.IsProxy
-		}
-		if IsKnown(plan.Language) {
-			state.Language = plan.Language
-		}
+		state.ClassLabels = plan.ClassLabels
+		state.ClassLabelsFile = plan.ClassLabelsFile
+		state.Language = plan.Language
 
 		if plan.SourceRemoteRepositories == nil && plan.LocalFiles == nil {
 			resp.Diagnostics.AddError(
@@ -498,10 +550,12 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.LocalFiles = plan.LocalFiles
-	state.Target = types.StringValue(customModel.TargetName)
+	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
 	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
+	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) {
 		runtimeParameterValues := make([]RuntimeParameterValue, 0)
@@ -529,11 +583,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionCreateFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
-			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-			RuntimeParameterValues:   string(jsonParams),
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:          "false",
+			BaseEnvironmentID:      baseEnvironmentID,
+			RuntimeParameterValues: string(jsonParams),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
@@ -571,12 +624,24 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 	}
 
+	err = r.assignTrainingDataset(
+		ctx,
+		customModelID,
+		baseEnvironmentID,
+		plan.TrainingDatasetID,
+		plan.TrainingDataPartitionColumn,
+		&state)
+	if err != nil {
+		resp.Diagnostics.AddError("Error assigning training dataset to Custom Model", err.Error())
+		return
+	}
+
 	if plan.ResourceSettings != nil {
 		resourceSettings := *plan.ResourceSettings
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:       "false",
-			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentID:   baseEnvironmentID,
 			Replicas:            resourceSettings.Replicas.ValueInt64(),
 			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
 			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
@@ -601,7 +666,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -641,7 +709,10 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -673,16 +744,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 
 	id := state.ID.ValueString()
 
+	classLabels, err := getClassLabels(plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
+	}
+
 	traceAPICall("UpdateCustomModel")
 	customModel, err := r.provider.service.UpdateCustomModel(ctx,
 		id,
 		&client.UpdateCustomModelRequest{
 			Name:                plan.Name.ValueString(),
 			Description:         plan.Description.ValueString(),
-			TargetName:          plan.Target.ValueString(),
+			TargetName:          plan.TargetName.ValueString(),
 			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
 			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
 			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+			Language:            plan.Language.ValueString(),
+			ClassLabels:         classLabels,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -696,24 +774,24 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	state.Name = types.StringValue(customModel.Name)
-	state.Description = types.StringValue(customModel.Description)
-	state.Target = types.StringValue(customModel.TargetName)
+	if customModel.Description != "" {
+		state.Description = types.StringValue(customModel.Description)
+	}
+	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
 	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	if customModel.Language != "" {
+		state.Language = types.StringValue(customModel.Language)
+	}
+	state.ClassLabels = plan.ClassLabels
+	state.ClassLabelsFile = plan.ClassLabelsFile
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	planRuntimeParametersValues, _ := types.ListValueFrom(
-		ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"key":   types.StringType,
-				"type":  types.StringType,
-				"value": types.StringType,
-			},
-		}, []RuntimeParameterValue{})
+	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 
 	if IsKnown(plan.RuntimeParameterValues) {
 		planRuntimeParametersValues = plan.RuntimeParameterValues
@@ -808,7 +886,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 
 		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
-		createVersionFromLatestResp, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		createVersionFromLatestResp, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
@@ -917,7 +995,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
 		resourceSettings := *plan.ResourceSettings
 		traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:       "false",
 			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
 			Replicas:            resourceSettings.Replicas.ValueInt64(),
@@ -931,6 +1009,33 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		state.ResourceSettings = plan.ResourceSettings
 	}
 
+	if plan.TrainingDatasetID != state.TrainingDatasetID ||
+		plan.TrainingDataPartitionColumn != state.TrainingDataPartitionColumn {
+		keepTrainingHoldoutData := false
+		traceAPICall("CreateCustomModelVersionFromLatest")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:           "true",
+			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
+			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			return
+		}
+
+		err = r.assignTrainingDataset(
+			ctx,
+			customModel.ID,
+			customModel.LatestVersion.BaseEnvironmentID,
+			plan.TrainingDatasetID,
+			plan.TrainingDataPartitionColumn,
+			&state)
+		if err != nil {
+			resp.Diagnostics.AddError("Error assigning training dataset to Custom Model", err.Error())
+			return
+		}
+	}
+
 	traceAPICall("WaitForCustomModelToBeReady")
 	customModel, err = r.waitForCustomModelToBeReady(ctx, id)
 	if err != nil {
@@ -939,7 +1044,10 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters)
+	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+		ctx,
+		customModel.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -983,19 +1091,35 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	var state CustomModelResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if !IsKnown(plan.RuntimeParameterValues) {
 		// use empty list if runtime parameter values are unknown
-		plan.RuntimeParameterValues, _ = types.ListValueFrom(
-			ctx, types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"key":   types.StringType,
-					"type":  types.StringType,
-					"value": types.StringType,
-				},
-			}, []RuntimeParameterValue{})
+		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	}
+
+	if plan.TrainingDatasetID == state.TrainingDatasetID &&
+		plan.TrainingDataPartitionColumn == state.TrainingDataPartitionColumn {
+		// traning dataset is not changed
+		plan.TrainingDatasetVersionID = state.TrainingDatasetVersionID
+		plan.TrainingDatasetName = state.TrainingDatasetName
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.Conflicting(
+			path.MatchRoot("class_labels"),
+			path.MatchRoot("class_labels_file"),
+		),
+	}
 }
 
 func loadCustomModelToTerraformState(
@@ -1011,18 +1135,42 @@ func loadCustomModelToTerraformState(
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}
-	state.Target = types.StringValue(customModel.TargetName)
+	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
 	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	if customModel.Language != "" {
+		state.Language = types.StringValue(customModel.Language)
+	}
+	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
+	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
+
+	if len(customModel.ClassLabels) > 0 {
+		classLabels := make([]types.String, len(customModel.ClassLabels))
+		for i, classLabel := range customModel.ClassLabels {
+			classLabels[i] = types.StringValue(classLabel)
+		}
+		state.ClassLabels = classLabels
+	}
+
+	if customModel.LatestVersion.TrainingData != nil {
+		state.TrainingDatasetID = types.StringValue(customModel.LatestVersion.TrainingData.DatasetID)
+		state.TrainingDatasetVersionID = types.StringValue(customModel.LatestVersion.TrainingData.DatasetVersionID)
+		state.TrainingDatasetName = types.StringValue(customModel.LatestVersion.TrainingData.DatasetName)
+	}
+
+	if customModel.LatestVersion.HoldoutData != nil {
+		state.TrainingDataPartitionColumn = types.StringPointerValue(customModel.LatestVersion.HoldoutData.PartitionColumn)
+	}
+
 	loadResourceSettingsToTerraformState(customModel.LatestVersion, state)
 }
 
 func loadResourceSettingsToTerraformState(
-	customModelVersion client.CustomModelVersionResponse,
+	customModelVersion client.CustomModelVersion,
 	state *CustomModelResourceModel,
 ) {
 	resourceSettings := &CustomModelResourceSettings{
@@ -1067,6 +1215,34 @@ func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, c
 
 	traceAPICall("GetCustomModel")
 	return r.provider.service.GetCustomModel(ctx, customModelId)
+}
+
+func (r *CustomModelResource) waitForTrainingDataToBeAssigned(ctx context.Context, customModelId string) error {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("GetCustomModel")
+		customModel, err := r.provider.service.GetCustomModel(ctx, customModelId)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if customModel.LatestVersion.TrainingData.AssignmentError != nil {
+			return backoff.Permanent(errors.New(customModel.LatestVersion.TrainingData.AssignmentError.Message))
+		}
+		if customModel.LatestVersion.TrainingData.AssignmentInProgress {
+			return errors.New("assignment in progress")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
@@ -1359,7 +1535,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 
 	if len(filesToDelete) > 0 {
 		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 			FilesToDelete:     filesToDelete,
@@ -1428,7 +1604,7 @@ func (r *CustomModelResource) updateLocalFiles(
 
 	if len(filesToDelete) > 0 {
 		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionCreateFromLatestRequest{
+		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 			FilesToDelete:     filesToDelete,
@@ -1454,6 +1630,98 @@ func (r *CustomModelResource) updateLocalFiles(
 			customModel.ID,
 			customModel.LatestVersion.BaseEnvironmentID,
 		)
+	}
+
+	return
+}
+
+func (r *CustomModelResource) assignTrainingDataset(
+	ctx context.Context,
+	customModelID string,
+	baseEnvironmentID string,
+	trainingDatasetID types.String,
+	trainingDataPartitionColumn types.String,
+	state *CustomModelResourceModel,
+) (
+	err error,
+) {
+	if IsKnown(trainingDatasetID) {
+		trainingData := client.CustomModelTrainingData{
+			DatasetID: trainingDatasetID.ValueString(),
+		}
+
+		var jsonTrainingData []byte
+		jsonTrainingData, err = json.Marshal(trainingData)
+		if err != nil {
+			return
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		keepTrainingHoldoutData := false
+		createVersionFromLatestRequest := &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:           "false",
+			BaseEnvironmentID:       baseEnvironmentID,
+			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
+			TrainingData:            string(jsonTrainingData),
+		}
+
+		if IsKnown(trainingDataPartitionColumn) {
+			partitionColumn := trainingDataPartitionColumn.ValueString()
+
+			var jsonHoldoutData []byte
+			jsonHoldoutData, err = json.Marshal(client.CustomModelHoldoutData{
+				PartitionColumn: &partitionColumn,
+			})
+			if err != nil {
+				return
+			}
+			createVersionFromLatestRequest.HoldoutData = string(jsonHoldoutData)
+		}
+
+		var customModelVersion *client.CustomModelVersion
+		customModelVersion, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, createVersionFromLatestRequest)
+		if err != nil {
+			return
+		}
+		state.TrainingDatasetVersionID = types.StringValue(customModelVersion.TrainingData.DatasetVersionID)
+		state.TrainingDatasetName = types.StringValue(customModelVersion.TrainingData.DatasetName)
+
+		err = r.waitForTrainingDataToBeAssigned(ctx, customModelID)
+		if err != nil {
+			return
+		}
+	} else {
+		state.TrainingDatasetVersionID = types.StringNull()
+		state.TrainingDatasetName = types.StringNull()
+	}
+
+	state.TrainingDatasetID = trainingDatasetID
+	state.TrainingDataPartitionColumn = trainingDataPartitionColumn
+
+	return
+}
+
+func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err error) {
+	if IsKnown(plan.ClassLabelsFile) {
+		var classLabelFile *os.File
+		classLabelFile, err = os.Open(plan.ClassLabelsFile.ValueString())
+		if err != nil {
+			return
+		}
+		defer classLabelFile.Close()
+
+		scanner := bufio.NewScanner(classLabelFile)
+		for scanner.Scan() {
+			classLabels = append(classLabels, scanner.Text())
+		}
+
+		if err = scanner.Err(); err != nil {
+			return
+		}
+	} else {
+		for _, classLabel := range plan.ClassLabels {
+			classLabels = append(classLabels, classLabel.ValueString())
+		}
 	}
 
 	return

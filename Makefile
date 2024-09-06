@@ -2,7 +2,7 @@ HOSTNAME=registry.terraform.io
 NAMESPACE=datarobot-community
 NAME=datarobot
 BINARY=terraform-provider-${NAME}
-VERSION=0.0.20
+VERSION=0.0.22
 
 OS := $(if $(GOOS),$(GOOS),$(shell go env GOOS))
 ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))

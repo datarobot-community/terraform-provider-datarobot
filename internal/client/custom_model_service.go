@@ -8,17 +8,17 @@ const (
 )
 
 type CreateCustomModelRequest struct {
-	Name                                        string  `json:"name"`
-	TargetType                                  string  `json:"targetType"`
-	TargetName                                  string  `json:"targetName"`
-	NegativeClassLabel                          string  `json:"negativeClassLabel,omitempty"`
-	PositiveClassLabel                          string  `json:"positiveClassLabel,omitempty"`
-	PredictionThreshold                         float64 `json:"predictionThreshold,omitempty"`
-	CustomModelType                             string  `json:"customModelType"`
-	Description                                 string  `json:"description,omitempty"`
-	IsProxyModel                                bool    `json:"isProxyModel,omitempty"`
-	IsTrainingDataForVersionsPermanentlyEnabled bool    `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
-	Language                                    string  `json:"language,omitempty"`
+	Name                string   `json:"name"`
+	TargetType          string   `json:"targetType"`
+	CustomModelType     string   `json:"customModelType"`
+	TargetName          string   `json:"targetName,omitempty"`
+	NegativeClassLabel  string   `json:"negativeClassLabel,omitempty"`
+	PositiveClassLabel  string   `json:"positiveClassLabel,omitempty"`
+	PredictionThreshold float64  `json:"predictionThreshold,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	IsProxyModel        bool     `json:"isProxyModel,omitempty"`
+	Language            string   `json:"language,omitempty"`
+	ClassLabels         []string `json:"classLabels,omitempty"`
 }
 
 type CreateCustomModelFromLLMBlueprintRequest struct {
@@ -29,36 +29,37 @@ type CreateCustomModelVersionFromLLMBlueprintResponse struct {
 	CustomModelID string `json:"customModelId"`
 }
 
-type CreateCustomModelVersionResponse struct {
-	CustomModelID string `json:"customModelId"`
-	ID            string `json:"id"`
-}
-
 type CustomModel struct {
-	ID                  string                     `json:"id"`
-	Name                string                     `json:"name"`
-	Description         string                     `json:"description"`
-	LatestVersion       CustomModelVersionResponse `json:"latestVersion"`
-	TargetType          string                     `json:"targetType"`
-	TargetName          string                     `json:"targetName"`
-	CustomModelType     string                     `json:"customModelType"`
-	Language            string                     `json:"language"`
-	PositiveClassLabel  string                     `json:"positiveClassLabel"`
-	NegativeClassLabel  string                     `json:"negativeClassLabel"`
-	PredictionThreshold float64                    `json:"predictionThreshold"`
+	ID                                          string             `json:"id"`
+	Name                                        string             `json:"name"`
+	Description                                 string             `json:"description"`
+	LatestVersion                               CustomModelVersion `json:"latestVersion"`
+	TargetType                                  string             `json:"targetType"`
+	TargetName                                  string             `json:"targetName"`
+	CustomModelType                             string             `json:"customModelType"`
+	Language                                    string             `json:"language"`
+	PositiveClassLabel                          string             `json:"positiveClassLabel"`
+	NegativeClassLabel                          string             `json:"negativeClassLabel"`
+	PredictionThreshold                         float64            `json:"predictionThreshold"`
+	ClassLabels                                 []string           `json:"classLabels,omitempty"`
+	IsTrainingDataForVersionsPermanentlyEnabled bool               `json:"isTrainingDataForVersionsPermanentlyEnabled"`
+	IsProxyModel                                bool               `json:"isProxyModel"`
+	DeploymentsCount                            int64              `json:"deploymentsCount"`
 }
 
-type CustomModelVersionResponse struct {
-	ID                       string             `json:"id"`
-	Description              string             `json:"description"`
-	CustomModelID            string             `json:"customModelId"`
-	BaseEnvironmentID        string             `json:"baseEnvironmentId"`
-	BaseEnvironmentVersionID string             `json:"baseEnvironmentVersionId"`
-	RuntimeParameters        []RuntimeParameter `json:"runtimeParameters"`
-	Items                    []FileItem         `json:"items"`
-	MaximumMemory            *int64             `json:"maximumMemory"`
-	NetworkEgressPolicy      *string            `json:"networkEgressPolicy"`
-	Replicas                 *int64             `json:"replicas"`
+type CustomModelVersion struct {
+	ID                       string                   `json:"id"`
+	Description              string                   `json:"description"`
+	CustomModelID            string                   `json:"customModelId"`
+	BaseEnvironmentID        string                   `json:"baseEnvironmentId"`
+	BaseEnvironmentVersionID string                   `json:"baseEnvironmentVersionId"`
+	RuntimeParameters        []RuntimeParameter       `json:"runtimeParameters"`
+	Items                    []FileItem               `json:"items"`
+	MaximumMemory            *int64                   `json:"maximumMemory"`
+	NetworkEgressPolicy      *string                  `json:"networkEgressPolicy"`
+	Replicas                 *int64                   `json:"replicas"`
+	TrainingData             *CustomModelTrainingData `json:"trainingData"`
+	HoldoutData              *CustomModelHoldoutData  `json:"holdoutData"`
 }
 
 type FileItem struct {
@@ -76,12 +77,15 @@ type FileItem struct {
 }
 
 type UpdateCustomModelRequest struct {
-	Name                string  `json:"name,omitempty"`
-	Description         string  `json:"description,omitempty"`
-	TargetName          string  `json:"targetName,omitempty"`
-	PositiveClassLabel  string  `json:"positiveClassLabel,omitempty"`
-	NegativeClassLabel  string  `json:"negativeClassLabel,omitempty"`
-	PredictionThreshold float64 `json:"predictionThreshold,omitempty"`
+	Name                                        string   `json:"name,omitempty"`
+	Description                                 string   `json:"description,omitempty"`
+	TargetName                                  string   `json:"targetName,omitempty"`
+	PositiveClassLabel                          string   `json:"positiveClassLabel,omitempty"`
+	NegativeClassLabel                          string   `json:"negativeClassLabel,omitempty"`
+	PredictionThreshold                         float64  `json:"predictionThreshold,omitempty"`
+	Language                                    string   `json:"language,omitempty"`
+	ClassLabels                                 []string `json:"classLabels,omitempty"`
+	IsTrainingDataForVersionsPermanentlyEnabled bool     `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
 }
 
 type RuntimeParameter struct {
@@ -95,7 +99,7 @@ type RuntimeParameter struct {
 	CurrentValue   any     `json:"currentValue,omitempty"`
 }
 
-type CreateCustomModelVersionCreateFromLatestRequest struct {
+type CreateCustomModelVersionFromLatestRequest struct {
 	IsMajorUpdate            string   `json:"isMajorUpdate"`
 	BaseEnvironmentID        string   `json:"baseEnvironmentId,omitempty"`
 	BaseEnvironmentVersionID string   `json:"baseEnvironmentVersionId,omitempty"`
@@ -104,6 +108,25 @@ type CreateCustomModelVersionCreateFromLatestRequest struct {
 	Replicas                 int64    `json:"replicas,omitempty"`
 	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
 	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
+	KeepTrainingHoldoutData  *bool    `json:"keepTrainingHoldoutData,omitempty"`
+	TrainingData             string   `json:"trainingData,omitempty"`
+	HoldoutData              string   `json:"holdoutData,omitempty"`
+}
+
+type CustomModelTrainingData struct {
+	DatasetID            string                       `json:"datasetId,omitempty"`
+	DatasetVersionID     string                       `json:"datasetVersionId,omitempty"`
+	DatasetName          string                       `json:"datasetName,omitempty"`
+	AssignmentInProgress bool                         `json:"assignmentInProgress,omitempty"`
+	AssignmentError      *TrainingDataAssignmentError `json:"assignmentError,omitempty"`
+}
+
+type TrainingDataAssignmentError struct {
+	Message string `json:"message"`
+}
+
+type CustomModelHoldoutData struct {
+	PartitionColumn *string `json:"partitionColumn,omitempty"`
 }
 
 type CreateCustomModelVersionFromFilesRequest struct {

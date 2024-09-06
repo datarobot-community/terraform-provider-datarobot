@@ -119,7 +119,7 @@ resource "datarobot_custom_model" "test_registered_model" {
 	name = "test registered model"
 	description = "test"
 	target_type = "Binary"
-	target = "my_label"
+	target_name = "my_label"
 	base_environment_name = "[GenAI] Python 3.11 with Moderations"
 	source_remote_repositories = [
 		{

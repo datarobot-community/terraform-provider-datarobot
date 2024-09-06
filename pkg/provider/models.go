@@ -90,15 +90,22 @@ type CustomModelResourceModel struct {
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	LocalFiles                     []types.String                  `tfsdk:"local_files"`
-	Target                         types.String                    `tfsdk:"target"`
+	TargetName                     types.String                    `tfsdk:"target_name"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
 	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
 	NegativeClassLabel             types.String                    `tfsdk:"negative_class_label"`
 	PredictionThreshold            types.Float64                   `tfsdk:"prediction_threshold"`
 	Language                       types.String                    `tfsdk:"language"`
 	IsProxy                        types.Bool                      `tfsdk:"is_proxy"`
+	ClassLabels                    []types.String                  `tfsdk:"class_labels"`
+	ClassLabelsFile                types.String                    `tfsdk:"class_labels_file"`
+	DeploymentsCount               types.Int64                     `tfsdk:"deployments_count"`
 	GuardConfigurations            []GuardConfiguration            `tfsdk:"guard_configurations"`
 	OverallModerationConfiguration *OverallModerationConfiguration `tfsdk:"overall_moderation_configuration"`
+	TrainingDatasetID              types.String                    `tfsdk:"training_dataset_id"`
+	TrainingDatasetVersionID       types.String                    `tfsdk:"training_dataset_version_id"`
+	TrainingDatasetName            types.String                    `tfsdk:"training_dataset_name"`
+	TrainingDataPartitionColumn    types.String                    `tfsdk:"training_data_partition_column"`
 	ResourceSettings               *CustomModelResourceSettings    `tfsdk:"resource_settings"`
 }
 

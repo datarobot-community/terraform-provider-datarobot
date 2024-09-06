@@ -17,7 +17,7 @@ resource "datarobot_custom_model" "example" {
   name                  = "Example Custom Model"
   description           = "Description for the example custom model"
   target_type           = "Binary"
-  target                = "my_label"
+  target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
   local_files           = ["example.py"]
 }
