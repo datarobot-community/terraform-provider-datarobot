@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
@@ -26,7 +26,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 const (
@@ -217,10 +216,13 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
-			"local_files": schema.ListAttribute{
+			"folder_path": schema.StringAttribute{
 				Optional:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "The list of local file paths used to build the Custom Model.",
+				MarkdownDescription: "The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.",
+			},
+			"files": schema.DynamicAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
 			},
 			"guard_configurations": schema.ListNestedAttribute{
 				Optional:            true,
@@ -497,10 +499,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.ClassLabelsFile = plan.ClassLabelsFile
 		state.Language = plan.Language
 
-		if plan.SourceRemoteRepositories == nil && plan.LocalFiles == nil {
+		if plan.SourceRemoteRepositories == nil && !IsKnown(plan.FolderPath) && !IsKnown(plan.Files) {
 			resp.Diagnostics.AddError(
 				"Invalid Custom Model configuration",
-				"Source Remote Repository or Local Files are required to create a Custom Model without a Source LLM Blueprint.",
+				"Source Remote Repository, Folder Path, or Files are required to create a Custom Model without a Source LLM Blueprint.",
 			)
 			return
 		}
@@ -524,16 +526,14 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	errSummary, errDetail := r.createCustomModelVersionFromFiles(
+	err := r.createCustomModelVersionFromFiles(
 		ctx,
-		plan.LocalFiles,
+		plan.FolderPath,
+		plan.Files,
 		customModelID,
 		baseEnvironmentID)
-	if errSummary != "" {
-		resp.Diagnostics.AddError(
-			errSummary,
-			errDetail,
-		)
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
 	}
 
@@ -549,7 +549,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-	state.LocalFiles = plan.LocalFiles
+	state.FolderPath = plan.FolderPath
+	state.Files = plan.Files
 	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
@@ -922,17 +923,15 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	if !reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) {
-		errSummary, errDetail := r.updateLocalFiles(ctx, customModel, state, plan)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(
-				errSummary,
-				errDetail,
-			)
+	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
+		err = r.updateLocalFiles(ctx, customModel, plan)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
 			return
 		}
 
-		state.LocalFiles = plan.LocalFiles
+		state.Files = plan.Files
+		state.FolderPath = plan.FolderPath
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -1285,49 +1284,60 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
-	files []basetypes.StringValue,
+	folderPath types.String,
+	files types.Dynamic,
 	customModelID string,
 	baseEnvironmentID string,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
-	if files == nil {
-		return
+	localFiles := make([]client.FileInfo, 0)
+	if IsKnown(folderPath) {
+		folder := folderPath.ValueString()
+		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+			if innerErr != nil {
+				return innerErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			fileInfo, innerErr := getFileInfo(path, path)
+			if innerErr != nil {
+				return innerErr
+			}
+			localFiles = append(localFiles, fileInfo)
+
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
-	localFiles := make([]client.FileInfo, 0)
-	for _, file := range files {
-		filePath := file.ValueString()
-		fileReader, err := os.Open(filePath)
+	fileTuples := make([]FileTuple, 0)
+	if IsKnown(files) {
+		fileTuples, err = formatFiles(files)
 		if err != nil {
-			errSummary = "Error opening local file"
-			errDetail = err.Error()
 			return
 		}
-		defer fileReader.Close()
-		fileContent, err := io.ReadAll(fileReader)
+	}
+
+	for _, file := range fileTuples {
+		var fileInfo client.FileInfo
+		fileInfo, err = getFileInfo(file.LocalPath, file.PathInModel)
 		if err != nil {
-			errSummary = "Error reading local file"
-			errDetail = err.Error()
 			return
 		}
 
-		localFiles = append(localFiles, client.FileInfo{
-			Name:    filePath,
-			Path:    filePath,
-			Content: fileContent,
-		})
+		localFiles = append(localFiles, fileInfo)
 	}
 
 	traceAPICall("CreateCustomModelVersionFromLocalFiles")
-	_, err := r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
+	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
 		BaseEnvironmentID: baseEnvironmentID,
 		Files:             localFiles,
 	})
 	if err != nil {
-		errSummary = "Error creating Custom Model version from local files"
-		errDetail = err.Error()
 		return
 	}
 
@@ -1585,54 +1595,36 @@ func (r *CustomModelResource) updateRemoteRepositories(
 func (r *CustomModelResource) updateLocalFiles(
 	ctx context.Context,
 	customModel *client.CustomModel,
-	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
 	filesToDelete := make([]string, 0)
-	for _, file := range state.LocalFiles {
-		if !contains(plan.LocalFiles, file) {
-			for _, item := range customModel.LatestVersion.Items {
-				if item.FilePath == file.ValueString() && item.FileSource == "local" {
-					filesToDelete = append(filesToDelete, item.ID)
-				}
-			}
+	for _, item := range customModel.LatestVersion.Items {
+		if item.FileSource == "local" {
+			filesToDelete = append(filesToDelete, item.ID)
 		}
 	}
 
 	if len(filesToDelete) > 0 {
 		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 			FilesToDelete:     filesToDelete,
 		})
 		if err != nil {
-			errSummary = "Error creating Custom Model version"
-			errDetail = err.Error()
 			return
 		}
 	}
 
-	filesToAdd := make([]string, 0)
-	for _, file := range plan.LocalFiles {
-		if !contains(state.LocalFiles, file) {
-			filesToAdd = append(filesToAdd, file.ValueString())
-		}
-	}
-
-	if len(filesToAdd) > 0 {
-		return r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.LocalFiles,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		)
-	}
-
-	return
+	return r.createCustomModelVersionFromFiles(
+		ctx,
+		plan.FolderPath,
+		plan.Files,
+		customModel.ID,
+		customModel.LatestVersion.BaseEnvironmentID,
+	)
 }
 
 func (r *CustomModelResource) assignTrainingDataset(

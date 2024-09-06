@@ -11,7 +11,7 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  local_files = [
+  files = [
     "file1.py",
     "file2.py",
   ]

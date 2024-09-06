@@ -1,3 +1,9 @@
+## 0.0.23
+
+FEATURES:
+
+- Support directories and relative file paths for Custom Models
+
 ## 0.0.22
 
 FEATURES:

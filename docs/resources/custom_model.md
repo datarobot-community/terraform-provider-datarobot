@@ -26,7 +26,7 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  local_files = [
+  files = [
     "file1.py",
     "file2.py",
   ]
@@ -94,10 +94,11 @@ output "example_id" {
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
+- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.
+- `folder_path` (String) The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
 - `language` (String) The language used to build the Custom Model.
-- `local_files` (List of String) The list of local file paths used to build the Custom Model.
 - `negative_class_label` (String) The negative class label of the Custom Model.
 - `overall_moderation_configuration` (Attributes) The overall moderation configuration for the Custom Model. (see [below for nested schema](#nestedatt--overall_moderation_configuration))
 - `positive_class_label` (String) The positive class label of the Custom Model.
