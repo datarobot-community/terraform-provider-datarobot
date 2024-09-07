@@ -61,6 +61,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	fileName := "custom_model_resource_test.go"
+	fileName2 := "custom_model_resource.go"
+
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
 			Ref:         basetypes.NewStringValue("master"),
@@ -79,7 +82,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -129,7 +132,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource_test.go"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -154,7 +157,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName), PathInModel: basetypes.NewStringValue("dir/custom_model_resource_test.go")}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -230,6 +233,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.path_in_model", "dir/custom_model_resource_test.go"),
 				),
 			},
 			// Remove guards
@@ -238,7 +242,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -264,7 +268,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -287,7 +291,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -308,7 +312,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource.go")},
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName2)}},
 					nil,
 					nil,
 					false),
@@ -320,7 +324,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource.go"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", fileName2),
 				),
 			},
 			// Remove files
@@ -341,7 +345,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.local_path"),
 				),
 			},
 			// Add resource settings
@@ -588,10 +592,11 @@ func TestAccUnstructuredCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: unstructuredCustomModelResourceConfig("example_name", "python"),
+				Config: basicCustomModelResourceConfig("example_name", "Unstructured", "python"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Unstructured"),
 					resource.TestCheckResourceAttr(resourceName, "language", "python"),
 					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -600,10 +605,53 @@ func TestAccUnstructuredCustomModelResource(t *testing.T) {
 			},
 			// Update parameters
 			{
-				Config: unstructuredCustomModelResourceConfig("new_example_name", "r"),
+				Config: basicCustomModelResourceConfig("new_example_name", "Unstructured", "r"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Unstructured"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccAnomalyCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_anomaly"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: basicCustomModelResourceConfig("example_name", "Anomaly", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Anomaly"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: basicCustomModelResourceConfig("new_example_name", "Anomaly", "r"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Anomaly"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -691,7 +739,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	name,
 	description string,
 	remoteRepositories []SourceRemoteRepository,
-	files []basetypes.StringValue,
+	files []FileTuple,
 	guards []GuardConfiguration,
 	resourceSettings *CustomModelResourceSettings,
 	addTrainingData bool,
@@ -712,9 +760,23 @@ func customModelWithoutLlmBlueprintResourceConfig(
 
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = fmt.Sprintf(`
-		files = %v
-		`, files)
+		filesStr = "files = ["
+		for _, file := range files {
+			pathInModelStr := ""
+			if IsKnown(file.PathInModel) {
+				pathInModelStr = fmt.Sprintf(`
+				path_in_model = %s
+				`, file.PathInModel)
+			}
+			filesStr += fmt.Sprintf(`
+				{
+					local_path = %s
+					%s
+				},
+			`, file.LocalPath, pathInModelStr)
+		}
+
+		filesStr += "]"
 	}
 
 	guardsStr := ""
@@ -908,22 +970,23 @@ resource "datarobot_custom_model" "test_text_generation" {
 `, resourceBlock, name, targetName, language, customModelBlock)
 }
 
-func unstructuredCustomModelResourceConfig(
+func basicCustomModelResourceConfig(
 	name,
+	targetType,
 	language string) string {
-	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_unstructured")
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_basic")
 
 	return fmt.Sprintf(`
 %s
 
-resource "datarobot_custom_model" "test_unstructured" {
+resource "datarobot_custom_model" "test_%s" {
 	name        		  							  = "%s"
-	target_type           							  = "Unstructured"
+	target_type           							  = "%s"
 	language 			  							  = "%s"
 	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
 	%s
 }
-`, resourceBlock, name, language, customModelBlock)
+`, resourceBlock, strings.ToLower(targetType), name, targetType, language, customModelBlock)
 }
 
 func remoteRepositoryResource(resourceName string) (string, string) {

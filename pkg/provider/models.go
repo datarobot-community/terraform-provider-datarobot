@@ -90,7 +90,7 @@ type CustomModelResourceModel struct {
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	FolderPath                     types.String                    `tfsdk:"folder_path"`
-	Files                          types.Dynamic                   `tfsdk:"files"`
+	Files                          []FileTuple                     `tfsdk:"files"`
 	TargetName                     types.String                    `tfsdk:"target_name"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
 	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
@@ -111,8 +111,8 @@ type CustomModelResourceModel struct {
 }
 
 type FileTuple struct {
-	LocalPath   string
-	PathInModel string
+	LocalPath   types.String `tfsdk:"local_path"`
+	PathInModel types.String `tfsdk:"path_in_model"`
 }
 
 type RuntimeParameterValue struct {

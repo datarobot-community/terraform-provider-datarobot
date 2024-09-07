@@ -320,47 +320,16 @@ func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues [
 		}, runtimeParameterValues)
 }
 
-func formatFiles(files types.Dynamic) ([]FileTuple, error) {
-	fileTuples := make([]FileTuple, 0)
-	switch value := files.UnderlyingValue().(type) {
-	case types.Tuple:
-		if len(value.Elements()) == 0 {
-			return fileTuples, nil
+func formatFiles(files []FileTuple) (fileTuples []FileTuple) {
+	fileTuples = make([]FileTuple, len(files))
+	for i, file := range files {
+		if !IsKnown(file.PathInModel) {
+			file.PathInModel = types.StringValue(filepath.Base(file.LocalPath.ValueString()))
 		}
-
-		for i, item := range value.Elements() {
-			switch v := item.(type) {
-			case types.String:
-				filePath := v.ValueString()
-				fileTuples = append(fileTuples, FileTuple{
-					LocalPath:   filePath,
-					PathInModel: filepath.Base(filePath),
-				})
-			case types.Tuple:
-				if len(v.Elements()) > 2 {
-					return nil, fmt.Errorf("files[%d] has more than 2 elements", i)
-				}
-
-				localPath, isString1 := v.Elements()[0].(types.String)
-				pathInModel, isString2 := v.Elements()[1].(types.String)
-
-				if isString1 && isString2 {
-					fileTuples = append(fileTuples, FileTuple{
-						LocalPath:   localPath.ValueString(),
-						PathInModel: pathInModel.ValueString(),
-					})
-				} else {
-					return nil, fmt.Errorf("files[%d] has element that is not a string", i)
-				}
-			default:
-				return nil, errors.New("files must be a tuple of strings or tuples")
-			}
-		}
-	default:
-		return nil, errors.New("files must be a tuple")
+		fileTuples[i] = file
 	}
 
-	return fileTuples, nil
+	return
 }
 
 func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {

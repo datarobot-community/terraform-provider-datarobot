@@ -222,9 +222,21 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				MarkdownDescription: "The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "Files for the Custom Model.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"local_path": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The local filesystem path of the file.",
+						},
+						"path_in_model": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The path where the file should be placed in the Custom Model. If not provided, the basename of the local path will be used.",
+						},
+					},
+				},
 			},
 			"guard_configurations": schema.ListNestedAttribute{
 				Optional:            true,
@@ -541,7 +553,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.ClassLabelsFile = plan.ClassLabelsFile
 		state.Language = plan.Language
 
-		if plan.SourceRemoteRepositories == nil && !IsKnown(plan.FolderPath) && !IsKnown(plan.Files) {
+		if plan.SourceRemoteRepositories == nil && !IsKnown(plan.FolderPath) && len(plan.Files) == 0 {
 			resp.Diagnostics.AddError(
 				"Invalid Custom Model configuration",
 				"Source Remote Repository, Folder Path, or Files are required to create a Custom Model without a Source LLM Blueprint.",
@@ -1334,7 +1346,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
 	folderPath types.String,
-	files types.Dynamic,
+	files []FileTuple,
 	customModelID string,
 	baseEnvironmentID string,
 ) (
@@ -1363,17 +1375,9 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		}
 	}
 
-	fileTuples := make([]FileTuple, 0)
-	if IsKnown(files) {
-		fileTuples, err = formatFiles(files)
-		if err != nil {
-			return
-		}
-	}
-
-	for _, file := range fileTuples {
+	for _, file := range formatFiles(files) {
 		var fileInfo client.FileInfo
-		fileInfo, err = getFileInfo(file.LocalPath, file.PathInModel)
+		fileInfo, err = getFileInfo(file.LocalPath.ValueString(), file.PathInModel.ValueString())
 		if err != nil {
 			return
 		}

@@ -94,7 +94,7 @@ output "example_id" {
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
-- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.
+- `files` (Attributes List) Files for the Custom Model. (see [below for nested schema](#nestedatt--files))
 - `folder_path` (String) The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
@@ -120,6 +120,18 @@ output "example_id" {
 - `training_dataset_version_id` (String) The version ID of the training dataset assigned to the Custom Model.
 - `version_id` (String) The ID of the latest Custom Model version.
 
+<a id="nestedatt--files"></a>
+### Nested Schema for `files`
+
+Required:
+
+- `local_path` (String) The local filesystem path of the file.
+
+Optional:
+
+- `path_in_model` (String) The path where the file should be placed in the Custom Model. If not provided, the basename of the local path will be used.
+
+
 <a id="nestedatt--guard_configurations"></a>
 ### Nested Schema for `guard_configurations`
 
@@ -134,6 +146,10 @@ Optional:
 
 - `deployment_id` (String) The deployment ID of this guard.
 - `input_column_name` (String) The input column name of this guard.
+- `llm_type` (String) The LLM type for this guard.
+- `openai_api_base` (String) The OpenAI API base URL for this guard.
+- `openai_credential` (String) The ID of an OpenAI credential for this guard.
+- `openai_deployment_id` (String) The ID of an OpenAI deployment for this guard.
 - `output_column_name` (String) The output column name of this guard.
 
 <a id="nestedatt--guard_configurations--intervention"></a>
