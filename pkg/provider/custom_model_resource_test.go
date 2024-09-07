@@ -8,6 +8,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -93,6 +94,23 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								},
 							},
 						},
+						{
+							TemplateName: basetypes.NewStringValue("Faithfulness"),
+							Name:         basetypes.NewStringValue("Faithfulness response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:  basetypes.NewStringValue("block"),
+								Message: basetypes.NewStringValue("you have been blocked by Faithfulness"),
+								Condition: GuardCondition{
+									Comparand:  basetypes.NewFloat64Value(0),
+									Comparator: basetypes.NewStringValue("equals"),
+								},
+							},
+							OpenAICredential:   basetypes.NewStringValue("test"),
+							OpenAIApiBase:      basetypes.NewStringValue("https://datarobot-genai-enablement.openai.azure.com/"),
+							OpenAIDeploymentID: basetypes.NewStringValue("test"),
+							LlmType:            basetypes.NewStringValue("azureOpenAi"),
+						},
 					},
 					nil,
 					false),
@@ -119,6 +137,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0.2"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "lessThan"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_credential"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_api_base"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_deployment_id"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.llm_type", "azureOpenAi"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "2048"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "PUBLIC"),
@@ -146,6 +168,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 									Comparator: basetypes.NewStringValue("equals"),
 								},
 							},
+							OpenAICredential: basetypes.NewStringValue("test"),
+							LlmType:          basetypes.NewStringValue("openAi"),
 						},
 						{
 							TemplateName: basetypes.NewStringValue("Token Count"),
@@ -204,9 +228,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Faithfulness"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
 				),
 			},
-			// // Remove guards
+			// Remove guards
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -695,6 +721,20 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	if len(guards) > 0 {
 		guardsStr = "guard_configurations = ["
 		for _, guard := range guards {
+			guardCredentialStr := ""
+			if guard.OpenAICredential != types.StringNull() {
+				guardCredentialStr = fmt.Sprintf(`
+				openai_credential = "${datarobot_api_token_credential.test_without_llm_blueprint.id}"
+				llm_type = %s
+				`, guard.LlmType)
+				if IsKnown(guard.OpenAIApiBase) {
+					guardCredentialStr += fmt.Sprintf(`
+					openai_api_base = %s
+					openai_deployment_id = %s
+					`, guard.OpenAIApiBase, guard.OpenAIDeploymentID)
+				}
+			}
+
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
@@ -708,7 +748,16 @@ func customModelWithoutLlmBlueprintResourceConfig(
 						comparator = %s
 					}
 				}
-			},`, guard.TemplateName, guard.Name, guard.Stages, guard.Intervention.Action, guard.Intervention.Message, guard.Intervention.Condition.Comparand, guard.Intervention.Condition.Comparator)
+				%s
+			},`,
+				guard.TemplateName,
+				guard.Name,
+				guard.Stages,
+				guard.Intervention.Action,
+				guard.Intervention.Message,
+				guard.Intervention.Condition.Comparand,
+				guard.Intervention.Condition.Comparator,
+				guardCredentialStr)
 		}
 		guardsStr += "]"
 	}
@@ -746,6 +795,11 @@ resource "datarobot_remote_repository" "test_custom_model_from_remote_repository
 	description = "test"
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
+}
+
+resource "datarobot_api_token_credential" "test_without_llm_blueprint" {
+	name = "open ai credential"
+	api_token = "test"
 }
 	
 resource "datarobot_custom_model" "test_without_llm_blueprint" {

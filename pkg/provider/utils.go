@@ -27,6 +27,9 @@ import (
 
 const (
 	defaultTimeoutMinutes = 30
+
+	faithfulnessOpenAiRuntimeParam      = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_OPENAI_API_KEY"
+	faithfulnessAzureOpenAiRuntimeParam = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_AZURE_OPENAI_API_KEY"
 )
 
 type Knowable interface {
@@ -261,6 +264,11 @@ func formatRuntimeParameterValues(
 			continue
 		}
 
+		if isManagedByGuards(param) {
+			// skip the parameter if it is managed by guards
+			continue
+		}
+
 		parameter := RuntimeParameterValue{
 			Key:   types.StringValue(param.FieldName),
 			Type:  types.StringValue(param.Type),
@@ -283,6 +291,11 @@ func formatRuntimeParameterValues(
 	}
 
 	return listValueFromRuntimParameters(ctx, parameters)
+}
+
+func isManagedByGuards(param client.RuntimeParameter) bool {
+	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
+		param.FieldName == faithfulnessAzureOpenAiRuntimeParam
 }
 
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
@@ -351,8 +364,6 @@ func formatFiles(files types.Dynamic) ([]FileTuple, error) {
 }
 
 func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {
-	fmt.Println("Reading file: ", localPath)
-
 	var fileReader *os.File
 	fileReader, err = os.Open(localPath)
 	if err != nil {

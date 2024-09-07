@@ -13,6 +13,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -25,6 +26,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -227,6 +229,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"guard_configurations": schema.ListNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "The guard configurations for the Custom Model.",
+
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"template_name": schema.StringAttribute{
@@ -283,6 +286,45 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 						"output_column_name": schema.StringAttribute{
 							Optional:            true,
 							MarkdownDescription: "The output column name of this guard.",
+						},
+						"openai_credential": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The ID of an OpenAI credential for this guard.",
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("llm_type"),
+								),
+							},
+						},
+						"openai_deployment_id": schema.StringAttribute{
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+									path.MatchRelative().AtParent().AtName("openai_api_base"),
+								),
+							},
+							Optional:            true,
+							MarkdownDescription: "The ID of an OpenAI deployment for this guard.",
+						},
+						"openai_api_base": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The OpenAI API base URL for this guard.",
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+									path.MatchRelative().AtParent().AtName("openai_deployment_id"),
+								),
+							},
+						},
+						"llm_type": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The LLM type for this guard.",
+							Validators: []validator.String{
+								stringvalidator.OneOf("openAi", "azureOpenAi"),
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+								),
+							},
 						},
 					},
 				},
@@ -750,19 +792,22 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
 	}
 
+	updateRequest := &client.UpdateCustomModelRequest{
+		Name:        plan.Name.ValueString(),
+		Description: plan.Description.ValueString(),
+	}
+
+	if state.DeploymentsCount.ValueInt64() < 1 {
+		updateRequest.TargetName = plan.TargetName.ValueString()
+		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
+		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
+		updateRequest.PredictionThreshold = plan.PredictionThreshold.ValueFloat64()
+		updateRequest.Language = plan.Language.ValueString()
+		updateRequest.ClassLabels = classLabels
+	}
+
 	traceAPICall("UpdateCustomModel")
-	customModel, err := r.provider.service.UpdateCustomModel(ctx,
-		id,
-		&client.UpdateCustomModelRequest{
-			Name:                plan.Name.ValueString(),
-			Description:         plan.Description.ValueString(),
-			TargetName:          plan.TargetName.ValueString(),
-			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
-			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
-			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
-			Language:            plan.Language.ValueString(),
-			ClassLabels:         classLabels,
-		})
+	customModel, err := r.provider.service.UpdateCustomModel(ctx, id, updateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
@@ -1118,6 +1163,10 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 			path.MatchRoot("class_labels"),
 			path.MatchRoot("class_labels_file"),
 		),
+		resourcevalidator.RequiredTogether(
+			path.MatchRoot("positive_class_label"),
+			path.MatchRoot("negative_class_label"),
+		),
 	}
 }
 
@@ -1384,14 +1433,18 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:         existingGuardConfig.Name,
-			Description:  existingGuardConfig.Description,
-			Type:         existingGuardConfig.Type,
-			Stages:       existingGuardConfig.Stages,
-			Intervention: intervention,
-			DeploymentID: existingGuardConfig.DeploymentID,
-			NemoInfo:     existingGuardConfig.NemoInfo,
-			ModelInfo:    existingGuardConfig.ModelInfo,
+			Name:               existingGuardConfig.Name,
+			Description:        existingGuardConfig.Description,
+			Type:               existingGuardConfig.Type,
+			Stages:             existingGuardConfig.Stages,
+			Intervention:       intervention,
+			DeploymentID:       existingGuardConfig.DeploymentID,
+			NemoInfo:           existingGuardConfig.NemoInfo,
+			ModelInfo:          existingGuardConfig.ModelInfo,
+			OpenAICredential:   existingGuardConfig.OpenAICredential,
+			OpenAIApiBase:      existingGuardConfig.OpenAIApiBase,
+			OpenAIDeploymentID: existingGuardConfig.OpenAIDeploymentID,
+			LlmType:            existingGuardConfig.LlmType,
 		}
 
 		if existingGuardConfig.OOTBType != "" {
@@ -1445,10 +1498,17 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 					},
 				},
 			},
-			ModelInfo: guardTemplate.ModelInfo,
-			// TODO: allow user to input Nemo Info
-			NemoInfo:     guardTemplate.NemoInfo,
+			ModelInfo:    guardTemplate.ModelInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
+
+			// TODO: allow user to input Nemo Info
+			NemoInfo: guardTemplate.NemoInfo,
+
+			// Faithfulness Guard specific fields
+			OpenAICredential:   guardConfigToAdd.OpenAICredential.ValueString(),
+			OpenAIApiBase:      guardConfigToAdd.OpenAIApiBase.ValueString(),
+			OpenAIDeploymentID: guardConfigToAdd.OpenAIDeploymentID.ValueString(),
+			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
 		if guardTemplate.OOTBType != "" {

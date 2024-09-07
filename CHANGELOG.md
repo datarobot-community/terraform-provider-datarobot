@@ -1,3 +1,9 @@
+## 0.0.24
+
+FEATURES:
+
+- Support Faithfulness Guard with OpenAI credentials
+
 ## 0.0.23
 
 FEATURES:
