@@ -380,7 +380,7 @@ func customApplicationResourceConfig(
 	if name == "" {
 		return fmt.Sprintf(`
 resource "datarobot_application_source" "%s" {
-	local_files = ["start-app.sh", "streamlit-app.py"]
+	files = [["start-app.sh"], ["streamlit-app.py"]]
 }
 
 resource "datarobot_custom_application" "test" {
@@ -392,7 +392,7 @@ resource "datarobot_custom_application" "test" {
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "%s" {
-	local_files = ["start-app.sh", "streamlit-app.py"]
+	files = [["start-app.sh"], ["streamlit-app.py"]]
 }
 
 resource "datarobot_custom_application" "test" {
