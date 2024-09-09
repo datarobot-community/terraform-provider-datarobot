@@ -211,19 +211,22 @@ type GuardConfigurationResponse struct {
 }
 
 type GuardConfiguration struct {
-	ID           string            `json:"id,omitempty"`
-	Name         string            `json:"name"`
-	Description  string            `json:"description"`
-	Stages       []string          `json:"stages"`
-	Type         string            `json:"type"`
-	OOTBType     string            `json:"ootbType,omitempty"`
-	Intervention GuardIntervention `json:"intervention"`
-	ErrorMessage string            `json:"errorMessage,omitempty"`
-	IsValid      bool              `json:"isValid,omitempty"`
-	LlmType      string            `json:"llmType,omitempty"`
-	DeploymentID string            `json:"deploymentId,omitempty"`
-	NemoInfo     NemoInfo          `json:"nemoInfo,omitempty"`
-	ModelInfo    GuardModelInfo    `json:"modelInfo,omitempty"`
+	ID                 string            `json:"id,omitempty"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Stages             []string          `json:"stages"`
+	Type               string            `json:"type"`
+	OOTBType           string            `json:"ootbType,omitempty"`
+	Intervention       GuardIntervention `json:"intervention"`
+	ErrorMessage       string            `json:"errorMessage,omitempty"`
+	IsValid            bool              `json:"isValid,omitempty"`
+	LlmType            string            `json:"llmType,omitempty"`
+	DeploymentID       string            `json:"deploymentId,omitempty"`
+	NemoInfo           NemoInfo          `json:"nemoInfo,omitempty"`
+	ModelInfo          GuardModelInfo    `json:"modelInfo,omitempty"`
+	OpenAICredential   string            `json:"openaiCredential,omitempty"`
+	OpenAIApiBase      string            `json:"openaiApiBase,omitempty"`
+	OpenAIDeploymentID string            `json:"openaiDeploymentId,omitempty"`
 }
 
 type GuardModelInfo struct {

@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -60,6 +62,25 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	fileName := "test-file.txt"
+	folderPath := "dir"
+	err := os.WriteFile(fileName, []byte(`test`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fileName)
+
+	err = os.Mkdir("dir", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("dir")
+
+	err = os.WriteFile("dir/"+fileName, []byte(`test`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
 			Ref:         basetypes.NewStringValue("master"),
@@ -78,7 +99,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: fileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -92,6 +114,23 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 									Comparator: basetypes.NewStringValue("lessThan"),
 								},
 							},
+						},
+						{
+							TemplateName: basetypes.NewStringValue("Faithfulness"),
+							Name:         basetypes.NewStringValue("Faithfulness response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:  basetypes.NewStringValue("block"),
+								Message: basetypes.NewStringValue("you have been blocked by Faithfulness"),
+								Condition: GuardCondition{
+									Comparand:  basetypes.NewFloat64Value(0),
+									Comparator: basetypes.NewStringValue("equals"),
+								},
+							},
+							OpenAICredential:   basetypes.NewStringValue("test"),
+							OpenAIApiBase:      basetypes.NewStringValue("https://datarobot-genai-enablement.openai.azure.com/"),
+							OpenAIDeploymentID: basetypes.NewStringValue("test"),
+							LlmType:            basetypes.NewStringValue("azureOpenAi"),
 						},
 					},
 					nil,
@@ -111,7 +150,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource_test.go"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -119,6 +159,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0.2"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "lessThan"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_credential"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_api_base"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_deployment_id"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.llm_type", "azureOpenAi"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "2048"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "PUBLIC"),
@@ -132,7 +176,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -146,6 +191,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 									Comparator: basetypes.NewStringValue("equals"),
 								},
 							},
+							OpenAICredential: basetypes.NewStringValue("test"),
+							LlmType:          basetypes.NewStringValue("openAi"),
 						},
 						{
 							TemplateName: basetypes.NewStringValue("Token Count"),
@@ -204,15 +251,20 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Faithfulness"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
 				),
 			},
-			// // Remove guards
+			// Remove guards
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -238,7 +290,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -261,7 +314,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource_test.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -282,7 +336,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					[]basetypes.StringValue{basetypes.NewStringValue("custom_model_resource.go")},
+					&folderPath,
+					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
 					nil,
 					nil,
 					false),
@@ -294,7 +349,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "files.0", "custom_model_resource.go"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
 				),
 			},
 			// Remove files
@@ -306,6 +361,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					nil,
 					nil,
 					nil,
+					nil,
 					false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -315,7 +371,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
 				),
 			},
 			// Add resource settings
@@ -323,6 +379,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					nil,
 					nil,
 					nil,
 					nil,
@@ -351,6 +408,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
+					nil,
 					nil,
 					nil,
 					&CustomModelResourceSettings{
@@ -562,10 +620,11 @@ func TestAccUnstructuredCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: unstructuredCustomModelResourceConfig("example_name", "python"),
+				Config: basicCustomModelResourceConfig("example_name", "Unstructured", "python"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Unstructured"),
 					resource.TestCheckResourceAttr(resourceName, "language", "python"),
 					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -574,10 +633,53 @@ func TestAccUnstructuredCustomModelResource(t *testing.T) {
 			},
 			// Update parameters
 			{
-				Config: unstructuredCustomModelResourceConfig("new_example_name", "r"),
+				Config: basicCustomModelResourceConfig("new_example_name", "Unstructured", "r"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Unstructured"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccAnomalyCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_anomaly"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: basicCustomModelResourceConfig("example_name", "Anomaly", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Anomaly"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters
+			{
+				Config: basicCustomModelResourceConfig("new_example_name", "Anomaly", "r"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Anomaly"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttr(resourceName, "deployments_count", "0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -665,7 +767,8 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	name,
 	description string,
 	remoteRepositories []SourceRemoteRepository,
-	files []basetypes.StringValue,
+	folderPath *string,
+	files []FileTuple,
 	guards []GuardConfiguration,
 	resourceSettings *CustomModelResourceSettings,
 	addTrainingData bool,
@@ -684,17 +787,47 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		remoteRepositoriesStr += "]"
 	}
 
+	folderStr := ""
+	if folderPath != nil {
+		folderStr = fmt.Sprintf(`
+		folder_path = "%s"
+		`, *folderPath)
+	}
+
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = fmt.Sprintf(`
-		files = %v
-		`, files)
+		filesStr = "files = ["
+		for _, file := range files {
+			if file.PathInModel != "" {
+				filesStr += fmt.Sprintf(`
+				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			} else {
+				filesStr += fmt.Sprintf(`
+				["%s"],`, file.LocalPath)
+			}
+		}
+
+		filesStr += "]"
 	}
 
 	guardsStr := ""
 	if len(guards) > 0 {
 		guardsStr = "guard_configurations = ["
 		for _, guard := range guards {
+			guardCredentialStr := ""
+			if guard.OpenAICredential != types.StringNull() {
+				guardCredentialStr = fmt.Sprintf(`
+				openai_credential = "${datarobot_api_token_credential.test_without_llm_blueprint.id}"
+				llm_type = %s
+				`, guard.LlmType)
+				if IsKnown(guard.OpenAIApiBase) {
+					guardCredentialStr += fmt.Sprintf(`
+					openai_api_base = %s
+					openai_deployment_id = %s
+					`, guard.OpenAIApiBase, guard.OpenAIDeploymentID)
+				}
+			}
+
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
@@ -708,7 +841,16 @@ func customModelWithoutLlmBlueprintResourceConfig(
 						comparator = %s
 					}
 				}
-			},`, guard.TemplateName, guard.Name, guard.Stages, guard.Intervention.Action, guard.Intervention.Message, guard.Intervention.Condition.Comparand, guard.Intervention.Condition.Comparator)
+				%s
+			},`,
+				guard.TemplateName,
+				guard.Name,
+				guard.Stages,
+				guard.Intervention.Action,
+				guard.Intervention.Message,
+				guard.Intervention.Condition.Comparand,
+				guard.Intervention.Condition.Comparator,
+				guardCredentialStr)
 		}
 		guardsStr += "]"
 	}
@@ -747,6 +889,11 @@ resource "datarobot_remote_repository" "test_custom_model_from_remote_repository
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
 }
+
+resource "datarobot_api_token_credential" "test_without_llm_blueprint" {
+	name = "open ai credential"
+	api_token = "test"
+}
 	
 resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	name        		  = "%s"
@@ -760,8 +907,9 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 	%s
+	%s
 }
-`, name, description, remoteRepositoriesStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+`, name, description, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
 }
 
 func binaryCustomModelResourceConfig(
@@ -854,22 +1002,23 @@ resource "datarobot_custom_model" "test_text_generation" {
 `, resourceBlock, name, targetName, language, customModelBlock)
 }
 
-func unstructuredCustomModelResourceConfig(
+func basicCustomModelResourceConfig(
 	name,
+	targetType,
 	language string) string {
-	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_unstructured")
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_basic")
 
 	return fmt.Sprintf(`
 %s
 
-resource "datarobot_custom_model" "test_unstructured" {
+resource "datarobot_custom_model" "test_%s" {
 	name        		  							  = "%s"
-	target_type           							  = "Unstructured"
+	target_type           							  = "%s"
 	language 			  							  = "%s"
 	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
 	%s
 }
-`, resourceBlock, name, language, customModelBlock)
+`, resourceBlock, strings.ToLower(targetType), name, targetType, language, customModelBlock)
 }
 
 func remoteRepositoryResource(resourceName string) (string, string) {

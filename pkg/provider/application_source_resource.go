@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -19,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 const baseEnvironmentName = "[Experimental] Python 3.9 Streamlit"
@@ -68,10 +65,13 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"local_files": schema.ListAttribute{
-				Required:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "The list of local file paths used to build the Application Source.",
+			"folder_path": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.",
+			},
+			"files": schema.DynamicAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
 			},
 			"resource_settings": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -195,13 +195,14 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	}
 	data.VersionID = types.StringValue(createApplicationSourceVersionResp.ID)
 
-	errSummary, errDetail := r.addLocalFilesToApplicationSource(
+	err = r.addLocalFilesToApplicationSource(
 		ctx,
 		createApplicationSourceResp.ID,
 		createApplicationSourceVersionResp.ID,
-		data.LocalFiles)
-	if errSummary != "" {
-		resp.Diagnostics.AddError(errSummary, errDetail)
+		data.FolderPath,
+		data.Files)
+	if err != nil {
+		resp.Diagnostics.AddError("Error adding files to Application Source", err.Error())
 		return
 	}
 
@@ -350,7 +351,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	applicationSourceVersion := applicationSource.LatestVersion
 
 	if (!reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) ||
-		!reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) ||
+		!reflect.DeepEqual(plan.Files, state.Files) ||
 		!reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues)) &&
 		applicationSource.LatestVersion.IsFrozen {
 		// must create a new version if the latest version is frozen
@@ -369,10 +370,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		applicationSourceVersion = *createApplicationSourceVersionResp
 	}
 
-	if !reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) {
-		errSummary, errDetail := r.updateLocalFiles(ctx, state, plan, applicationSourceVersion)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(errSummary, errDetail)
+	if !reflect.DeepEqual(plan.Files, state.Files) {
+		err = r.updateLocalFiles(ctx, state, plan, applicationSourceVersion)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Application Source files", err.Error())
 			return
 		}
 	}
@@ -540,44 +541,19 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	ctx context.Context,
 	id string,
 	versionId string,
-	files []basetypes.StringValue,
+	folderPath types.String,
+	files types.Dynamic,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
-	if files == nil {
+	localFiles, err := prepareLocalFiles(folderPath, files)
+	if err != nil {
 		return
 	}
 
-	localFiles := make([]client.FileInfo, 0)
-	for _, file := range files {
-		filePath := file.ValueString()
-		fileReader, err := os.Open(filePath)
-		if err != nil {
-			errSummary = "Error opening local file"
-			errDetail = err.Error()
-			return
-		}
-		defer fileReader.Close()
-		fileContent, err := io.ReadAll(fileReader)
-		if err != nil {
-			errSummary = "Error reading local file"
-			errDetail = err.Error()
-			return
-		}
-
-		localFiles = append(localFiles, client.FileInfo{
-			Name:    filePath,
-			Path:    filePath,
-			Content: fileContent,
-		})
-	}
-
 	traceAPICall("UpdateApplicationSourceVersion")
-	_, err := r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, localFiles)
+	_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, localFiles)
 	if err != nil {
-		errSummary = "Error creating Application Source version from local files"
-		errDetail = err.Error()
 		return
 	}
 
@@ -590,23 +566,18 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 	plan ApplicationSourceResourceModel,
 	applicationSourceVersion client.ApplicationSourceVersion,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
 	filesToDelete := make([]string, 0)
-	for _, file := range state.LocalFiles {
-		if !contains(plan.LocalFiles, file) {
-			for _, item := range applicationSourceVersion.Items {
-				if item.FilePath == file.ValueString() && item.FileSource == "local" {
-					filesToDelete = append(filesToDelete, item.ID)
-				}
-			}
+	for _, item := range applicationSourceVersion.Items {
+		if item.FileSource == "local" {
+			filesToDelete = append(filesToDelete, item.ID)
 		}
 	}
 
 	if len(filesToDelete) > 0 {
 		traceAPICall("UpdateApplicationSourceVersion")
-		_, err := r.provider.service.UpdateApplicationSourceVersion(
+		_, err = r.provider.service.UpdateApplicationSourceVersion(
 			ctx,
 			state.ID.ValueString(),
 			applicationSourceVersion.ID,
@@ -614,27 +585,17 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 				FilesToDelete: filesToDelete,
 			})
 		if err != nil {
-			errSummary = "Error updating Application Source version"
-			errDetail = err.Error()
 			return
 		}
 	}
 
-	filesToAdd := make([]string, 0)
-	for _, file := range plan.LocalFiles {
-		if !contains(state.LocalFiles, file) {
-			filesToAdd = append(filesToAdd, file.ValueString())
-		}
-	}
-
-	if len(filesToAdd) > 0 {
-		errSummary, errDetail = r.addLocalFilesToApplicationSource(
-			ctx,
-			state.ID.ValueString(),
-			applicationSourceVersion.ID,
-			plan.LocalFiles,
-		)
-	}
+	err = r.addLocalFilesToApplicationSource(
+		ctx,
+		state.ID.ValueString(),
+		applicationSourceVersion.ID,
+		plan.FolderPath,
+		plan.Files,
+	)
 
 	return
 }

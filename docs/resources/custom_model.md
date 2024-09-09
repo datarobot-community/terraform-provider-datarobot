@@ -34,27 +34,6 @@ resource "datarobot_custom_model" "example" {
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
 
-  # Guards
-  guard_configurations = [
-    {
-      template_name = "Rouge 1"
-      name          = "Rouge 1 response"
-      stages        = ["response"]
-      intervention = {
-        action  = "block"
-        message = "response has been blocked by Rogue 1 guard"
-        condition = {
-          comparand  = 0.8
-          comparator = "lessThan"
-        }
-      }
-    },
-  ]
-  overall_moderation_configuration = {
-    timeout_sec    = 120
-    timeout_action = "score"
-  }
-
   resource_settings = {
     memory_mb      = 512
     replicas       = 2
@@ -71,6 +50,25 @@ resource "datarobot_custom_model" "example" {
   #     ]
   #   }
   # ]
+  # guard_configurations = [
+  #   {
+  #     template_name = "Rouge 1"
+  #     name          = "Rouge 1 response"
+  #     stages        = ["response"]
+  #     intervention = {
+  #       action  = "block"
+  #       message = "response has been blocked by Rogue 1 guard"
+  #       condition = {
+  #         comparand  = 0.8
+  #         comparator = "lessThan"
+  #       }
+  #     }
+  #   },
+  # ]
+  # overall_moderation_configuration = {
+  #   timeout_sec    = 120
+  #   timeout_action = "score"
+  # }
 }
 
 output "example_id" {
@@ -134,6 +132,10 @@ Optional:
 
 - `deployment_id` (String) The deployment ID of this guard.
 - `input_column_name` (String) The input column name of this guard.
+- `llm_type` (String) The LLM type for this guard.
+- `openai_api_base` (String) The OpenAI API base URL for this guard.
+- `openai_credential` (String) The ID of an OpenAI credential for this guard.
+- `openai_deployment_id` (String) The ID of an OpenAI deployment for this guard.
 - `output_column_name` (String) The output column name of this guard.
 
 <a id="nestedatt--guard_configurations--intervention"></a>
