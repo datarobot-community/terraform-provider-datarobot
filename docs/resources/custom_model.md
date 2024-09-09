@@ -26,34 +26,13 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  local_files = [
+  files = [
     "file1.py",
     "file2.py",
   ]
   target_type           = "Binary"
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
-
-  # Guards
-  guard_configurations = [
-    {
-      template_name = "Rouge 1"
-      name          = "Rouge 1 response"
-      stages        = ["response"]
-      intervention = {
-        action  = "block"
-        message = "response has been blocked by Rogue 1 guard"
-        condition = {
-          comparand  = 0.8
-          comparator = "lessThan"
-        }
-      }
-    },
-  ]
-  overall_moderation_configuration = {
-    timeout_sec    = 120
-    timeout_action = "score"
-  }
 
   resource_settings = {
     memory_mb      = 512
@@ -71,6 +50,25 @@ resource "datarobot_custom_model" "example" {
   #     ]
   #   }
   # ]
+  # guard_configurations = [
+  #   {
+  #     template_name = "Rouge 1"
+  #     name          = "Rouge 1 response"
+  #     stages        = ["response"]
+  #     intervention = {
+  #       action  = "block"
+  #       message = "response has been blocked by Rogue 1 guard"
+  #       condition = {
+  #         comparand  = 0.8
+  #         comparator = "lessThan"
+  #       }
+  #     }
+  #   },
+  # ]
+  # overall_moderation_configuration = {
+  #   timeout_sec    = 120
+  #   timeout_action = "score"
+  # }
 }
 
 output "example_id" {
@@ -94,10 +92,11 @@ output "example_id" {
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
+- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.
+- `folder_path` (String) The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
 - `language` (String) The language used to build the Custom Model.
-- `local_files` (List of String) The list of local file paths used to build the Custom Model.
 - `negative_class_label` (String) The negative class label of the Custom Model.
 - `overall_moderation_configuration` (Attributes) The overall moderation configuration for the Custom Model. (see [below for nested schema](#nestedatt--overall_moderation_configuration))
 - `positive_class_label` (String) The positive class label of the Custom Model.
@@ -133,6 +132,10 @@ Optional:
 
 - `deployment_id` (String) The deployment ID of this guard.
 - `input_column_name` (String) The input column name of this guard.
+- `llm_type` (String) The LLM type for this guard.
+- `openai_api_base` (String) The OpenAI API base URL for this guard.
+- `openai_credential` (String) The ID of an OpenAI credential for this guard.
+- `openai_deployment_id` (String) The ID of an OpenAI deployment for this guard.
 - `output_column_name` (String) The output column name of this guard.
 
 <a id="nestedatt--guard_configurations--intervention"></a>

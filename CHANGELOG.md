@@ -1,3 +1,18 @@
+## 0.0.24
+
+FEATURES:
+
+- Support Faithfulness Guard with OpenAI credentials
+- Add name to Registered Model version
+- Support directories and relative file paths for Application Sources
+- Support LLM Settings and Vector Database Settings for LLM Blueprints
+
+## 0.0.23
+
+FEATURES:
+
+- Support directories and relative file paths for Custom Models
+
 ## 0.0.22
 
 FEATURES:

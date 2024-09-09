@@ -234,11 +234,11 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: applicationSourceResourceConfig("", "start-app.sh", 1),
+				Config: applicationSourceResourceConfig("", []FileTuple{{LocalPath: "start-app.sh"}}, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "local_files.0", "start-app.sh"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", "start-app.sh"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -246,11 +246,11 @@ if __name__ == "__main__":
 			},
 			// Update name, local file, and replicas
 			{
-				Config: applicationSourceResourceConfig("new_example_name", "streamlit-app.py", 2),
+				Config: applicationSourceResourceConfig("new_example_name", []FileTuple{{LocalPath: "streamlit-app.py"}}, 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "local_files.0", "streamlit-app.py"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", "streamlit-app.py"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -262,7 +262,7 @@ if __name__ == "__main__":
 	})
 }
 
-func applicationSourceResourceConfig(name, localFile string, replicas int) string {
+func applicationSourceResourceConfig(name string, files []FileTuple, replicas int) string {
 	resourceSettingsStr := ""
 	if replicas > 1 {
 		resourceSettingsStr = fmt.Sprintf(`
@@ -279,13 +279,29 @@ func applicationSourceResourceConfig(name, localFile string, replicas int) strin
 `, name)
 	}
 
+	filesStr := ""
+	if len(files) > 0 {
+		filesStr = "files = ["
+		for _, file := range files {
+			if file.PathInModel != "" {
+				filesStr += fmt.Sprintf(`
+				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			} else {
+				filesStr += fmt.Sprintf(`
+				["%s"],`, file.LocalPath)
+			}
+		}
+
+		filesStr += "]"
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
-	local_files = ["%s"]
+	%s
 	%s
 	%s
   }
-`, localFile, nameStr, resourceSettingsStr)
+`, nameStr, filesStr, resourceSettingsStr)
 }
 
 func checkApplicationSourceResourceExists(resourceName string) resource.TestCheckFunc {
@@ -318,7 +334,7 @@ func checkApplicationSourceResourceExists(resourceName string) resource.TestChec
 		}
 
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
-			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["local_files.0"] &&
+			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["files.0.0"] &&
 			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
 			return nil
 		}

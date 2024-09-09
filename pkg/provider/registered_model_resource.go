@@ -57,6 +57,11 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				Computed:            true,
 				MarkdownDescription: "The ID of the Registered Model Version.",
 			},
+			"version_name": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The name of the Registered Model Version.",
+			},
 			"custom_model_version_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The ID of the custom model version for this Registered Model.",
@@ -91,10 +96,12 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	versionName := getVersionName(data, 1)
+
 	traceAPICall("CreateRegisteredModel")
 	registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
 		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
-		Name:                 fmt.Sprintf("%s (v1)", data.Name.ValueString()),
+		Name:                 versionName,
 		RegisteredModelName:  data.Name.ValueString(),
 	})
 	if err != nil {
@@ -104,12 +111,13 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 	}
 	data.ID = types.StringValue(registeredModelVersion.RegisteredModelID)
 	data.VersionID = types.StringValue(registeredModelVersion.ID)
+	data.VersionName = types.StringValue(registeredModelVersion.Name)
 
 	if IsKnown(data.Description) {
 		traceAPICall("UpdateRegisteredModel")
 		_, err := r.provider.service.UpdateRegisteredModel(ctx,
 			registeredModelVersion.RegisteredModelID,
-			&client.RegisteredModelUpdate{
+			&client.UpdateRegisteredModelRequest{
 				Name:        data.Name.ValueString(),
 				Description: data.Description.ValueString(),
 			})
@@ -167,13 +175,14 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 		data.Description = types.StringValue(registeredModel.Description)
 	}
 
-	traceAPICall("ListRegisteredModelVersions")
+	traceAPICall("GetLatestRegisteredModelVersion")
 	latestRegisteredModelVersion, err := r.provider.service.GetLatestRegisteredModelVersion(ctx, data.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Registered Model Version", err.Error())
 		return
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
+	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -195,25 +204,36 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 
 	plan.VersionID = state.VersionID
 
-	if state.Name.ValueString() != plan.Name.ValueString() ||
-		state.Description.ValueString() != plan.Description.ValueString() {
-		traceAPICall("UpdateRegisteredModel")
-		_, err := r.provider.service.UpdateRegisteredModel(ctx,
-			plan.ID.ValueString(),
-			&client.RegisteredModelUpdate{
-				Name:        plan.Name.ValueString(),
-				Description: plan.Description.ValueString(),
-			})
+	traceAPICall("UpdateRegisteredModel")
+	registeredModel, err := r.provider.service.UpdateRegisteredModel(ctx,
+		plan.ID.ValueString(),
+		&client.UpdateRegisteredModelRequest{
+			Name:        plan.Name.ValueString(),
+			Description: plan.Description.ValueString(),
+		})
+	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"Registered Model not found",
+				fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", plan.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			errMessage := checkNameAlreadyExists(err, plan.Name.ValueString(), "Registered Model")
+			resp.Diagnostics.AddError("Error updating Registered Model", errMessage)
+		}
+		return
+	}
+
+	versionName := getVersionName(plan, registeredModel.LastVersionNum)
+	plan.VersionName = types.StringValue(versionName)
+
+	if state.VersionName.ValueString() != versionName {
+		traceAPICall("UpdateRegisteredModelVersion")
+		_, err := r.provider.service.UpdateRegisteredModelVersion(ctx, plan.ID.ValueString(), plan.VersionID.ValueString(), &client.UpdateRegisteredModelVersionRequest{
+			Name: versionName,
+		})
 		if err != nil {
-			if errors.Is(err, &client.NotFoundError{}) {
-				resp.Diagnostics.AddWarning(
-					"Registered Model not found",
-					fmt.Sprintf("Registered Model with ID %s is not found. Removing from state.", plan.ID.ValueString()))
-				resp.State.RemoveResource(ctx)
-			} else {
-				errMessage := checkNameAlreadyExists(err, plan.Name.ValueString(), "Registered Model")
-				resp.Diagnostics.AddError("Error updating Registered Model", errMessage)
-			}
+			resp.Diagnostics.AddError("Error updating Registered Model Version", err.Error())
 			return
 		}
 	}
@@ -230,7 +250,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
 			RegisteredModelID:    registeredModel.ID,
 			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
-			Name:                 fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), registeredModel.LastVersionNum+1),
+			Name:                 versionName,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Registered Model Version", err.Error())
@@ -290,4 +310,12 @@ func (r *RegisteredModelResource) waitForRegisteredModelVersionToBeReady(ctx con
 		return err
 	}
 	return nil
+}
+
+func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
+	if IsKnown(plan.VersionName) {
+		return plan.VersionName.ValueString()
+	}
+
+	return fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), versionNum)
 }

@@ -11,34 +11,13 @@ resource "datarobot_remote_repository" "example" {
 resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
-  local_files = [
+  files = [
     "file1.py",
     "file2.py",
   ]
   target_type           = "Binary"
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
-
-  # Guards
-  guard_configurations = [
-    {
-      template_name = "Rouge 1"
-      name          = "Rouge 1 response"
-      stages        = ["response"]
-      intervention = {
-        action  = "block"
-        message = "response has been blocked by Rogue 1 guard"
-        condition = {
-          comparand  = 0.8
-          comparator = "lessThan"
-        }
-      }
-    },
-  ]
-  overall_moderation_configuration = {
-    timeout_sec    = 120
-    timeout_action = "score"
-  }
 
   resource_settings = {
     memory_mb      = 512
@@ -56,6 +35,25 @@ resource "datarobot_custom_model" "example" {
   #     ]
   #   }
   # ]
+  # guard_configurations = [
+  #   {
+  #     template_name = "Rouge 1"
+  #     name          = "Rouge 1 response"
+  #     stages        = ["response"]
+  #     intervention = {
+  #       action  = "block"
+  #       message = "response has been blocked by Rogue 1 guard"
+  #       condition = {
+  #         comparand  = 0.8
+  #         comparator = "lessThan"
+  #       }
+  #     }
+  #   },
+  # ]
+  # overall_moderation_configuration = {
+  #   timeout_sec    = 120
+  #   timeout_action = "score"
+  # }
 }
 
 output "example_id" {

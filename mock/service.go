@@ -247,10 +247,10 @@ func (mr *MockServiceMockRecorder) CreateDeploymentFromModelPackage(ctx, req int
 }
 
 // CreateLLMBlueprint mocks base method.
-func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateLLMBlueprint", ctx, req)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -307,10 +307,10 @@ func (mr *MockServiceMockRecorder) CreateQAApplication(ctx, req interface{}) *go
 }
 
 // CreateRegisteredModelFromCustomModelVersion mocks base method.
-func (m *MockService) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *client.CreateRegisteredModelFromCustomModelRequest) (*client.RegisteredModelVersionResponse, error) {
+func (m *MockService) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *client.CreateRegisteredModelFromCustomModelRequest) (*client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateRegisteredModelFromCustomModelVersion", ctx, req)
-	ret0, _ := ret[0].(*client.RegisteredModelVersionResponse)
+	ret0, _ := ret[0].(*client.RegisteredModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -684,10 +684,10 @@ func (mr *MockServiceMockRecorder) GetGuardConfigurationsForCustomModelVersion(c
 }
 
 // GetLLMBlueprint mocks base method.
-func (m *MockService) GetLLMBlueprint(ctx context.Context, id string) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) GetLLMBlueprint(ctx context.Context, id string) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLLMBlueprint", ctx, id)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -699,10 +699,10 @@ func (mr *MockServiceMockRecorder) GetLLMBlueprint(ctx, id interface{}) *gomock.
 }
 
 // GetLatestRegisteredModelVersion mocks base method.
-func (m *MockService) GetLatestRegisteredModelVersion(ctx context.Context, id string) (*client.RegisteredModelVersionResponse, error) {
+func (m *MockService) GetLatestRegisteredModelVersion(ctx context.Context, id string) (*client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLatestRegisteredModelVersion", ctx, id)
-	ret0, _ := ret[0].(*client.RegisteredModelVersionResponse)
+	ret0, _ := ret[0].(*client.RegisteredModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -759,10 +759,10 @@ func (mr *MockServiceMockRecorder) GetPredictionEnvironment(ctx, id interface{})
 }
 
 // GetRegisteredModel mocks base method.
-func (m *MockService) GetRegisteredModel(ctx context.Context, id string) (*client.RegisteredModelResponse, error) {
+func (m *MockService) GetRegisteredModel(ctx context.Context, id string) (*client.RegisteredModel, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRegisteredModel", ctx, id)
-	ret0, _ := ret[0].(*client.RegisteredModelResponse)
+	ret0, _ := ret[0].(*client.RegisteredModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -774,10 +774,10 @@ func (mr *MockServiceMockRecorder) GetRegisteredModel(ctx, id interface{}) *gomo
 }
 
 // GetRegisteredModelVersion mocks base method.
-func (m *MockService) GetRegisteredModelVersion(ctx context.Context, registeredModelId, versionId string) (*client.RegisteredModelVersionResponse, error) {
+func (m *MockService) GetRegisteredModelVersion(ctx context.Context, registeredModelId, versionId string) (*client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRegisteredModelVersion", ctx, registeredModelId, versionId)
-	ret0, _ := ret[0].(*client.RegisteredModelVersionResponse)
+	ret0, _ := ret[0].(*client.RegisteredModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1179,10 +1179,10 @@ func (mr *MockServiceMockRecorder) UpdateDeploymentSettings(ctx, id, req interfa
 }
 
 // UpdateLLMBlueprint mocks base method.
-func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *client.UpdateLLMBlueprintRequest) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *client.UpdateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLLMBlueprint", ctx, id, req)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1224,10 +1224,10 @@ func (mr *MockServiceMockRecorder) UpdatePredictionEnvironment(ctx, id, req inte
 }
 
 // UpdateRegisteredModel mocks base method.
-func (m *MockService) UpdateRegisteredModel(ctx context.Context, id string, req *client.RegisteredModelUpdate) (*client.RegisteredModelResponse, error) {
+func (m *MockService) UpdateRegisteredModel(ctx context.Context, id string, req *client.UpdateRegisteredModelRequest) (*client.RegisteredModel, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRegisteredModel", ctx, id, req)
-	ret0, _ := ret[0].(*client.RegisteredModelResponse)
+	ret0, _ := ret[0].(*client.RegisteredModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1236,6 +1236,21 @@ func (m *MockService) UpdateRegisteredModel(ctx context.Context, id string, req 
 func (mr *MockServiceMockRecorder) UpdateRegisteredModel(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegisteredModel", reflect.TypeOf((*MockService)(nil).UpdateRegisteredModel), ctx, id, req)
+}
+
+// UpdateRegisteredModelVersion mocks base method.
+func (m *MockService) UpdateRegisteredModelVersion(ctx context.Context, registeredModelId, versionId string, req *client.UpdateRegisteredModelVersionRequest) (*client.RegisteredModelVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRegisteredModelVersion", ctx, registeredModelId, versionId, req)
+	ret0, _ := ret[0].(*client.RegisteredModelVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRegisteredModelVersion indicates an expected call of UpdateRegisteredModelVersion.
+func (mr *MockServiceMockRecorder) UpdateRegisteredModelVersion(ctx, registeredModelId, versionId, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegisteredModelVersion", reflect.TypeOf((*MockService)(nil).UpdateRegisteredModelVersion), ctx, registeredModelId, versionId, req)
 }
 
 // UpdateRemoteRepository mocks base method.

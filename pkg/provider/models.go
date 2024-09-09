@@ -69,12 +69,27 @@ type PlaygroundResourceModel struct {
 
 // LLMBlueprintResourceModel describes the LLM blueprint resource.
 type LLMBlueprintResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Description      types.String `tfsdk:"description"`
-	PlaygroundID     types.String `tfsdk:"playground_id"`
-	VectorDatabaseID types.String `tfsdk:"vector_database_id"`
-	LLMID            types.String `tfsdk:"llm_id"`
+	ID                     types.String            `tfsdk:"id"`
+	Name                   types.String            `tfsdk:"name"`
+	Description            types.String            `tfsdk:"description"`
+	PlaygroundID           types.String            `tfsdk:"playground_id"`
+	VectorDatabaseID       types.String            `tfsdk:"vector_database_id"`
+	VectorDatabaseSettings *VectorDatabaseSettings `tfsdk:"vector_database_settings"`
+	LLMID                  types.String            `tfsdk:"llm_id"`
+	LLMSettings            *LLMSettings            `tfsdk:"llm_settings"`
+	PromptType             types.String            `tfsdk:"prompt_type"`
+}
+
+type VectorDatabaseSettings struct {
+	MaxDocumentsRetrievedPerPrompt types.Int64 `tfsdk:"max_documents_retrieved_per_prompt"`
+	MaxTokens                      types.Int64 `tfsdk:"max_tokens"`
+}
+
+type LLMSettings struct {
+	MaxCompletionLength types.Int64   `tfsdk:"max_completion_length"`
+	Temperature         types.Float64 `tfsdk:"temperature"`
+	TopP                types.Float64 `tfsdk:"top_p"`
+	SystemPrompt        types.String  `tfsdk:"system_prompt"`
 }
 
 // ModelResourceModel describes the custom model resource.
@@ -89,7 +104,8 @@ type CustomModelResourceModel struct {
 	BaseEnvironmentVersionID       types.String                    `tfsdk:"base_environment_version_id"`
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
-	LocalFiles                     []types.String                  `tfsdk:"local_files"`
+	FolderPath                     types.String                    `tfsdk:"folder_path"`
+	Files                          types.Dynamic                   `tfsdk:"files"`
 	TargetName                     types.String                    `tfsdk:"target_name"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
 	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
@@ -109,6 +125,11 @@ type CustomModelResourceModel struct {
 	ResourceSettings               *CustomModelResourceSettings    `tfsdk:"resource_settings"`
 }
 
+type FileTuple struct {
+	LocalPath   string
+	PathInModel string
+}
+
 type RuntimeParameterValue struct {
 	Key   types.String `json:"key" tfsdk:"key"`
 	Type  types.String `json:"type" tfsdk:"type"`
@@ -122,13 +143,17 @@ type SourceRemoteRepository struct {
 }
 
 type GuardConfiguration struct {
-	TemplateName     types.String      `tfsdk:"template_name"`
-	Name             types.String      `tfsdk:"name"`
-	Stages           []types.String    `tfsdk:"stages"`
-	Intervention     GuardIntervention `tfsdk:"intervention"`
-	DeploymentID     types.String      `tfsdk:"deployment_id"`
-	InputColumnName  types.String      `tfsdk:"input_column_name"`
-	OutputColumnName types.String      `tfsdk:"output_column_name"`
+	TemplateName       types.String      `tfsdk:"template_name"`
+	Name               types.String      `tfsdk:"name"`
+	Stages             []types.String    `tfsdk:"stages"`
+	Intervention       GuardIntervention `tfsdk:"intervention"`
+	DeploymentID       types.String      `tfsdk:"deployment_id"`
+	InputColumnName    types.String      `tfsdk:"input_column_name"`
+	OutputColumnName   types.String      `tfsdk:"output_column_name"`
+	OpenAICredential   types.String      `tfsdk:"openai_credential"`
+	OpenAIApiBase      types.String      `tfsdk:"openai_api_base"`
+	OpenAIDeploymentID types.String      `tfsdk:"openai_deployment_id"`
+	LlmType            types.String      `tfsdk:"llm_type"`
 }
 
 type GuardIntervention struct {
@@ -157,6 +182,7 @@ type CustomModelResourceSettings struct {
 type RegisteredModelResourceModel struct {
 	ID                   types.String `tfsdk:"id"`
 	VersionID            types.String `tfsdk:"version_id"`
+	VersionName          types.String `tfsdk:"version_name"`
 	Name                 types.String `tfsdk:"name"`
 	Description          types.String `tfsdk:"description"`
 	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
@@ -194,8 +220,9 @@ type DeploymentSettings struct {
 }
 
 type AssociationIDSetting struct {
-	AutoGenerateID types.Bool   `tfsdk:"auto_generate_id"`
-	FeatureName    types.String `tfsdk:"feature_name"`
+	AutoGenerateID               types.Bool   `tfsdk:"auto_generate_id"`
+	FeatureName                  types.String `tfsdk:"feature_name"`
+	RequiredInPredictionRequests types.Bool   `tfsdk:"required_in_prediction_requests"`
 }
 
 type PredictionsSetting struct {
@@ -221,7 +248,8 @@ type ApplicationSourceResourceModel struct {
 	ID                     types.String                 `tfsdk:"id"`
 	VersionID              types.String                 `tfsdk:"version_id"`
 	Name                   types.String                 `tfsdk:"name"`
-	LocalFiles             []types.String               `tfsdk:"local_files"`
+	FolderPath             types.String                 `tfsdk:"folder_path"`
+	Files                  types.Dynamic                `tfsdk:"files"`
 	ResourceSettings       *ApplicationResourceSettings `tfsdk:"resource_settings"`
 	RuntimeParameterValues types.List                   `tfsdk:"runtime_parameter_values"`
 }

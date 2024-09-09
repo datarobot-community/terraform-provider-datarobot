@@ -10,7 +10,7 @@ type CreateRegisteredModelFromCustomModelRequest struct {
 	RegisteredModelID string `json:"registeredModelId,omitempty"`
 }
 
-type RegisteredModelResponse struct {
+type RegisteredModel struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	Description    string `json:"description"`
@@ -18,16 +18,20 @@ type RegisteredModelResponse struct {
 	IsGlobal       bool   `json:"isGlobal"`
 }
 
-type ListRegisteredModelsResponse struct {
-	Data []RegisteredModelResponse
+type UpdateRegisteredModelVersionRequest struct {
+	Name string `json:"name,omitempty"`
 }
 
-type RegisteredModelUpdate struct {
+type ListRegisteredModelsResponse struct {
+	Data []RegisteredModel
+}
+
+type UpdateRegisteredModelRequest struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
-type RegisteredModelVersionResponse struct {
+type RegisteredModelVersion struct {
 	ID                     string `json:"id"` // Registered model version ID
 	Name                   string `json:"name"`
 	BuildStatus            string `json:"buildStatus"`
@@ -38,5 +42,5 @@ type RegisteredModelVersionResponse struct {
 }
 
 type ListRegisteredModelVersionsResponse struct {
-	Data []RegisteredModelVersionResponse
+	Data []RegisteredModelVersion
 }

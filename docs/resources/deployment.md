@@ -19,7 +19,7 @@ resource "datarobot_custom_model" "example" {
   target_type           = "Binary"
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
-  local_files           = ["example.py"]
+  files                 = ["example.py"]
 }
 
 resource "datarobot_registered_model" "example" {
@@ -85,6 +85,7 @@ Required:
 
 - `auto_generate_id` (Boolean) Whether to automatically generate an association ID.
 - `feature_name` (String) The name of the feature to use as the association ID.
+- `required_in_prediction_requests` (Boolean) Whether the association ID is required in prediction requests.
 
 
 <a id="nestedatt--settings--predictions_settings"></a>

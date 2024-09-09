@@ -48,7 +48,7 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 
 		for i := 0; i < 3; i++ {
 			mockService.EXPECT().ListRegisteredModels(gomock.Any()).Return(&client.ListRegisteredModelsResponse{
-				Data: []client.RegisteredModelResponse{
+				Data: []client.RegisteredModel{
 					{
 						ID:             id,
 						Name:           name,
@@ -58,7 +58,7 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 				},
 			}, nil)
 			mockService.EXPECT().ListRegisteredModelVersions(gomock.Any(), id).Return(&client.ListRegisteredModelVersionsResponse{
-				Data: []client.RegisteredModelVersionResponse{
+				Data: []client.RegisteredModelVersion{
 					{
 						ID:                     versionID,
 						RegisteredModelVersion: versionNum,

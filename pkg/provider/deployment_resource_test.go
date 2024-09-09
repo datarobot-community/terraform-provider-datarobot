@@ -29,14 +29,15 @@ func TestAccDeploymentResource(t *testing.T) {
 			{
 				Config: deploymentResourceConfig("example_label", "1", &client.DeploymentSettings{
 					AssociationID: &client.AssociationIDSetting{
-						AutoGenerateID: true,
-						ColumnNames:    []string{"example_column"},
+						AutoGenerateID:               true,
+						ColumnNames:                  []string{"example_column"},
+						RequiredInPredictionRequests: true,
 					},
 					PredictionsDataCollection: &client.BasicSetting{
 						Enabled: true,
 					},
 					PredictionsSettings: &client.PredictionsSettings{
-						MinComputes: 1,
+						MinComputes: 0,
 						MaxComputes: 2,
 						RealTime:    true,
 					},
@@ -46,6 +47,7 @@ func TestAccDeploymentResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "label", "example_label"),
 					resource.TestCheckResourceAttr(resourceName, "settings.association_id.auto_generate_id", "true"),
 					resource.TestCheckResourceAttr(resourceName, "settings.association_id.feature_name", "example_column"),
+					resource.TestCheckResourceAttr(resourceName, "settings.association_id.required_in_prediction_requests", "true"),
 					resource.TestCheckResourceAttr(resourceName, "settings.prediction_row_storage", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
@@ -54,15 +56,16 @@ func TestAccDeploymentResource(t *testing.T) {
 			{
 				Config: deploymentResourceConfig("new_example_label", "1", &client.DeploymentSettings{
 					AssociationID: &client.AssociationIDSetting{
-						AutoGenerateID: false,
-						ColumnNames:    []string{"new_example_column"},
+						AutoGenerateID:               false,
+						ColumnNames:                  []string{"new_example_column"},
+						RequiredInPredictionRequests: false,
 					},
 					PredictionsDataCollection: &client.BasicSetting{
 						Enabled: false,
 					},
 					PredictionsSettings: &client.PredictionsSettings{
-						MinComputes: 2,
-						MaxComputes: 3,
+						MinComputes: 0,
+						MaxComputes: 1,
 						RealTime:    false,
 					},
 				}),
@@ -71,6 +74,7 @@ func TestAccDeploymentResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "settings.association_id.auto_generate_id", "false"),
 					resource.TestCheckResourceAttr(resourceName, "settings.association_id.feature_name", "new_example_column"),
+					resource.TestCheckResourceAttr(resourceName, "settings.association_id.required_in_prediction_requests", "false"),
 					resource.TestCheckResourceAttr(resourceName, "settings.prediction_row_storage", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
@@ -124,6 +128,7 @@ func deploymentResourceConfig(label, guardName string, settings *client.Deployme
 		association_id = {
 			auto_generate_id = %t
 			feature_name = "%s"
+			required_in_prediction_requests = %t
 		}
 		prediction_row_storage = %t
 		predictions_settings = {
@@ -135,6 +140,7 @@ func deploymentResourceConfig(label, guardName string, settings *client.Deployme
 `,
 			associationID.AutoGenerateID,
 			associationID.ColumnNames[0],
+			associationID.RequiredInPredictionRequests,
 			predictionsDataCollection.Enabled,
 			predictionsSettings.MinComputes,
 			predictionsSettings.MaxComputes,

@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -25,8 +25,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 const (
@@ -217,14 +217,18 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
-			"local_files": schema.ListAttribute{
+			"folder_path": schema.StringAttribute{
 				Optional:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "The list of local file paths used to build the Custom Model.",
+				MarkdownDescription: "The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.",
+			},
+			"files": schema.DynamicAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
 			},
 			"guard_configurations": schema.ListNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "The guard configurations for the Custom Model.",
+
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"template_name": schema.StringAttribute{
@@ -281,6 +285,45 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 						"output_column_name": schema.StringAttribute{
 							Optional:            true,
 							MarkdownDescription: "The output column name of this guard.",
+						},
+						"openai_credential": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The ID of an OpenAI credential for this guard.",
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("llm_type"),
+								),
+							},
+						},
+						"openai_deployment_id": schema.StringAttribute{
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+									path.MatchRelative().AtParent().AtName("openai_api_base"),
+								),
+							},
+							Optional:            true,
+							MarkdownDescription: "The ID of an OpenAI deployment for this guard.",
+						},
+						"openai_api_base": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The OpenAI API base URL for this guard.",
+							Validators: []validator.String{
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+									path.MatchRelative().AtParent().AtName("openai_deployment_id"),
+								),
+							},
+						},
+						"llm_type": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "The LLM type for this guard.",
+							Validators: []validator.String{
+								stringvalidator.OneOf("openAi", "azureOpenAi"),
+								stringvalidator.AlsoRequires(
+									path.MatchRelative().AtParent().AtName("openai_credential"),
+								),
+							},
 						},
 					},
 				},
@@ -497,10 +540,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.ClassLabelsFile = plan.ClassLabelsFile
 		state.Language = plan.Language
 
-		if plan.SourceRemoteRepositories == nil && plan.LocalFiles == nil {
+		if plan.SourceRemoteRepositories == nil && !IsKnown(plan.FolderPath) && !IsKnown(plan.Files) {
 			resp.Diagnostics.AddError(
 				"Invalid Custom Model configuration",
-				"Source Remote Repository or Local Files are required to create a Custom Model without a Source LLM Blueprint.",
+				"Source Remote Repository, Folder Path, or Files are required to create a Custom Model without a Source LLM Blueprint.",
 			)
 			return
 		}
@@ -524,16 +567,14 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	errSummary, errDetail := r.createCustomModelVersionFromFiles(
+	err := r.createCustomModelVersionFromFiles(
 		ctx,
-		plan.LocalFiles,
+		plan.FolderPath,
+		plan.Files,
 		customModelID,
 		baseEnvironmentID)
-	if errSummary != "" {
-		resp.Diagnostics.AddError(
-			errSummary,
-			errDetail,
-		)
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
 	}
 
@@ -549,7 +590,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-	state.LocalFiles = plan.LocalFiles
+	state.FolderPath = plan.FolderPath
+	state.Files = plan.Files
 	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
@@ -749,19 +791,22 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
 	}
 
+	updateRequest := &client.UpdateCustomModelRequest{
+		Name:        plan.Name.ValueString(),
+		Description: plan.Description.ValueString(),
+	}
+
+	if state.DeploymentsCount.ValueInt64() < 1 {
+		updateRequest.TargetName = plan.TargetName.ValueString()
+		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
+		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
+		updateRequest.PredictionThreshold = plan.PredictionThreshold.ValueFloat64()
+		updateRequest.Language = plan.Language.ValueString()
+		updateRequest.ClassLabels = classLabels
+	}
+
 	traceAPICall("UpdateCustomModel")
-	customModel, err := r.provider.service.UpdateCustomModel(ctx,
-		id,
-		&client.UpdateCustomModelRequest{
-			Name:                plan.Name.ValueString(),
-			Description:         plan.Description.ValueString(),
-			TargetName:          plan.TargetName.ValueString(),
-			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
-			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
-			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
-			Language:            plan.Language.ValueString(),
-			ClassLabels:         classLabels,
-		})
+	customModel, err := r.provider.service.UpdateCustomModel(ctx, id, updateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
@@ -922,17 +967,15 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	if !reflect.DeepEqual(plan.LocalFiles, state.LocalFiles) {
-		errSummary, errDetail := r.updateLocalFiles(ctx, customModel, state, plan)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(
-				errSummary,
-				errDetail,
-			)
+	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
+		err = r.updateLocalFiles(ctx, customModel, plan)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
 			return
 		}
 
-		state.LocalFiles = plan.LocalFiles
+		state.Files = plan.Files
+		state.FolderPath = plan.FolderPath
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -1119,6 +1162,10 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 			path.MatchRoot("class_labels"),
 			path.MatchRoot("class_labels_file"),
 		),
+		resourcevalidator.RequiredTogether(
+			path.MatchRoot("positive_class_label"),
+			path.MatchRoot("negative_class_label"),
+		),
 	}
 }
 
@@ -1285,49 +1332,24 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
-	files []basetypes.StringValue,
+	folderPath types.String,
+	files types.Dynamic,
 	customModelID string,
 	baseEnvironmentID string,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
-	if files == nil {
+	localFiles, err := prepareLocalFiles(folderPath, files)
+	if err != nil {
 		return
 	}
 
-	localFiles := make([]client.FileInfo, 0)
-	for _, file := range files {
-		filePath := file.ValueString()
-		fileReader, err := os.Open(filePath)
-		if err != nil {
-			errSummary = "Error opening local file"
-			errDetail = err.Error()
-			return
-		}
-		defer fileReader.Close()
-		fileContent, err := io.ReadAll(fileReader)
-		if err != nil {
-			errSummary = "Error reading local file"
-			errDetail = err.Error()
-			return
-		}
-
-		localFiles = append(localFiles, client.FileInfo{
-			Name:    filePath,
-			Path:    filePath,
-			Content: fileContent,
-		})
-	}
-
 	traceAPICall("CreateCustomModelVersionFromLocalFiles")
-	_, err := r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
+	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
 		BaseEnvironmentID: baseEnvironmentID,
 		Files:             localFiles,
 	})
 	if err != nil {
-		errSummary = "Error creating Custom Model version from local files"
-		errDetail = err.Error()
 		return
 	}
 
@@ -1374,14 +1396,18 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:         existingGuardConfig.Name,
-			Description:  existingGuardConfig.Description,
-			Type:         existingGuardConfig.Type,
-			Stages:       existingGuardConfig.Stages,
-			Intervention: intervention,
-			DeploymentID: existingGuardConfig.DeploymentID,
-			NemoInfo:     existingGuardConfig.NemoInfo,
-			ModelInfo:    existingGuardConfig.ModelInfo,
+			Name:               existingGuardConfig.Name,
+			Description:        existingGuardConfig.Description,
+			Type:               existingGuardConfig.Type,
+			Stages:             existingGuardConfig.Stages,
+			Intervention:       intervention,
+			DeploymentID:       existingGuardConfig.DeploymentID,
+			NemoInfo:           existingGuardConfig.NemoInfo,
+			ModelInfo:          existingGuardConfig.ModelInfo,
+			OpenAICredential:   existingGuardConfig.OpenAICredential,
+			OpenAIApiBase:      existingGuardConfig.OpenAIApiBase,
+			OpenAIDeploymentID: existingGuardConfig.OpenAIDeploymentID,
+			LlmType:            existingGuardConfig.LlmType,
 		}
 
 		if existingGuardConfig.OOTBType != "" {
@@ -1435,10 +1461,17 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 					},
 				},
 			},
-			ModelInfo: guardTemplate.ModelInfo,
-			// TODO: allow user to input Nemo Info
-			NemoInfo:     guardTemplate.NemoInfo,
+			ModelInfo:    guardTemplate.ModelInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
+
+			// TODO: allow user to input Nemo Info
+			NemoInfo: guardTemplate.NemoInfo,
+
+			// Faithfulness Guard specific fields
+			OpenAICredential:   guardConfigToAdd.OpenAICredential.ValueString(),
+			OpenAIApiBase:      guardConfigToAdd.OpenAIApiBase.ValueString(),
+			OpenAIDeploymentID: guardConfigToAdd.OpenAIDeploymentID.ValueString(),
+			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
 		if guardTemplate.OOTBType != "" {
@@ -1585,54 +1618,36 @@ func (r *CustomModelResource) updateRemoteRepositories(
 func (r *CustomModelResource) updateLocalFiles(
 	ctx context.Context,
 	customModel *client.CustomModel,
-	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
 	filesToDelete := make([]string, 0)
-	for _, file := range state.LocalFiles {
-		if !contains(plan.LocalFiles, file) {
-			for _, item := range customModel.LatestVersion.Items {
-				if item.FilePath == file.ValueString() && item.FileSource == "local" {
-					filesToDelete = append(filesToDelete, item.ID)
-				}
-			}
+	for _, item := range customModel.LatestVersion.Items {
+		if item.FileSource == "local" {
+			filesToDelete = append(filesToDelete, item.ID)
 		}
 	}
 
 	if len(filesToDelete) > 0 {
 		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 			FilesToDelete:     filesToDelete,
 		})
 		if err != nil {
-			errSummary = "Error creating Custom Model version"
-			errDetail = err.Error()
 			return
 		}
 	}
 
-	filesToAdd := make([]string, 0)
-	for _, file := range plan.LocalFiles {
-		if !contains(state.LocalFiles, file) {
-			filesToAdd = append(filesToAdd, file.ValueString())
-		}
-	}
-
-	if len(filesToAdd) > 0 {
-		return r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.LocalFiles,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		)
-	}
-
-	return
+	return r.createCustomModelVersionFromFiles(
+		ctx,
+		plan.FolderPath,
+		plan.Files,
+		customModel.ID,
+		customModel.LatestVersion.BaseEnvironmentID,
+	)
 }
 
 func (r *CustomModelResource) assignTrainingDataset(

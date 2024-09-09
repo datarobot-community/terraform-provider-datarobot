@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -25,6 +27,9 @@ import (
 
 const (
 	defaultTimeoutMinutes = 30
+
+	faithfulnessOpenAiRuntimeParam      = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_OPENAI_API_KEY"
+	faithfulnessAzureOpenAiRuntimeParam = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_AZURE_OPENAI_API_KEY"
 )
 
 type Knowable interface {
@@ -259,6 +264,11 @@ func formatRuntimeParameterValues(
 			continue
 		}
 
+		if isManagedByGuards(param) {
+			// skip the parameter if it is managed by guards
+			continue
+		}
+
 		parameter := RuntimeParameterValue{
 			Key:   types.StringValue(param.FieldName),
 			Type:  types.StringValue(param.Type),
@@ -283,6 +293,11 @@ func formatRuntimeParameterValues(
 	return listValueFromRuntimParameters(ctx, parameters)
 }
 
+func isManagedByGuards(param client.RuntimeParameter) bool {
+	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
+		param.FieldName == faithfulnessAzureOpenAiRuntimeParam
+}
+
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
 	switch paramType {
 	case "boolean":
@@ -303,4 +318,123 @@ func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues [
 				"value": types.StringType,
 			},
 		}, runtimeParameterValues)
+}
+
+func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles []client.FileInfo, err error) {
+	localFiles = make([]client.FileInfo, 0)
+
+	if IsKnown(folderPath) {
+		folder := folderPath.ValueString()
+		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+			if innerErr != nil {
+				return innerErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			fileInfo, innerErr := getFileInfo(path, path)
+			if innerErr != nil {
+				return innerErr
+			}
+			localFiles = append(localFiles, fileInfo)
+
+			return nil
+		}); err != nil {
+			return
+		}
+	}
+
+	if IsKnown(files) {
+		var fileTuples []FileTuple
+		fileTuples, err = formatFiles(files)
+		if err != nil {
+			return
+		}
+
+		for _, file := range fileTuples {
+			var fileInfo client.FileInfo
+			fileInfo, err = getFileInfo(file.LocalPath, file.PathInModel)
+			if err != nil {
+				return
+			}
+
+			localFiles = append(localFiles, fileInfo)
+		}
+	}
+
+	return
+}
+
+func formatFiles(files types.Dynamic) ([]FileTuple, error) {
+	fileTuples := make([]FileTuple, 0)
+
+	switch value := files.UnderlyingValue().(type) {
+	case types.Tuple:
+		if len(value.Elements()) == 0 {
+			return fileTuples, nil
+		}
+
+		for i, item := range value.Elements() {
+			switch v := item.(type) {
+			case types.String:
+				filePath := v.ValueString()
+				fileTuples = append(fileTuples, FileTuple{
+					LocalPath:   filePath,
+					PathInModel: filepath.Base(filePath),
+				})
+			case types.Tuple:
+				if len(v.Elements()) < 1 || len(v.Elements()) > 2 {
+					return nil, fmt.Errorf("files[%d] must have 1 or 2 elements", i)
+				}
+
+				localPath, ok := v.Elements()[0].(types.String)
+				if !ok {
+					return nil, fmt.Errorf("files[%d] has element that is not a string", i)
+				}
+				pathInModel := filepath.Base(localPath.ValueString())
+				if len(v.Elements()) == 2 {
+					modelPath, ok := v.Elements()[1].(types.String)
+					if !ok {
+						return nil, fmt.Errorf("files[%d] has element that is not a string", i)
+					}
+					pathInModel = modelPath.ValueString()
+				}
+
+				fileTuples = append(fileTuples, FileTuple{
+					LocalPath:   localPath.ValueString(),
+					PathInModel: pathInModel,
+				})
+			default:
+				return nil, errors.New("files must be a tuple of strings or tuples")
+			}
+		}
+	default:
+		return nil, errors.New("files must be a tuple")
+	}
+
+	return fileTuples, nil
+}
+
+func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {
+	var fileReader *os.File
+	fileReader, err = os.Open(localPath)
+	if err != nil {
+		fmt.Println("Error opening file", err)
+		return
+	}
+	defer fileReader.Close()
+
+	var fileContent []byte
+	fileContent, err = io.ReadAll(fileReader)
+	if err != nil {
+		return
+	}
+
+	fileInfo = client.FileInfo{
+		Name:    filepath.Base(localPath),
+		Path:    pathInModel,
+		Content: fileContent,
+	}
+	return
 }
