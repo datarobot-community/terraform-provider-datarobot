@@ -167,6 +167,7 @@ type CustomModelResourceSettings struct {
 type RegisteredModelResourceModel struct {
 	ID                   types.String `tfsdk:"id"`
 	VersionID            types.String `tfsdk:"version_id"`
+	VersionName          types.String `tfsdk:"version_name"`
 	Name                 types.String `tfsdk:"name"`
 	Description          types.String `tfsdk:"description"`
 	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
@@ -204,8 +205,9 @@ type DeploymentSettings struct {
 }
 
 type AssociationIDSetting struct {
-	AutoGenerateID types.Bool   `tfsdk:"auto_generate_id"`
-	FeatureName    types.String `tfsdk:"feature_name"`
+	AutoGenerateID               types.Bool   `tfsdk:"auto_generate_id"`
+	FeatureName                  types.String `tfsdk:"feature_name"`
+	RequiredInPredictionRequests types.Bool   `tfsdk:"required_in_prediction_requests"`
 }
 
 type PredictionsSetting struct {
@@ -231,7 +233,8 @@ type ApplicationSourceResourceModel struct {
 	ID                     types.String                 `tfsdk:"id"`
 	VersionID              types.String                 `tfsdk:"version_id"`
 	Name                   types.String                 `tfsdk:"name"`
-	LocalFiles             []types.String               `tfsdk:"local_files"`
+	FolderPath             types.String                 `tfsdk:"folder_path"`
+	Files                  []FileTuple                  `tfsdk:"files"`
 	ResourceSettings       *ApplicationResourceSettings `tfsdk:"resource_settings"`
 	RuntimeParameterValues types.List                   `tfsdk:"runtime_parameter_values"`
 }

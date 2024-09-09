@@ -3,6 +3,8 @@
 FEATURES:
 
 - Support Faithfulness Guard with OpenAI credentials
+- Add name to Registered Model version
+- Support directories and relative file paths for Application Sources
 
 ## 0.0.23
 

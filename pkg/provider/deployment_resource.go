@@ -81,6 +81,10 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 								Required:            true,
 								MarkdownDescription: "The name of the feature to use as the association ID.",
 							},
+							"required_in_prediction_requests": schema.BoolAttribute{
+								Required:            true,
+								MarkdownDescription: "Whether the association ID is required in prediction requests.",
+							},
 						},
 					},
 					"prediction_row_storage": schema.BoolAttribute{
@@ -365,13 +369,15 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	if settings != nil {
 		// Association ID
 		req.AssociationID = &client.AssociationIDSetting{
-			AutoGenerateID: true,
-			ColumnNames:    []string{"id"},
+			AutoGenerateID:               true,
+			ColumnNames:                  []string{"id"},
+			RequiredInPredictionRequests: false,
 		}
 		if settings.AssociationID != nil {
 			req.AssociationID = &client.AssociationIDSetting{
-				AutoGenerateID: settings.AssociationID.AutoGenerateID.ValueBool(),
-				ColumnNames:    []string{settings.AssociationID.FeatureName.ValueString()},
+				AutoGenerateID:               settings.AssociationID.AutoGenerateID.ValueBool(),
+				ColumnNames:                  []string{settings.AssociationID.FeatureName.ValueString()},
+				RequiredInPredictionRequests: settings.AssociationID.RequiredInPredictionRequests.ValueBool(),
 			}
 		}
 
