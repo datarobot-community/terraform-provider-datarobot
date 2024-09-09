@@ -43,9 +43,9 @@ type Service interface {
 	DeletePlayground(ctx context.Context, id string) error
 
 	// LLM Blueprint
-	CreateLLMBlueprint(ctx context.Context, req *CreateLLMBlueprintRequest) (*LLMBlueprintResponse, error)
-	GetLLMBlueprint(ctx context.Context, id string) (*LLMBlueprintResponse, error)
-	UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprintResponse, error)
+	CreateLLMBlueprint(ctx context.Context, req *CreateLLMBlueprintRequest) (*LLMBlueprint, error)
+	GetLLMBlueprint(ctx context.Context, id string) (*LLMBlueprint, error)
+	UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprint, error)
 	DeleteLLMBlueprint(ctx context.Context, id string) error
 	ListLLMs(ctx context.Context) (*ListLLMsResponse, error)
 
@@ -257,16 +257,16 @@ func (s *ServiceImpl) IsVectorDatabaseReady(ctx context.Context, id string) (boo
 	return dataset.ExecutionStatus == "COMPLETED", nil
 }
 
-func (s *ServiceImpl) CreateLLMBlueprint(ctx context.Context, req *CreateLLMBlueprintRequest) (*LLMBlueprintResponse, error) {
-	return Post[LLMBlueprintResponse](s.client, ctx, "/genai/llmBlueprints/", req)
+func (s *ServiceImpl) CreateLLMBlueprint(ctx context.Context, req *CreateLLMBlueprintRequest) (*LLMBlueprint, error) {
+	return Post[LLMBlueprint](s.client, ctx, "/genai/llmBlueprints/", req)
 }
 
-func (s *ServiceImpl) GetLLMBlueprint(ctx context.Context, id string) (*LLMBlueprintResponse, error) {
-	return Get[LLMBlueprintResponse](s.client, ctx, "/genai/llmBlueprints/"+id+"/")
+func (s *ServiceImpl) GetLLMBlueprint(ctx context.Context, id string) (*LLMBlueprint, error) {
+	return Get[LLMBlueprint](s.client, ctx, "/genai/llmBlueprints/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprintResponse, error) {
-	return Patch[LLMBlueprintResponse](s.client, ctx, "/genai/llmBlueprints/"+id+"/", req)
+func (s *ServiceImpl) UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprint, error) {
+	return Patch[LLMBlueprint](s.client, ctx, "/genai/llmBlueprints/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteLLMBlueprint(ctx context.Context, id string) error {

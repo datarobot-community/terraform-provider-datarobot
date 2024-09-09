@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -29,7 +31,7 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: llmBlueprintResourceConfig("example_name", "example_description", llmID),
+				Config: llmBlueprintResourceConfig("example_name", "example_description", llmID, nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -40,12 +42,13 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 					checkLlmBlueprintResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "prompt_type", "CHAT_HISTORY_AWARE"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
 			// Update name, description, and LLM ID
 			{
-				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", newLLMID),
+				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", newLLMID, nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -57,6 +60,34 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "llm_id", newLLMID),
+					resource.TestCheckResourceAttr(resourceName, "prompt_type", "CHAT_HISTORY_AWARE"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Update LLM Settings
+			{
+				Config: llmBlueprintResourceConfig("new_example_name", "new_example_description", newLLMID, &LLMSettings{
+					MaxCompletionLength: basetypes.NewInt64Value(1000),
+					Temperature:         basetypes.NewFloat64Value(0.5),
+					TopP:                basetypes.NewFloat64Value(0.5),
+					SystemPrompt:        basetypes.NewStringValue("Prompt:"),
+				}),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkLlmBlueprintResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "llm_id", newLLMID),
+					resource.TestCheckResourceAttr(resourceName, "llm_settings.max_completion_length", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "llm_settings.temperature", "0.5"),
+					resource.TestCheckResourceAttr(resourceName, "llm_settings.top_p", "0.5"),
+					resource.TestCheckResourceAttr(resourceName, "llm_settings.system_prompt", "Prompt:"),
+					resource.TestCheckResourceAttr(resourceName, "prompt_type", "CHAT_HISTORY_AWARE"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -65,7 +96,42 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 	})
 }
 
-func llmBlueprintResourceConfig(name, description, llmID string) string {
+func TestLLMBlueprintResourceSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	NewLLMBlueprintResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
+
+func llmBlueprintResourceConfig(name, description, llmID string, llmSettings *LLMSettings) string {
+	llmSettingsStr := ""
+	if llmSettings != nil {
+		llmSettingsStr = fmt.Sprintf(`
+		llm_settings = {
+			max_completion_length = %d
+			temperature = %f
+			top_p = %f
+			system_prompt = "%s"
+		}`,
+			llmSettings.MaxCompletionLength.ValueInt64(),
+			llmSettings.Temperature.ValueFloat64(),
+			llmSettings.TopP.ValueFloat64(),
+			llmSettings.SystemPrompt.ValueString())
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_llm_blueprint" {
 	name = "test"
@@ -80,8 +146,9 @@ resource "datarobot_llm_blueprint" "test" {
 	description = "%s"
 	playground_id = "${datarobot_playground.test_llm_blueprint.id}"
 	llm_id = "%s"
+	%s
 }
-`, name, description, llmID)
+`, name, description, llmID, llmSettingsStr)
 }
 
 func checkLlmBlueprintResourceExists(resourceName string) resource.TestCheckFunc {
@@ -111,7 +178,8 @@ func checkLlmBlueprintResourceExists(resourceName string) resource.TestCheckFunc
 			llmBlueprint.Description == rs.Primary.Attributes["description"] &&
 			llmBlueprint.VectorDatabaseID == rs.Primary.Attributes["vector_database_id"] &&
 			llmBlueprint.PlaygroundID == rs.Primary.Attributes["playground_id"] &&
-			llmBlueprint.LLMID == rs.Primary.Attributes["llm_id"] {
+			llmBlueprint.LLMID == rs.Primary.Attributes["llm_id"] &&
+			llmBlueprint.PromptType == rs.Primary.Attributes["prompt_type"] {
 			return nil
 		}
 

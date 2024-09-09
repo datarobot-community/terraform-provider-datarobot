@@ -69,12 +69,27 @@ type PlaygroundResourceModel struct {
 
 // LLMBlueprintResourceModel describes the LLM blueprint resource.
 type LLMBlueprintResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Description      types.String `tfsdk:"description"`
-	PlaygroundID     types.String `tfsdk:"playground_id"`
-	VectorDatabaseID types.String `tfsdk:"vector_database_id"`
-	LLMID            types.String `tfsdk:"llm_id"`
+	ID                     types.String            `tfsdk:"id"`
+	Name                   types.String            `tfsdk:"name"`
+	Description            types.String            `tfsdk:"description"`
+	PlaygroundID           types.String            `tfsdk:"playground_id"`
+	VectorDatabaseID       types.String            `tfsdk:"vector_database_id"`
+	VectorDatabaseSettings *VectorDatabaseSettings `tfsdk:"vector_database_settings"`
+	LLMID                  types.String            `tfsdk:"llm_id"`
+	LLMSettings            *LLMSettings            `tfsdk:"llm_settings"`
+	PromptType             types.String            `tfsdk:"prompt_type"`
+}
+
+type VectorDatabaseSettings struct {
+	MaxDocumentsRetrievedPerPrompt types.Int64 `tfsdk:"max_documents_retrieved_per_prompt"`
+	MaxTokens                      types.Int64 `tfsdk:"max_tokens"`
+}
+
+type LLMSettings struct {
+	MaxCompletionLength types.Int64   `tfsdk:"max_completion_length"`
+	Temperature         types.Float64 `tfsdk:"temperature"`
+	TopP                types.Float64 `tfsdk:"top_p"`
+	SystemPrompt        types.String  `tfsdk:"system_prompt"`
 }
 
 // ModelResourceModel describes the custom model resource.

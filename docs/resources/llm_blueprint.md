@@ -48,8 +48,30 @@ output "example_id" {
 ### Optional
 
 - `description` (String) The description of the LLM Blueprint.
+- `llm_settings` (Attributes) The LLM settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--llm_settings))
+- `prompt_type` (String) The prompt type for the LLM Blueprint.
 - `vector_database_id` (String) The id of the Vector Database for the LLM Blueprint.
+- `vector_database_settings` (Attributes) The Vector Database settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--vector_database_settings))
 
 ### Read-Only
 
 - `id` (String) The ID of the LLM Blueprint.
+
+<a id="nestedatt--llm_settings"></a>
+### Nested Schema for `llm_settings`
+
+Optional:
+
+- `max_completion_length` (Number) The maximum number of tokens allowed in the completion. The combined count of this value and prompt tokens must be below the model's maximum context size, where prompt token count is comprised of system prompt, user prompt, recent chat history, and vector database citations.
+- `system_prompt` (String) Guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.
+- `temperature` (Number) Controls the randomness of model output, where higher values return more diverse output and lower values return more deterministic results.
+- `top_p` (Number) Threshold that controls the selection of words included in the response, based on a cumulative probability cutoff for token selection. Higher numbers return more diverse options for outputs.
+
+
+<a id="nestedatt--vector_database_settings"></a>
+### Nested Schema for `vector_database_settings`
+
+Optional:
+
+- `max_documents_retrieved_per_prompt` (Number) The maximum number of documents to retrieve from the Vector Database.
+- `max_tokens` (Number) The maximum number of tokens to retrieve from the Vector Database.

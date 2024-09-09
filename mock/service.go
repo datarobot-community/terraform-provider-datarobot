@@ -247,10 +247,10 @@ func (mr *MockServiceMockRecorder) CreateDeploymentFromModelPackage(ctx, req int
 }
 
 // CreateLLMBlueprint mocks base method.
-func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateLLMBlueprint", ctx, req)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -684,10 +684,10 @@ func (mr *MockServiceMockRecorder) GetGuardConfigurationsForCustomModelVersion(c
 }
 
 // GetLLMBlueprint mocks base method.
-func (m *MockService) GetLLMBlueprint(ctx context.Context, id string) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) GetLLMBlueprint(ctx context.Context, id string) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLLMBlueprint", ctx, id)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1179,10 +1179,10 @@ func (mr *MockServiceMockRecorder) UpdateDeploymentSettings(ctx, id, req interfa
 }
 
 // UpdateLLMBlueprint mocks base method.
-func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *client.UpdateLLMBlueprintRequest) (*client.LLMBlueprintResponse, error) {
+func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *client.UpdateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLLMBlueprint", ctx, id, req)
-	ret0, _ := ret[0].(*client.LLMBlueprintResponse)
+	ret0, _ := ret[0].(*client.LLMBlueprint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
