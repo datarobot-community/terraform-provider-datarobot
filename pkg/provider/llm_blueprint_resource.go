@@ -112,7 +112,7 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 				MarkdownDescription: "The prompt type for the LLM Blueprint.",
 				Optional:            true,
 				Computed:            true,
-				Default: stringdefault.StaticString(defaultPromptType),
+				Default:             stringdefault.StaticString(defaultPromptType),
 				Validators: []validator.String{
 					stringvalidator.OneOf(defaultPromptType, "ONE_TIME_PROMPT"),
 				},
