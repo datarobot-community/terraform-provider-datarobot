@@ -28,6 +28,19 @@ resource "datarobot_llm_blueprint" "example" {
   description   = "Description for the example LLM blueprint"
   playground_id = datarobot_playground.example.id
   llm_id        = "azure-openai-gpt-3.5-turbo"
+  prompt_type   = "ONE_TIME_PROMPT"
+
+  # Optional
+  # llm_settings {
+  #   max_completion_length = 1000
+  #   temperature           = 0.5
+  #   top_p                 = 0.9
+  #   system_prompt         = "My Prompt:"
+  # }
+  # vector_database_settings = {
+  #   max_documents_retrieved_per_prompt = 5
+  #   max_tokens = 1000
+  # }
 }
 
 output "example_id" {

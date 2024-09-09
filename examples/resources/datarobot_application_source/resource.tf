@@ -1,6 +1,9 @@
 resource "datarobot_application_source" "example" {
-  name        = "example application source"
-  local_files = ["start-app.sh", "streamlit-app.py"]
+  name = "example application source"
+  files = [
+    ["start-app.sh"],
+    ["streamlit-app.py"],
+  ]
 }
 
 output "datarobot_application_source_id" {

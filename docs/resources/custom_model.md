@@ -34,12 +34,6 @@ resource "datarobot_custom_model" "example" {
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
 
-  resource_settings = {
-    memory_mb      = 512
-    replicas       = 2
-    network_access = "NONE"
-  }
-
   # Optional
   # source_remote_repositories = [
   #   {
@@ -68,6 +62,11 @@ resource "datarobot_custom_model" "example" {
   # overall_moderation_configuration = {
   #   timeout_sec    = 120
   #   timeout_action = "score"
+  # }
+  # resource_settings = {
+  #   memory_mb      = 512
+  #   replicas       = 2
+  #   network_access = "NONE"
   # }
 }
 
