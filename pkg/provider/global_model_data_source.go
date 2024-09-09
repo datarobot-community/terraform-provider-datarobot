@@ -73,7 +73,7 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var globalModel *client.RegisteredModelResponse
+	var globalModel *client.RegisteredModel
 	for index := range listRegisteredModelsResp.Data {
 		registeredModel := listRegisteredModelsResp.Data[index]
 		if registeredModel.Name == config.Name.ValueString() && registeredModel.IsGlobal {
@@ -93,7 +93,7 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var globalModelVersion *client.RegisteredModelVersionResponse
+	var globalModelVersion *client.RegisteredModelVersion
 	for index := range listRegisteredModelVersionsResp.Data {
 		registeredModelVersion := listRegisteredModelVersionsResp.Data[index]
 		if registeredModelVersion.RegisteredModelVersion == globalModel.LastVersionNum {

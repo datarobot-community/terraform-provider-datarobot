@@ -527,7 +527,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	registeredModelName := "Updated Integration Test" + uuid.New().String()
 	registeredModelDescription := "This is an updated test registered model."
-	registeredModelResp, err := s.UpdateRegisteredModel(ctx, registeredModelVersion.RegisteredModelID, &client.RegisteredModelUpdate{
+	registeredModelResp, err := s.UpdateRegisteredModel(ctx, registeredModelVersion.RegisteredModelID, &client.UpdateRegisteredModelRequest{
 		Name:        registeredModelName,
 		Description: registeredModelDescription,
 	})

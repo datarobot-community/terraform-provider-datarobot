@@ -332,6 +332,44 @@ func formatFiles(files []FileTuple) (fileTuples []FileTuple) {
 	return
 }
 
+func prepareLocalFiles(folderPath types.String, files []FileTuple) (localFiles []client.FileInfo, err error) {
+	localFiles = make([]client.FileInfo, 0)
+
+	if IsKnown(folderPath) {
+		folder := folderPath.ValueString()
+		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+			if innerErr != nil {
+				return innerErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			fileInfo, innerErr := getFileInfo(path, path)
+			if innerErr != nil {
+				return innerErr
+			}
+			localFiles = append(localFiles, fileInfo)
+
+			return nil
+		}); err != nil {
+			return
+		}
+	}
+
+	for _, file := range formatFiles(files) {
+		var fileInfo client.FileInfo
+		fileInfo, err = getFileInfo(file.LocalPath.ValueString(), file.PathInModel.ValueString())
+		if err != nil {
+			return
+		}
+
+		localFiles = append(localFiles, fileInfo)
+	}
+
+	return
+}
+
 func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {
 	var fileReader *os.File
 	fileReader, err = os.Open(localPath)

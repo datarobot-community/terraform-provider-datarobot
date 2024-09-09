@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -61,8 +62,24 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	fileName := "custom_model_resource_test.go"
-	fileName2 := "custom_model_resource.go"
+	fileName := "test-file.txt"
+	folderPath := "dir"
+	err := os.WriteFile(fileName, []byte(`test`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fileName)
+
+	err = os.Mkdir("dir", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("dir")
+
+	err = os.WriteFile("dir/"+fileName, []byte(`test`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
@@ -82,6 +99,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
+					&folderPath,
 					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					[]GuardConfiguration{
 						{
@@ -132,6 +150,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
@@ -157,7 +176,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName), PathInModel: basetypes.NewStringValue("dir/custom_model_resource_test.go")}},
+					&folderPath,
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName), PathInModel: basetypes.NewStringValue("new_dir/" + fileName)}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -233,7 +253,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.path_in_model", "dir/custom_model_resource_test.go"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttr(resourceName, "files.0.path_in_model", "new_dir/"+fileName),
 				),
 			},
 			// Remove guards
@@ -242,6 +263,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
+					&folderPath,
 					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
@@ -268,6 +290,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
+					&folderPath,
 					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
@@ -291,6 +314,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
+					&folderPath,
 					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
 					nil,
 					nil,
@@ -312,7 +336,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName2)}},
+					&folderPath,
+					[]FileTuple{{LocalPath: basetypes.NewStringValue(folderPath + "/" + fileName)}},
 					nil,
 					nil,
 					false),
@@ -324,7 +349,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", fileName2),
+					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", folderPath+"/"+fileName),
 				),
 			},
 			// Remove files
@@ -332,6 +357,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					nil,
 					nil,
 					nil,
 					nil,
@@ -353,6 +379,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					nil,
 					nil,
 					nil,
 					nil,
@@ -381,6 +408,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
+					nil,
 					nil,
 					nil,
 					&CustomModelResourceSettings{
@@ -739,6 +767,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	name,
 	description string,
 	remoteRepositories []SourceRemoteRepository,
+	folderPath *string,
 	files []FileTuple,
 	guards []GuardConfiguration,
 	resourceSettings *CustomModelResourceSettings,
@@ -756,6 +785,13 @@ func customModelWithoutLlmBlueprintResourceConfig(
 			},`, remoteRepository.Ref, remoteRepository.SourcePaths)
 		}
 		remoteRepositoriesStr += "]"
+	}
+
+	folderStr := ""
+	if folderPath != nil {
+		folderStr = fmt.Sprintf(`
+		folder_path = "%s"
+		`, *folderPath)
 	}
 
 	filesStr := ""
@@ -876,8 +912,9 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 	%s
+	%s
 }
-`, name, description, remoteRepositoriesStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+`, name, description, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
 }
 
 func binaryCustomModelResourceConfig(
