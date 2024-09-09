@@ -66,14 +66,15 @@ type Service interface {
 	CreateCustomModelVersionFromGuardConfigurations(ctx context.Context, id string, req *CreateCustomModelVersionFromGuardsConfigurationRequest) (*CreateCustomModelVersionFromGuardsConfigurationResponse, error)
 
 	// Registered Model
-	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersionResponse, error)
+	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
+	UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error)
 	ListRegisteredModelVersions(ctx context.Context, id string) (*ListRegisteredModelVersionsResponse, error)
-	GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersionResponse, error)
-	GetRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string) (*RegisteredModelVersionResponse, error)
+	GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error)
+	GetRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string) (*RegisteredModelVersion, error)
 	IsRegisteredModelVersionReady(ctx context.Context, registeredModelId string, versionId string) (bool, error)
 	ListRegisteredModels(ctx context.Context) (*ListRegisteredModelsResponse, error)
-	GetRegisteredModel(ctx context.Context, id string) (*RegisteredModelResponse, error)
-	UpdateRegisteredModel(ctx context.Context, id string, req *RegisteredModelUpdate) (*RegisteredModelResponse, error)
+	GetRegisteredModel(ctx context.Context, id string) (*RegisteredModel, error)
+	UpdateRegisteredModel(ctx context.Context, id string, req *UpdateRegisteredModelRequest) (*RegisteredModel, error)
 	DeleteRegisteredModel(ctx context.Context, id string) error
 
 	// Prediction Environment
@@ -337,19 +338,23 @@ func (s *ServiceImpl) CreateCustomModelVersionFromGuardConfigurations(ctx contex
 }
 
 // Registered Model Service Implementation.
-func (s *ServiceImpl) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersionResponse, error) {
-	return Post[RegisteredModelVersionResponse](s.client, ctx, "/modelPackages/fromCustomModelVersion/", req)
+func (s *ServiceImpl) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error) {
+	return Post[RegisteredModelVersion](s.client, ctx, "/modelPackages/fromCustomModelVersion/", req)
 }
 
-func (s *ServiceImpl) GetRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string) (*RegisteredModelVersionResponse, error) {
-	return Get[RegisteredModelVersionResponse](s.client, ctx, "/registeredModels/"+registeredModelId+"/versions/"+versionId+"/")
+func (s *ServiceImpl) UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error) {
+	return Patch[RegisteredModelVersion](s.client, ctx, "/registeredModels/"+registeredModelId+"/versions/"+versionId+"/", req)
+}
+
+func (s *ServiceImpl) GetRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string) (*RegisteredModelVersion, error) {
+	return Get[RegisteredModelVersion](s.client, ctx, "/registeredModels/"+registeredModelId+"/versions/"+versionId+"/")
 }
 
 func (s *ServiceImpl) ListRegisteredModelVersions(ctx context.Context, id string) (*ListRegisteredModelVersionsResponse, error) {
 	return Get[ListRegisteredModelVersionsResponse](s.client, ctx, "/registeredModels/"+id+"/versions/")
 }
 
-func (s *ServiceImpl) GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersionResponse, error) {
+func (s *ServiceImpl) GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error) {
 	registeredModel, err := s.GetRegisteredModel(ctx, id)
 	if err != nil {
 		return nil, err
@@ -383,12 +388,12 @@ func (s *ServiceImpl) ListRegisteredModels(ctx context.Context) (*ListRegistered
 	return Get[ListRegisteredModelsResponse](s.client, ctx, "/registeredModels/")
 }
 
-func (s *ServiceImpl) GetRegisteredModel(ctx context.Context, id string) (*RegisteredModelResponse, error) {
-	return Get[RegisteredModelResponse](s.client, ctx, "/registeredModels/"+id+"/")
+func (s *ServiceImpl) GetRegisteredModel(ctx context.Context, id string) (*RegisteredModel, error) {
+	return Get[RegisteredModel](s.client, ctx, "/registeredModels/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateRegisteredModel(ctx context.Context, id string, req *RegisteredModelUpdate) (*RegisteredModelResponse, error) {
-	return Patch[RegisteredModelResponse](s.client, ctx, "/registeredModels/"+id+"/", req)
+func (s *ServiceImpl) UpdateRegisteredModel(ctx context.Context, id string, req *UpdateRegisteredModelRequest) (*RegisteredModel, error) {
+	return Patch[RegisteredModel](s.client, ctx, "/registeredModels/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteRegisteredModel(ctx context.Context, id string) error {

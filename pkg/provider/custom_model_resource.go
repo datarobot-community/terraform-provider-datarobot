@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
@@ -1340,45 +1339,9 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 ) (
 	err error,
 ) {
-	localFiles := make([]client.FileInfo, 0)
-	if IsKnown(folderPath) {
-		folder := folderPath.ValueString()
-		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
-			if innerErr != nil {
-				return innerErr
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			fileInfo, innerErr := getFileInfo(path, path)
-			if innerErr != nil {
-				return innerErr
-			}
-			localFiles = append(localFiles, fileInfo)
-
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
-	fileTuples := make([]FileTuple, 0)
-	if IsKnown(files) {
-		fileTuples, err = formatFiles(files)
-		if err != nil {
-			return
-		}
-	}
-
-	for _, file := range fileTuples {
-		var fileInfo client.FileInfo
-		fileInfo, err = getFileInfo(file.LocalPath, file.PathInModel)
-		if err != nil {
-			return
-		}
-
-		localFiles = append(localFiles, fileInfo)
+	localFiles, err := prepareLocalFiles(folderPath, files)
+	if err != nil {
+		return
 	}
 
 	traceAPICall("CreateCustomModelVersionFromLocalFiles")
