@@ -12,7 +12,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -235,11 +234,11 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: applicationSourceResourceConfig("", []FileTuple{{LocalPath: basetypes.NewStringValue("start-app.sh")}}, 1),
+				Config: applicationSourceResourceConfig("", []FileTuple{{LocalPath: "start-app.sh"}}, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", "start-app.sh"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", "start-app.sh"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -247,11 +246,11 @@ if __name__ == "__main__":
 			},
 			// Update name, local file, and replicas
 			{
-				Config: applicationSourceResourceConfig("new_example_name", []FileTuple{{LocalPath: basetypes.NewStringValue("streamlit-app.py")}}, 2),
+				Config: applicationSourceResourceConfig("new_example_name", []FileTuple{{LocalPath: "streamlit-app.py"}}, 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", "streamlit-app.py"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", "streamlit-app.py"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -284,18 +283,13 @@ func applicationSourceResourceConfig(name string, files []FileTuple, replicas in
 	if len(files) > 0 {
 		filesStr = "files = ["
 		for _, file := range files {
-			pathInModelStr := ""
-			if IsKnown(file.PathInModel) {
-				pathInModelStr = fmt.Sprintf(`
-				path_in_model = %s
-				`, file.PathInModel)
+			if file.PathInModel != "" {
+				filesStr += fmt.Sprintf(`
+				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			} else {
+				filesStr += fmt.Sprintf(`
+				["%s"],`, file.LocalPath)
 			}
-			filesStr += fmt.Sprintf(`
-				{
-					local_path = %s
-					%s
-				},
-			`, file.LocalPath, pathInModelStr)
 		}
 
 		filesStr += "]"
@@ -340,7 +334,7 @@ func checkApplicationSourceResourceExists(resourceName string) resource.TestChec
 		}
 
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
-			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["files.0.local_path"] &&
+			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["files.0.0"] &&
 			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
 			return nil
 		}

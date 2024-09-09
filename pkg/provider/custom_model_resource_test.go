@@ -100,7 +100,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
+					[]FileTuple{{LocalPath: fileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -151,7 +151,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
-					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -177,7 +177,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName), PathInModel: basetypes.NewStringValue("new_dir/" + fileName)}},
+					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -254,7 +254,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
-					resource.TestCheckResourceAttr(resourceName, "files.0.path_in_model", "new_dir/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
 				),
 			},
 			// Remove guards
@@ -264,7 +264,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -291,7 +291,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 						},
 					},
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -315,7 +315,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					nil,
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(fileName)}},
+					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
 					false),
@@ -337,7 +337,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					nil,
 					&folderPath,
-					[]FileTuple{{LocalPath: basetypes.NewStringValue(folderPath + "/" + fileName)}},
+					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
 					nil,
 					nil,
 					false),
@@ -349,7 +349,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.local_path", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
 				),
 			},
 			// Remove files
@@ -371,7 +371,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.local_path"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
 				),
 			},
 			// Add resource settings
@@ -798,18 +798,13 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	if len(files) > 0 {
 		filesStr = "files = ["
 		for _, file := range files {
-			pathInModelStr := ""
-			if IsKnown(file.PathInModel) {
-				pathInModelStr = fmt.Sprintf(`
-				path_in_model = %s
-				`, file.PathInModel)
+			if file.PathInModel != "" {
+				filesStr += fmt.Sprintf(`
+				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			} else {
+				filesStr += fmt.Sprintf(`
+				["%s"],`, file.LocalPath)
 			}
-			filesStr += fmt.Sprintf(`
-				{
-					local_path = %s
-					%s
-				},
-			`, file.LocalPath, pathInModelStr)
 		}
 
 		filesStr += "]"

@@ -34,27 +34,6 @@ resource "datarobot_custom_model" "example" {
   target_name           = "my_label"
   base_environment_name = "[GenAI] Python 3.11 with Moderations"
 
-  # Guards
-  guard_configurations = [
-    {
-      template_name = "Rouge 1"
-      name          = "Rouge 1 response"
-      stages        = ["response"]
-      intervention = {
-        action  = "block"
-        message = "response has been blocked by Rogue 1 guard"
-        condition = {
-          comparand  = 0.8
-          comparator = "lessThan"
-        }
-      }
-    },
-  ]
-  overall_moderation_configuration = {
-    timeout_sec    = 120
-    timeout_action = "score"
-  }
-
   resource_settings = {
     memory_mb      = 512
     replicas       = 2
@@ -71,6 +50,25 @@ resource "datarobot_custom_model" "example" {
   #     ]
   #   }
   # ]
+  # guard_configurations = [
+  #   {
+  #     template_name = "Rouge 1"
+  #     name          = "Rouge 1 response"
+  #     stages        = ["response"]
+  #     intervention = {
+  #       action  = "block"
+  #       message = "response has been blocked by Rogue 1 guard"
+  #       condition = {
+  #         comparand  = 0.8
+  #         comparator = "lessThan"
+  #       }
+  #     }
+  #   },
+  # ]
+  # overall_moderation_configuration = {
+  #   timeout_sec    = 120
+  #   timeout_action = "score"
+  # }
 }
 
 output "example_id" {
@@ -94,7 +92,7 @@ output "example_id" {
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
-- `files` (Attributes List) Files for the Custom Model. (see [below for nested schema](#nestedatt--files))
+- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
@@ -119,18 +117,6 @@ output "example_id" {
 - `training_dataset_name` (String) The name of the training dataset assigned to the Custom Model.
 - `training_dataset_version_id` (String) The version ID of the training dataset assigned to the Custom Model.
 - `version_id` (String) The ID of the latest Custom Model version.
-
-<a id="nestedatt--files"></a>
-### Nested Schema for `files`
-
-Required:
-
-- `local_path` (String) The local filesystem path of the file.
-
-Optional:
-
-- `path_in_model` (String) The path where the file should be placed in the Custom Model. If not provided, the basename of the local path will be used.
-
 
 <a id="nestedatt--guard_configurations"></a>
 ### Nested Schema for `guard_configurations`

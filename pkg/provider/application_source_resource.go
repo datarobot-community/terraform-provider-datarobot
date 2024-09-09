@@ -69,21 +69,9 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				Optional:            true,
 				MarkdownDescription: "The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.",
 			},
-			"files": schema.ListNestedAttribute{
+			"files": schema.DynamicAttribute{
 				Optional:            true,
-				MarkdownDescription: "Files for the Application Source.",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"local_path": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The local filesystem path of the file.",
-						},
-						"path_in_model": schema.StringAttribute{
-							Optional:            true,
-							MarkdownDescription: "The path where the file should be placed in the Application Source. If not provided, the basename of the local path will be used.",
-						},
-					},
-				},
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
 			},
 			"resource_settings": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -554,7 +542,7 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	id string,
 	versionId string,
 	folderPath types.String,
-	files []FileTuple,
+	files types.Dynamic,
 ) (
 	err error,
 ) {

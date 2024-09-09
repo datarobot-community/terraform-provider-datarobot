@@ -73,6 +73,47 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			// "llm_settings": schema.SingleNestedAttribute{
+			// 	MarkdownDescription: "The LLM settings for the LLM Blueprint.",
+			// 	Attributes: map[string]schema.Attribute{
+			// 		"max_completion_length": schema.Int64Attribute{
+			// 			MarkdownDescription: "The maximum completion length for the LLM Blueprint.",
+			// 			Required:            true,
+			// 		},
+			// 		"temperature": schema.Float64Attribute{
+			// 			MarkdownDescription: "The temperature for the LLM Blueprint.",
+			// 			Required:            true,
+			// 		},
+			// 		"top_p": schema.Float64Attribute{
+			// 			MarkdownDescription: "The top p for the LLM Blueprint.",
+			// 			Required:            true,
+			// 		},
+			// 		"system_prompt": schema.StringAttribute{
+			// 			MarkdownDescription: "The system prompt for the LLM Blueprint.",
+			// 			Required:            true,
+			// 		},
+			// 	},
+			// },
+			// "prompt_type": schema.StringAttribute{
+			// 	MarkdownDescription: "The prompt type for the LLM Blueprint.",
+			// 	Required:            true,
+			// 	Validators: []validator.String{
+			// 		stringvalidator.OneOf("CHAT_HISTORY_AWARE", "ONE_TIME_PROMPT"),
+			// 	},
+			// },
+			// "vector_database_settings": schema.SingleNestedAttribute{
+			// 	MarkdownDescription: "The Vector Database settings for the LLM Blueprint.",
+			// 	Attributes: map[string]schema.Attribute{
+			// 		"max_tokens": schema.Int64Attribute{
+			// 			MarkdownDescription: "The maximum number of tokens to retrieve from the Vector Database.",
+			// 			Required:            true,
+			// 		},
+			// 		"max_documents_retrieved_per_prompt": schema.Int64Attribute{
+			// 			MarkdownDescription: "The maximum number of documents to retrieve from the Vector Database.",
+			// 			Required:            true,
+			// 		},
+			// 	},
+			// },
 		},
 	}
 }
