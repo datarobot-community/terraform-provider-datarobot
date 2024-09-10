@@ -62,9 +62,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	fileName := "test-file.txt"
+	fileName := "requirements.txt"
 	folderPath := "dir"
-	err := os.WriteFile(fileName, []byte(`test`), 0644)
+	err := os.WriteFile(fileName, []byte(`langchain == 0.2.8`), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	}
 	defer os.RemoveAll("dir")
 
-	err = os.WriteFile("dir/"+fileName, []byte(`test`), 0644)
+	err = os.WriteFile("dir/"+fileName, []byte(`langchain == 0.2.9`), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -708,6 +708,22 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	if customModel.LatestVersion.Dependencies != nil && len(customModel.LatestVersion.Dependencies) > 0 {
+		traceAPICall("CreateDependencyBuild")
+		_, err := r.provider.service.CreateDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model dependency build", err.Error())
+			return
+		}
+
+		err = r.waitForDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error waiting for Custom Model dependency build", err.Error())
+			return
+		}
+
+	}
+
 	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		customModel.LatestVersion.RuntimeParameters,
@@ -1087,6 +1103,25 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
+	if customModel.LatestVersion.Dependencies != nil && len(customModel.LatestVersion.Dependencies) > 0 {
+		traceAPICall("GetDependencyBuild")
+		_, err := r.provider.service.GetDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+		if err != nil {  // if not found, must create a new one
+			traceAPICall("CreateDependencyBuild")
+			_, err := r.provider.service.CreateDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+			if err != nil {
+				resp.Diagnostics.AddError("Error creating Custom Model dependency build", err.Error())
+				return
+			}
+
+			err = r.waitForDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+			if err != nil {
+				resp.Diagnostics.AddError("Error waiting for Custom Model dependency build", err.Error())
+				return
+			}
+		}
+	}
+
 	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		customModel.LatestVersion.RuntimeParameters,
@@ -1278,6 +1313,34 @@ func (r *CustomModelResource) waitForTrainingDataToBeAssigned(ctx context.Contex
 		}
 		if customModel.LatestVersion.TrainingData.AssignmentInProgress {
 			return errors.New("assignment in progress")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *CustomModelResource) waitForDependencyBuild(ctx context.Context, id, versionID string) error {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("GetDependencyBuild")
+		dependencyBuild, err := r.provider.service.GetDependencyBuild(ctx, id, versionID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if dependencyBuild.BuildStatus == "failed" {
+			return backoff.Permanent(errors.New("dependency build failed"))
+		}
+		if dependencyBuild.BuildStatus != "success" {
+			return errors.New("dependency build in progress")
 		}
 
 		return nil

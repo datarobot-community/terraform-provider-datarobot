@@ -53,6 +53,7 @@ type CustomModelVersion struct {
 	CustomModelID            string                   `json:"customModelId"`
 	BaseEnvironmentID        string                   `json:"baseEnvironmentId"`
 	BaseEnvironmentVersionID string                   `json:"baseEnvironmentVersionId"`
+	Dependencies             []Dependency             `json:"dependencies"`
 	RuntimeParameters        []RuntimeParameter       `json:"runtimeParameters"`
 	Items                    []FileItem               `json:"items"`
 	MaximumMemory            *int64                   `json:"maximumMemory"`
@@ -60,6 +61,10 @@ type CustomModelVersion struct {
 	Replicas                 *int64                   `json:"replicas"`
 	TrainingData             *CustomModelTrainingData `json:"trainingData"`
 	HoldoutData              *CustomModelHoldoutData  `json:"holdoutData"`
+}
+
+type Dependency struct {
+	PackageName string `json:"packageName"`
 }
 
 type FileItem struct {
@@ -252,4 +257,8 @@ type OverallModerationConfiguration struct {
 
 type CreateCustomModelVersionFromGuardsConfigurationResponse struct {
 	CustomModelVersionID string `json:"customModelVersionId"`
+}
+
+type DependencyBuild struct {
+	BuildStatus string `json:"buildStatus"`
 }
