@@ -1,3 +1,9 @@
+## 0.1.27
+
+FEATURES:
+
+- Support Dependency Builds for Custom Models
+
 ## 0.0.24
 
 FEATURES:

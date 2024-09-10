@@ -231,6 +231,21 @@ func (mr *MockServiceMockRecorder) CreateDatasetVersionFromFile(ctx, id, fileNam
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetVersionFromFile", reflect.TypeOf((*MockService)(nil).CreateDatasetVersionFromFile), ctx, id, fileName, content)
 }
 
+// CreateDependencyBuild mocks base method.
+func (m *MockService) CreateDependencyBuild(ctx context.Context, id, versionID string) (*client.DependencyBuild, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDependencyBuild", ctx, id, versionID)
+	ret0, _ := ret[0].(*client.DependencyBuild)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDependencyBuild indicates an expected call of CreateDependencyBuild.
+func (mr *MockServiceMockRecorder) CreateDependencyBuild(ctx, id, versionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDependencyBuild", reflect.TypeOf((*MockService)(nil).CreateDependencyBuild), ctx, id, versionID)
+}
+
 // CreateDeploymentFromModelPackage mocks base method.
 func (m *MockService) CreateDeploymentFromModelPackage(ctx context.Context, req *client.CreateDeploymentFromModelPackageRequest) (*client.DeploymentCreateResponse, error) {
 	m.ctrl.T.Helper()
@@ -636,6 +651,21 @@ func (m *MockService) GetDataset(ctx context.Context, id string) (*client.Datase
 func (mr *MockServiceMockRecorder) GetDataset(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDataset", reflect.TypeOf((*MockService)(nil).GetDataset), ctx, id)
+}
+
+// GetDependencyBuild mocks base method.
+func (m *MockService) GetDependencyBuild(ctx context.Context, id, versionID string) (*client.DependencyBuild, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDependencyBuild", ctx, id, versionID)
+	ret0, _ := ret[0].(*client.DependencyBuild)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDependencyBuild indicates an expected call of GetDependencyBuild.
+func (mr *MockServiceMockRecorder) GetDependencyBuild(ctx, id, versionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDependencyBuild", reflect.TypeOf((*MockService)(nil).GetDependencyBuild), ctx, id, versionID)
 }
 
 // GetDeployment mocks base method.
