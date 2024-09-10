@@ -1106,7 +1106,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	if customModel.LatestVersion.Dependencies != nil && len(customModel.LatestVersion.Dependencies) > 0 {
 		traceAPICall("GetDependencyBuild")
 		_, err := r.provider.service.GetDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
-		if err != nil {  // if not found, must create a new one
+		if err != nil { // if not found, must create a new one
 			traceAPICall("CreateDependencyBuild")
 			_, err := r.provider.service.CreateDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
 			if err != nil {
