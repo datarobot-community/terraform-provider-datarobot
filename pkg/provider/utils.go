@@ -367,51 +367,72 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 }
 
 func formatFiles(files types.Dynamic) ([]FileTuple, error) {
-	fileTuples := make([]FileTuple, 0)
-
 	switch value := files.UnderlyingValue().(type) {
+	case types.List:
+		return handleFilesAsListOrTuple(value.Elements())
 	case types.Tuple:
-		if len(value.Elements()) == 0 {
-			return fileTuples, nil
-		}
-
-		for i, item := range value.Elements() {
-			switch v := item.(type) {
-			case types.String:
-				filePath := v.ValueString()
-				fileTuples = append(fileTuples, FileTuple{
-					LocalPath:   filePath,
-					PathInModel: filepath.Base(filePath),
-				})
-			case types.Tuple:
-				if len(v.Elements()) < 1 || len(v.Elements()) > 2 {
-					return nil, fmt.Errorf("files[%d] must have 1 or 2 elements", i)
-				}
-
-				localPath, ok := v.Elements()[0].(types.String)
-				if !ok {
-					return nil, fmt.Errorf("files[%d] has element that is not a string", i)
-				}
-				pathInModel := filepath.Base(localPath.ValueString())
-				if len(v.Elements()) == 2 {
-					modelPath, ok := v.Elements()[1].(types.String)
-					if !ok {
-						return nil, fmt.Errorf("files[%d] has element that is not a string", i)
-					}
-					pathInModel = modelPath.ValueString()
-				}
-
-				fileTuples = append(fileTuples, FileTuple{
-					LocalPath:   localPath.ValueString(),
-					PathInModel: pathInModel,
-				})
-			default:
-				return nil, errors.New("files must be a tuple of strings or tuples")
-			}
-		}
+		return handleFilesAsListOrTuple(value.Elements())
 	default:
-		return nil, errors.New("files must be a tuple")
+		return nil, errors.New("files must be a list/tuple")
 	}
+}
+
+func handleFilesAsListOrTuple(values []attr.Value) ([]FileTuple, error) {
+	fileTuples := make([]FileTuple, 0)
+	if len(values) == 0 {
+		return fileTuples, nil
+	}
+
+	for i, item := range values {
+		switch v := item.(type) {
+		case types.List:
+			var err error
+			fileTuples, err = handleFileAsListOrTuple(v.Elements(), fileTuples, i)
+			if err != nil {
+				return nil, err
+			}
+		case types.Tuple:
+			var err error
+			fileTuples, err = handleFileAsListOrTuple(v.Elements(), fileTuples, i)
+			if err != nil {
+				return nil, err
+			}
+		case types.String:
+			filePath := v.ValueString()
+			fileTuples = append(fileTuples, FileTuple{
+				LocalPath:   filePath,
+				PathInModel: filepath.Base(filePath),
+			})
+		default:
+			return nil, errors.New("files must be a tuple of strings or lists/tuples")
+		}
+	}
+
+	return fileTuples, nil
+}
+
+func handleFileAsListOrTuple(values []attr.Value, fileTuples []FileTuple, i int) ([]FileTuple, error) {
+	if len(values) < 1 || len(values) > 2 {
+		return nil, fmt.Errorf("files[%d] must have 1 or 2 elements", i)
+	}
+
+	localPath, ok := values[0].(types.String)
+	if !ok {
+		return nil, fmt.Errorf("files[%d] has element that is not a string", i)
+	}
+	pathInModel := filepath.Base(localPath.ValueString())
+	if len(values) == 2 {
+		modelPath, ok := values[1].(types.String)
+		if !ok {
+			return nil, fmt.Errorf("files[%d] has element that is not a string", i)
+		}
+		pathInModel = modelPath.ValueString()
+	}
+
+	fileTuples = append(fileTuples, FileTuple{
+		LocalPath:   localPath.ValueString(),
+		PathInModel: pathInModel,
+	})
 
 	return fileTuples, nil
 }
