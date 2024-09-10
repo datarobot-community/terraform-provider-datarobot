@@ -345,7 +345,7 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 		}
 	}
 
-	if IsKnown(files) {
+	if IsKnown(files) && files.UnderlyingValue() != nil && IsKnown(files.UnderlyingValue()) {
 		var fileTuples []FileTuple
 		fileTuples, err = formatFiles(files)
 		if err != nil {

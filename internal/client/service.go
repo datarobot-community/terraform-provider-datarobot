@@ -64,6 +64,8 @@ type Service interface {
 	GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error)
 	GetOverallModerationConfigurationForCustomModelVersion(ctx context.Context, id string) (*OverallModerationConfiguration, error)
 	CreateCustomModelVersionFromGuardConfigurations(ctx context.Context, id string, req *CreateCustomModelVersionFromGuardsConfigurationRequest) (*CreateCustomModelVersionFromGuardsConfigurationResponse, error)
+	CreateDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error)
+	GetDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error)
 
 	// Registered Model
 	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
@@ -335,6 +337,14 @@ func (s *ServiceImpl) GetOverallModerationConfigurationForCustomModelVersion(ctx
 
 func (s *ServiceImpl) CreateCustomModelVersionFromGuardConfigurations(ctx context.Context, id string, req *CreateCustomModelVersionFromGuardsConfigurationRequest) (*CreateCustomModelVersionFromGuardsConfigurationResponse, error) {
 	return Post[CreateCustomModelVersionFromGuardsConfigurationResponse](s.client, ctx, "/guardConfigurations/toNewCustomModelVersion/", req)
+}
+
+func (s *ServiceImpl) CreateDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error) {
+	return Post[DependencyBuild](s.client, ctx, "/customModels/"+id+"/versions/"+versionID+"/dependencyBuild/", map[string]string{})
+}
+
+func (s *ServiceImpl) GetDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error) {
+	return Get[DependencyBuild](s.client, ctx, "/customModels/"+id+"/versions/"+versionID+"/dependencyBuild/")
 }
 
 // Registered Model Service Implementation.
