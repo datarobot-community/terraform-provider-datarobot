@@ -292,7 +292,7 @@ func (mr *MockServiceMockRecorder) CreatePlayground(ctx, req interface{}) *gomoc
 }
 
 // CreatePredictionEnvironment mocks base method.
-func (m *MockService) CreatePredictionEnvironment(ctx context.Context, req *client.CreatePredictionEnvironmentRequest) (*client.PredictionEnvironment, error) {
+func (m *MockService) CreatePredictionEnvironment(ctx context.Context, req *client.PredictionEnvironmentRequest) (*client.PredictionEnvironment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePredictionEnvironment", ctx, req)
 	ret0, _ := ret[0].(*client.PredictionEnvironment)
@@ -1239,7 +1239,7 @@ func (mr *MockServiceMockRecorder) UpdatePlayground(ctx, id, req interface{}) *g
 }
 
 // UpdatePredictionEnvironment mocks base method.
-func (m *MockService) UpdatePredictionEnvironment(ctx context.Context, id string, req *client.UpdatePredictionEnvironmentRequest) (*client.PredictionEnvironment, error) {
+func (m *MockService) UpdatePredictionEnvironment(ctx context.Context, id string, req *client.PredictionEnvironmentRequest) (*client.PredictionEnvironment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePredictionEnvironment", ctx, id, req)
 	ret0, _ := ret[0].(*client.PredictionEnvironment)

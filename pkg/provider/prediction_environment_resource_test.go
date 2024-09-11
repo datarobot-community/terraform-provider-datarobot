@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -44,6 +45,26 @@ func TestAccPredictionEnvironmentResource(t *testing.T) {
 			// Delete is tested automatically
 		},
 	})
+}
+
+func TestPredictionEnvironmentResourceSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	NewPredictionEnvironmentResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
 }
 
 func predictionEnvironmentResourceConfig(name, description, platform string) string {

@@ -333,7 +333,9 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 				return nil
 			}
 
-			fileInfo, innerErr := getFileInfo(path, path)
+			pathInModel := strings.TrimPrefix(path, folder)
+			pathInModel = strings.TrimPrefix(pathInModel, string(filepath.Separator))
+			fileInfo, innerErr := getFileInfo(path, pathInModel)
 			if innerErr != nil {
 				return innerErr
 			}

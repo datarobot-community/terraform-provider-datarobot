@@ -534,7 +534,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 	require.Equal(registeredModelVersion.RegisteredModelID, registeredModelResp.ID)
 
-	predictionEnvironment, err := s.CreatePredictionEnvironment(ctx, &client.CreatePredictionEnvironmentRequest{
+	predictionEnvironment, err := s.CreatePredictionEnvironment(ctx, &client.PredictionEnvironmentRequest{
 		Name:     "Integration Test" + uuid.New().String(),
 		Platform: "aws",
 	})

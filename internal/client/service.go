@@ -80,9 +80,9 @@ type Service interface {
 	DeleteRegisteredModel(ctx context.Context, id string) error
 
 	// Prediction Environment
-	CreatePredictionEnvironment(ctx context.Context, req *CreatePredictionEnvironmentRequest) (*PredictionEnvironment, error)
+	CreatePredictionEnvironment(ctx context.Context, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error)
 	GetPredictionEnvironment(ctx context.Context, id string) (*PredictionEnvironment, error)
-	UpdatePredictionEnvironment(ctx context.Context, id string, req *UpdatePredictionEnvironmentRequest) (*PredictionEnvironment, error)
+	UpdatePredictionEnvironment(ctx context.Context, id string, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error)
 	DeletePredictionEnvironment(ctx context.Context, id string) error
 
 	// Deployment
@@ -411,7 +411,7 @@ func (s *ServiceImpl) DeleteRegisteredModel(ctx context.Context, id string) erro
 }
 
 // Prediction Environment Service Implementation.
-func (s *ServiceImpl) CreatePredictionEnvironment(ctx context.Context, req *CreatePredictionEnvironmentRequest) (*PredictionEnvironment, error) {
+func (s *ServiceImpl) CreatePredictionEnvironment(ctx context.Context, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error) {
 	return Post[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/", req)
 }
 
@@ -419,7 +419,7 @@ func (s *ServiceImpl) GetPredictionEnvironment(ctx context.Context, id string) (
 	return Get[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdatePredictionEnvironment(ctx context.Context, id string, req *UpdatePredictionEnvironmentRequest) (*PredictionEnvironment, error) {
+func (s *ServiceImpl) UpdatePredictionEnvironment(ctx context.Context, id string, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error) {
 	return Patch[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/"+id+"/", req)
 }
 
