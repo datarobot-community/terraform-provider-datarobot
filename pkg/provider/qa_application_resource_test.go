@@ -53,8 +53,8 @@ resource "datarobot_use_case" "test_qa_application" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_qa_application" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_qa_application.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_qa_application.id}"]
 }
 resource "datarobot_vector_database" "test_qa_application" {
 	  name = "test qa application"

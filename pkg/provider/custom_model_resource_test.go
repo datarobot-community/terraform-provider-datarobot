@@ -717,8 +717,8 @@ resource "datarobot_use_case" "test_custom_model" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_custom_model" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_custom_model.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_custom_model.id}"]
 }
 resource "datarobot_vector_database" "test_custom_model" {
 	  name = "test custom model"
@@ -878,8 +878,8 @@ resource "datarobot_use_case" "test_without_llm_blueprint" {
 }
 
 resource "datarobot_dataset_from_file" "test_without_llm_blueprint" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_without_llm_blueprint.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_without_llm_blueprint.id}"]
 }
 
 resource "datarobot_remote_repository" "test_custom_model_from_remote_repository" {

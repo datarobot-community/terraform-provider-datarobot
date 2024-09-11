@@ -50,8 +50,8 @@ resource "datarobot_use_case" "test_vector_database" {
 }
   
 resource "datarobot_dataset_from_file" "test_vector_database" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_vector_database.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_vector_database.id}"]
 }
 resource "datarobot_vector_database" "test" {
 	  name = "%s"

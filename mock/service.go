@@ -35,6 +35,20 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// AddDatasetToUseCase mocks base method.
+func (m *MockService) AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddDatasetToUseCase", ctx, useCaseID, datasetID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddDatasetToUseCase indicates an expected call of AddDatasetToUseCase.
+func (mr *MockServiceMockRecorder) AddDatasetToUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDatasetToUseCase", reflect.TypeOf((*MockService)(nil).AddDatasetToUseCase), ctx, useCaseID, datasetID)
+}
+
 // CreateApplicationFromSource mocks base method.
 func (m *MockService) CreateApplicationFromSource(ctx context.Context, req *client.CreateApplicationFromSourceRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
@@ -639,10 +653,10 @@ func (mr *MockServiceMockRecorder) GetCustomModel(ctx, id interface{}) *gomock.C
 }
 
 // GetDataset mocks base method.
-func (m *MockService) GetDataset(ctx context.Context, id string) (*client.DatasetResponse, error) {
+func (m *MockService) GetDataset(ctx context.Context, id string) (*client.Dataset, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDataset", ctx, id)
-	ret0, _ := ret[0].(*client.DatasetResponse)
+	ret0, _ := ret[0].(*client.Dataset)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -908,21 +922,6 @@ func (mr *MockServiceMockRecorder) IsCustomModelReady(ctx, id interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCustomModelReady", reflect.TypeOf((*MockService)(nil).IsCustomModelReady), ctx, id)
 }
 
-// IsDatasetReady mocks base method.
-func (m *MockService) IsDatasetReady(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsDatasetReady", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsDatasetReady indicates an expected call of IsDatasetReady.
-func (mr *MockServiceMockRecorder) IsDatasetReady(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDatasetReady", reflect.TypeOf((*MockService)(nil).IsDatasetReady), ctx, id)
-}
-
 // IsRegisteredModelVersionReady mocks base method.
 func (m *MockService) IsRegisteredModelVersionReady(ctx context.Context, registeredModelId, versionId string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -951,20 +950,6 @@ func (m *MockService) IsVectorDatabaseReady(ctx context.Context, id string) (boo
 func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
-}
-
-// LinkDatasetToUseCase mocks base method.
-func (m *MockService) LinkDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LinkDatasetToUseCase", ctx, useCaseID, datasetID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LinkDatasetToUseCase indicates an expected call of LinkDatasetToUseCase.
-func (mr *MockServiceMockRecorder) LinkDatasetToUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkDatasetToUseCase", reflect.TypeOf((*MockService)(nil).LinkDatasetToUseCase), ctx, useCaseID, datasetID)
 }
 
 // ListApplicationSourceVersions mocks base method.
@@ -1055,6 +1040,20 @@ func (m *MockService) ListRegisteredModels(ctx context.Context) (*client.ListReg
 func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx)
+}
+
+// RemoveDatasetFromUseCase mocks base method.
+func (m *MockService) RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveDatasetFromUseCase", ctx, useCaseID, datasetID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveDatasetFromUseCase indicates an expected call of RemoveDatasetFromUseCase.
+func (mr *MockServiceMockRecorder) RemoveDatasetFromUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveDatasetFromUseCase", reflect.TypeOf((*MockService)(nil).RemoveDatasetFromUseCase), ctx, useCaseID, datasetID)
 }
 
 // UpdateApplication mocks base method.
@@ -1148,10 +1147,10 @@ func (mr *MockServiceMockRecorder) UpdateCustomModel(ctx, id, req interface{}) *
 }
 
 // UpdateDataset mocks base method.
-func (m *MockService) UpdateDataset(ctx context.Context, id string, req *client.UpdateDatasetRequest) (*client.DatasetResponse, error) {
+func (m *MockService) UpdateDataset(ctx context.Context, id string, req *client.UpdateDatasetRequest) (*client.Dataset, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDataset", ctx, id, req)
-	ret0, _ := ret[0].(*client.DatasetResponse)
+	ret0, _ := ret[0].(*client.Dataset)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

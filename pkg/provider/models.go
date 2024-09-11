@@ -35,9 +35,10 @@ type RemoteRepositoryResourceModel struct {
 
 // DatasetFromFileResourceModel describes the datasource uploaded from a file.
 type DatasetFromFileResourceModel struct {
-	ID         types.String `tfsdk:"id"`
-	SourceFile types.String `tfsdk:"source_file"`
-	UseCaseID  types.String `tfsdk:"use_case_id"`
+	ID         types.String   `tfsdk:"id"`
+	FilePath   types.String   `tfsdk:"file_path"`
+	Name       types.String   `tfsdk:"name"`
+	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
 
 // VectorDatabaseResourceModel describes a vector database.

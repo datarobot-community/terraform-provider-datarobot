@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -46,19 +47,21 @@ func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"source_file": schema.StringAttribute{
+			"file_path": schema.StringAttribute{
 				MarkdownDescription: "The path to the file to upload.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"use_case_id": schema.StringAttribute{
-				MarkdownDescription: "The id of the Use Case.",
-				Required:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+			"name": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The name of the Dataset. Defaults to the file name.",
+			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Dataset to.",
+				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -87,10 +90,10 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	filePath := data.SourceFile.ValueString()
+	filePath := data.FilePath.ValueString()
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
-		resp.Diagnostics.AddError("Can't get info from source file", err.Error())
+		resp.Diagnostics.AddError("Can't get info from file", err.Error())
 		return
 	}
 
@@ -118,6 +121,17 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	if IsKnown(data.Name) {
+		traceAPICall("UpdateDataset")
+		_, err = r.provider.service.UpdateDataset(ctx, createResp.ID, &client.UpdateDatasetRequest{
+			Name: data.Name.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Dataset", err.Error())
+			return
+		}
+	}
+
 	dataset, err := waitForDatasetToBeReady(ctx, r.provider.service, createResp.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting Dataset info", err.Error())
@@ -125,17 +139,13 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 	}
 	data.ID = types.StringValue(dataset.ID)
 
-	traceAPICall("LinkDatasetToUseCase")
-	err = r.provider.service.LinkDatasetToUseCase(ctx, data.UseCaseID.ValueString(), dataset.ID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error linking Dataset to Use Case", err.Error())
-		return
-	}
-
-	_, err = waitForDatasetToBeReady(ctx, r.provider.service, dataset.ID)
-	if err != nil {
-		resp.Diagnostics.AddError("Dataset not ready", err.Error())
-		return
+	for _, useCaseID := range data.UseCaseIDs {
+		traceAPICall("AddDatasetToUseCase")
+		err = r.provider.service.AddDatasetToUseCase(ctx, useCaseID.ValueString(), dataset.ID)
+		if err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Dataset to Use Case %s", useCaseID), err.Error())
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -173,7 +183,38 @@ func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadReq
 }
 
 func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// This resource does not support updates.
+	var state DatasetFromFileResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var plan DatasetFromFileResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if IsKnown(plan.Name) {
+		traceAPICall("UpdateDataset")
+		_, err := r.provider.service.UpdateDataset(ctx, plan.ID.ValueString(), &client.UpdateDatasetRequest{
+			Name: plan.Name.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Dataset", err.Error())
+			return
+		}
+	}
+
+	err := r.updateUseCases(ctx, state, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Dataset", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -196,4 +237,52 @@ func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.Delet
 
 func (r *DatasetFromFileResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r *DatasetFromFileResource) updateUseCases(ctx context.Context, state DatasetFromFileResourceModel, plan DatasetFromFileResourceModel) (err error) {
+	if !reflect.DeepEqual(state.UseCaseIDs, plan.UseCaseIDs) {
+		useCasesToAdd := make([]string, 0)
+		for _, useCaseID := range plan.UseCaseIDs {
+			found := false
+			for _, oldUseCaseID := range state.UseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToAdd = append(useCasesToAdd, useCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToAdd {
+			traceAPICall("AddDatasetToUseCase")
+			err = r.provider.service.AddDatasetToUseCase(ctx, useCaseID, plan.ID.ValueString())
+			if err != nil {
+				return
+			}
+		}
+
+		useCasesToRemove := make([]string, 0)
+		for _, oldUseCaseID := range state.UseCaseIDs {
+			found := false
+			for _, useCaseID := range plan.UseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToRemove = append(useCasesToRemove, oldUseCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToRemove {
+			traceAPICall("RemoveDatasetFromUseCase")
+			err = r.provider.service.RemoveDatasetFromUseCase(ctx, useCaseID, plan.ID.ValueString())
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	return
 }

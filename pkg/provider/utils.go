@@ -163,17 +163,22 @@ func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id strin
 	return backoff.Retry(operation, expBackoff)
 }
 
-func waitForDatasetToBeReady(ctx context.Context, service client.Service, datasetId string) (*client.DatasetResponse, error) {
+func waitForDatasetToBeReady(ctx context.Context, service client.Service, datasetId string) (*client.Dataset, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
-		ready, err := service.IsDatasetReady(ctx, datasetId)
+		traceAPICall("GetDataset")
+		dataset, err := service.GetDataset(ctx, datasetId)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
-		if !ready {
+		if dataset.ProcessingState == "ERROR" {
+			return backoff.Permanent(errors.New(*dataset.Error))
+		}
+		if dataset.ProcessingState != "COMPLETED" {
 			return errors.New("dataset is not ready")
 		}
+
 		return nil
 	}
 
