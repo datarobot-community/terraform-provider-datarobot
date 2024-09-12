@@ -1,3 +1,11 @@
+## 0.1.28
+
+FEATURES:
+
+- Support the remaining Prediction Environment settings
+- Match Dataset parameter names with Python SDK
+- Change Custom Model relative folder path to root
+
 ## 0.1.27
 
 FEATURES:

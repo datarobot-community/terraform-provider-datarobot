@@ -163,17 +163,22 @@ func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id strin
 	return backoff.Retry(operation, expBackoff)
 }
 
-func waitForDatasetToBeReady(ctx context.Context, service client.Service, datasetId string) (*client.DatasetResponse, error) {
+func waitForDatasetToBeReady(ctx context.Context, service client.Service, datasetId string) (*client.Dataset, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
-		ready, err := service.IsDatasetReady(ctx, datasetId)
+		traceAPICall("GetDataset")
+		dataset, err := service.GetDataset(ctx, datasetId)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
-		if !ready {
+		if dataset.ProcessingState == "ERROR" {
+			return backoff.Permanent(errors.New(*dataset.Error))
+		}
+		if dataset.ProcessingState != "COMPLETED" {
 			return errors.New("dataset is not ready")
 		}
+
 		return nil
 	}
 
@@ -333,7 +338,9 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 				return nil
 			}
 
-			fileInfo, innerErr := getFileInfo(path, path)
+			pathInModel := strings.TrimPrefix(path, folder)
+			pathInModel = strings.TrimPrefix(pathInModel, string(filepath.Separator))
+			fileInfo, innerErr := getFileInfo(path, pathInModel)
 			if innerErr != nil {
 				return innerErr
 			}

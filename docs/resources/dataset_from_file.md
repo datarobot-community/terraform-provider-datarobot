@@ -14,8 +14,11 @@ Data set from file
 
 ```terraform
 resource "datarobot_dataset_from_file" "example" {
-  source_file = "[Path to file to upload]"
-  use_case_id = datarobot_use_case.example.id
+  file_path    = "[Path to file to upload]"
+  use_case_ids = [datarobot_use_case.example.id]
+
+  # Optional
+  name = "Example Dataset"
 }
 
 output "example_id" {
@@ -29,8 +32,12 @@ output "example_id" {
 
 ### Required
 
-- `source_file` (String) The path to the file to upload.
-- `use_case_id` (String) The id of the Use Case.
+- `file_path` (String) The path to the file to upload.
+
+### Optional
+
+- `name` (String) The name of the Dataset. Defaults to the file name.
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Dataset to.
 
 ### Read-Only
 

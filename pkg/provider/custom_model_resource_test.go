@@ -99,7 +99,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: fileName}},
 					[]GuardConfiguration{
 						{
@@ -150,7 +150,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
@@ -176,7 +175,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					sourceRemoteRepositories,
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
 					[]GuardConfiguration{
 						{
@@ -253,7 +252,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
-					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
 				),
 			},
@@ -263,7 +261,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					sourceRemoteRepositories,
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
@@ -290,7 +288,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
@@ -314,7 +312,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: fileName}},
 					nil,
 					nil,
@@ -336,7 +334,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					&folderPath,
+					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
 					nil,
 					nil,
@@ -358,7 +356,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					nil,
-					nil,
+					&folderPath,
 					nil,
 					nil,
 					nil,
@@ -372,6 +370,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 				),
 			},
 			// Add resource settings
@@ -718,8 +717,8 @@ resource "datarobot_use_case" "test_custom_model" {
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_custom_model" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_custom_model.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_custom_model.id}"]
 }
 resource "datarobot_vector_database" "test_custom_model" {
 	  name = "test custom model"
@@ -879,8 +878,8 @@ resource "datarobot_use_case" "test_without_llm_blueprint" {
 }
 
 resource "datarobot_dataset_from_file" "test_without_llm_blueprint" {
-	source_file = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_id = "${datarobot_use_case.test_without_llm_blueprint.id}"
+	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
+	use_case_ids = ["${datarobot_use_case.test_without_llm_blueprint.id}"]
 }
 
 resource "datarobot_remote_repository" "test_custom_model_from_remote_repository" {

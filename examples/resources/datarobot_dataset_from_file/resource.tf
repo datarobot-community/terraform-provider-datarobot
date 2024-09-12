@@ -1,6 +1,9 @@
 resource "datarobot_dataset_from_file" "example" {
-  source_file = "[Path to file to upload]"
-  use_case_id = datarobot_use_case.example.id
+  file_path    = "[Path to file to upload]"
+  use_case_ids = [datarobot_use_case.example.id]
+
+  # Optional
+  name = "Example Dataset"
 }
 
 output "example_id" {

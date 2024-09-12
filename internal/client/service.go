@@ -23,11 +23,11 @@ type Service interface {
 	CreateDataset(ctx context.Context, req *CreateDatasetRequest) (*CreateDatasetResponse, error)
 	CreateDatasetFromFile(ctx context.Context, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
 	CreateDatasetVersionFromFile(ctx context.Context, id string, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
-	GetDataset(ctx context.Context, id string) (*DatasetResponse, error)
-	IsDatasetReady(ctx context.Context, id string) (bool, error)
-	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*DatasetResponse, error)
+	GetDataset(ctx context.Context, id string) (*Dataset, error)
+	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error)
 	DeleteDataset(ctx context.Context, id string) error
-	LinkDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
+	AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
+	RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error
 
 	// Vector Database
 	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error)
@@ -80,9 +80,9 @@ type Service interface {
 	DeleteRegisteredModel(ctx context.Context, id string) error
 
 	// Prediction Environment
-	CreatePredictionEnvironment(ctx context.Context, req *CreatePredictionEnvironmentRequest) (*PredictionEnvironment, error)
+	CreatePredictionEnvironment(ctx context.Context, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error)
 	GetPredictionEnvironment(ctx context.Context, id string) (*PredictionEnvironment, error)
-	UpdatePredictionEnvironment(ctx context.Context, id string, req *UpdatePredictionEnvironmentRequest) (*PredictionEnvironment, error)
+	UpdatePredictionEnvironment(ctx context.Context, id string, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error)
 	DeletePredictionEnvironment(ctx context.Context, id string) error
 
 	// Deployment
@@ -169,33 +169,26 @@ func (s *ServiceImpl) CreateDatasetVersionFromFile(ctx context.Context, id strin
 	return uploadFileFromBinary[CreateDatasetVersionResponse](s.client, ctx, "/datasets/"+id+"/versions/fromFile/", http.MethodPost, fileName, content, map[string]string{})
 }
 
-func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*DatasetResponse, error) {
-	return Get[DatasetResponse](s.client, ctx, "/datasets/"+id+"/")
+func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*Dataset, error) {
+	return Get[Dataset](s.client, ctx, "/datasets/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*DatasetResponse, error) {
-	return Patch[DatasetResponse](s.client, ctx, "/datasets/"+id+"/", req)
+func (s *ServiceImpl) UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error) {
+	return Patch[Dataset](s.client, ctx, "/datasets/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteDataset(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/datasets/"+id+"/")
 }
 
-func (s *ServiceImpl) IsDatasetReady(ctx context.Context, id string) (bool, error) {
-	dataset, err := s.GetDataset(ctx, id)
-	if err != nil {
-		return false, err
-	}
-	if dataset.Status == "ERROR" {
-		return false, NewGenericError("Dataset execution failed")
-	}
-	return dataset.Status == "COMPLETED", nil
-}
-
 // Use Case Service Implementation.
-func (s *ServiceImpl) LinkDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
+func (s *ServiceImpl) AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
 	_, err := Post[CreateVoidResponse](s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID+"/", &CreateVoidRequest{})
 	return err
+}
+
+func (s *ServiceImpl) RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error {
+	return Delete(s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID+"/")
 }
 
 func (s *ServiceImpl) CreateUseCase(ctx context.Context, req *UseCaseRequest) (resp *CreateUseCaseResponse, err error) {
@@ -411,7 +404,7 @@ func (s *ServiceImpl) DeleteRegisteredModel(ctx context.Context, id string) erro
 }
 
 // Prediction Environment Service Implementation.
-func (s *ServiceImpl) CreatePredictionEnvironment(ctx context.Context, req *CreatePredictionEnvironmentRequest) (*PredictionEnvironment, error) {
+func (s *ServiceImpl) CreatePredictionEnvironment(ctx context.Context, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error) {
 	return Post[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/", req)
 }
 
@@ -419,7 +412,7 @@ func (s *ServiceImpl) GetPredictionEnvironment(ctx context.Context, id string) (
 	return Get[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdatePredictionEnvironment(ctx context.Context, id string, req *UpdatePredictionEnvironmentRequest) (*PredictionEnvironment, error) {
+func (s *ServiceImpl) UpdatePredictionEnvironment(ctx context.Context, id string, req *PredictionEnvironmentRequest) (*PredictionEnvironment, error) {
 	return Patch[PredictionEnvironment](s.client, ctx, "/predictionEnvironments/"+id+"/", req)
 }
 

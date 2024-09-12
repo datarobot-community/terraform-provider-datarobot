@@ -35,9 +35,10 @@ type RemoteRepositoryResourceModel struct {
 
 // DatasetFromFileResourceModel describes the datasource uploaded from a file.
 type DatasetFromFileResourceModel struct {
-	ID         types.String `tfsdk:"id"`
-	SourceFile types.String `tfsdk:"source_file"`
-	UseCaseID  types.String `tfsdk:"use_case_id"`
+	ID         types.String   `tfsdk:"id"`
+	FilePath   types.String   `tfsdk:"file_path"`
+	Name       types.String   `tfsdk:"name"`
+	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
 
 // VectorDatabaseResourceModel describes a vector database.
@@ -197,10 +198,16 @@ type GlobalModelDataSourceModel struct {
 
 // PredictionEnvironmentResourceModel describes the prediction environment resource.
 type PredictionEnvironmentResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	Platform    types.String `tfsdk:"platform"`
-	Description types.String `tfsdk:"description"`
+	ID                     types.String   `tfsdk:"id"`
+	Name                   types.String   `tfsdk:"name"`
+	Platform               types.String   `tfsdk:"platform"`
+	Description            types.String   `tfsdk:"description"`
+	SupportedModelFormats  []types.String `tfsdk:"supported_model_formats"`
+	BatchJobsPriority      types.String   `tfsdk:"batch_jobs_priority"`
+	BatchJobsMaxConcurrent types.Int64    `tfsdk:"batch_jobs_max_concurrent"`
+	ManagedBy              types.String   `tfsdk:"managed_by"`
+	CredentialID           types.String   `tfsdk:"credential_id"`
+	DatastoreID            types.String   `tfsdk:"datastore_id"`
 }
 
 // DeploymentResourceModel describes the deployment resource.

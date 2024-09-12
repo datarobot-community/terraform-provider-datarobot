@@ -19,7 +19,7 @@ resource "datarobot_use_case" "example" {
 }
 
 resource "datarobot_dataset_from_file" "example" {
-  source_file = "[Path to file to upload]"
+  file_path   = "[Path to file to upload]"
   use_case_id = datarobot_use_case.example.id
 }
 

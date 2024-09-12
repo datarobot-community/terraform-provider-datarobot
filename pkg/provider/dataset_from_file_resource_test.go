@@ -14,6 +14,13 @@ import (
 func TestAccDatasetFromFileResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_dataset_from_file.test"
+
+	datasetName := "example_dataset"
+	newDatsetName := "new_example_dataset"
+
+	useCase := "test_datasource"
+	newUseCase := "test_new_datasource"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -22,33 +29,56 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip"),
+				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &datasetName, &useCase),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "source_file", "../../test/datarobot_english_documentation_docsassist.zip"),
+					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					resource.TestCheckResourceAttr(resourceName, "name", datasetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
-			// TODO: update source_file and use_case_id
-
+			// update name and use case IDs
+			{
+				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &newDatsetName, &newUseCase),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkDatasetFromFileResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+				),
+			},
 			// Delete is tested automatically
 		},
 	})
 }
 
-func datasetFromFileResourceConfig(source_file string) string {
+func datasetFromFileResourceConfig(filePath string, name *string, useCaseID *string) string {
+	nameStr := ""
+	if name != nil {
+		nameStr = fmt.Sprintf(`name = "%s"`, *name)
+	}
+
+	useCaseIDsStr := ""
+	if useCaseID != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseID)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_datasource" {
 	  name = "test"
-	  description = "test"
+}
+resource "datarobot_use_case" "test_new_datasource" {
+	  name = "test 2"
 }
 
 resource "datarobot_dataset_from_file" "test" {
-	  source_file = "%s"
-	  use_case_id = "${datarobot_use_case.test_datasource.id}"
+	  file_path = "%s"
+	  %s
+	  %s
 }
-`, source_file)
+`, filePath, nameStr, useCaseIDsStr)
 }
 
 func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckFunc {
@@ -74,7 +104,8 @@ func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckF
 			return err
 		}
 
-		if dataset.Name == strings.Split(rs.Primary.Attributes["source_file"], "/")[3] {
+		if dataset.Name == rs.Primary.Attributes["name"] ||
+			dataset.Name == strings.Split(rs.Primary.Attributes["file_path"], "/")[3] {
 			return nil
 		}
 

@@ -17,6 +17,14 @@ resource "datarobot_prediction_environment" "example" {
   name        = "Example Prediction Environment"
   description = "Description for the example prediction environment"
   platform    = "datarobotServerless"
+
+  # Optional
+  batch_jobs_max_concurrent = 20
+  batch_jobs_priority       = "high"
+  supported_model_formats   = ["datarobot", "customModel"]
+  managed_by                = "selfManaged"
+  credential_id             = "<credential_id>"
+  datastore_id              = "<datastore_id>"
 }
 ```
 
@@ -30,7 +38,13 @@ resource "datarobot_prediction_environment" "example" {
 
 ### Optional
 
+- `batch_jobs_max_concurrent` (Number) The maximum number of concurrent batch prediction jobs.
+- `batch_jobs_priority` (String) The importance of batch jobs.
+- `credential_id` (String) The ID of the credential associated with the data connection. Only applicable for external prediction environments managed by DataRobot.
+- `datastore_id` (String) The ID of the data store connection configuration. Only applicable for external prediction environments managed by DataRobot.
 - `description` (String) The description of the Prediction Environment.
+- `managed_by` (String) Determines if the prediction environment should be managed by the management agent, datarobot, or self-managed. Self-managed by default.
+- `supported_model_formats` (List of String) The list of supported model formats.
 
 ### Read-Only
 

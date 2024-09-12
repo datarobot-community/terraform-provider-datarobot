@@ -24,8 +24,8 @@ resource "datarobot_use_case" "example" {
 }
 
 resource "datarobot_dataset_from_file" "example" {
-  use_case_id = datarobot_use_case.example.id
-  source_file = "datarobot_english_documentation_docsassist.zip"
+  use_case_ids = [datarobot_use_case.example.id]
+  file_path    = "datarobot_english_documentation_docsassist.zip"
 }
 
 resource "datarobot_playground" "example" {

@@ -534,7 +534,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 	require.Equal(registeredModelVersion.RegisteredModelID, registeredModelResp.ID)
 
-	predictionEnvironment, err := s.CreatePredictionEnvironment(ctx, &client.CreatePredictionEnvironmentRequest{
+	predictionEnvironment, err := s.CreatePredictionEnvironment(ctx, &client.PredictionEnvironmentRequest{
 		Name:     "Integration Test" + uuid.New().String(),
 		Platform: "aws",
 	})
@@ -774,23 +774,8 @@ func TestVectorDatabase(t *testing.T) {
 	assert.NotEmpty(dataset.StatusID)
 
 	// Link the dataset to the use case
-	err = s.LinkDatasetToUseCase(ctx, useCase.ID, dataset.ID)
+	err = s.AddDatasetToUseCase(ctx, useCase.ID, dataset.ID)
 	require.NoError(err)
-
-	// wait for data source to be ready
-	timeout := 5 * time.Minute
-	start := time.Now()
-	for {
-		status, err := s.IsDatasetReady(ctx, dataset.ID)
-		require.NoError(err)
-		if status {
-			break
-		}
-		if time.Since(start) > timeout {
-			require.FailNow("timeout reached while waiting for dataset to be ready")
-		}
-		time.Sleep(1 * time.Second)
-	}
 
 	name := "Integration Test" + uuid.New().String()
 	vdb, err := s.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
@@ -923,7 +908,7 @@ func TestPlayground(t *testing.T) {
 	require.NoError(err)
 }
 
-func TestLinkDatasetToUseCase(t *testing.T) {
+func TestAddDatasetToUseCase(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.TODO()
@@ -961,8 +946,8 @@ func TestLinkDatasetToUseCase(t *testing.T) {
 	assert.NotEmpty(dataset.VersionID)
 	assert.NotEmpty(dataset.StatusID)
 
-	// Link the dataset to the use case
-	err = s.LinkDatasetToUseCase(ctx, useCase.ID, dataset.ID)
+	// add the dataset to the use case
+	err = s.AddDatasetToUseCase(ctx, useCase.ID, dataset.ID)
 	require.NoError(err)
 
 	err = s.DeleteDataset(ctx, dataset.ID)
@@ -1058,14 +1043,6 @@ func TestDatasetFromFile(t *testing.T) {
 	require.Equal(resp.ID, getDataset.ID)
 	require.Equal(resp.VersionID, getDataset.VersionID)
 	assert.Equal(fileName, getDataset.Name)
-
-	// wait for the dataset to be processed and timeout after 1 minute
-	checkStatus := func() bool {
-		status, err := s.IsDatasetReady(ctx, resp.ID)
-		require.NoError(err)
-		return status
-	}
-	require.Eventually(checkStatus, 1*time.Minute, 1*time.Second, "data source processing failed")
 }
 
 func TestDatasetCreatingVersion(t *testing.T) {
@@ -1120,14 +1097,6 @@ func TestDatasetCreatingVersion(t *testing.T) {
 	assert.NotEmpty(versionResp.ID)
 	assert.NotEmpty(versionResp.VersionID)
 	assert.NotEmpty(versionResp.StatusID)
-
-	// wait for the dataset to be processed and timeout after 1 minute
-	checkStatus := func() bool {
-		status, err := s.IsDatasetReady(ctx, resp.ID)
-		require.NoError(err)
-		return status
-	}
-	require.Eventually(checkStatus, 1*time.Minute, 1*time.Second, "data source processing failed")
 }
 
 func initializeTest(t *testing.T) client.Service {
