@@ -466,3 +466,36 @@ func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err e
 	}
 	return
 }
+
+func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
+	if value.IsUnknown() {
+		return nil
+	}
+
+	return value.ValueInt64Pointer()
+}
+
+func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
+	if value.IsUnknown() {
+		return nil
+	}
+
+	return value.ValueFloat64Pointer()
+}
+
+func StringValuePointerOptional(value basetypes.StringValue) *string {
+	if value.IsUnknown() {
+		return nil
+	}
+
+	return value.ValueStringPointer()
+}
+
+func ConvertTfStringListToPtr(input []types.String) *[]string {
+	output := make([]string, len(input))
+	for i, value := range input {
+		output[i] = value.ValueString()
+	}
+
+	return &output
+}

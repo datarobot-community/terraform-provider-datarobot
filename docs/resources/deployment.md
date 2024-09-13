@@ -40,9 +40,18 @@ resource "datarobot_deployment" "example" {
   registered_model_version_id = datarobot_registered_model.example.version_id
 
   # Optional settings
-  # settings = {
-  #   prediction_row_storage = true
-  # }
+  # challenger_models_settings = {}
+  # challenger_replay_settings = {}
+  # segment_analysis_settings  = {}
+  # bias_and_fairness_settings = {}
+  # predictions_by_forecast_date_settings = {}
+  # drift_tracking_settings = {}
+  # association_id_settings = {}
+  # predictions_data_collection_settings = {}
+  # prediction_warning_settings = {}
+  # prediction_interval_settings = {}
+  # predictions_settings = {}
+  # health_settings = {}
 }
 
 output "datarobot_deployment_id" {
@@ -62,37 +71,254 @@ output "datarobot_deployment_id" {
 
 ### Optional
 
-- `settings` (Attributes) The settings for the Deployment. (see [below for nested schema](#nestedatt--settings))
+- `association_id_settings` (Attributes) Association ID settings for this Deployment. (see [below for nested schema](#nestedatt--association_id_settings))
+- `bias_and_fairness_settings` (Attributes) Bias and fairness settings for the Deployment. (see [below for nested schema](#nestedatt--bias_and_fairness_settings))
+- `challenger_models_settings` (Attributes) The challenger models settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_models_settings))
+- `challenger_replay_settings` (Attributes) The challenger replay settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_replay_settings))
+- `drift_tracking_settings` (Attributes) The drift tracking settings for the Deployment. (see [below for nested schema](#nestedatt--drift_tracking_settings))
+- `health_settings` (Attributes) The health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings))
+- `importance` (String) The importance of the Deployment.
+- `prediction_intervals_settings` (Attributes) The prediction intervals settings for this Deployment. (see [below for nested schema](#nestedatt--prediction_intervals_settings))
+- `prediction_warning_settings` (Attributes) The prediction warning settings for the Deployment. (see [below for nested schema](#nestedatt--prediction_warning_settings))
+- `predictions_by_forecast_date_settings` (Attributes) The predictions by forecase date settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_by_forecast_date_settings))
+- `predictions_data_collection_settings` (Attributes) The predictions data collection settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_data_collection_settings))
+- `predictions_settings` (Attributes) Settings for the predictions. (see [below for nested schema](#nestedatt--predictions_settings))
+- `segment_analysis_settings` (Attributes) The segment analysis settings for the Deployment. (see [below for nested schema](#nestedatt--segment_analysis_settings))
 
 ### Read-Only
 
 - `id` (String) The ID of the Deployment.
 
-<a id="nestedatt--settings"></a>
-### Nested Schema for `settings`
+<a id="nestedatt--association_id_settings"></a>
+### Nested Schema for `association_id_settings`
 
 Optional:
 
-- `association_id` (Attributes) Used to associate predictions back to your actual data. (see [below for nested schema](#nestedatt--settings--association_id))
-- `challenger_analysis` (Boolean) Used to compare the performance of the deployed model with the challenger models.
-- `prediction_row_storage` (Boolean) Used to score predictions made by the challenger models and compare performance with the deployed model.
-- `predictions_settings` (Attributes) Settings for the predictions. (see [below for nested schema](#nestedatt--settings--predictions_settings))
+- `auto_generate_id` (Boolean) Whether to auto generate ID.
+- `column_names` (List of String) Name of the columns to be used as association ID, currently only support a list of one string.
+- `required_in_prediction_requests` (Boolean) Whether the association ID column is required in prediction requests.
 
-<a id="nestedatt--settings--association_id"></a>
-### Nested Schema for `settings.association_id`
+
+<a id="nestedatt--bias_and_fairness_settings"></a>
+### Nested Schema for `bias_and_fairness_settings`
 
 Required:
 
-- `auto_generate_id` (Boolean) Whether to automatically generate an association ID.
-- `feature_name` (String) The name of the feature to use as the association ID.
-- `required_in_prediction_requests` (Boolean) Whether the association ID is required in prediction requests.
+- `fairness_metric_set` (String) A set of fairness metrics to use for calculating fairness.
+- `fairness_threshold` (Number) Threshold value of the fairness metric. Cannot be less than 0 or greater than 1.
+- `preferable_target_value` (Boolean) A target value that should be treated as a positive outcome for the prediction.
+- `protected_features` (List of String) A list of features to mark as protected.
 
 
-<a id="nestedatt--settings--predictions_settings"></a>
-### Nested Schema for `settings.predictions_settings`
+<a id="nestedatt--challenger_models_settings"></a>
+### Nested Schema for `challenger_models_settings`
+
+Required:
+
+- `enabled` (Boolean) Is 'True' if challenger models is enabled for this deployment.
+
+
+<a id="nestedatt--challenger_replay_settings"></a>
+### Nested Schema for `challenger_replay_settings`
+
+Required:
+
+- `enabled` (Boolean) If challenger replay is enabled.
+
+
+<a id="nestedatt--drift_tracking_settings"></a>
+### Nested Schema for `drift_tracking_settings`
+
+Optional:
+
+- `feature_drift_enabled` (Boolean) If feature drift tracking is to be turned on.
+- `target_drift_enabled` (Boolean) If target drift tracking is to be turned on.
+
+
+<a id="nestedatt--health_settings"></a>
+### Nested Schema for `health_settings`
+
+Optional:
+
+- `accuracy` (Attributes) The accuracy health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--accuracy))
+- `actuals_timeliness` (Attributes) The actuals timeliness health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--actuals_timeliness))
+- `custom_metrics` (Attributes) The custom metrics health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--custom_metrics))
+- `data_drift` (Attributes) The data drift health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--data_drift))
+- `fairness` (Attributes) The fairness health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--fairness))
+- `predictions_timeliness` (Attributes) The predictions timeliness health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--predictions_timeliness))
+- `service` (Attributes) The service health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings--service))
+
+<a id="nestedatt--health_settings--accuracy"></a>
+### Nested Schema for `health_settings.accuracy`
+
+Optional:
+
+- `batch_count` (Number) The batch count for the accuracy health settings.
+- `failing_threshold` (Number) The failing threshold for the accuracy health settings.
+- `measurement` (String) The measurement for the accuracy health settings.
+- `metric` (String) The metric for the accuracy health settings.
+- `warning_threshold` (Number) The warning threshold for the accuracy health settings.
+
+
+<a id="nestedatt--health_settings--actuals_timeliness"></a>
+### Nested Schema for `health_settings.actuals_timeliness`
+
+Required:
+
+- `enabled` (Boolean) If acutals timeliness is enabled for this Deployment.
+
+Optional:
+
+- `expected_frequency` (String) The expected frequency for the actuals timeliness health settings.
+
+
+<a id="nestedatt--health_settings--custom_metrics"></a>
+### Nested Schema for `health_settings.custom_metrics`
+
+Optional:
+
+- `failing_conditions` (Attributes List) The failing conditions for the custom metrics health settings. (see [below for nested schema](#nestedatt--health_settings--custom_metrics--failing_conditions))
+- `warning_conditions` (Attributes List) The warning conditions for the custom metrics health settings. (see [below for nested schema](#nestedatt--health_settings--custom_metrics--warning_conditions))
+
+<a id="nestedatt--health_settings--custom_metrics--failing_conditions"></a>
+### Nested Schema for `health_settings.custom_metrics.failing_conditions`
+
+Required:
+
+- `compare_operator` (String) The compare operator for the failing condition of the custom metrics health settings.
+- `metric_id` (String) The metric ID for the failing condition of the custom metrics health settings.
+- `threshold` (Number) The threshold for the failing condition of the custom metrics health settings.
+
+
+<a id="nestedatt--health_settings--custom_metrics--warning_conditions"></a>
+### Nested Schema for `health_settings.custom_metrics.warning_conditions`
+
+Required:
+
+- `compare_operator` (String) The compare operator for the warning condition of the custom metrics health settings.
+- `metric_id` (String) The metric ID for the warning condition of the custom metrics health settings.
+- `threshold` (Number) The threshold for the warning condition of the custom metrics health settings.
+
+
+
+<a id="nestedatt--health_settings--data_drift"></a>
+### Nested Schema for `health_settings.data_drift`
+
+Optional:
+
+- `batch_count` (Number) The batch count for the data drift health settings.
+- `drift_threshold` (Number) The drift threshold for the data drift health settings.
+- `exclude_features` (List of String) The exclude features for the data drift health settings.
+- `high_importance_failing_count` (Number) The high importance failing count for the data drift health settings.
+- `high_importance_warning_count` (Number) The high importance warning count for the data drift health settings.
+- `importance_threshold` (Number) The importance threshold for the data drift health settings.
+- `low_importance_failing_count` (Number) The low importance failing count for the data drift health settings.
+- `low_importance_warning_count` (Number) The low importance warning count for the data drift health settings.
+- `starred_features` (List of String) The starred features for the data drift health settings.
+- `time_interval` (String) The time interval for the data drift health settings.
+
+
+<a id="nestedatt--health_settings--fairness"></a>
+### Nested Schema for `health_settings.fairness`
+
+Optional:
+
+- `protected_class_failing_count` (Number) The protected class failing count for the fairness health settings.
+- `protected_class_warning_count` (Number) The protected class warning count for the fairness health settings.
+
+
+<a id="nestedatt--health_settings--predictions_timeliness"></a>
+### Nested Schema for `health_settings.predictions_timeliness`
+
+Required:
+
+- `enabled` (Boolean) If predictions timeliness is enabled for this Deployment.
+
+Optional:
+
+- `expected_frequency` (String) The expected frequency for the predictions timeliness health settings.
+
+
+<a id="nestedatt--health_settings--service"></a>
+### Nested Schema for `health_settings.service`
+
+Required:
+
+- `batch_count` (Number) The batch count for the service health settings.
+
+
+
+<a id="nestedatt--prediction_intervals_settings"></a>
+### Nested Schema for `prediction_intervals_settings`
+
+Required:
+
+- `enabled` (Boolean) Whether prediction intervals are enabled for this deployment.
+
+Optional:
+
+- `percentiles` (List of Number) List of enabled prediction intervals’ sizes for this deployment.
+
+
+<a id="nestedatt--prediction_warning_settings"></a>
+### Nested Schema for `prediction_warning_settings`
+
+Required:
+
+- `enabled` (Boolean) If target prediction warning is enabled for this Deployment.
+
+Optional:
+
+- `custom_boundaries` (Attributes) The custom boundaries for prediction warnings. (see [below for nested schema](#nestedatt--prediction_warning_settings--custom_boundaries))
+
+<a id="nestedatt--prediction_warning_settings--custom_boundaries"></a>
+### Nested Schema for `prediction_warning_settings.custom_boundaries`
+
+Optional:
+
+- `lower_boundary` (Number) All predictions less than provided value will be considered anomalous.
+- `upper_boundary` (Number) All predictions greater than provided value will be considered anomalous.
+
+
+
+<a id="nestedatt--predictions_by_forecast_date_settings"></a>
+### Nested Schema for `predictions_by_forecast_date_settings`
+
+Required:
+
+- `enabled` (Boolean) Is ’True’ if predictions by forecast date is enabled for this deployment.
+
+Optional:
+
+- `column_name` (String) The column name in prediction datasets to be used as forecast date.
+- `datetime_format` (String) The datetime format of the forecast date column in prediction datasets.
+
+
+<a id="nestedatt--predictions_data_collection_settings"></a>
+### Nested Schema for `predictions_data_collection_settings`
+
+Required:
+
+- `enabled` (Boolean) If predictions data collections is enabled for this Deployment.
+
+
+<a id="nestedatt--predictions_settings"></a>
+### Nested Schema for `predictions_settings`
 
 Required:
 
 - `max_computes` (Number) The maximum number of computes to use for predictions.
 - `min_computes` (Number) The minimum number of computes to use for predictions.
 - `real_time` (Boolean) Whether to use real-time predictions.
+
+
+<a id="nestedatt--segment_analysis_settings"></a>
+### Nested Schema for `segment_analysis_settings`
+
+Required:
+
+- `enabled` (Boolean) Set to 'True' if segment analysis is enabled for this deployment.
+
+Optional:
+
+- `attributes` (List of String) A list of strings that gives the segment attributes selected for tracking.

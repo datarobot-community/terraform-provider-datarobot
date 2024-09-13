@@ -683,10 +683,10 @@ func (mr *MockServiceMockRecorder) GetDependencyBuild(ctx, id, versionID interfa
 }
 
 // GetDeployment mocks base method.
-func (m *MockService) GetDeployment(ctx context.Context, id string) (*client.DeploymentRetrieveResponse, error) {
+func (m *MockService) GetDeployment(ctx context.Context, id string) (*client.Deployment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDeployment", ctx, id)
-	ret0, _ := ret[0].(*client.DeploymentRetrieveResponse)
+	ret0, _ := ret[0].(*client.Deployment)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -695,6 +695,36 @@ func (m *MockService) GetDeployment(ctx context.Context, id string) (*client.Dep
 func (mr *MockServiceMockRecorder) GetDeployment(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeployment", reflect.TypeOf((*MockService)(nil).GetDeployment), ctx, id)
+}
+
+// GetDeploymentChallengerReplaySettings mocks base method.
+func (m *MockService) GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*client.DeploymentChallengerReplaySettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentChallengerReplaySettings", ctx, id)
+	ret0, _ := ret[0].(*client.DeploymentChallengerReplaySettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentChallengerReplaySettings indicates an expected call of GetDeploymentChallengerReplaySettings.
+func (mr *MockServiceMockRecorder) GetDeploymentChallengerReplaySettings(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentChallengerReplaySettings", reflect.TypeOf((*MockService)(nil).GetDeploymentChallengerReplaySettings), ctx, id)
+}
+
+// GetDeploymentHealthSettings mocks base method.
+func (m *MockService) GetDeploymentHealthSettings(ctx context.Context, id string) (*client.DeploymentHealthSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentHealthSettings", ctx, id)
+	ret0, _ := ret[0].(*client.DeploymentHealthSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentHealthSettings indicates an expected call of GetDeploymentHealthSettings.
+func (mr *MockServiceMockRecorder) GetDeploymentHealthSettings(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentHealthSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentHealthSettings), ctx, id)
 }
 
 // GetDeploymentSettings mocks base method.
@@ -1162,10 +1192,10 @@ func (mr *MockServiceMockRecorder) UpdateDataset(ctx, id, req interface{}) *gomo
 }
 
 // UpdateDeployment mocks base method.
-func (m *MockService) UpdateDeployment(ctx context.Context, id string, req *client.UpdateDeploymentRequest) (*client.DeploymentRetrieveResponse, error) {
+func (m *MockService) UpdateDeployment(ctx context.Context, id string, req *client.UpdateDeploymentRequest) (*client.Deployment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeployment", ctx, id, req)
-	ret0, _ := ret[0].(*client.DeploymentRetrieveResponse)
+	ret0, _ := ret[0].(*client.Deployment)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1176,11 +1206,41 @@ func (mr *MockServiceMockRecorder) UpdateDeployment(ctx, id, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeployment", reflect.TypeOf((*MockService)(nil).UpdateDeployment), ctx, id, req)
 }
 
+// UpdateDeploymentChallengerReplaySettings mocks base method.
+func (m *MockService) UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *client.DeploymentChallengerReplaySettings) (*client.DeploymentChallengerReplaySettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentChallengerReplaySettings", ctx, id, req)
+	ret0, _ := ret[0].(*client.DeploymentChallengerReplaySettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeploymentChallengerReplaySettings indicates an expected call of UpdateDeploymentChallengerReplaySettings.
+func (mr *MockServiceMockRecorder) UpdateDeploymentChallengerReplaySettings(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentChallengerReplaySettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentChallengerReplaySettings), ctx, id, req)
+}
+
+// UpdateDeploymentHealthSettings mocks base method.
+func (m *MockService) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *client.DeploymentHealthSettings) (*client.DeploymentHealthSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentHealthSettings", ctx, id, req)
+	ret0, _ := ret[0].(*client.DeploymentHealthSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeploymentHealthSettings indicates an expected call of UpdateDeploymentHealthSettings.
+func (mr *MockServiceMockRecorder) UpdateDeploymentHealthSettings(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentHealthSettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentHealthSettings), ctx, id, req)
+}
+
 // UpdateDeploymentModel mocks base method.
-func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.DeploymentRetrieveResponse, string, error) {
+func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req *client.UpdateDeploymentModelRequest) (*client.Deployment, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentModel", ctx, id, req)
-	ret0, _ := ret[0].(*client.DeploymentRetrieveResponse)
+	ret0, _ := ret[0].(*client.Deployment)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

@@ -15,7 +15,7 @@ terraform {
 }
 
 provider "datarobot" {
-  # export DATAROBOT_API_KEY="the API Key value here"
+  # export DATAROBOT_API_TOKEN="the API Key value here"
 }
 
 resource "datarobot_use_case" "example" {

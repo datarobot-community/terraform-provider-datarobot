@@ -1103,11 +1103,11 @@ func initializeTest(t *testing.T) client.Service {
 	if os.Getenv("ENABLE_INTEGRATION_TESTS") != "true" {
 		t.Skip("Integration tests are disabled")
 	}
-	if os.Getenv("DATAROBOT_API_KEY") == "" {
-		t.Fatal("DATAROBOT_API_KEY not set")
+	if os.Getenv("DATAROBOT_API_TOKEN") == "" {
+		t.Fatal("DATAROBOT_API_TOKEN not set")
 	}
 
-	cfg := client.NewConfiguration(os.Getenv("DATAROBOT_API_KEY"))
+	cfg := client.NewConfiguration(os.Getenv("DATAROBOT_API_TOKEN"))
 	cfg.Debug = true
 	c := client.NewClient(cfg)
 

@@ -7,12 +7,14 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -65,59 +67,374 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"settings": schema.SingleNestedAttribute{
+			"importance": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The settings for the Deployment.",
+				Computed:            true,
+				MarkdownDescription: "The importance of the Deployment.",
+				Default:             stringdefault.StaticString("LOW"),
+				Validators:          ImportanceValidators(),
+			},
+			"predictions_by_forecast_date_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The predictions by forecase date settings for the Deployment.",
 				Attributes: map[string]schema.Attribute{
-					"association_id": schema.SingleNestedAttribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "Is ’True’ if predictions by forecast date is enabled for this deployment.",
+					},
+					"column_name": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "Used to associate predictions back to your actual data.",
+						MarkdownDescription: "The column name in prediction datasets to be used as forecast date.",
+					},
+					"datetime_format": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The datetime format of the forecast date column in prediction datasets.",
+					},
+				},
+			},
+			"challenger_models_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The challenger models settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "Is 'True' if challenger models is enabled for this deployment.",
+					},
+				},
+				Validators: []validator.Object{
+					objectvalidator.AlsoRequires(path.MatchRoot("predictions_data_collection_settings")),
+				},
+			},
+			"segment_analysis_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The segment analysis settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "Set to 'True' if segment analysis is enabled for this deployment.",
+					},
+					"attributes": schema.ListAttribute{
+						Optional:            true,
+						MarkdownDescription: "A list of strings that gives the segment attributes selected for tracking.",
+						ElementType:         types.StringType,
+					},
+				},
+			},
+			"bias_and_fairness_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "Bias and fairness settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"protected_features": schema.ListAttribute{
+						Required:            true,
+						MarkdownDescription: "A list of features to mark as protected.",
+						ElementType:         types.StringType,
+					},
+					"preferable_target_value": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "A target value that should be treated as a positive outcome for the prediction.",
+					},
+					"fairness_metric_set": schema.StringAttribute{
+						Required:            true,
+						MarkdownDescription: "A set of fairness metrics to use for calculating fairness.",
+						Validators:          FairnessMetricSetValidators(),
+					},
+					"fairness_threshold": schema.Float64Attribute{
+						Required:            true,
+						MarkdownDescription: "Threshold value of the fairness metric. Cannot be less than 0 or greater than 1.",
+						Validators:          Float64ZeroToOneValidators(),
+					},
+				},
+			},
+			"challenger_replay_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The challenger replay settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "If challenger replay is enabled.",
+					},
+				},
+			},
+			"drift_tracking_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The drift tracking settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"target_drift_enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "If target drift tracking is to be turned on.",
+					},
+					"feature_drift_enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "If feature drift tracking is to be turned on.",
+					},
+				},
+			},
+			"association_id_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "Association ID settings for this Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"auto_generate_id": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to auto generate ID.",
+					},
+					"column_names": schema.ListAttribute{
+						Optional:            true,
+						MarkdownDescription: "Name of the columns to be used as association ID, currently only support a list of one string.",
+						ElementType:         types.StringType,
+					},
+					"required_in_prediction_requests": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether the association ID column is required in prediction requests.",
+					},
+				},
+			},
+			"predictions_data_collection_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The predictions data collection settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "If predictions data collections is enabled for this Deployment.",
+					},
+				},
+			},
+			"prediction_warning_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The prediction warning settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "If target prediction warning is enabled for this Deployment.",
+					},
+					"custom_boundaries": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The custom boundaries for prediction warnings.",
 						Attributes: map[string]schema.Attribute{
-							"auto_generate_id": schema.BoolAttribute{
-								Required:            true,
-								MarkdownDescription: "Whether to automatically generate an association ID.",
+							"upper_boundary": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "All predictions greater than provided value will be considered anomalous.",
 							},
-							"feature_name": schema.StringAttribute{
-								Required:            true,
-								MarkdownDescription: "The name of the feature to use as the association ID.",
-							},
-							"required_in_prediction_requests": schema.BoolAttribute{
-								Required:            true,
-								MarkdownDescription: "Whether the association ID is required in prediction requests.",
+							"lower_boundary": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "All predictions less than provided value will be considered anomalous.",
 							},
 						},
 					},
-					"prediction_row_storage": schema.BoolAttribute{
-						Optional:            true,
-						MarkdownDescription: "Used to score predictions made by the challenger models and compare performance with the deployed model.",
-						PlanModifiers: []planmodifier.Bool{
-							boolplanmodifier.UseStateForUnknown(),
-						},
+				},
+			},
+			"prediction_intervals_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The prediction intervals settings for this Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "Whether prediction intervals are enabled for this deployment.",
 					},
-					"challenger_analysis": schema.BoolAttribute{
+					"percentiles": schema.ListAttribute{
 						Optional:            true,
-						MarkdownDescription: "Used to compare the performance of the deployed model with the challenger models.",
-						PlanModifiers: []planmodifier.Bool{
-							boolplanmodifier.UseStateForUnknown(),
-						},
+						MarkdownDescription: "List of enabled prediction intervals’ sizes for this deployment.",
+						ElementType:         types.Int64Type,
 					},
-					"predictions_settings": schema.SingleNestedAttribute{
+				},
+			},
+			"health_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The health settings for this Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"service": schema.SingleNestedAttribute{
 						Optional:            true,
-						MarkdownDescription: "Settings for the predictions.",
+						MarkdownDescription: "The service health settings for this Deployment.",
 						Attributes: map[string]schema.Attribute{
-							"min_computes": schema.Int64Attribute{
+							"batch_count": schema.Int64Attribute{
 								Required:            true,
-								MarkdownDescription: "The minimum number of computes to use for predictions.",
-							},
-							"max_computes": schema.Int64Attribute{
-								Required:            true,
-								MarkdownDescription: "The maximum number of computes to use for predictions.",
-							},
-							"real_time": schema.BoolAttribute{
-								Required:            true,
-								MarkdownDescription: "Whether to use real-time predictions.",
+								MarkdownDescription: "The batch count for the service health settings.",
+								Validators:          BatchCountValidators(),
 							},
 						},
+					},
+					"data_drift": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The data drift health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"batch_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The batch count for the data drift health settings.",
+								Validators:          BatchCountValidators(),
+							},
+							"time_interval": schema.StringAttribute{
+								Optional:            true,
+								MarkdownDescription: "The time interval for the data drift health settings.",
+							},
+							"drift_threshold": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The drift threshold for the data drift health settings.",
+							},
+							"importance_threshold": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The importance threshold for the data drift health settings.",
+							},
+							"low_importance_warning_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The low importance warning count for the data drift health settings.",
+							},
+							"low_importance_failing_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The low importance failing count for the data drift health settings.",
+							},
+							"high_importance_warning_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The high importance warning count for the data drift health settings.",
+							},
+							"high_importance_failing_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The high importance failing count for the data drift health settings.",
+							},
+							"exclude_features": schema.ListAttribute{
+								Optional:            true,
+								MarkdownDescription: "The exclude features for the data drift health settings.",
+								ElementType:         types.StringType,
+							},
+							"starred_features": schema.ListAttribute{
+								Optional:            true,
+								MarkdownDescription: "The starred features for the data drift health settings.",
+								ElementType:         types.StringType,
+							},
+						},
+					},
+					"accuracy": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The accuracy health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"batch_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The batch count for the accuracy health settings.",
+								Validators:          BatchCountValidators(),
+							},
+							"metric": schema.StringAttribute{
+								Optional:            true,
+								MarkdownDescription: "The metric for the accuracy health settings.",
+							},
+							"measurement": schema.StringAttribute{
+								Optional:            true,
+								MarkdownDescription: "The measurement for the accuracy health settings.",
+							},
+							"warning_threshold": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The warning threshold for the accuracy health settings.",
+							},
+							"failing_threshold": schema.Float64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The failing threshold for the accuracy health settings.",
+							},
+						},
+					},
+					"fairness": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The fairness health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"protected_class_warning_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The protected class warning count for the fairness health settings.",
+							},
+							"protected_class_failing_count": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "The protected class failing count for the fairness health settings.",
+							},
+						},
+					},
+					"custom_metrics": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The custom metrics health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"warning_conditions": schema.ListNestedAttribute{
+								Optional:            true,
+								MarkdownDescription: "The warning conditions for the custom metrics health settings.",
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"metric_id": schema.StringAttribute{
+											Required:            true,
+											MarkdownDescription: "The metric ID for the warning condition of the custom metrics health settings.",
+										},
+										"compare_operator": schema.StringAttribute{
+											Required:            true,
+											MarkdownDescription: "The compare operator for the warning condition of the custom metrics health settings.",
+										},
+										"threshold": schema.Float64Attribute{
+											Required:            true,
+											MarkdownDescription: "The threshold for the warning condition of the custom metrics health settings.",
+										},
+									},
+								},
+							},
+							"failing_conditions": schema.ListNestedAttribute{
+								Optional:            true,
+								MarkdownDescription: "The failing conditions for the custom metrics health settings.",
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"metric_id": schema.StringAttribute{
+											Required:            true,
+											MarkdownDescription: "The metric ID for the failing condition of the custom metrics health settings.",
+										},
+										"compare_operator": schema.StringAttribute{
+											Required:            true,
+											MarkdownDescription: "The compare operator for the failing condition of the custom metrics health settings.",
+										},
+										"threshold": schema.Float64Attribute{
+											Required:            true,
+											MarkdownDescription: "The threshold for the failing condition of the custom metrics health settings.",
+										},
+									},
+								},
+							},
+						},
+					},
+					"predictions_timeliness": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The predictions timeliness health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"enabled": schema.BoolAttribute{
+								Required:            true,
+								MarkdownDescription: "If predictions timeliness is enabled for this Deployment.",
+							},
+							"expected_frequency": schema.StringAttribute{
+								Optional:            true,
+								MarkdownDescription: "The expected frequency for the predictions timeliness health settings.",
+								Validators:          TimelinessFrequencyValidators(),
+							},
+						},
+					},
+					"actuals_timeliness": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "The actuals timeliness health settings for this Deployment.",
+						Attributes: map[string]schema.Attribute{
+							"enabled": schema.BoolAttribute{
+								Required:            true,
+								MarkdownDescription: "If acutals timeliness is enabled for this Deployment.",
+							},
+							"expected_frequency": schema.StringAttribute{
+								Optional:            true,
+								MarkdownDescription: "The expected frequency for the actuals timeliness health settings.",
+								Validators:          TimelinessFrequencyValidators(),
+							},
+						},
+					},
+				},
+			},
+			"predictions_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "Settings for the predictions.",
+				Attributes: map[string]schema.Attribute{
+					"min_computes": schema.Int64Attribute{
+						Required:            true,
+						MarkdownDescription: "The minimum number of computes to use for predictions.",
+					},
+					"max_computes": schema.Int64Attribute{
+						Required:            true,
+						MarkdownDescription: "The maximum number of computes to use for predictions.",
+					},
+					"real_time": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "Whether to use real-time predictions.",
 					},
 				},
 			},
@@ -153,6 +470,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 		ModelPackageID:          data.RegisteredModelVersionID.ValueString(),
 		PredictionEnvironmentID: data.PredictionEnvironmentID.ValueString(),
 		Label:                   data.Label.ValueString(),
+		Importance:              data.Importance.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Deployment", err.Error())
@@ -166,12 +484,10 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 	data.ID = types.StringValue(deployment.ID)
 
-	if data.Settings != nil {
-		err = r.updateDeploymentSettings(ctx, createResp.ID, data.Settings)
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
-			return
-		}
+	err = r.updateDeploymentSettings(ctx, createResp.ID, data)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -207,8 +523,7 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.Label = types.StringValue(deployment.Label)
 	data.RegisteredModelVersionID = types.StringValue(deployment.ModelPackage.ID)
 	data.PredictionEnvironmentID = types.StringValue(deployment.PredictionEnvironment.ID)
-
-	// TODO: read deployment settings from various sources
+	data.Importance = types.StringValue(deployment.Importance)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -230,30 +545,29 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	id := state.ID.ValueString()
 
-	if plan.Label.ValueString() != state.Label.ValueString() {
-		traceAPICall("UpdateDeployment")
-		_, err := r.provider.service.UpdateDeployment(ctx,
-			id,
-			&client.UpdateDeploymentRequest{
-				Label: plan.Label.ValueString(),
-			})
-		if err != nil {
-			if errors.Is(err, &client.NotFoundError{}) {
-				resp.Diagnostics.AddWarning(
-					"Deployment not found",
-					fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", id))
-				resp.State.RemoveResource(ctx)
-			} else {
-				resp.Diagnostics.AddError("Error updating Deployment", err.Error())
-			}
-			return
+	traceAPICall("UpdateDeployment")
+	_, err := r.provider.service.UpdateDeployment(ctx,
+		id,
+		&client.UpdateDeploymentRequest{
+			Label:      plan.Label.ValueString(),
+			Importance: plan.Importance.ValueString(),
+		})
+	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"Deployment not found",
+				fmt.Sprintf("Deployment with ID %s is not found. Removing from state.", id))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError("Error updating Deployment", err.Error())
 		}
+		return
+	}
 
-		_, err = r.waitForDeploymentToBeReady(ctx, id)
-		if err != nil {
-			resp.Diagnostics.AddError("Deployment not ready", err.Error())
-			return
-		}
+	_, err = r.waitForDeploymentToBeReady(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Deployment not ready", err.Error())
+		return
 	}
 
 	if plan.RegisteredModelVersionID != state.RegisteredModelVersionID {
@@ -298,13 +612,10 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
-	if plan.Settings != state.Settings {
-		err := r.updateDeploymentSettings(ctx, id, plan.Settings)
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
-			return
-		}
-		state.Settings = plan.Settings
+	err = r.updateDeploymentSettings(ctx, id, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -332,7 +643,7 @@ func (r *DeploymentResource) ImportState(ctx context.Context, req resource.Impor
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id string) (*client.DeploymentRetrieveResponse, error) {
+func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id string) (*client.Deployment, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
@@ -363,51 +674,98 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 func (r *DeploymentResource) updateDeploymentSettings(
 	ctx context.Context,
 	id string,
-	settings *DeploymentSettings,
+	data DeploymentResourceModel,
 ) (err error) {
 	req := &client.DeploymentSettings{}
-	if settings != nil {
-		// Association ID
-		req.AssociationID = &client.AssociationIDSetting{
-			AutoGenerateID:               true,
-			ColumnNames:                  []string{"id"},
-			RequiredInPredictionRequests: false,
+	if data.PredictionsByForecastDateSettings != nil {
+		req.PredictionsByForecastDate = &client.PredictionsByForecastDateSettings{
+			Enabled:        data.PredictionsByForecastDateSettings.Enabled.ValueBool(),
+			ColumnName:     data.PredictionsByForecastDateSettings.ColumnName.ValueString(),
+			DatetimeFormat: data.PredictionsByForecastDateSettings.DatetimeFormat.ValueString(),
 		}
-		if settings.AssociationID != nil {
-			req.AssociationID = &client.AssociationIDSetting{
-				AutoGenerateID:               settings.AssociationID.AutoGenerateID.ValueBool(),
-				ColumnNames:                  []string{settings.AssociationID.FeatureName.ValueString()},
-				RequiredInPredictionRequests: settings.AssociationID.RequiredInPredictionRequests.ValueBool(),
-			}
-		}
+	}
 
-		// Prediction Row Storage
-		req.PredictionsDataCollection = &client.BasicSetting{
-			Enabled: true,
-		}
-		if IsKnown(settings.PredictionRowStorage) {
-			req.PredictionsDataCollection = &client.BasicSetting{
-				Enabled: settings.PredictionRowStorage.ValueBool(),
-			}
-		}
-
-		// Challenger Analysis
+	if data.ChallengerModelsSettings != nil {
 		req.ChallengerModels = &client.BasicSetting{
-			Enabled: false,
+			Enabled: data.ChallengerModelsSettings.Enabled.ValueBool(),
 		}
-		if IsKnown(settings.ChallengerAnalysis) {
-			req.ChallengerModels = &client.BasicSetting{
-				Enabled: settings.ChallengerAnalysis.ValueBool(),
-			}
-		}
+	}
 
-		// Predictions Settings
-		if settings.PredictionsSettings != nil {
-			req.PredictionsSettings = &client.PredictionsSettings{
-				MinComputes: int(settings.PredictionsSettings.MinComputes.ValueInt64()),
-				MaxComputes: int(settings.PredictionsSettings.MaxComputes.ValueInt64()),
-				RealTime:    settings.PredictionsSettings.RealTime.ValueBool(),
+	if data.SegmentAnalysisSettings != nil {
+		req.SegmentAnalysis = &client.SegmentAnalysisSetting{
+			Enabled:    data.SegmentAnalysisSettings.Enabled.ValueBool(),
+			Attributes: ConvertTfStringListToPtr(data.SegmentAnalysisSettings.Attributes),
+		}
+	}
+
+	if data.BiasAndFairnessSettings != nil {
+		protectedFeatures := make([]string, len(data.BiasAndFairnessSettings.ProtectedFeatures))
+		for i, protectedFeature := range data.BiasAndFairnessSettings.ProtectedFeatures {
+			protectedFeatures[i] = protectedFeature.ValueString()
+		}
+		req.BiasAndFairness = &client.BiasAndFairnessSetting{
+			ProtectedFeatures:     protectedFeatures,
+			PreferableTargetValue: data.BiasAndFairnessSettings.PreferableTargetValue.ValueBool(),
+			FairnessMetricsSet:    data.BiasAndFairnessSettings.FairnessMetricSet.ValueString(),
+			FairnessThreshold:     data.BiasAndFairnessSettings.FairnessThreshold.ValueFloat64(),
+		}
+	}
+
+	if data.DriftTrackingSettings != nil {
+		req.FeatureDrift = &client.BasicSetting{
+			Enabled: data.DriftTrackingSettings.FeatureDriftEnabled.ValueBool(),
+		}
+		req.TargetDrift = &client.BasicSetting{
+			Enabled: data.DriftTrackingSettings.TargetDriftEnabled.ValueBool(),
+		}
+	}
+
+	if data.AssociationIDSettings != nil {
+		columnNames := make([]string, len(data.AssociationIDSettings.ColumnNames))
+		for i, columnName := range data.AssociationIDSettings.ColumnNames {
+			columnNames[i] = columnName.ValueString()
+		}
+		req.AssociationID = &client.AssociationIDSetting{
+			AutoGenerateID:               data.AssociationIDSettings.AutoGenerateID.ValueBool(),
+			ColumnNames:                  columnNames,
+			RequiredInPredictionRequests: data.AssociationIDSettings.RequiredInPredictionRequests.ValueBool(),
+		}
+	}
+
+	if data.PredictionsDataCollectionSettings != nil {
+		req.PredictionsDataCollection = &client.BasicSetting{
+			Enabled: data.PredictionsDataCollectionSettings.Enabled.ValueBool(),
+		}
+	}
+
+	if data.PredictionWarningSettings != nil {
+		req.PredictionWarning = &client.PredictionWarningSetting{
+			Enabled: data.PredictionWarningSettings.Enabled.ValueBool(),
+		}
+		if data.PredictionWarningSettings.CustomBoundaries != nil {
+			req.PredictionWarning.CustomBoundaries = &client.CustomBoundaries{
+				LowerBoundary: data.PredictionWarningSettings.CustomBoundaries.LowerBoundary.ValueFloat64(),
+				UpperBoundary: data.PredictionWarningSettings.CustomBoundaries.UpperBoundary.ValueFloat64(),
 			}
+		}
+	}
+
+	if data.PredictionIntervalsSettings != nil {
+		percentils := make([]int64, len(data.PredictionIntervalsSettings.Percentiles))
+		for i, percentile := range data.PredictionIntervalsSettings.Percentiles {
+			percentils[i] = percentile.ValueInt64()
+		}
+		req.PredictionIntervals = &client.PredictionIntervalsSetting{
+			Enabled:     data.PredictionIntervalsSettings.Enabled.ValueBool(),
+			Percentiles: percentils,
+		}
+	}
+
+	if data.PredictionsSettings != nil {
+		req.PredictionsSettings = &client.PredictionsSettings{
+			MinComputes: data.PredictionsSettings.MinComputes.ValueInt64(),
+			MaxComputes: data.PredictionsSettings.MaxComputes.ValueInt64(),
+			RealTime:    data.PredictionsSettings.RealTime.ValueBool(),
 		}
 	}
 
@@ -422,5 +780,98 @@ func (r *DeploymentResource) updateDeploymentSettings(
 		return
 	}
 
+	if data.ChallengerReplaySettings != nil {
+		req := &client.DeploymentChallengerReplaySettings{
+			Enabled: data.ChallengerReplaySettings.Enabled.ValueBool(),
+		}
+
+		traceAPICall("UpdateDeploymentChallengerReplaySettings")
+		_, err = r.provider.service.UpdateDeploymentChallengerReplaySettings(ctx, id, req)
+		if err != nil {
+			return
+		}
+	}
+
+	if data.HealthSettings != nil {
+		req := &client.DeploymentHealthSettings{}
+
+		if data.HealthSettings.Service != nil {
+			req.Service = &client.DeploymentServiceHealthSettings{
+				BatchCount: data.HealthSettings.Service.BatchCount.ValueInt64(),
+			}
+		}
+
+		if data.HealthSettings.DataDrift != nil {
+			req.DataDrift = &client.DeploymentDataDriftHealthSettings{
+				BatchCount:                 Int64ValuePointerOptional(data.HealthSettings.DataDrift.BatchCount),
+				TimeInterval:               StringValuePointerOptional(data.HealthSettings.DataDrift.TimeInterval),
+				DriftThreshold:             Float64ValuePointerOptional(data.HealthSettings.DataDrift.DriftThreshold),
+				ImportanceThreshold:        Float64ValuePointerOptional(data.HealthSettings.DataDrift.ImportanceThreshold),
+				LowImportanceWarningCount:  Int64ValuePointerOptional(data.HealthSettings.DataDrift.LowImportanceWarningCount),
+				LowImportanceFailingCount:  Int64ValuePointerOptional(data.HealthSettings.DataDrift.LowImportanceFailingCount),
+				HighImportanceWarningCount: Int64ValuePointerOptional(data.HealthSettings.DataDrift.HighImportanceWarningCount),
+				HighImportanceFailingCount: Int64ValuePointerOptional(data.HealthSettings.DataDrift.HighImportanceFailingCount),
+				ExcludedFeatures:           ConvertTfStringListToPtr(data.HealthSettings.DataDrift.ExcludeFeatures),
+				StarredFeatures:            ConvertTfStringListToPtr(data.HealthSettings.DataDrift.StarredFeatures),
+			}
+		}
+
+		if data.HealthSettings.Accuracy != nil {
+			req.Accuracy = &client.DeploymentAccuracyHealthSettings{
+				BatchCount:       Int64ValuePointerOptional(data.HealthSettings.Accuracy.BatchCount),
+				Metric:           StringValuePointerOptional(data.HealthSettings.Accuracy.Metric),
+				Measurement:      StringValuePointerOptional(data.HealthSettings.Accuracy.Measurement),
+				WarningThreshold: Float64ValuePointerOptional(data.HealthSettings.Accuracy.WarningThreshold),
+				FailingThreshold: Float64ValuePointerOptional(data.HealthSettings.Accuracy.FailingThreshold),
+			}
+		}
+
+		if data.HealthSettings.Fairness != nil {
+			req.Fairness = &client.DeploymentFairnessHealthSettings{
+				ProtectedClassWarningCount: Int64ValuePointerOptional(data.HealthSettings.Fairness.ProtectedClassWarningCount),
+				ProtectedClassFailingCount: Int64ValuePointerOptional(data.HealthSettings.Fairness.ProtectedClassFailingCount),
+			}
+		}
+
+		if data.HealthSettings.CustomMetrics != nil {
+			req.CustomMetrics = &client.DeploymentCustomMetricsHealthSettings{
+				WarningConditions: convertCustomMetricConditions(data.HealthSettings.CustomMetrics.WarningConditions),
+				FailingConditions: convertCustomMetricConditions(data.HealthSettings.CustomMetrics.FailingConditions),
+			}
+		}
+
+		if data.HealthSettings.PredictionsTimeliness != nil {
+			req.PredictionsTimeliness = &client.DeploymentTimelinessHealthSettings{
+				Enabled:           data.HealthSettings.PredictionsTimeliness.Enabled.ValueBool(),
+				ExpectedFrequency: StringValuePointerOptional(data.HealthSettings.PredictionsTimeliness.ExpectedFrequency),
+			}
+		}
+
+		if data.HealthSettings.ActualsTimeliness != nil {
+			req.ActualsTimeliness = &client.DeploymentTimelinessHealthSettings{
+				Enabled:           data.HealthSettings.ActualsTimeliness.Enabled.ValueBool(),
+				ExpectedFrequency: StringValuePointerOptional(data.HealthSettings.ActualsTimeliness.ExpectedFrequency),
+			}
+		}
+
+		traceAPICall("UpdateDeploymentHealthSettings")
+		_, err = r.provider.service.UpdateDeploymentHealthSettings(ctx, id, req)
+		if err != nil {
+			return
+		}
+	}
+
 	return
+}
+
+func convertCustomMetricConditions(conditions []CustomMetricCondition) []client.CustomMetricCondition {
+	customMetricConditions := make([]client.CustomMetricCondition, 0)
+	for _, condition := range conditions {
+		customMetricConditions = append(customMetricConditions, client.CustomMetricCondition{
+			MetricID:        condition.MetricID.ValueString(),
+			CompareOperator: condition.CompareOperator.ValueString(),
+			Threshold:       condition.Threshold.ValueFloat64(),
+		})
+	}
+	return customMetricConditions
 }

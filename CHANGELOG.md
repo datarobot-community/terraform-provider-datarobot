@@ -1,3 +1,10 @@
+## 0.1.37
+
+FEATURES:
+
+- Deployment settings
+- Rename DATAROBOT_API_KEY to DATAROBOT_API_TOKEN
+
 ## 0.1.28
 
 FEATURES:

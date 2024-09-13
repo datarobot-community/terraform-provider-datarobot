@@ -87,13 +87,17 @@ type Service interface {
 
 	// Deployment
 	CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, error)
-	GetDeployment(ctx context.Context, id string) (*DeploymentRetrieveResponse, error)
-	UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*DeploymentRetrieveResponse, error)
-	UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error)
-	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
+	GetDeployment(ctx context.Context, id string) (*Deployment, error)
+	UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error)
 	DeleteDeployment(ctx context.Context, id string) error
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
-	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, string, error)
+	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
+	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error)
+	UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error)
+	GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*DeploymentChallengerReplaySettings, error)
+	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
+	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
+	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
 
 	// Application Source
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
@@ -425,12 +429,12 @@ func (s *ServiceImpl) CreateDeploymentFromModelPackage(ctx context.Context, req 
 	return Post[DeploymentCreateResponse](s.client, ctx, "/deployments/fromModelPackage/", req)
 }
 
-func (s *ServiceImpl) GetDeployment(ctx context.Context, id string) (*DeploymentRetrieveResponse, error) {
-	return Get[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/")
+func (s *ServiceImpl) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
+	return Get[Deployment](s.client, ctx, "/deployments/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*DeploymentRetrieveResponse, error) {
-	return Patch[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/", req)
+func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {
+	return Patch[Deployment](s.client, ctx, "/deployments/"+id+"/", req)
 }
 
 func (s *ServiceImpl) UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error) {
@@ -441,6 +445,22 @@ func (s *ServiceImpl) GetDeploymentSettings(ctx context.Context, id string) (*De
 	return Get[DeploymentSettings](s.client, ctx, "/deployments/"+id+"/settings/")
 }
 
+func (s *ServiceImpl) GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*DeploymentChallengerReplaySettings, error) {
+	return Get[DeploymentChallengerReplaySettings](s.client, ctx, "/deployments/"+id+"/challengerReplaySettings/")
+}
+
+func (s *ServiceImpl) UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error) {
+	return Patch[DeploymentChallengerReplaySettings](s.client, ctx, "/deployments/"+id+"/challengerReplaySettings/", req)
+}
+
+func (s *ServiceImpl) GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error) {
+	return Get[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/")
+}
+
+func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error) {
+	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
+}
+
 func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/deployments/"+id+"/")
 }
@@ -449,8 +469,8 @@ func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id
 	return Post[ValidateDeployemntModelReplacementResponse](s.client, ctx, "/deployments/"+id+"/model/validation/", req)
 }
 
-func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*DeploymentRetrieveResponse, string, error) {
-	return PatchAndExpectStatus[DeploymentRetrieveResponse](s.client, ctx, "/deployments/"+id+"/model/", req)
+func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {
+	return PatchAndExpectStatus[Deployment](s.client, ctx, "/deployments/"+id+"/model/", req)
 }
 
 // Application Service Implementation.
