@@ -38,10 +38,10 @@ Now you can continue with the Low Code RAG example:
     cd examples/workflows/low_code_rag
     ~~~
 
-1. The provider requires an API key set in an environment variable named `DATROBOT_API_KEY`. Copy the [API key](https://docs.datarobot.com/en/docs/get-started/acct-mgmt/acct-settings/api-key-mgmt.html#api-key-management) from the DataRobot console and create the `DATAROBOT_API_KEY` environment variable.
+1. The provider requires an API key set in an environment variable named `DATROBOT_API_TOKEN`. Copy the [API key](https://docs.datarobot.com/en/docs/get-started/acct-mgmt/acct-settings/api-key-mgmt.html#api-key-management) from the DataRobot console and create the `DATAROBOT_API_TOKEN` environment variable.
 
     ~~~ shell
-    export DATAROBOT_API_KEY=<YOUR_API_KEY>
+    export DATAROBOT_API_TOKEN=<YOUR_API_KEY>
     ~~~
 
     Where `<your API key>` is the API key you copied from the DataRobot Console.

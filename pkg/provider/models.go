@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_KEY"
+	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar string = "DATAROBOT_ENDPOINT"
 	TimeoutMinutesEnvVar    string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent               string = "terraform-provider-datarobot"
@@ -212,27 +212,139 @@ type PredictionEnvironmentResourceModel struct {
 
 // DeploymentResourceModel describes the deployment resource.
 type DeploymentResourceModel struct {
-	ID                       types.String        `tfsdk:"id"`
-	Label                    types.String        `tfsdk:"label"`
-	RegisteredModelVersionID types.String        `tfsdk:"registered_model_version_id"`
-	PredictionEnvironmentID  types.String        `tfsdk:"prediction_environment_id"`
-	Settings                 *DeploymentSettings `tfsdk:"settings"`
+	ID                       types.String `tfsdk:"id"`
+	Label                    types.String `tfsdk:"label"`
+	RegisteredModelVersionID types.String `tfsdk:"registered_model_version_id"`
+	PredictionEnvironmentID  types.String `tfsdk:"prediction_environment_id"`
+	Importance               types.String `tfsdk:"importance"`
+
+	// settings
+	PredictionsByForecastDateSettings *PredictionsByForecastDateSettings `tfsdk:"predictions_by_forecast_date_settings"`
+	ChallengerModelsSettings          *BasicDeploymentSetting            `tfsdk:"challenger_models_settings"`
+	SegmentAnalysisSettings           *SegmentAnalysisSettings           `tfsdk:"segment_analysis_settings"`
+	BiasAndFairnessSettings           *BiasAndFairnessSettings           `tfsdk:"bias_and_fairness_settings"`
+	ChallengerReplaySettings          *BasicDeploymentSetting            `tfsdk:"challenger_replay_settings"`
+	DriftTrackingSettings             *DriftTrackingSettings             `tfsdk:"drift_tracking_settings"`
+	AssociationIDSettings             *AssociationIDSettings             `tfsdk:"association_id_settings"`
+	PredictionsDataCollectionSettings *BasicDeploymentSetting            `tfsdk:"predictions_data_collection_settings"`
+	PredictionWarningSettings         *PredictionWarningSettings         `tfsdk:"prediction_warning_settings"`
+	PredictionIntervalsSettings       *PredictionIntervalsSettings       `tfsdk:"prediction_intervals_settings"`
+	HealthSettings                    *HealthSettings                    `tfsdk:"health_settings"`
+	PredictionsSettings               *PredictionsSettings               `tfsdk:"predictions_settings"`
+}
+
+type BasicDeploymentSetting struct {
+	Enabled types.Bool `tfsdk:"enabled"`
+}
+
+type PredictionsByForecastDateSettings struct {
+	Enabled        types.Bool   `tfsdk:"enabled"`
+	ColumnName     types.String `tfsdk:"column_name"`
+	DatetimeFormat types.String `tfsdk:"datetime_format"`
+}
+
+type SegmentAnalysisSettings struct {
+	Enabled    types.Bool     `tfsdk:"enabled"`
+	Attributes []types.String `tfsdk:"attributes"`
+}
+
+type BiasAndFairnessSettings struct {
+	ProtectedFeatures     []types.String `tfsdk:"protected_features"`
+	PreferableTargetValue types.Bool     `tfsdk:"preferable_target_value"`
+	FairnessMetricSet     types.String   `tfsdk:"fairness_metric_set"`
+	FairnessThreshold     types.Float64  `tfsdk:"fairness_threshold"`
+}
+
+type DriftTrackingSettings struct {
+	TargetDriftEnabled  types.Bool `tfsdk:"target_drift_enabled"`
+	FeatureDriftEnabled types.Bool `tfsdk:"feature_drift_enabled"`
 }
 
 type DeploymentSettings struct {
-	AssociationID        *AssociationIDSetting `tfsdk:"association_id"`
-	PredictionRowStorage types.Bool            `tfsdk:"prediction_row_storage"`
-	ChallengerAnalysis   types.Bool            `tfsdk:"challenger_analysis"`
-	PredictionsSettings  *PredictionsSetting   `tfsdk:"predictions_settings"`
+	AssociationID        *AssociationIDSettings `tfsdk:"association_id"`
+	PredictionRowStorage types.Bool             `tfsdk:"prediction_row_storage"`
+	ChallengerAnalysis   types.Bool             `tfsdk:"challenger_analysis"`
+	PredictionsSettings  *PredictionsSettings   `tfsdk:"predictions_settings"`
 }
 
-type AssociationIDSetting struct {
-	AutoGenerateID               types.Bool   `tfsdk:"auto_generate_id"`
-	FeatureName                  types.String `tfsdk:"feature_name"`
-	RequiredInPredictionRequests types.Bool   `tfsdk:"required_in_prediction_requests"`
+type AssociationIDSettings struct {
+	AutoGenerateID               types.Bool     `tfsdk:"auto_generate_id"`
+	ColumnNames                  []types.String `tfsdk:"column_names"`
+	RequiredInPredictionRequests types.Bool     `tfsdk:"required_in_prediction_requests"`
 }
 
-type PredictionsSetting struct {
+type PredictionWarningSettings struct {
+	Enabled          types.Bool        `tfsdk:"enabled"`
+	CustomBoundaries *CustomBoundaries `tfsdk:"custom_boundaries"`
+}
+
+type CustomBoundaries struct {
+	UpperBoundary types.Float64 `tfsdk:"uppder_boundary"`
+	LowerBoundary types.Float64 `tfsdk:"lower_boundary"`
+}
+
+type PredictionIntervalsSettings struct {
+	Enabled     types.Bool    `tfsdk:"enabled"`
+	Percentiles []types.Int64 `tfsdk:"percentiles"`
+}
+
+type HealthSettings struct {
+	Service               *ServiceHealthSettings       `tfsdk:"service"`
+	DataDrift             *DataDriftHealthSettings     `tfsdk:"data_drift"`
+	Accuracy              *AccuracyHealthSettings      `tfsdk:"accuracy"`
+	Fairness              *FairnessHealthSettings      `tfsdk:"fairness"`
+	CustomMetrics         *CustomMetricsHealthSettings `tfsdk:"custom_metrics"`
+	PredictionsTimeliness *TimelinessHealthSettings    `tfsdk:"predictions_timeliness"`
+	ActualsTimeliness     *TimelinessHealthSettings    `tfsdk:"actuals_timeliness"`
+}
+
+type ServiceHealthSettings struct {
+	BatchCount types.Int64 `tfsdk:"batch_count"`
+}
+
+type DataDriftHealthSettings struct {
+	BatchCount                 types.Int64    `tfsdk:"batch_count"`
+	TimeInterval               types.String   `tfsdk:"time_interval"`
+	DriftThreshold             types.Float64  `tfsdk:"drift_threshold"`
+	ImportanceThreshold        types.Float64  `tfsdk:"importance_threshold"`
+	LowImportanceWarningCount  types.Int64    `tfsdk:"low_importance_warning_count"`
+	LowImportanceFailingCount  types.Int64    `tfsdk:"low_importance_failing_count"`
+	HighImportanceWarningCount types.Int64    `tfsdk:"high_importance_warning_count"`
+	HighImportanceFailingCount types.Int64    `tfsdk:"high_importance_failing_count"`
+	ExcludeFeatures            []types.String `tfsdk:"exclude_features"`
+	StarredFeatures            []types.String `tfsdk:"starred_features"`
+}
+
+type AccuracyHealthSettings struct {
+	BatchCount       types.Int64   `tfsdk:"batch_count"`
+	Metric           types.String  `tfsdk:"metric"`
+	Measurement      types.String  `tfsdk:"measurement"`
+	WarningThreshold types.Float64 `tfsdk:"warning_threshold"`
+	FailingThreshold types.Float64 `tfsdk:"failing_threshold"`
+}
+
+type FairnessHealthSettings struct {
+	ProtectedClassWarningCount types.Int64 `tfsdk:"protected_class_warning_count"`
+	ProtectedClassFailingCount types.Int64 `tfsdk:"protected_class_failing_count"`
+}
+
+type CustomMetricsHealthSettings struct {
+	WarningConditions []CustomMetricCondition `tfsdk:"warning_conditions"`
+	FailingConditions []CustomMetricCondition `tfsdk:"failing_conditions"`
+}
+
+type CustomMetricCondition struct {
+	MetricID        types.String  `tfsdk:"metric_id"`
+	CompareOperator types.String  `tfsdk:"compare_operator"`
+	Threshold       types.Float64 `tfsdk:"threshold"`
+}
+
+type TimelinessHealthSettings struct {
+	Enabled           types.Bool   `tfsdk:"enabled"`
+	ExpectedFrequency types.String `tfsdk:"expected_frequency"`
+}
+
+type PredictionsSettings struct {
 	MinComputes types.Int64 `tfsdk:"min_computes"`
 	MaxComputes types.Int64 `tfsdk:"max_computes"`
 	RealTime    types.Bool  `tfsdk:"real_time"`

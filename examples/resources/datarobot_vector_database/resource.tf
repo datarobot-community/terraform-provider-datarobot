@@ -4,8 +4,8 @@ resource "datarobot_use_case" "example" {
 }
 
 resource "datarobot_dataset_from_file" "example" {
-  file_path   = "[Path to file to upload]"
-  use_case_id = datarobot_use_case.example.id
+  file_path    = "[Path to file to upload]"
+  use_case_ids = [datarobot_use_case.example.id]
 }
 
 resource "datarobot_vector_database" "example" {

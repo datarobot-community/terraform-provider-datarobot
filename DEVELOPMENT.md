@@ -25,7 +25,7 @@
 To override the datarobot api token used by the terraform provider
 
 ~~~shell
-export DATAROBOT_API_KEY=<YOUR_API_KEY>
+export DATAROBOT_API_TOKEN=<YOUR_API_KEY>
 ~~~
 
 ## Regenerating Docs
@@ -76,7 +76,7 @@ expected mock calls before calling that common method.
 Integration and unit tests are run on every commit, while acceptance tests are only automatically run during the release
 process. Unit tests are great, but rare since TF provider methods don't usually contain complex business logic.
 
-**It's generally a good idea to run acceptance tests affected by your change manually before submitting a PR.** They can be run individually, setting `TF_ACC=1` and `DATAROBOT_API_KEY` to appropriate values. Please ensure the service account associated with the provided `DATAROBOT_API_KEY` has the necessary features enabled to run the tests.
+**It's generally a good idea to run acceptance tests affected by your change manually before submitting a PR.** They can be run individually, setting `TF_ACC=1` and `DATAROBOT_API_TOKEN` to appropriate values. Please ensure the service account associated with the provided `DATAROBOT_API_TOKEN` has the necessary features enabled to run the tests.
 
 Getting the mock calls right for integration tests can be challenging. You may be surprised at how many read calls are
 issued at each stage. Some optional logging has been enabled which can help with this. Enable it by setting the env var `TRACE_API_CALLS=1`. If you first run an acceptance test that performs the real operations, ie `TF_ACC=1 TRACE_API_CALLS=1`, you can then use this record to determine the mock calls.
