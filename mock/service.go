@@ -230,19 +230,19 @@ func (mr *MockServiceMockRecorder) CreateDatasetFromFile(ctx, fileName, content 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromFile", reflect.TypeOf((*MockService)(nil).CreateDatasetFromFile), ctx, fileName, content)
 }
 
-// CreateDatasetVersionFromFile mocks base method.
-func (m *MockService) CreateDatasetVersionFromFile(ctx context.Context, id, fileName string, content []byte) (*client.CreateDatasetVersionResponse, error) {
+// CreateDatasetFromURL mocks base method.
+func (m *MockService) CreateDatasetFromURL(ctx context.Context, req *client.CreateDatasetFromURLRequest) (*client.CreateDatasetVersionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateDatasetVersionFromFile", ctx, id, fileName, content)
+	ret := m.ctrl.Call(m, "CreateDatasetFromURL", ctx, req)
 	ret0, _ := ret[0].(*client.CreateDatasetVersionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateDatasetVersionFromFile indicates an expected call of CreateDatasetVersionFromFile.
-func (mr *MockServiceMockRecorder) CreateDatasetVersionFromFile(ctx, id, fileName, content interface{}) *gomock.Call {
+// CreateDatasetFromURL indicates an expected call of CreateDatasetFromURL.
+func (mr *MockServiceMockRecorder) CreateDatasetFromURL(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetVersionFromFile", reflect.TypeOf((*MockService)(nil).CreateDatasetVersionFromFile), ctx, id, fileName, content)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromURL", reflect.TypeOf((*MockService)(nil).CreateDatasetFromURL), ctx, req)
 }
 
 // CreateDependencyBuild mocks base method.

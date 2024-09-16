@@ -135,6 +135,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"target_type": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The target type of the Custom Model.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"target_name": schema.StringAttribute{
 				Optional:            true,

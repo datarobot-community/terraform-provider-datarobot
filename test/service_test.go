@@ -1086,17 +1086,6 @@ func TestDatasetCreatingVersion(t *testing.T) {
 	require.Equal(resp.ID, getUpdatedDataset.ID)
 	require.NotEmpty(getUpdatedDataset.VersionID)
 	assert.Equal(updateReq.Name, getUpdatedDataset.Name)
-
-	// Upload file to the dataset
-	fileName := "test-from-file-version.csv"
-	content := []byte("value1,value2\n1,2\n")
-
-	versionResp, err := s.CreateDatasetVersionFromFile(ctx, resp.ID, fileName, content)
-	require.NoError(err)
-	require.NotNil(versionResp)
-	assert.NotEmpty(versionResp.ID)
-	assert.NotEmpty(versionResp.VersionID)
-	assert.NotEmpty(versionResp.StatusID)
 }
 
 func initializeTest(t *testing.T) client.Service {

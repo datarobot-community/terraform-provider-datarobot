@@ -22,7 +22,7 @@ type Service interface {
 	// Data Set
 	CreateDataset(ctx context.Context, req *CreateDatasetRequest) (*CreateDatasetResponse, error)
 	CreateDatasetFromFile(ctx context.Context, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
-	CreateDatasetVersionFromFile(ctx context.Context, id string, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
+	CreateDatasetFromURL(ctx context.Context, req *CreateDatasetFromURLRequest) (*CreateDatasetVersionResponse, error)
 	GetDataset(ctx context.Context, id string) (*Dataset, error)
 	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error)
 	DeleteDataset(ctx context.Context, id string) error
@@ -169,8 +169,8 @@ func (s *ServiceImpl) CreateDatasetFromFile(ctx context.Context, fileName string
 	return uploadFileFromBinary[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromFile", http.MethodPost, fileName, content, map[string]string{})
 }
 
-func (s *ServiceImpl) CreateDatasetVersionFromFile(ctx context.Context, id string, fileName string, content []byte) (*CreateDatasetVersionResponse, error) {
-	return uploadFileFromBinary[CreateDatasetVersionResponse](s.client, ctx, "/datasets/"+id+"/versions/fromFile/", http.MethodPost, fileName, content, map[string]string{})
+func (s *ServiceImpl) CreateDatasetFromURL(ctx context.Context, req *CreateDatasetFromURLRequest) (*CreateDatasetVersionResponse, error) {
+	return Post[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromURL/", req)
 }
 
 func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*Dataset, error) {

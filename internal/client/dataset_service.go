@@ -4,6 +4,18 @@ type CreateDatasetRequest struct {
 	DoSnapshot bool `json:"doSnapshot"`
 }
 
+type CreateDatasetFromURLRequest struct {
+	URL                       string             `json:"url"`
+	DoSnapshot                *bool              `json:"doSnapshot,omitempty"`
+	PersistDataAfterIngestion *bool              `json:"persistDataAfterIngestion,omitempty"`
+	SampleSize                *DatasetSampleSize `json:"sampleSize,omitempty"`
+}
+
+type DatasetSampleSize struct {
+	Type  string `json:"type"`
+	Value int64  `json:"value"`
+}
+
 type CreateDatasetResponse struct {
 	ID string `json:"datasetId"`
 }
@@ -33,4 +45,5 @@ type Dataset struct {
 	IsDataEngineEligible                  bool    `json:"isDataEngineEligible"`
 	IsWranglingEligible                   bool    `json:"isWranglingEligible"`
 	IsPlaygroundEvaluationDatasetEligible bool    `json:"isPlaygroundEvaluationDatasetEligible"`
+	Uri                                   string  `json:"uri"`
 }

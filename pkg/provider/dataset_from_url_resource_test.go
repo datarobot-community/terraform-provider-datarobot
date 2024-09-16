@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -12,15 +11,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestAccDatasetFromFileResource(t *testing.T) {
+func TestAccDatasetFromURLResource(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_dataset_from_file.test"
+	resourceName := "datarobot_dataset_from_url.test"
+
+	// TODO: Update the URL to a valid URL
+	url := "url"
 
 	datasetName := "example_dataset"
 	newDatsetName := "new_example_dataset"
 
-	useCase := "test_datasource"
-	newUseCase := "test_new_datasource"
+	useCase := "test_datasource_from_url"
+	newUseCase := "test_new_datasource_from_url"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -30,10 +32,10 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &datasetName, &useCase),
+				Config: datasetFromURLResourceConfig(url, &datasetName, &useCase),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					checkDatasetFromURLResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "url", url),
 					resource.TestCheckResourceAttr(resourceName, "name", datasetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -41,10 +43,10 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 			},
 			// update name and use case IDs
 			{
-				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &newDatsetName, &newUseCase),
+				Config: datasetFromURLResourceConfig(url, &newDatsetName, &newUseCase),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					checkDatasetFromURLResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "url", url),
 					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -55,14 +57,14 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 	})
 }
 
-func TestDatasetFromFileResourceSchema(t *testing.T) {
+func TestDatasetFromURLResourceSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	schemaRequest := fwresource.SchemaRequest{}
 	schemaResponse := &fwresource.SchemaResponse{}
 
-	NewDatasetFromFileResource().Schema(ctx, schemaRequest, schemaResponse)
+	NewDatasetFromURLResource().Schema(ctx, schemaRequest, schemaResponse)
 
 	if schemaResponse.Diagnostics.HasError() {
 		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
@@ -75,7 +77,7 @@ func TestDatasetFromFileResourceSchema(t *testing.T) {
 	}
 }
 
-func datasetFromFileResourceConfig(filePath string, name *string, useCaseID *string) string {
+func datasetFromURLResourceConfig(url string, name *string, useCaseID *string) string {
 	nameStr := ""
 	if name != nil {
 		nameStr = fmt.Sprintf(`name = "%s"`, *name)
@@ -87,22 +89,22 @@ func datasetFromFileResourceConfig(filePath string, name *string, useCaseID *str
 	}
 
 	return fmt.Sprintf(`
-resource "datarobot_use_case" "test_datasource" {
+resource "datarobot_use_case" "test_datasource_from_url" {
 	  name = "test"
 }
-resource "datarobot_use_case" "test_new_datasource" {
+resource "datarobot_use_case" "test_new_datasource_from_url" {
 	  name = "test 2"
 }
 
-resource "datarobot_dataset_from_file" "test" {
-	  file_path = "%s"
+resource "datarobot_dataset_from_url" "test" {
+	  url = "%s"
 	  %s
 	  %s
 }
-`, filePath, nameStr, useCaseIDsStr)
+`, url, nameStr, useCaseIDsStr)
 }
 
-func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckFunc {
+func checkDatasetFromURLResourceExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -125,8 +127,7 @@ func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckF
 			return err
 		}
 
-		if dataset.Name == rs.Primary.Attributes["name"] ||
-			dataset.Name == strings.Split(rs.Primary.Attributes["file_path"], "/")[3] {
+		if dataset.Name == rs.Primary.Attributes["name"] {
 			return nil
 		}
 
