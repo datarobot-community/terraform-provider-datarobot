@@ -54,9 +54,6 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			"source_version_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The version ID of the Custom Application Source.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
@@ -217,8 +214,9 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients: recipients,
+		CustomApplicationSourceVersionID: plan.SourceVersionID.ValueString(),
+		ExternalAccessEnabled:            IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessRecipients:         recipients,
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
@@ -241,6 +239,13 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		}
 		return
 	}
+
+	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Custom Application is not ready", err.Error())
+		return
+	}
+	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

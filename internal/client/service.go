@@ -29,6 +29,13 @@ type Service interface {
 	AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
 	RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error
 
+	// Data Store
+	CreateDatastore(ctx context.Context, req *CreateDatastoreRequest) (*Datastore, error)
+	GetDatastore(ctx context.Context, id string) (*Datastore, error)
+	UpdateDatastore(ctx context.Context, id string, req *UpdateDatastoreRequest) (*Datastore, error)
+	DeleteDatastore(ctx context.Context, id string) error
+	TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error)
+
 	// Vector Database
 	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error)
 	GetVectorDatabase(ctx context.Context, id string) (*VectorDatabase, error)
@@ -183,6 +190,27 @@ func (s *ServiceImpl) UpdateDataset(ctx context.Context, id string, req *UpdateD
 
 func (s *ServiceImpl) DeleteDataset(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/datasets/"+id+"/")
+}
+
+// Data Store Service Implementation.
+func (s *ServiceImpl) CreateDatastore(ctx context.Context, req *CreateDatastoreRequest) (*Datastore, error) {
+	return Post[Datastore](s.client, ctx, "/externalDataStores/", req)
+}
+
+func (s *ServiceImpl) GetDatastore(ctx context.Context, id string) (*Datastore, error) {
+	return Get[Datastore](s.client, ctx, "/externalDataStores/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateDatastore(ctx context.Context, id string, req *UpdateDatastoreRequest) (*Datastore, error) {
+	return Patch[Datastore](s.client, ctx, "/externalDataStores/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteDatastore(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/externalDataStores/"+id+"/")
+}
+
+func (s *ServiceImpl) TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error) {
+	return Post[TestDatastoreConnectionResponse](s.client, ctx, "/externalDataStores/"+id+"/test/", req)
 }
 
 // Use Case Service Implementation.

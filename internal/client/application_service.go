@@ -20,9 +20,10 @@ type Application struct {
 }
 
 type UpdateApplicationRequest struct {
-	Name                     string   `json:"name,omitempty"`
-	ExternalAccessEnabled    bool     `json:"externalAccessEnabled"`
-	ExternalAccessRecipients []string `json:"externalAccessRecipients"`
+	Name                             string   `json:"name,omitempty"`
+	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId,omitempty"`
+	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
+	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
 }
 
 type UpdateApplicationSourceRequest struct {

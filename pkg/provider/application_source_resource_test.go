@@ -12,8 +12,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func TestAccApplicationSourceResource(t *testing.T) {
@@ -225,6 +228,8 @@ if __name__ == "__main__":
 	}
 	defer os.Remove("streamlit-app.py")
 
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: isMock,
 		PreCheck: func() {
@@ -247,6 +252,12 @@ if __name__ == "__main__":
 			// Update name, local file, and replicas
 			{
 				Config: applicationSourceResourceConfig("new_example_name", []FileTuple{{LocalPath: "streamlit-app.py"}}, 2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),

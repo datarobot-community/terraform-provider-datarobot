@@ -47,3 +47,37 @@ type Dataset struct {
 	IsPlaygroundEvaluationDatasetEligible bool    `json:"isPlaygroundEvaluationDatasetEligible"`
 	Uri                                   string  `json:"uri"`
 }
+
+type CreateDatastoreRequest struct {
+	Type          string          `json:"type"`
+	CanonicalName string          `json:"canonicalName"`
+	Params        DatastoreParams `json:"params"`
+}
+
+type DatastoreParams struct {
+	Fields      []map[string]string `json:"fields"`
+	DriverID    *string             `json:"driverId,omitempty"`
+	JDBCURL     *string             `json:"jdbcUrl,omitempty"`
+	ConnectorID *string             `json:"connectorId,omitempty"`
+}
+
+type Datastore struct {
+	ID              string              `json:"id"`
+	CanonicalName   string              `json:"canonicalName"`
+	Type            string              `json:"type"`
+	DriverClassType *string             `json:"driverClassType,omitempty"`
+	Fields          []map[string]string `json:"fields,omitempty"`
+}
+
+type UpdateDatastoreRequest struct {
+	CanonicalName string          `json:"canonicalName"`
+	Params        DatastoreParams `json:"params"`
+}
+
+type TestDatastoreConnectionRequest struct {
+	CredentialID string `json:"credentialId"`
+}
+
+type TestDatastoreConnectionResponse struct {
+	Message string `json:"message"`
+}
