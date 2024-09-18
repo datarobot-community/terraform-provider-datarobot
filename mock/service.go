@@ -230,19 +230,34 @@ func (mr *MockServiceMockRecorder) CreateDatasetFromFile(ctx, fileName, content 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromFile", reflect.TypeOf((*MockService)(nil).CreateDatasetFromFile), ctx, fileName, content)
 }
 
-// CreateDatasetVersionFromFile mocks base method.
-func (m *MockService) CreateDatasetVersionFromFile(ctx context.Context, id, fileName string, content []byte) (*client.CreateDatasetVersionResponse, error) {
+// CreateDatasetFromURL mocks base method.
+func (m *MockService) CreateDatasetFromURL(ctx context.Context, req *client.CreateDatasetFromURLRequest) (*client.CreateDatasetVersionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateDatasetVersionFromFile", ctx, id, fileName, content)
+	ret := m.ctrl.Call(m, "CreateDatasetFromURL", ctx, req)
 	ret0, _ := ret[0].(*client.CreateDatasetVersionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateDatasetVersionFromFile indicates an expected call of CreateDatasetVersionFromFile.
-func (mr *MockServiceMockRecorder) CreateDatasetVersionFromFile(ctx, id, fileName, content interface{}) *gomock.Call {
+// CreateDatasetFromURL indicates an expected call of CreateDatasetFromURL.
+func (mr *MockServiceMockRecorder) CreateDatasetFromURL(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetVersionFromFile", reflect.TypeOf((*MockService)(nil).CreateDatasetVersionFromFile), ctx, id, fileName, content)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromURL", reflect.TypeOf((*MockService)(nil).CreateDatasetFromURL), ctx, req)
+}
+
+// CreateDatastore mocks base method.
+func (m *MockService) CreateDatastore(ctx context.Context, req *client.CreateDatastoreRequest) (*client.Datastore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDatastore", ctx, req)
+	ret0, _ := ret[0].(*client.Datastore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDatastore indicates an expected call of CreateDatastore.
+func (mr *MockServiceMockRecorder) CreateDatastore(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatastore", reflect.TypeOf((*MockService)(nil).CreateDatastore), ctx, req)
 }
 
 // CreateDependencyBuild mocks base method.
@@ -465,6 +480,20 @@ func (mr *MockServiceMockRecorder) DeleteDataset(ctx, id interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDataset", reflect.TypeOf((*MockService)(nil).DeleteDataset), ctx, id)
 }
 
+// DeleteDatastore mocks base method.
+func (m *MockService) DeleteDatastore(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDatastore", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDatastore indicates an expected call of DeleteDatastore.
+func (mr *MockServiceMockRecorder) DeleteDatastore(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDatastore", reflect.TypeOf((*MockService)(nil).DeleteDatastore), ctx, id)
+}
+
 // DeleteDeployment mocks base method.
 func (m *MockService) DeleteDeployment(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -665,6 +694,21 @@ func (m *MockService) GetDataset(ctx context.Context, id string) (*client.Datase
 func (mr *MockServiceMockRecorder) GetDataset(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDataset", reflect.TypeOf((*MockService)(nil).GetDataset), ctx, id)
+}
+
+// GetDatastore mocks base method.
+func (m *MockService) GetDatastore(ctx context.Context, id string) (*client.Datastore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDatastore", ctx, id)
+	ret0, _ := ret[0].(*client.Datastore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDatastore indicates an expected call of GetDatastore.
+func (mr *MockServiceMockRecorder) GetDatastore(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDatastore", reflect.TypeOf((*MockService)(nil).GetDatastore), ctx, id)
 }
 
 // GetDependencyBuild mocks base method.
@@ -1086,6 +1130,21 @@ func (mr *MockServiceMockRecorder) RemoveDatasetFromUseCase(ctx, useCaseID, data
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveDatasetFromUseCase", reflect.TypeOf((*MockService)(nil).RemoveDatasetFromUseCase), ctx, useCaseID, datasetID)
 }
 
+// TestDataStoreConnection mocks base method.
+func (m *MockService) TestDataStoreConnection(ctx context.Context, id string, req *client.TestDatastoreConnectionRequest) (*client.TestDatastoreConnectionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TestDataStoreConnection", ctx, id, req)
+	ret0, _ := ret[0].(*client.TestDatastoreConnectionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TestDataStoreConnection indicates an expected call of TestDataStoreConnection.
+func (mr *MockServiceMockRecorder) TestDataStoreConnection(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestDataStoreConnection", reflect.TypeOf((*MockService)(nil).TestDataStoreConnection), ctx, id, req)
+}
+
 // UpdateApplication mocks base method.
 func (m *MockService) UpdateApplication(ctx context.Context, id string, req *client.UpdateApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
@@ -1189,6 +1248,21 @@ func (m *MockService) UpdateDataset(ctx context.Context, id string, req *client.
 func (mr *MockServiceMockRecorder) UpdateDataset(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDataset", reflect.TypeOf((*MockService)(nil).UpdateDataset), ctx, id, req)
+}
+
+// UpdateDatastore mocks base method.
+func (m *MockService) UpdateDatastore(ctx context.Context, id string, req *client.UpdateDatastoreRequest) (*client.Datastore, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDatastore", ctx, id, req)
+	ret0, _ := ret[0].(*client.Datastore)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDatastore indicates an expected call of UpdateDatastore.
+func (mr *MockServiceMockRecorder) UpdateDatastore(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDatastore", reflect.TypeOf((*MockService)(nil).UpdateDatastore), ctx, id, req)
 }
 
 // UpdateDeployment mocks base method.

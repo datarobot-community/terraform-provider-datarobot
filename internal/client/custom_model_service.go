@@ -61,6 +61,7 @@ type CustomModelVersion struct {
 	Replicas                 *int64                   `json:"replicas"`
 	TrainingData             *CustomModelTrainingData `json:"trainingData"`
 	HoldoutData              *CustomModelHoldoutData  `json:"holdoutData"`
+	IsFrozen                 bool                     `json:"isFrozen"`
 }
 
 type Dependency struct {

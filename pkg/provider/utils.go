@@ -499,3 +499,57 @@ func ConvertTfStringListToPtr(input []types.String) *[]string {
 
 	return &output
 }
+
+func UpdateUseCasesForDataset(
+	ctx context.Context,
+	service client.Service,
+	datasetID string,
+	stateUseCaseIDs []types.String,
+	planUseCaseIDs []types.String,
+) (err error) {
+	if !reflect.DeepEqual(stateUseCaseIDs, planUseCaseIDs) {
+		useCasesToAdd := make([]string, 0)
+		for _, useCaseID := range planUseCaseIDs {
+			found := false
+			for _, oldUseCaseID := range stateUseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToAdd = append(useCasesToAdd, useCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToAdd {
+			traceAPICall("AddDatasetToUseCase")
+			err = service.AddDatasetToUseCase(ctx, useCaseID, datasetID)
+			if err != nil {
+				return
+			}
+		}
+
+		useCasesToRemove := make([]string, 0)
+		for _, oldUseCaseID := range stateUseCaseIDs {
+			found := false
+			for _, useCaseID := range planUseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToRemove = append(useCasesToRemove, oldUseCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToRemove {
+			traceAPICall("RemoveDatasetFromUseCase")
+			err = service.RemoveDatasetFromUseCase(ctx, useCaseID, datasetID)
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}

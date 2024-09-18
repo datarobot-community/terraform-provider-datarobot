@@ -53,6 +53,11 @@ resource "datarobot_google_cloud_credential" "example" {
   source_file = var.google_cloud_credential_source_file
 }
 
+resource "datarobot_google_cloud_credential" "example2" {
+  name        = "${var.use_case_name} Google Cloud Service Account 2"
+  source_file = var.google_cloud_credential_source_file
+}
+
 resource "datarobot_custom_model" "example" {
   name                    = datarobot_use_case.example.name
   description             = datarobot_use_case.example.description
@@ -61,7 +66,7 @@ resource "datarobot_custom_model" "example" {
     {
       key   = "GOOGLE_SERVICE_ACCOUNT",
       type  = "credential",
-      value = datarobot_google_cloud_credential.example.id
+      value = datarobot_google_cloud_credential.example2.id
     }
   ]
 }
@@ -82,9 +87,6 @@ resource "datarobot_deployment" "example" {
   label                       = datarobot_use_case.example.name
   prediction_environment_id   = datarobot_prediction_environment.example.id
   registered_model_version_id = datarobot_registered_model.example.version_id
-  settings = {
-    prediction_row_storage = true
-  }
 }
 
 resource "datarobot_qa_application" "example" {

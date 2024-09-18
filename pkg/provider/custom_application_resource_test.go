@@ -7,10 +7,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
-	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
-	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -18,236 +14,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
+const (
+	resourceName = "datarobot_custom_application.test"
+)
+
 func TestAccCustomApplicationResource(t *testing.T) {
 	t.Parallel()
-	testCustomApplicationResource(t, false)
-}
 
-func TestIntegrationCustomApplicationResource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
-	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
-		os.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
-
-	envID := uuid.NewString()
-	sourceID := uuid.NewString()
-	sourceVersionID := uuid.NewString()
-	sourceVersionID2 := uuid.NewString()
-
-	id := uuid.NewString()
-	id2 := uuid.NewString()
-	name := uuid.NewString()
-	applicationUrl := uuid.NewString()
-
-	// Create Application Source
-	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
-		&client.ListExecutionEnvironmentsResponse{
-			Data: []client.ExecutionEnvironment{
-				{
-					ID:   envID,
-					Name: baseEnvironmentName,
-				},
-			},
-		}, nil)
-
-	mockService.EXPECT().CreateApplicationSource(gomock.Any()).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().CreateApplicationSourceVersion(gomock.Any(), sourceID, &client.CreateApplicationSourceVersionRequest{
-		Label:             "v1",
-		BaseEnvironmentID: envID,
-	}).Return(&client.ApplicationSourceVersion{
-		ID: sourceVersionID,
-	}, nil)
-	mockService.EXPECT().UpdateApplicationSourceVersionFiles(gomock.Any(), sourceID, sourceVersionID, gomock.Any()).Return(
-		&client.ApplicationSourceVersion{
-			ID: sourceVersionID,
-		}, nil)
-
-	// Create
-	mockService.EXPECT().CreateApplicationFromSource(gomock.Any(), &client.CreateApplicationFromSourceRequest{
-		ApplicationSourceVersionID: sourceVersionID,
-	}).Return(&client.Application{
-		ID:   id,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().IsApplicationReady(gomock.Any(), id).Return(true, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             name,
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-	}, nil)
-
-	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             name,
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-	}, nil)
-
-	// Read
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             name,
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-	}, nil)
-
-	// Update name
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             name,
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-	}, nil)
-	mockService.EXPECT().UpdateApplication(gomock.Any(), id, &client.UpdateApplicationRequest{
-		Name:                     "new_example_name",
-		ExternalAccessEnabled:    true,
-		ExternalAccessRecipients: []string{"test@test.com"},
-	}).Return(&client.Application{
-		ID:   id,
-		Name: "new_example_name",
-	}, nil)
-
-	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-		ExternalAccessEnabled:            true,
-	}, nil)
-
-	// Update application source version
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-		ExternalAccessEnabled:            true,
-	}, nil)
-	mockService.EXPECT().DeleteApplication(gomock.Any(), id).Return(nil)
-	mockService.EXPECT().DeleteApplicationSource(gomock.Any(), sourceID).Return(nil)
-	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
-		&client.ListExecutionEnvironmentsResponse{
-			Data: []client.ExecutionEnvironment{
-				{
-					ID:   envID,
-					Name: baseEnvironmentName,
-				},
-			},
-		}, nil)
-	mockService.EXPECT().CreateApplicationSource(gomock.Any()).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().CreateApplicationSourceVersion(gomock.Any(), sourceID, &client.CreateApplicationSourceVersionRequest{
-		Label:             "v1",
-		BaseEnvironmentID: envID,
-	}).Return(&client.ApplicationSourceVersion{
-		ID: sourceVersionID2,
-	}, nil)
-	mockService.EXPECT().UpdateApplicationSourceVersionFiles(gomock.Any(), sourceID, sourceVersionID2, gomock.Any()).Return(
-		&client.ApplicationSourceVersion{
-			ID: sourceVersionID,
-		}, nil)
-
-	mockService.EXPECT().CreateApplicationFromSource(gomock.Any(), &client.CreateApplicationFromSourceRequest{
-		ApplicationSourceVersionID: sourceVersionID2,
-	}).Return(&client.Application{
-		ID:   id2,
-		Name: "new_example_name",
-	}, nil)
-	mockService.EXPECT().UpdateApplication(gomock.Any(), id2, &client.UpdateApplicationRequest{
-		Name:                     "new_example_name",
-		ExternalAccessEnabled:    true,
-		ExternalAccessRecipients: []string{"test2@test.com"},
-	}).Return(&client.Application{
-		ID:   id2,
-		Name: "new_example_name",
-	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
-		ID:                               id2,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID2,
-		ExternalAccessEnabled:            true,
-	}, nil)
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().IsApplicationReady(gomock.Any(), id2).Return(true, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id).Return(&client.Application{
-		ID:                               id,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID,
-		ExternalAccessEnabled:            true,
-	}, nil)
-
-	// Test check
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
-		ID:                               id2,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID2,
-		ExternalAccessEnabled:            true,
-	}, nil)
-
-	// Delete
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), sourceID).Return(&client.ApplicationSource{
-		ID:   sourceID,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().GetApplication(gomock.Any(), id2).Return(&client.Application{
-		ID:                               id2,
-		Name:                             "new_example_name",
-		ApplicationUrl:                   applicationUrl,
-		CustomApplicationSourceID:        sourceID,
-		CustomApplicationSourceVersionID: sourceVersionID2,
-		ExternalAccessEnabled:            true,
-	}, nil)
-	mockService.EXPECT().DeleteApplication(gomock.Any(), id2).Return(nil)
-	mockService.EXPECT().DeleteApplicationSource(gomock.Any(), sourceID).Return(nil)
-
-	testCustomApplicationResource(t, true)
-}
-
-func testCustomApplicationResource(t *testing.T, isMock bool) {
-	resourceName := "datarobot_custom_application.test"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
 	startAppScript := `#!/usr/bin/env bash
 
@@ -283,7 +58,6 @@ if __name__ == "__main__":
 	defer os.Remove("streamlit-app.py")
 
 	resource.Test(t, resource.TestCase{
-		IsUnitTest: isMock,
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -291,9 +65,9 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customApplicationResourceConfig("", "test", false, []string{}),
+				Config: customApplicationResourceConfig("", 1, false, []string{}),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomApplicationResourceExists(resourceName),
+					checkCustomApplicationResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
@@ -305,23 +79,19 @@ if __name__ == "__main__":
 			},
 			// Update name and external access
 			{
-				Config: customApplicationResourceConfig("new_example_name", "test", true, []string{"test@test.com"}),
+				Config: customApplicationResourceConfig("new_example_name", 1, true, []string{"test@test.com"}),
 				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("id"),
-					),
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("source_version_id"),
 					),
-					compareValuesDiffer.AddStateValue(
+					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("application_url"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomApplicationResourceExists(resourceName),
+					checkCustomApplicationResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
@@ -331,25 +101,21 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
 				),
 			},
-			// Update Application source version
+			// Update Application Source version
 			{
-				Config: customApplicationResourceConfig("new_example_name", "new_test", true, []string{"test2@test.com"}),
+				Config: customApplicationResourceConfig("new_example_name", 2, true, []string{"test2@test.com"}),
 				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("id"),
-					),
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("source_version_id"),
 					),
-					compareValuesDiffer.AddStateValue(
+					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("application_url"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomApplicationResourceExists(resourceName),
+					checkCustomApplicationResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
@@ -366,7 +132,7 @@ if __name__ == "__main__":
 
 func customApplicationResourceConfig(
 	name string,
-	applicationSourceResourceName string,
+	applicationSourceReplicas int,
 	externalAccess bool,
 	externalAccessRecipients []string,
 ) string {
@@ -377,34 +143,31 @@ func customApplicationResourceConfig(
 		`, externalAccessRecipients)
 	}
 
-	if name == "" {
-		return fmt.Sprintf(`
-resource "datarobot_application_source" "%s" {
-	files = [["start-app.sh"], ["streamlit-app.py"]]
-}
-
-resource "datarobot_custom_application" "test" {
-	source_version_id = "${datarobot_application_source.%s.version_id}"
-	external_access_enabled = %t
-	%s
-}`, applicationSourceResourceName, applicationSourceResourceName, externalAccess, recipients)
+	nameStr := ""
+	if name != "" {
+		nameStr = fmt.Sprintf(`
+		name = "%s"
+		`, name)
 	}
 
 	return fmt.Sprintf(`
-resource "datarobot_application_source" "%s" {
+resource "datarobot_application_source" "test" {
 	files = [["start-app.sh"], ["streamlit-app.py"]]
+	resource_settings = {
+		replicas = %d
+	}
 }
 
 resource "datarobot_custom_application" "test" {
-	name = "%s"
-	source_version_id = "${datarobot_application_source.%s.version_id}"
+	source_version_id = "${datarobot_application_source.test.version_id}"
 	external_access_enabled = %t
 	%s
+	%s
 }
-`, applicationSourceResourceName, name, applicationSourceResourceName, externalAccess, recipients)
+`, applicationSourceReplicas, externalAccess, recipients, nameStr)
 }
 
-func checkCustomApplicationResourceExists(resourceName string) resource.TestCheckFunc {
+func checkCustomApplicationResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {

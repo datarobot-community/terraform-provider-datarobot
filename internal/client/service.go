@@ -22,12 +22,19 @@ type Service interface {
 	// Data Set
 	CreateDataset(ctx context.Context, req *CreateDatasetRequest) (*CreateDatasetResponse, error)
 	CreateDatasetFromFile(ctx context.Context, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
-	CreateDatasetVersionFromFile(ctx context.Context, id string, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
+	CreateDatasetFromURL(ctx context.Context, req *CreateDatasetFromURLRequest) (*CreateDatasetVersionResponse, error)
 	GetDataset(ctx context.Context, id string) (*Dataset, error)
 	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error)
 	DeleteDataset(ctx context.Context, id string) error
 	AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
 	RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error
+
+	// Data Store
+	CreateDatastore(ctx context.Context, req *CreateDatastoreRequest) (*Datastore, error)
+	GetDatastore(ctx context.Context, id string) (*Datastore, error)
+	UpdateDatastore(ctx context.Context, id string, req *UpdateDatastoreRequest) (*Datastore, error)
+	DeleteDatastore(ctx context.Context, id string) error
+	TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error)
 
 	// Vector Database
 	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error)
@@ -169,8 +176,8 @@ func (s *ServiceImpl) CreateDatasetFromFile(ctx context.Context, fileName string
 	return uploadFileFromBinary[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromFile", http.MethodPost, fileName, content, map[string]string{})
 }
 
-func (s *ServiceImpl) CreateDatasetVersionFromFile(ctx context.Context, id string, fileName string, content []byte) (*CreateDatasetVersionResponse, error) {
-	return uploadFileFromBinary[CreateDatasetVersionResponse](s.client, ctx, "/datasets/"+id+"/versions/fromFile/", http.MethodPost, fileName, content, map[string]string{})
+func (s *ServiceImpl) CreateDatasetFromURL(ctx context.Context, req *CreateDatasetFromURLRequest) (*CreateDatasetVersionResponse, error) {
+	return Post[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromURL/", req)
 }
 
 func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*Dataset, error) {
@@ -183,6 +190,27 @@ func (s *ServiceImpl) UpdateDataset(ctx context.Context, id string, req *UpdateD
 
 func (s *ServiceImpl) DeleteDataset(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/datasets/"+id+"/")
+}
+
+// Data Store Service Implementation.
+func (s *ServiceImpl) CreateDatastore(ctx context.Context, req *CreateDatastoreRequest) (*Datastore, error) {
+	return Post[Datastore](s.client, ctx, "/externalDataStores/", req)
+}
+
+func (s *ServiceImpl) GetDatastore(ctx context.Context, id string) (*Datastore, error) {
+	return Get[Datastore](s.client, ctx, "/externalDataStores/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateDatastore(ctx context.Context, id string, req *UpdateDatastoreRequest) (*Datastore, error) {
+	return Patch[Datastore](s.client, ctx, "/externalDataStores/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteDatastore(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/externalDataStores/"+id+"/")
+}
+
+func (s *ServiceImpl) TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error) {
+	return Post[TestDatastoreConnectionResponse](s.client, ctx, "/externalDataStores/"+id+"/test/", req)
 }
 
 // Use Case Service Implementation.

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -17,23 +15,23 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &DatasetFromFileResource{}
-var _ resource.ResourceWithImportState = &DatasetFromFileResource{}
+var _ resource.Resource = &DatasetFromURLResource{}
+var _ resource.ResourceWithImportState = &DatasetFromURLResource{}
 
-func NewDatasetFromFileResource() resource.Resource {
-	return &DatasetFromFileResource{}
+func NewDatasetFromURLResource() resource.Resource {
+	return &DatasetFromURLResource{}
 }
 
-// DatasetFromFileResource defines the resource implementation.
-type DatasetFromFileResource struct {
+// DatasetFromURLResource defines the resource implementation.
+type DatasetFromURLResource struct {
 	provider *Provider
 }
 
-func (r *DatasetFromFileResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_dataset_from_file"
+func (r *DatasetFromURLResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_dataset_from_url"
 }
 
-func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *DatasetFromURLResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Data set from file",
@@ -46,8 +44,8 @@ func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"file_path": schema.StringAttribute{
-				MarkdownDescription: "The path to the file to upload.",
+			"url": schema.StringAttribute{
+				MarkdownDescription: "The URL to upload the Dataset from.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -55,7 +53,7 @@ func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.Schem
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The name of the Dataset. Defaults to the file name.",
+				MarkdownDescription: "The name of the Dataset.",
 			},
 			"use_case_ids": schema.ListAttribute{
 				Optional:            true,
@@ -66,7 +64,7 @@ func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.Schem
 	}
 }
 
-func (r *DatasetFromFileResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *DatasetFromURLResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -81,40 +79,18 @@ func (r *DatasetFromFileResource) Configure(ctx context.Context, req resource.Co
 	}
 }
 
-func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data DatasetFromFileResourceModel
+func (r *DatasetFromURLResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data DatasetFromURLResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	filePath := data.FilePath.ValueString()
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		resp.Diagnostics.AddError("Can't get info from file", err.Error())
-		return
-	}
-
-	fileName := fileInfo.Name()
-	fileReader, err := os.Open(filePath)
-	if err != nil {
-		resp.Diagnostics.AddError("Error opening file", err.Error())
-		return
-	}
-
-	defer fileReader.Close()
-	fileContent, err := io.ReadAll(fileReader)
-	if err != nil {
-		resp.Diagnostics.AddError("Error reading file", err.Error())
-		return
-	}
-
-	traceAPICall("CreateDatasetFromFile")
-	createResp, err := r.provider.service.CreateDatasetFromFile(ctx,
-		fileName,
-		fileContent,
-	)
+	traceAPICall("CreateDatasetFromURL")
+	createResp, err := r.provider.service.CreateDatasetFromURL(ctx, &client.CreateDatasetFromURLRequest{
+		URL: data.URL.ValueString(),
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Dataset", err.Error())
 		return
@@ -150,8 +126,8 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data DatasetFromFileResourceModel
+func (r *DatasetFromURLResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data DatasetFromURLResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -181,15 +157,15 @@ func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var state DatasetFromFileResourceModel
+func (r *DatasetFromURLResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var state DatasetFromURLResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var plan DatasetFromFileResourceModel
+	var plan DatasetFromURLResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -221,8 +197,8 @@ func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.Updat
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state DatasetFromFileResourceModel
+func (r *DatasetFromURLResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state DatasetFromURLResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -239,6 +215,6 @@ func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.Delet
 	}
 }
 
-func (r *DatasetFromFileResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *DatasetFromURLResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

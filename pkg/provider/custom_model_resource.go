@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -135,6 +136,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"target_type": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The target type of the Custom Model.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"target_name": schema.StringAttribute{
 				Optional:            true,
@@ -142,6 +146,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The target name of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"positive_class_label": schema.StringAttribute{
@@ -150,6 +155,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The positive class label of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"negative_class_label": schema.StringAttribute{
@@ -158,6 +164,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The negative class label of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"prediction_threshold": schema.Float64Attribute{
@@ -184,10 +191,16 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Class labels for multiclass classification. Cannot be used with class_labels_file.",
+				PlanModifiers: []planmodifier.List{
+					listRequiresReplaceIfDeployed(),
+				},
 			},
 			"class_labels_file": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.",
+				PlanModifiers: []planmodifier.String{
+					stringRequiresReplaceIfDeployed(),
+				},
 			},
 			"deployments_count": schema.Int64Attribute{
 				Computed:            true,
@@ -808,16 +821,16 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	updateRequest := &client.UpdateCustomModelRequest{
-		Name:        plan.Name.ValueString(),
-		Description: plan.Description.ValueString(),
+		Name:                plan.Name.ValueString(),
+		Description:         plan.Description.ValueString(),
+		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+		Language:            plan.Language.ValueString(),
 	}
 
 	if state.DeploymentsCount.ValueInt64() < 1 {
 		updateRequest.TargetName = plan.TargetName.ValueString()
 		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
 		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
-		updateRequest.PredictionThreshold = plan.PredictionThreshold.ValueFloat64()
-		updateRequest.Language = plan.Language.ValueString()
 		updateRequest.ClassLabels = classLabels
 	}
 
@@ -850,6 +863,22 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	if customModel.LatestVersion.IsFrozen {
+		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:     "true",
+			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			return
+		}
+		customModel, err = r.provider.service.GetCustomModel(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting Custom Model", err.Error())
+			return
+		}
 	}
 
 	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
@@ -1803,4 +1832,56 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 	}
 
 	return
+}
+
+func stringRequiresReplaceIfDeployed() planmodifier.String {
+	return stringplanmodifier.RequiresReplaceIf(
+		func(ctx context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+			if req.PlanValue.IsUnknown() {
+				resp.RequiresReplace = false
+				return
+			}
+
+			var state CustomModelResourceModel
+
+			diags := req.State.Get(ctx, &state)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			if state.DeploymentsCount.ValueInt64() > 0 {
+				resp.RequiresReplace = true
+				return
+			}
+		},
+		"Requires replace if the model was deployed.",
+		"Requires replace if the model was deployed.",
+	)
+}
+
+func listRequiresReplaceIfDeployed() planmodifier.List {
+	return listplanmodifier.RequiresReplaceIf(
+		func(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
+			if req.PlanValue.IsUnknown() {
+				resp.RequiresReplace = false
+				return
+			}
+
+			var state CustomModelResourceModel
+
+			diags := req.State.Get(ctx, &state)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			if state.DeploymentsCount.ValueInt64() > 0 {
+				resp.RequiresReplace = true
+				return
+			}
+		},
+		"Requires replace if the model was deployed.",
+		"Requires replace if the model was deployed.",
+	)
 }

@@ -53,9 +53,6 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 			"version_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The version ID of the Application Source.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
@@ -347,11 +344,11 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError("Error getting Application Source", err.Error())
 		return
 	}
-	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 	applicationSourceVersion := applicationSource.LatestVersion
 
 	if (!reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) ||
 		!reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FolderPath, state.FolderPath) ||
 		!reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues)) &&
 		applicationSource.LatestVersion.IsFrozen {
 		// must create a new version if the latest version is frozen
@@ -366,11 +363,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 			resp.Diagnostics.AddError("Error creating Application Source version", err.Error())
 			return
 		}
-		plan.VersionID = types.StringValue(applicationSourceVersion.ID)
 		applicationSourceVersion = *createApplicationSourceVersionResp
 	}
 
-	if !reflect.DeepEqual(plan.Files, state.Files) {
+	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
 		err = r.updateLocalFiles(ctx, state, plan, applicationSourceVersion)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Application Source files", err.Error())
@@ -444,7 +440,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		traceAPICall("UpdateApplicationSourceVersion")
 		_, err := r.provider.service.UpdateApplicationSourceVersion(ctx,
 			plan.ID.ValueString(),
-			plan.VersionID.ValueString(),
+			applicationSourceVersion.ID,
 			updateVersionRequest)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
@@ -457,6 +453,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError("Error getting Application Source", err.Error())
 		return
 	}
+	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 
 	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,

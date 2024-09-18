@@ -41,6 +41,13 @@ type DatasetFromFileResourceModel struct {
 	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
 
+type DatasetFromURLResourceModel struct {
+	ID         types.String   `tfsdk:"id"`
+	URL        types.String   `tfsdk:"url"`
+	Name       types.String   `tfsdk:"name"`
+	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
+}
+
 // VectorDatabaseResourceModel describes a vector database.
 type VectorDatabaseResourceModel struct {
 	ID                 types.String             `tfsdk:"id"`
