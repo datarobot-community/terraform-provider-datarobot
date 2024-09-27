@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -51,9 +52,14 @@ func (r *GoogleCloudCredentialResource) Schema(ctx context.Context, req resource
 				MarkdownDescription: "The name of the Google Cloud Credential.",
 				Required:            true,
 			},
-			"source_file": schema.StringAttribute{
-				MarkdownDescription: "The source file of the Google Cloud Credential.",
-				Required:            true,
+			"gcp_key": schema.StringAttribute{
+				Optional:            true,
+				Sensitive:           true,
+				MarkdownDescription: "The GCP key in JSON format.",
+			},
+			"gcp_key_file": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The file that has the GCP key. Cannot be used with `gcp_key`.",
 			},
 		},
 	}
@@ -82,9 +88,9 @@ func (r *GoogleCloudCredentialResource) Create(ctx context.Context, req resource
 		return
 	}
 
-	gcpKey, errSummary, errDetail := r.getGCPKeyFromFile(data.SourceFile.ValueString())
-	if errSummary != "" {
-		resp.Diagnostics.AddError(errSummary, errDetail)
+	gcpKey, err := r.getGCPKey(data)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting GCP key", err.Error())
 		return
 	}
 
@@ -144,14 +150,14 @@ func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource
 		return
 	}
 
-	gcpKey, errSummary, errDetail := r.getGCPKeyFromFile(data.SourceFile.ValueString())
-	if errSummary != "" {
-		resp.Diagnostics.AddError(errSummary, errDetail)
+	gcpKey, err := r.getGCPKey(data)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting GCP key", err.Error())
 		return
 	}
 
 	traceAPICall("UpdateGoogleCloudCredential")
-	_, err := r.provider.service.UpdateCredential(ctx,
+	_, err = r.provider.service.UpdateCredential(ctx,
 		data.ID.ValueString(),
 		&client.CredentialRequest{
 			Name:   data.Name.ValueString(),
@@ -195,30 +201,41 @@ func (r *GoogleCloudCredentialResource) ImportState(ctx context.Context, req res
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+func (r GoogleCloudCredentialResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.Conflicting(
+			path.MatchRoot("gcp_key"),
+			path.MatchRoot("gcp_key_file"),
+		),
+	}
+}
+
+func (r *GoogleCloudCredentialResource) getGCPKey(data GoogleCloudCredentialResourceModel) (gcpKey client.GCPKey, err error) {
+	var gcpKeyBytes []byte
+	if IsKnown(data.GCPKey) {
+		gcpKeyBytes = []byte(data.GCPKey.ValueString())
+	} else {
+		if gcpKeyBytes, err = r.getGCPKeyFromFile(data.GCPKeyFile.ValueString()); err != nil {
+			return
+		}
+	}
+
+	err = json.Unmarshal(gcpKeyBytes, &gcpKey)
+	return
+}
+
 func (r *GoogleCloudCredentialResource) getGCPKeyFromFile(filePath string) (
-	gcpKey client.GCPKey,
-	errSummary string,
-	errDetail string,
+	fileContent []byte,
+	err error,
 ) {
 	fileReader, err := os.Open(filePath)
 	if err != nil {
-		errSummary = "Error opening source file"
-		errDetail = err.Error()
 		return
 	}
 	defer fileReader.Close()
 
-	fileContent, err := io.ReadAll(fileReader)
+	fileContent, err = io.ReadAll(fileReader)
 	if err != nil {
-		errSummary = "Error reading source file"
-		errDetail = err.Error()
-		return
-	}
-
-	err = json.Unmarshal(fileContent, &gcpKey)
-	if err != nil {
-		errSummary = "Error parsing source file"
-		errDetail = err.Error()
 		return
 	}
 

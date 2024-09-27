@@ -62,6 +62,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	baseEnvironmentID := "65f9b27eab986d30d4c64268"  // [GenAI] Python 3.11 with Moderations
+	baseEnvironmentID2 := "6542cd582a9d3d51bf4ac71e" // [Experimental] Python 3.9 Streamlit
+
 	fileName := "requirements.txt"
 	folderPath := "dir"
 	err := os.WriteFile(fileName, []byte(`langchain == 0.2.8`), 0644)
@@ -98,6 +101,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"example_name",
 					"example_description",
+					baseEnvironmentID,
 					sourceRemoteRepositories,
 					nil,
 					[]FileTuple{{LocalPath: fileName}},
@@ -145,6 +149,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "document"),
 					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
@@ -169,11 +174,12 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Add and update guards
+			// Add and update guards + update base environment
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"example_name",
 					"example_description",
+					baseEnvironmentID2,
 					sourceRemoteRepositories,
 					nil,
 					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
@@ -243,6 +249,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID2),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Faithfulness"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Faithfulness response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -260,6 +267,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID2,
 					sourceRemoteRepositories,
 					nil,
 					[]FileTuple{{LocalPath: fileName}},
@@ -282,6 +290,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID2,
 					[]SourceRemoteRepository{
 						{
 							Ref:         basetypes.NewStringValue("master"),
@@ -311,6 +320,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID2,
 					nil,
 					nil,
 					[]FileTuple{{LocalPath: fileName}},
@@ -328,11 +338,12 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(resourceName, "source_remote_repositories.0.id"),
 				),
 			},
-			// // Update files
+			// Update files and base environment
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID,
 					nil,
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
@@ -347,6 +358,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
 				),
 			},
@@ -355,6 +367,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID,
 					nil,
 					&folderPath,
 					nil,
@@ -378,6 +391,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID,
 					nil,
 					nil,
 					nil,
@@ -406,6 +420,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
+					baseEnvironmentID,
 					sourceRemoteRepositories,
 					nil,
 					nil,
@@ -765,6 +780,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 func customModelWithoutLlmBlueprintResourceConfig(
 	name,
 	description string,
+	baseEnvironmentID string,
 	remoteRepositories []SourceRemoteRepository,
 	folderPath *string,
 	files []FileTuple,
@@ -900,7 +916,7 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	target_type           = "TextGeneration"
 	target_name           = "document"
 	language 			  = "Python"
-	base_environment_name = "[GenAI] Python 3.11 with Moderations"
+	base_environment_id   = "%s"
 	%s
 	%s
 	%s
@@ -908,7 +924,7 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 }
-`, name, description, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+`, name, description, baseEnvironmentID, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
 }
 
 func binaryCustomModelResourceConfig(
@@ -931,7 +947,7 @@ resource "datarobot_custom_model" "test_binary" {
 	positive_class_label  = "%s"
 	negative_class_label  = "%s"
 	prediction_threshold  = %f
-	base_environment_name = "[GenAI] Python 3.11 with Moderations"
+	base_environment_id = "65f9b27eab986d30d4c64268"
 	%s
 }
 `, resourceBlock, name, targetName, language, positiveClassLabel, negativeClassLabel, predictionThreshold, customModelBlock)
@@ -953,7 +969,7 @@ resource "datarobot_custom_model" "test_multiclass" {
 	target_name           							  = "%s"
 	language 			  							  = "%s"
 	class_labels  		  							  = [%s]
-	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	base_environment_id 							  = "65f9b27eab986d30d4c64268"
 	is_proxy 										  = true
 	%s
 }
@@ -974,7 +990,7 @@ resource "datarobot_custom_model" "test_regression" {
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	base_environment_version_id = "66f11c731b6e05f43b07537c"
 	%s
 }
 `, resourceBlock, name, targetName, language, customModelBlock)
@@ -994,7 +1010,7 @@ resource "datarobot_custom_model" "test_text_generation" {
 	target_type           							  = "TextGeneration"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	base_environment_id 							  = "65f9b27eab986d30d4c64268"
 	is_proxy 										  = true
 	%s
 }
@@ -1014,7 +1030,7 @@ resource "datarobot_custom_model" "test_%s" {
 	name        		  							  = "%s"
 	target_type           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_name 							  = "[GenAI] Python 3.11 with Moderations"
+	base_environment_id 							  = "65f9b27eab986d30d4c64268"
 	%s
 }
 `, resourceBlock, strings.ToLower(targetType), name, targetType, language, customModelBlock)

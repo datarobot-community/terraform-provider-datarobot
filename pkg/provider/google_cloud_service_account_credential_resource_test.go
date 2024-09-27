@@ -16,6 +16,9 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_google_cloud_credential.test"
 	credentialName := uuid.NewString()
+	gcpKeyFileName := "example.json"
+	gcpKeyFileName2 := "example2.json"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -24,22 +27,31 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: googleCloudCredentialResourceConfig(credentialName, "example.json"),
+				Config: googleCloudCredentialResourceConfig(credentialName, false, &gcpKeyFileName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkGoogleCloudCredentialResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", credentialName),
-					resource.TestCheckResourceAttr(resourceName, "source_file", "example.json"),
+					resource.TestCheckResourceAttr(resourceName, "gcp_key_file", "example.json"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update name and source_file
+			// Update name and gcp_key_file
 			{
-				Config: googleCloudCredentialResourceConfig(credentialName+"_new", "example2.json"),
+				Config: googleCloudCredentialResourceConfig(credentialName+"_new", false, &gcpKeyFileName2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkGoogleCloudCredentialResourceExists(resourceName),
-					// Verify name and description
 					resource.TestCheckResourceAttr(resourceName, "name", credentialName+"_new"),
-					resource.TestCheckResourceAttr(resourceName, "source_file", "example2.json"),
+					resource.TestCheckResourceAttr(resourceName, "gcp_key_file", "example2.json"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Use gcp_key instead of gcp_key_file
+			{
+				Config: googleCloudCredentialResourceConfig(credentialName+"_new", true, nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkGoogleCloudCredentialResourceExists(resourceName),
+					resource.TestCheckResourceAttrSet(resourceName, "gcp_key"),
+					resource.TestCheckNoResourceAttr(resourceName, "gcp_key_file"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -57,7 +69,7 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 	}
 }
 
-func googleCloudCredentialResourceConfig(name, source_file string) string {
+func googleCloudCredentialResourceConfig(name string, gcpKey bool, gcpKeyFile *string) string {
 	json := `{
 		"type": "service_account",
 		"project_id": "example",
@@ -72,17 +84,31 @@ func googleCloudCredentialResourceConfig(name, source_file string) string {
 		"universe_domain": "googleapis.com"
 		}`
 
-	err := os.WriteFile(source_file, []byte(json), 0644)
-	if err != nil {
-		panic(err)
+	gcpKeyStr := ""
+	if gcpKey {
+		gcpKeyStr = fmt.Sprintf(`
+		gcp_key = jsonencode(%s)
+		`, json)
+	}
+
+	gcpKeyFileStr := ""
+	if gcpKeyFile != nil {
+		gcpKeyFileStr = fmt.Sprintf(`
+		gcp_key_file = "%s"
+		`, *gcpKeyFile)
+		err := os.WriteFile(*gcpKeyFile, []byte(json), 0644)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return fmt.Sprintf(`
 resource "datarobot_google_cloud_credential" "test" {
 	  name = "%s"
-	  source_file = "%s"
+	  %s
+	  %s
 }
-`, name, source_file)
+`, name, gcpKeyStr, gcpKeyFileStr)
 }
 
 func checkGoogleCloudCredentialResourceExists(resourceName string) resource.TestCheckFunc {

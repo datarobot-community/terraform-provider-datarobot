@@ -14,12 +14,12 @@ Deployment
 
 ```terraform
 resource "datarobot_custom_model" "example" {
-  name                  = "Example Custom Model"
-  description           = "Description for the example custom model"
-  target_type           = "Binary"
-  target_name           = "my_label"
-  base_environment_name = "[GenAI] Python 3.11 with Moderations"
-  files                 = ["example.py"]
+  name                = "Example Custom Model"
+  description         = "Description for the example custom model"
+  target_type         = "Binary"
+  target_name         = "my_label"
+  base_environment_id = "65f9b27eab986d30d4c64268"
+  files               = ["example.py"]
 }
 
 resource "datarobot_registered_model" "example" {

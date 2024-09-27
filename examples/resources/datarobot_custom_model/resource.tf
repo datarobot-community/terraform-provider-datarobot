@@ -15,9 +15,9 @@ resource "datarobot_custom_model" "example" {
     "file1.py",
     "file2.py",
   ]
-  target_type           = "Binary"
-  target_name           = "my_label"
-  base_environment_name = "[GenAI] Python 3.11 with Moderations"
+  target_type         = "Binary"
+  target_name         = "my_label"
+  base_environment_id = "65f9b27eab986d30d4c64268"
 
   # Optional
   # source_remote_repositories = [

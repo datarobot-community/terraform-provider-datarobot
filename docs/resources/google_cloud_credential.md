@@ -18,7 +18,11 @@ Api Token Credential
 ### Required
 
 - `name` (String) The name of the Google Cloud Credential.
-- `source_file` (String) The source file of the Google Cloud Credential.
+
+### Optional
+
+- `gcp_key` (String, Sensitive) The GCP key in JSON format.
+- `gcp_key_file` (String) The file that has the GCP key. Cannot be used with `gcp_key`.
 
 ### Read-Only
 

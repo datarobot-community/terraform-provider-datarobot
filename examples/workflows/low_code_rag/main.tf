@@ -49,13 +49,8 @@ resource "datarobot_llm_blueprint" "example" {
 }
 
 resource "datarobot_google_cloud_credential" "example" {
-  name        = "${var.use_case_name} Google Cloud Service Account"
-  source_file = var.google_cloud_credential_source_file
-}
-
-resource "datarobot_google_cloud_credential" "example2" {
-  name        = "${var.use_case_name} Google Cloud Service Account 2"
-  source_file = var.google_cloud_credential_source_file
+  name         = "${var.use_case_name} Google Cloud Service Account"
+  gcp_key_file = var.google_cloud_credential_source_file
 }
 
 resource "datarobot_custom_model" "example" {
@@ -66,7 +61,7 @@ resource "datarobot_custom_model" "example" {
     {
       key   = "GOOGLE_SERVICE_ACCOUNT",
       type  = "credential",
-      value = datarobot_google_cloud_credential.example2.id
+      value = datarobot_google_cloud_credential.example.id
     }
   ]
 }
