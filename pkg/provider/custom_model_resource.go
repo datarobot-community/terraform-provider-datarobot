@@ -92,25 +92,15 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"base_environment_name": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "The name of the base environment for the Custom Model.",
-			},
 			"base_environment_id": schema.StringAttribute{
 				Computed:            true,
 				Optional:            true,
 				MarkdownDescription: "The ID of the base environment for the Custom Model.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"base_environment_version_id": schema.StringAttribute{
 				Computed:            true,
 				Optional:            true,
 				MarkdownDescription: "The ID of the base environment version for the Custom Model.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
 				Optional:            true,
@@ -135,8 +125,10 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			},
 			"target_type": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The target type of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -443,6 +435,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	var state CustomModelResourceModel
 	var customModelID string
 	var baseEnvironmentID string
+	var baseEnvironmentVersionID string
 	name := plan.Name.ValueString()
 	description := plan.Description.ValueString()
 
@@ -482,41 +475,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			return
 		}
 		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
+		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
 
 		state.Name = types.StringValue(name)
 		state.Description = plan.Description
 	} else {
-		if !IsKnown(plan.TargetType) || !IsKnown(plan.BaseEnvironmentName) {
-			resp.Diagnostics.AddError(
-				"Invalid Custom Model configuration",
-				"Target Type, and Base Environment Name are required to create a Custom Model without a Source LLM Blueprint.",
-			)
-			return
-		}
-
-		// verify the base environment exists
-		traceAPICall("ListExecutionEnvironments")
-		listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
-		if err != nil {
-			resp.Diagnostics.AddError("Error listing Execution Environments", err.Error())
-			return
-		}
-
-		for _, executionEnvironment := range listResp.Data {
-			if executionEnvironment.Name == plan.BaseEnvironmentName.ValueString() {
-				baseEnvironmentID = executionEnvironment.ID
-				break
-			}
-		}
-
-		if baseEnvironmentID == "" {
-			resp.Diagnostics.AddError(
-				"Base Environment not found",
-				fmt.Sprintf("Base Environment with name %s is not found.", plan.BaseEnvironmentName.ValueString()),
-			)
-			return
-		}
-
 		classLabels, err := getClassLabels(plan)
 		if err != nil {
 			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
@@ -552,29 +515,38 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.ClassLabels = plan.ClassLabels
 		state.ClassLabelsFile = plan.ClassLabelsFile
 		state.Language = plan.Language
+	}
 
-		if plan.SourceRemoteRepositories == nil && !IsKnown(plan.FolderPath) && !IsKnown(plan.Files) {
-			resp.Diagnostics.AddError(
-				"Invalid Custom Model configuration",
-				"Source Remote Repository, Folder Path, or Files are required to create a Custom Model without a Source LLM Blueprint.",
-			)
+	if IsKnown(plan.BaseEnvironmentID) || IsKnown(plan.BaseEnvironmentVersionID) {
+		if IsKnown(plan.BaseEnvironmentID) {
+			baseEnvironmentID = plan.BaseEnvironmentID.ValueString()
+		}
+		if IsKnown(plan.BaseEnvironmentVersionID) {
+			baseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		customModelVersion, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        baseEnvironmentID,
+			BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
 		}
+		baseEnvironmentID = customModelVersion.BaseEnvironmentID
 	}
 
 	if plan.SourceRemoteRepositories != nil {
 		for _, sourceRemoteRepository := range plan.SourceRemoteRepositories {
-			errSummary, errDetail := r.createCustomModelVersionFromRemoteRepository(
+			if err := r.createCustomModelVersionFromRemoteRepository(
 				ctx,
 				sourceRemoteRepository,
 				customModelID,
 				baseEnvironmentID,
-			)
-			if errSummary != "" {
-				resp.Diagnostics.AddError(
-					errSummary,
-					errDetail,
-				)
+			); err != nil {
+				resp.Diagnostics.AddError("Error creating Custom Model version from remote repository", err.Error())
 				return
 			}
 		}
@@ -601,10 +573,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
-	state.BaseEnvironmentName = plan.BaseEnvironmentName
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.FolderPath = plan.FolderPath
 	state.Files = plan.Files
+	state.TargetType = types.StringValue(customModel.TargetType)
 	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
@@ -813,349 +785,87 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	id := state.ID.ValueString()
+	id := plan.ID.ValueString()
 
-	classLabels, err := getClassLabels(plan)
+	traceAPICall("GetCustomModel")
+	customModel, err := r.provider.service.GetCustomModel(ctx, id)
 	if err != nil {
-		resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
-	}
-
-	updateRequest := &client.UpdateCustomModelRequest{
-		Name:                plan.Name.ValueString(),
-		Description:         plan.Description.ValueString(),
-		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
-		Language:            plan.Language.ValueString(),
-	}
-
-	if state.DeploymentsCount.ValueInt64() < 1 {
-		updateRequest.TargetName = plan.TargetName.ValueString()
-		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
-		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
-		updateRequest.ClassLabels = classLabels
-	}
-
-	traceAPICall("UpdateCustomModel")
-	customModel, err := r.provider.service.UpdateCustomModel(ctx, id, updateRequest)
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
+		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Custom Model not found",
 				fmt.Sprintf("Custom Model with ID %s is not found. Removing from state.", id))
 			resp.State.RemoveResource(ctx)
 		} else {
-			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Custom Model with ID %s", id),
+				err.Error())
 		}
 		return
 	}
-	state.Name = types.StringValue(customModel.Name)
-	if customModel.Description != "" {
-		state.Description = types.StringValue(customModel.Description)
-	}
-	state.TargetName = types.StringValue(customModel.TargetName)
-	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
-	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
-	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
-	if customModel.Language != "" {
-		state.Language = types.StringValue(customModel.Language)
-	}
-	state.ClassLabels = plan.ClassLabels
-	state.ClassLabelsFile = plan.ClassLabelsFile
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	if resp.Diagnostics.HasError() {
+
+	if err := r.updateCustomModel(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
 		return
 	}
 
-	if customModel.LatestVersion.IsFrozen {
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:     "true",
-			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-		customModel, err = r.provider.service.GetCustomModel(ctx, id)
-		if err != nil {
-			resp.Diagnostics.AddError("Error getting Custom Model", err.Error())
-			return
-		}
+	if err = r.createNewCustomModelVersion(ctx, plan, customModel); err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+		return
 	}
 
-	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	if customModel, err = r.provider.service.GetCustomModel(ctx, id); err != nil {
+		resp.Diagnostics.AddError("Error getting Custom Model", err.Error())
+		return
+	}
+	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
+	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
-	if IsKnown(plan.RuntimeParameterValues) {
-		planRuntimeParametersValues = plan.RuntimeParameterValues
+	if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
+		return
 	}
 
-	if !reflect.DeepEqual(planRuntimeParametersValues, state.RuntimeParameterValues) ||
-		state.BaseEnvironmentName.ValueString() != plan.BaseEnvironmentName.ValueString() {
-
-		traceAPICall("ListExecutionEnvironments")
-		listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
-		if err != nil {
-			resp.Diagnostics.AddError("Error listing Execution Environments", err.Error())
-			return
-		}
-
-		baseEnvironmentID := customModel.LatestVersion.BaseEnvironmentID
-		baseEnvironmentVersionID := customModel.LatestVersion.BaseEnvironmentVersionID
-
-		if state.BaseEnvironmentName.ValueString() != plan.BaseEnvironmentName.ValueString() {
-			var newBaseEnvironmentID string
-			var newBaseEnvironmentVersionID string
-			for _, executionEnvironment := range listResp.Data {
-				if executionEnvironment.Name == plan.BaseEnvironmentName.ValueString() {
-					newBaseEnvironmentID = executionEnvironment.ID
-					newBaseEnvironmentVersionID = executionEnvironment.LatestVersion.ID
-					break
-				}
-			}
-
-			if newBaseEnvironmentID == "" {
-				resp.Diagnostics.AddError(
-					"Base Environment not found",
-					fmt.Sprintf("Base Environment with name %s is not found.", plan.BaseEnvironmentName.ValueString()),
-				)
-				return
-			}
-
-			baseEnvironmentID = newBaseEnvironmentID
-			baseEnvironmentVersionID = newBaseEnvironmentVersionID
-		}
-
-		runtimeParameterValues := make([]RuntimeParameterValue, 0)
-		if IsKnown(plan.RuntimeParameterValues) {
-			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
-		}
-
-		params := make([]client.RuntimeParameterValueRequest, 0)
-		for _, param := range runtimeParameterValues {
-			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
-				return
-			}
-			params = append(params, client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
-			})
-		}
-
-		// compute the runtime parameter values to reset
-		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
-		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-
-		for _, param := range runtimeParametersToReset {
-			found := false
-			for _, newParam := range runtimeParameterValues {
-				if param.Key.ValueString() == newParam.Key.ValueString() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				params = append(params, client.RuntimeParameterValueRequest{
-					FieldName: param.Key.ValueString(),
-					Type:      param.Type.ValueString(),
-					Value:     nil,
-				})
-			}
-		}
-
-		jsonParams, err := json.Marshal(params)
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
-			return
-		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
-		createVersionFromLatestResp, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, id, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        baseEnvironmentID,
-			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameterValues:   string(jsonParams),
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-		latestVersion := createVersionFromLatestResp.ID
-
-		state.VersionID = types.StringValue(latestVersion)
-		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if err = r.updateRemoteRepositories(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating remote repositories", err.Error())
+		return
 	}
 
-	if !reflect.DeepEqual(plan.SourceRemoteRepositories, state.SourceRemoteRepositories) {
-		errSummary, errDetail := r.updateRemoteRepositories(ctx, customModel, state, plan)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(
-				errSummary,
-				errDetail,
-			)
-			return
-		}
-
-		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
+		return
 	}
 
-	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
-		err = r.updateLocalFiles(ctx, customModel, plan)
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
-			return
-		}
-
-		state.Files = plan.Files
-		state.FolderPath = plan.FolderPath
-		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if err = r.updateGuardConfigurations(ctx, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating guard configurations", err.Error())
+		return
 	}
 
-	if !reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) {
-		guardsToAdd := make([]GuardConfiguration, 0)
-		for _, guard := range plan.GuardConfigurations {
-			found := false
-			for _, stateGuard := range state.GuardConfigurations {
-				if reflect.DeepEqual(guard, stateGuard) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				guardsToAdd = append(guardsToAdd, guard)
-			}
-		}
-
-		guardsToRemove := make([]GuardConfiguration, 0)
-		for _, stateGuard := range state.GuardConfigurations {
-			found := false
-			for _, guard := range plan.GuardConfigurations {
-				if reflect.DeepEqual(guard, stateGuard) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				guardsToRemove = append(guardsToRemove, stateGuard)
-			}
-		}
-
-		newVersion, errSummary, errDetail := r.createCustomModelVersionFromGuards(
-			ctx,
-			plan,
-			customModel.ID,
-			customModel.LatestVersion.ID,
-			guardsToAdd,
-			guardsToRemove,
-		)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(
-				errSummary,
-				errDetail,
-			)
-			return
-		}
-		state.VersionID = types.StringValue(newVersion)
-		state.GuardConfigurations = plan.GuardConfigurations
-		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
-		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if err = r.updateResourceSettings(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating resource settings", err.Error())
+		return
 	}
 
-	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
-		resourceSettings := *plan.ResourceSettings
-		traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:       "false",
-			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
-			Replicas:            resourceSettings.Replicas.ValueInt64(),
-			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
-			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-		state.ResourceSettings = plan.ResourceSettings
+	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating training dataset", err.Error())
+		return
 	}
 
-	if plan.TrainingDatasetID != state.TrainingDatasetID ||
-		plan.TrainingDataPartitionColumn != state.TrainingDataPartitionColumn {
-		keepTrainingHoldoutData := false
-		traceAPICall("CreateCustomModelVersionFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:           "true",
-			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
-			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-
-		err = r.assignTrainingDataset(
-			ctx,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-			plan.TrainingDatasetID,
-			plan.TrainingDataPartitionColumn,
-			&state)
-		if err != nil {
-			resp.Diagnostics.AddError("Error assigning training dataset to Custom Model", err.Error())
-			return
-		}
-	}
-
-	traceAPICall("WaitForCustomModelToBeReady")
-	customModel, err = r.waitForCustomModelToBeReady(ctx, id)
-	if err != nil {
-		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
+	traceAPICall("GetCustomModel")
+	if customModel, err = r.provider.service.GetCustomModel(ctx, id); err != nil {
+		resp.Diagnostics.AddError("Error getting Custom Model", err.Error())
 		return
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
-	if len(customModel.LatestVersion.Dependencies) > 0 {
-		traceAPICall("GetDependencyBuild")
-		_, err := r.provider.service.GetDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
-		if err != nil { // if not found, must create a new one
-			traceAPICall("CreateDependencyBuild")
-			_, err := r.provider.service.CreateDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
-			if err != nil {
-				resp.Diagnostics.AddError("Error creating Custom Model dependency build", err.Error())
-				return
-			}
-
-			err = r.waitForDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
-			if err != nil {
-				resp.Diagnostics.AddError("Error waiting for Custom Model dependency build", err.Error())
-				return
-			}
-		}
+	if err = r.updateDependencyBuild(ctx, customModel); err != nil {
+		resp.Diagnostics.AddError("Error updating Custom Model dependency build", err.Error())
+		return
 	}
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+	if state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		customModel.LatestVersion.RuntimeParameters,
-		plan.RuntimeParameterValues)
-	if diags.HasError() {
+		plan.RuntimeParameterValues); diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
 	}
@@ -1205,6 +915,20 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	if !IsKnown(plan.BaseEnvironmentID) {
+		if plan.BaseEnvironmentVersionID == state.BaseEnvironmentVersionID {
+			// use state base environment id if base environment version id is not changed
+			plan.BaseEnvironmentID = state.BaseEnvironmentID
+		}
+	}
+
+	if !IsKnown(plan.BaseEnvironmentVersionID) {
+		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
+			// use state base environment version id if base environment id is not changed
+			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
+		}
+	}
+
 	if !IsKnown(plan.RuntimeParameterValues) {
 		// use empty list if runtime parameter values are unknown
 		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
@@ -1230,6 +954,15 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 			path.MatchRoot("positive_class_label"),
 			path.MatchRoot("negative_class_label"),
 		),
+		resourcevalidator.AtLeastOneOf(
+			path.MatchRoot("source_llm_blueprint_id"),
+			path.MatchRoot("target_type"),
+		),
+		resourcevalidator.AtLeastOneOf(
+			path.MatchRoot("source_llm_blueprint_id"),
+			path.MatchRoot("base_environment_id"),
+			path.MatchRoot("base_environment_version_id"),
+		),
 	}
 }
 
@@ -1246,6 +979,7 @@ func loadCustomModelToTerraformState(
 	if sourceBlueprintId != "" {
 		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintId)
 	}
+	state.TargetType = types.StringValue(customModel.TargetType)
 	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
@@ -1390,8 +1124,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	customModelID string,
 	baseEnvironmentID string,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
 	sourcePaths := make([]string, 0)
 	for _, path := range sourceRemoteRepository.SourcePaths {
@@ -1407,15 +1140,11 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 		SourcePath:        sourcePaths,
 	})
 	if err != nil {
-		errSummary = "Error creating Custom Model version from remote repository"
-		errDetail = err.Error()
 		return
 	}
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
 	if err != nil {
-		errSummary = "Error waiting for Custom Model version to be created from remote repository"
-		errDetail = err.Error()
 		return
 	}
 
@@ -1615,93 +1344,258 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	return
 }
 
-func (r *CustomModelResource) updateRemoteRepositories(
+func (r *CustomModelResource) createNewCustomModelVersion(
+	ctx context.Context,
+	plan CustomModelResourceModel,
+	customModel *client.CustomModel,
+) (
+	err error,
+) {
+	// check for major version update
+	if customModel.LatestVersion.IsFrozen {
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:     "true",
+			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	// check for base environment update
+	updateRequest := &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate: "false",
+	}
+	if IsKnown(plan.BaseEnvironmentID) && plan.BaseEnvironmentID.ValueString() != customModel.LatestVersion.BaseEnvironmentID {
+		updateRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
+	}
+
+	if IsKnown(plan.BaseEnvironmentVersionID) && plan.BaseEnvironmentVersionID.ValueString() != customModel.LatestVersion.BaseEnvironmentVersionID {
+		updateRequest.BaseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
+	}
+
+	if updateRequest.BaseEnvironmentID != "" || updateRequest.BaseEnvironmentVersionID != "" {
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest); err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (r *CustomModelResource) updateCustomModel(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	var classLabels []string
+	if classLabels, err = getClassLabels(plan); err != nil {
+		return
+	}
+
+	updateRequest := &client.UpdateCustomModelRequest{
+		Name:                plan.Name.ValueString(),
+		Description:         plan.Description.ValueString(),
+		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+		Language:            plan.Language.ValueString(),
+	}
+
+	if state.DeploymentsCount.ValueInt64() < 1 {
+		updateRequest.TargetName = plan.TargetName.ValueString()
+		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
+		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
+		updateRequest.ClassLabels = classLabels
+	}
+
+	traceAPICall("UpdateCustomModel")
+	if customModel, err = r.provider.service.UpdateCustomModel(ctx, customModel.ID, updateRequest); err != nil {
+		return
+	}
+	state.Name = types.StringValue(customModel.Name)
+	if customModel.Description != "" {
+		state.Description = types.StringValue(customModel.Description)
+	}
+	state.TargetName = types.StringValue(customModel.TargetName)
+	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
+	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
+	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
+	if customModel.Language != "" {
+		state.Language = types.StringValue(customModel.Language)
+	}
+	state.ClassLabels = plan.ClassLabels
+	state.ClassLabelsFile = plan.ClassLabelsFile
+
+	return
+}
+
+func (r *CustomModelResource) updateRuntimeParameterValues(
 	ctx context.Context,
 	customModel *client.CustomModel,
 	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
-	filesToDelete := make([]string, 0)
-	for _, oldSourceRemoteRepository := range state.SourceRemoteRepositories {
-		for _, filePath := range oldSourceRemoteRepository.SourcePaths {
-			found := false
+	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 
-			for _, newSourceRemoteRepository := range plan.SourceRemoteRepositories {
-				if oldSourceRemoteRepository.ID == newSourceRemoteRepository.ID &&
-					oldSourceRemoteRepository.Ref == newSourceRemoteRepository.Ref &&
-					contains(newSourceRemoteRepository.SourcePaths, filePath) {
+	if IsKnown(plan.RuntimeParameterValues) {
+		planRuntimeParametersValues = plan.RuntimeParameterValues
+	}
+
+	if !reflect.DeepEqual(planRuntimeParametersValues, state.RuntimeParameterValues) {
+		runtimeParameterValues := make([]RuntimeParameterValue, 0)
+		if IsKnown(plan.RuntimeParameterValues) {
+			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+				err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
+				return
+			}
+		}
+
+		params := make([]client.RuntimeParameterValueRequest, 0)
+		for _, param := range runtimeParameterValues {
+			var value any
+			if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
+				return
+			}
+			params = append(params, client.RuntimeParameterValueRequest{
+				FieldName: param.Key.ValueString(),
+				Type:      param.Type.ValueString(),
+				Value:     &value,
+			})
+		}
+
+		// compute the runtime parameter values to reset
+		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
+		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
+			err = fmt.Errorf("Error reading state runtime parameter values: %s", diags.Errors()[0].Detail())
+			return
+		}
+
+		for _, param := range runtimeParametersToReset {
+			found := false
+			for _, newParam := range runtimeParameterValues {
+				if param.Key.ValueString() == newParam.Key.ValueString() {
 					found = true
 					break
 				}
 			}
-
 			if !found {
-				remoteRepository, err := r.provider.service.GetRemoteRepository(ctx, oldSourceRemoteRepository.ID.ValueString())
-				if err != nil {
-					errSummary = "Error getting remote repository"
-					errDetail = err.Error()
-					return
-				}
-
-				for _, item := range customModel.LatestVersion.Items {
-					if item.RepositoryFilePath == filePath.ValueString() &&
-						item.Ref == oldSourceRemoteRepository.Ref.ValueString() &&
-						item.FileSource == remoteRepository.SourceType &&
-						item.RepositoryLocation == remoteRepository.Location {
-						filesToDelete = append(filesToDelete, item.ID)
-					}
-				}
+				params = append(params, client.RuntimeParameterValueRequest{
+					FieldName: param.Key.ValueString(),
+					Type:      param.Type.ValueString(),
+					Value:     nil,
+				})
 			}
 		}
-	}
 
-	if len(filesToDelete) > 0 {
-		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-		_, err := r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:     "false",
-			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-			FilesToDelete:     filesToDelete,
-		})
-		if err != nil {
-			errSummary = "Error creating Custom Model version"
-			errDetail = err.Error()
+		var jsonParams []byte
+		if jsonParams, err = json.Marshal(params); err != nil {
+			return
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
+		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:          "false",
+			BaseEnvironmentID:      customModel.LatestVersion.BaseEnvironmentID,
+			RuntimeParameterValues: string(jsonParams),
+		}); err != nil {
 			return
 		}
 	}
 
-	for _, newSourceRemoteRepository := range plan.SourceRemoteRepositories {
-		filesToAdd := make([]string, 0)
-		for _, filePath := range newSourceRemoteRepository.SourcePaths {
-			found := false
+	return
+}
 
-			for _, oldSourceRemoteRepository := range state.SourceRemoteRepositories {
-				if oldSourceRemoteRepository.ID == newSourceRemoteRepository.ID &&
-					oldSourceRemoteRepository.Ref == newSourceRemoteRepository.Ref &&
-					contains(oldSourceRemoteRepository.SourcePaths, filePath) {
-					found = true
-					break
+func (r *CustomModelResource) updateRemoteRepositories(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if !reflect.DeepEqual(plan.SourceRemoteRepositories, state.SourceRemoteRepositories) {
+		filesToDelete := make([]string, 0)
+		for _, oldSourceRemoteRepository := range state.SourceRemoteRepositories {
+			for _, filePath := range oldSourceRemoteRepository.SourcePaths {
+				found := false
+
+				for _, newSourceRemoteRepository := range plan.SourceRemoteRepositories {
+					if oldSourceRemoteRepository.ID == newSourceRemoteRepository.ID &&
+						oldSourceRemoteRepository.Ref == newSourceRemoteRepository.Ref &&
+						contains(newSourceRemoteRepository.SourcePaths, filePath) {
+						found = true
+						break
+					}
 				}
-			}
 
-			if !found {
-				filesToAdd = append(filesToAdd, filePath.ValueString())
+				if !found {
+					var remoteRepository *client.RemoteRepositoryResponse
+					remoteRepository, err = r.provider.service.GetRemoteRepository(ctx, oldSourceRemoteRepository.ID.ValueString())
+					if err != nil {
+						return
+					}
+
+					for _, item := range customModel.LatestVersion.Items {
+						if item.RepositoryFilePath == filePath.ValueString() &&
+							item.Ref == oldSourceRemoteRepository.Ref.ValueString() &&
+							item.FileSource == remoteRepository.SourceType &&
+							item.RepositoryLocation == remoteRepository.Location {
+							filesToDelete = append(filesToDelete, item.ID)
+						}
+					}
+				}
 			}
 		}
 
-		if len(filesToAdd) > 0 {
-			errSummary, errDetail = r.createCustomModelVersionFromRemoteRepository(
-				ctx,
-				newSourceRemoteRepository,
-				customModel.ID,
-				customModel.LatestVersion.BaseEnvironmentID,
-			)
-			if errSummary != "" {
+		if len(filesToDelete) > 0 {
+			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
+			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+				IsMajorUpdate:     "false",
+				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+				FilesToDelete:     filesToDelete,
+			})
+			if err != nil {
 				return
 			}
 		}
+
+		for _, newSourceRemoteRepository := range plan.SourceRemoteRepositories {
+			filesToAdd := make([]string, 0)
+			for _, filePath := range newSourceRemoteRepository.SourcePaths {
+				found := false
+
+				for _, oldSourceRemoteRepository := range state.SourceRemoteRepositories {
+					if oldSourceRemoteRepository.ID == newSourceRemoteRepository.ID &&
+						oldSourceRemoteRepository.Ref == newSourceRemoteRepository.Ref &&
+						contains(oldSourceRemoteRepository.SourcePaths, filePath) {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					filesToAdd = append(filesToAdd, filePath.ValueString())
+				}
+			}
+
+			if len(filesToAdd) > 0 {
+				if err = r.createCustomModelVersionFromRemoteRepository(
+					ctx,
+					newSourceRemoteRepository,
+					customModel.ID,
+					customModel.LatestVersion.BaseEnvironmentID,
+				); err != nil {
+					return
+				}
+			}
+		}
+		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	}
 
 	return
@@ -1710,36 +1604,169 @@ func (r *CustomModelResource) updateRemoteRepositories(
 func (r *CustomModelResource) updateLocalFiles(
 	ctx context.Context,
 	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
 	err error,
 ) {
-	filesToDelete := make([]string, 0)
-	for _, item := range customModel.LatestVersion.Items {
-		if item.FileSource == "local" {
-			filesToDelete = append(filesToDelete, item.ID)
+	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
+		filesToDelete := make([]string, 0)
+		for _, item := range customModel.LatestVersion.Items {
+			if item.FileSource == "local" {
+				filesToDelete = append(filesToDelete, item.ID)
+			}
 		}
+
+		if len(filesToDelete) > 0 {
+			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
+			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+				IsMajorUpdate:     "false",
+				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+				FilesToDelete:     filesToDelete,
+			})
+			if err != nil {
+				return
+			}
+		}
+
+		if err = r.createCustomModelVersionFromFiles(
+			ctx,
+			plan.FolderPath,
+			plan.Files,
+			customModel.ID,
+			customModel.LatestVersion.BaseEnvironmentID,
+		); err != nil {
+			return
+		}
+		state.Files = plan.Files
+		state.FolderPath = plan.FolderPath
 	}
 
-	if len(filesToDelete) > 0 {
-		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
+	return
+}
+
+func (r *CustomModelResource) updateGuardConfigurations(
+	ctx context.Context,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if !reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) {
+		var customModel *client.CustomModel
+		customModel, err = r.provider.service.GetCustomModel(ctx, plan.ID.ValueString())
+		if err != nil {
+			return
+		}
+
+		guardsToAdd := make([]GuardConfiguration, 0)
+		for _, guard := range plan.GuardConfigurations {
+			found := false
+			for _, stateGuard := range state.GuardConfigurations {
+				if reflect.DeepEqual(guard, stateGuard) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				guardsToAdd = append(guardsToAdd, guard)
+			}
+		}
+
+		guardsToRemove := make([]GuardConfiguration, 0)
+		for _, stateGuard := range state.GuardConfigurations {
+			found := false
+			for _, guard := range plan.GuardConfigurations {
+				if reflect.DeepEqual(guard, stateGuard) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				guardsToRemove = append(guardsToRemove, stateGuard)
+			}
+		}
+
+		_, errSummary, errDetail := r.createCustomModelVersionFromGuards(
+			ctx,
+			plan,
+			customModel.ID,
+			customModel.LatestVersion.ID,
+			guardsToAdd,
+			guardsToRemove,
+		)
+		if errSummary != "" {
+			err = errors.New(errDetail)
+			return
+		}
+		state.GuardConfigurations = plan.GuardConfigurations
+		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
+	}
+
+	return
+}
+
+func (r *CustomModelResource) updateResourceSettings(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
+		resourceSettings := *plan.ResourceSettings
+		traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:     "false",
-			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-			FilesToDelete:     filesToDelete,
+			IsMajorUpdate:       "false",
+			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
+			Replicas:            resourceSettings.Replicas.ValueInt64(),
+			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
+			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
 		})
+		if err != nil {
+			return
+		}
+		state.ResourceSettings = plan.ResourceSettings
+
+	}
+	return
+}
+
+func (r *CustomModelResource) updateTrainingDataset(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if plan.TrainingDatasetID != state.TrainingDatasetID ||
+		plan.TrainingDataPartitionColumn != state.TrainingDataPartitionColumn {
+		keepTrainingHoldoutData := false
+		traceAPICall("CreateCustomModelVersionFromLatest")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:           "true",
+			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
+			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
+		})
+		if err != nil {
+			return
+		}
+
+		err = r.assignTrainingDataset(
+			ctx,
+			customModel.ID,
+			customModel.LatestVersion.BaseEnvironmentID,
+			plan.TrainingDatasetID,
+			plan.TrainingDataPartitionColumn,
+			state)
 		if err != nil {
 			return
 		}
 	}
 
-	return r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModel.ID,
-		customModel.LatestVersion.BaseEnvironmentID,
-	)
+	return
 }
 
 func (r *CustomModelResource) assignTrainingDataset(
@@ -1804,6 +1831,30 @@ func (r *CustomModelResource) assignTrainingDataset(
 
 	state.TrainingDatasetID = trainingDatasetID
 	state.TrainingDataPartitionColumn = trainingDataPartitionColumn
+
+	return
+}
+
+func (r *CustomModelResource) updateDependencyBuild(
+	ctx context.Context,
+	customModel *client.CustomModel,
+) (
+	err error,
+) {
+	if len(customModel.LatestVersion.Dependencies) > 0 {
+		traceAPICall("GetDependencyBuild")
+		_, err = r.provider.service.GetDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID)
+		if err != nil { // if not found, must create a new one
+			traceAPICall("CreateDependencyBuild")
+			if _, err = r.provider.service.CreateDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID); err != nil {
+				return
+			}
+
+			if err = r.waitForDependencyBuild(ctx, customModel.ID, customModel.LatestVersion.ID); err != nil {
+				return
+			}
+		}
+	}
 
 	return
 }

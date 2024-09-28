@@ -30,9 +30,9 @@ resource "datarobot_custom_model" "example" {
     "file1.py",
     "file2.py",
   ]
-  target_type           = "Binary"
-  target_name           = "my_label"
-  base_environment_name = "[GenAI] Python 3.11 with Moderations"
+  target_type         = "Binary"
+  target_name         = "my_label"
+  base_environment_id = "65f9b27eab986d30d4c64268"
 
   # Optional
   # source_remote_repositories = [
@@ -86,7 +86,6 @@ output "example_id" {
 ### Optional
 
 - `base_environment_id` (String) The ID of the base environment for the Custom Model.
-- `base_environment_name` (String) The name of the base environment for the Custom Model.
 - `base_environment_version_id` (String) The ID of the base environment version for the Custom Model.
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.

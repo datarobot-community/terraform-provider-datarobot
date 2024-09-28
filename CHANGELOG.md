@@ -1,3 +1,9 @@
+## 0.1.39
+
+- GCP key string parameter for credentials
+- Remove base_environment_name from Custom Model, use base_environment_id and base_environment_version_id instead
+- Make targetType computed for Custom Model
+
 ## 0.1.38
 
 FEATURES:

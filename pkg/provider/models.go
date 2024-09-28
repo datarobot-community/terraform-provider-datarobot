@@ -107,7 +107,6 @@ type CustomModelResourceModel struct {
 	Name                           types.String                    `tfsdk:"name"`
 	Description                    types.String                    `tfsdk:"description"`
 	SourceLLMBlueprintID           types.String                    `tfsdk:"source_llm_blueprint_id"`
-	BaseEnvironmentName            types.String                    `tfsdk:"base_environment_name"`
 	BaseEnvironmentID              types.String                    `tfsdk:"base_environment_id"`
 	BaseEnvironmentVersionID       types.String                    `tfsdk:"base_environment_version_id"`
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
@@ -413,5 +412,6 @@ type BasicCredentialResourceModel struct {
 type GoogleCloudCredentialResourceModel struct {
 	ID         types.String `tfsdk:"id"`
 	Name       types.String `tfsdk:"name"`
-	SourceFile types.String `tfsdk:"source_file"`
+	GCPKey     types.String `tfsdk:"gcp_key"`
+	GCPKeyFile types.String `tfsdk:"gcp_key_file"`
 }
