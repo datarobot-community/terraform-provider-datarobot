@@ -66,9 +66,18 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				Optional:            true,
 				MarkdownDescription: "The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.",
 			},
+			"folder_path_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the folder path contents.",
+			},
 			"files": schema.DynamicAttribute{
 				Optional:            true,
 				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
+			},
+			"files_hashes": schema.ListAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of file contents for each file in files.",
+				ElementType:         types.StringType,
 			},
 			"resource_settings": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -235,7 +244,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 			createApplicationSourceResp.ID,
 			createApplicationSourceVersionResp.ID,
 			&client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameterValueRequest: string(jsonParams),
+				RuntimeParameterValues: string(jsonParams),
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())
@@ -348,7 +357,9 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 
 	if (!reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) ||
 		!reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		!reflect.DeepEqual(plan.FolderPath, state.FolderPath) ||
+		!reflect.DeepEqual(plan.FolderPathHash, state.FolderPathHash) ||
 		!reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues)) &&
 		applicationSource.LatestVersion.IsFrozen {
 		// must create a new version if the latest version is frozen
@@ -366,7 +377,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		applicationSourceVersion = *createApplicationSourceVersionResp
 	}
 
-	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
+	if !reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPath != state.FolderPath ||
+		plan.FolderPathHash != state.FolderPathHash {
 		err = r.updateLocalFiles(ctx, state, plan, applicationSourceVersion)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Application Source files", err.Error())
@@ -433,7 +447,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 			resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
 			return
 		}
-		updateVersionRequest.RuntimeParameterValueRequest = string(jsonParams)
+		updateVersionRequest.RuntimeParameterValues = string(jsonParams)
 	}
 
 	if !reflect.DeepEqual(updateVersionRequest, &client.UpdateApplicationSourceVersionRequest{}) {
@@ -490,8 +504,8 @@ func (r *ApplicationSourceResource) ImportState(ctx context.Context, req resourc
 }
 
 func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		// Resource is being created or destroyed
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
 		return
 	}
 
@@ -499,6 +513,27 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// compute file content hashes
+	filesHashes, err := computeFilesHashes(ctx, plan.Files)
+	if err != nil {
+		resp.Diagnostics.AddError("Error calculating files hashes", err.Error())
+		return
+	}
+	plan.FilesHashes = filesHashes
+
+	folderPathHash, err := computeFolderHash(plan.FolderPath)
+	if err != nil {
+		resp.Diagnostics.AddError("Error calculating folder path hash", err.Error())
+		return
+	}
+	plan.FolderPathHash = folderPathHash
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// resource is being created
 		return
 	}
 

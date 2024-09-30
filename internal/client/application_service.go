@@ -60,10 +60,10 @@ type ApplicationSourceVersion struct {
 }
 
 type UpdateApplicationSourceVersionRequest struct {
-	BaseEnvironmentID            string               `json:"baseEnvironmentId,omitempty"`
-	Resources                    ApplicationResources `json:"resources,omitempty"`
-	FilesToDelete                []string             `json:"filesToDelete,omitempty"`
-	RuntimeParameterValueRequest string               `json:"runtimeParameterValues,omitempty"`
+	BaseEnvironmentID      string               `json:"baseEnvironmentId,omitempty"`
+	Resources              ApplicationResources `json:"resources,omitempty"`
+	FilesToDelete          []string             `json:"filesToDelete,omitempty"`
+	RuntimeParameterValues string               `json:"runtimeParameterValues,omitempty"`
 }
 
 type ApplicationResources struct {

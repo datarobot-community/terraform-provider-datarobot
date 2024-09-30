@@ -226,9 +226,18 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				MarkdownDescription: "The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.",
 			},
+			"folder_path_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the folder path contents.",
+			},
 			"files": schema.DynamicAttribute{
 				Optional:            true,
 				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
+			},
+			"files_hashes": schema.ListAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of file contents for each file in files.",
+				ElementType:         types.StringType,
 			},
 			"guard_configurations": schema.ListNestedAttribute{
 				Optional:            true,
@@ -575,7 +584,9 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.FolderPath = plan.FolderPath
+	state.FolderPathHash = plan.FolderPathHash
 	state.Files = plan.Files
+	state.FilesHashes = plan.FilesHashes
 	state.TargetType = types.StringValue(customModel.TargetType)
 	state.TargetName = types.StringValue(customModel.TargetName)
 	state.PositiveClassLabel = types.StringValue(customModel.PositiveClassLabel)
@@ -896,8 +907,8 @@ func (r *CustomModelResource) ImportState(ctx context.Context, req resource.Impo
 }
 
 func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		// Resource is being created or destroyed
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
 		return
 	}
 
@@ -908,11 +919,39 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	// compute file content hashes
+	filesHashes, err := computeFilesHashes(ctx, plan.Files)
+	if err != nil {
+		resp.Diagnostics.AddError("Error calculating files hashes", err.Error())
+		return
+	}
+	plan.FilesHashes = filesHashes
+
+	folderPathHash, err := computeFolderHash(plan.FolderPath)
+	if err != nil {
+		resp.Diagnostics.AddError("Error calculating folder path hash", err.Error())
+		return
+	}
+	plan.FolderPathHash = folderPathHash
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// resource is being created
+		return
+	}
+
 	var state CustomModelResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// reset unknown version id if if hashess have been changed
+	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPathHash != state.FolderPathHash {
+		plan.VersionID = types.StringUnknown()
 	}
 
 	if !IsKnown(plan.BaseEnvironmentID) {
@@ -1609,7 +1648,10 @@ func (r *CustomModelResource) updateLocalFiles(
 ) (
 	err error,
 ) {
-	if !reflect.DeepEqual(plan.Files, state.Files) || plan.FolderPath != state.FolderPath {
+	if !reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPath != state.FolderPath ||
+		plan.FolderPathHash != state.FolderPathHash {
 		filesToDelete := make([]string, 0)
 		for _, item := range customModel.LatestVersion.Items {
 			if item.FileSource == "local" {
@@ -1638,8 +1680,11 @@ func (r *CustomModelResource) updateLocalFiles(
 		); err != nil {
 			return
 		}
+
 		state.Files = plan.Files
 		state.FolderPath = plan.FolderPath
+		state.FolderPathHash = plan.FolderPathHash
+		state.FilesHashes = plan.FilesHashes
 	}
 
 	return

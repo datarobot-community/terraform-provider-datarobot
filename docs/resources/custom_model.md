@@ -111,6 +111,8 @@ output "example_id" {
 ### Read-Only
 
 - `deployments_count` (Number) The number of deployments for the Custom Model.
+- `files_hashes` (List of String) The hash of file contents for each file in files.
+- `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Custom Model.
 - `training_dataset_name` (String) The name of the training dataset assigned to the Custom Model.
 - `training_dataset_version_id` (String) The version ID of the training dataset assigned to the Custom Model.

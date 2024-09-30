@@ -73,13 +73,13 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	}
 	defer os.Remove(fileName)
 
-	err = os.Mkdir("dir", 0755)
+	err = os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll("dir")
+	defer os.RemoveAll(folderPath)
 
-	err = os.WriteFile("dir/"+fileName, []byte(`langchain == 0.2.9`), 0644)
+	err = os.WriteFile(folderPath+"/"+fileName, []byte(`langchain == 0.2.9`), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(resourceName, "source_remote_repositories.0.id"),
 				),
 			},
-			// Update files and base environment
+			// Update files, base environment, and rebuild dependencies
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -362,7 +362,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
 				),
 			},
-			// Remove files
+			// Remove files, add folder path
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					"new_example_name",
@@ -379,11 +379,82 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
+					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+				),
+			},
+			// Add file in folder path
+			{
+				PreConfig: func() {
+					if err := os.WriteFile(folderPath+"/newfile.txt", []byte("contents..."), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					baseEnvironmentID,
+					nil,
+					&folderPath,
+					nil,
+					nil,
+					nil,
+					false),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+				),
+			},
+			// update file in folder path
+			{
+				PreConfig: func() {
+					if err := os.WriteFile(folderPath+"/newfile.txt", []byte("new contents..."), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					baseEnvironmentID,
+					nil,
+					&folderPath,
+					nil,
+					nil,
+					nil,
+					false),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 				),
 			},
 			// Add resource settings
