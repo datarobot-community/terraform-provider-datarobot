@@ -37,6 +37,7 @@ type RemoteRepositoryResourceModel struct {
 type DatasetFromFileResourceModel struct {
 	ID         types.String   `tfsdk:"id"`
 	FilePath   types.String   `tfsdk:"file_path"`
+	FileHash   types.String   `tfsdk:"file_hash"`
 	Name       types.String   `tfsdk:"name"`
 	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
@@ -112,7 +113,9 @@ type CustomModelResourceModel struct {
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	FolderPath                     types.String                    `tfsdk:"folder_path"`
+	FolderPathHash                 types.String                    `tfsdk:"folder_path_hash"`
 	Files                          types.Dynamic                   `tfsdk:"files"`
+	FilesHashes                    types.List                      `tfsdk:"files_hashes"`
 	TargetName                     types.String                    `tfsdk:"target_name"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
 	PositiveClassLabel             types.String                    `tfsdk:"positive_class_label"`
@@ -374,7 +377,9 @@ type ApplicationSourceResourceModel struct {
 	VersionID              types.String                 `tfsdk:"version_id"`
 	Name                   types.String                 `tfsdk:"name"`
 	FolderPath             types.String                 `tfsdk:"folder_path"`
+	FolderPathHash         types.String                 `tfsdk:"folder_path_hash"`
 	Files                  types.Dynamic                `tfsdk:"files"`
+	FilesHashes            types.List                   `tfsdk:"files_hashes"`
 	ResourceSettings       *ApplicationResourceSettings `tfsdk:"resource_settings"`
 	RuntimeParameterValues types.List                   `tfsdk:"runtime_parameter_values"`
 }
@@ -410,8 +415,9 @@ type BasicCredentialResourceModel struct {
 }
 
 type GoogleCloudCredentialResourceModel struct {
-	ID         types.String `tfsdk:"id"`
-	Name       types.String `tfsdk:"name"`
-	GCPKey     types.String `tfsdk:"gcp_key"`
-	GCPKeyFile types.String `tfsdk:"gcp_key_file"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	GCPKey         types.String `tfsdk:"gcp_key"`
+	GCPKeyFile     types.String `tfsdk:"gcp_key_file"`
+	GCPKeyFileHash types.String `tfsdk:"gcp_key_file_hash"`
 }

@@ -1,3 +1,7 @@
+## 0.2.0
+
+- CustomModel/App Source/Dataset/Credential -- trigger updates when file contents change
+
 ## 0.1.39
 
 - GCP key string parameter for credentials

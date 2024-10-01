@@ -41,4 +41,5 @@ output "example_id" {
 
 ### Read-Only
 
+- `file_hash` (String) The hash of the file contents.
 - `id` (String) The ID of the Dataset.

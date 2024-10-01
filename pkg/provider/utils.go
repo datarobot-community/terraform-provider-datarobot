@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -464,6 +466,89 @@ func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err e
 		Path:    pathInModel,
 		Content: fileContent,
 	}
+	return
+}
+
+func computeFolderHash(folderPath types.String) (hash types.String, err error) {
+	hash = types.StringNull()
+	if IsKnown(folderPath) {
+		hashValue := ""
+		filesInFolder := make([]string, 0)
+		folder := folderPath.ValueString()
+		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+			if innerErr != nil {
+				return innerErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			filesInFolder = append(filesInFolder, path)
+			return nil
+		}); err != nil {
+			return
+		}
+
+		// sort files to ensure consistent hash
+		sort.Strings(filesInFolder)
+
+		for _, file := range filesInFolder {
+			var fileHash string
+			if fileHash, err = computeFileHash(file); err != nil {
+				return
+			}
+			hashValue += fileHash
+		}
+
+		// calculate hash of all file hashes
+		sha256 := sha256.New()
+		sha256.Write([]byte(hashValue))
+		hashValue = hex.EncodeToString(sha256.Sum(nil))
+
+		hash = types.StringValue(hashValue)
+	}
+
+	return
+}
+
+func computeFileHash(file string) (hash string, err error) {
+	// calculate hash of file contents
+	var fileReader *os.File
+	if fileReader, err = os.Open(file); err != nil {
+		return
+	}
+	defer fileReader.Close()
+
+	sha256 := sha256.New()
+	if _, err = io.Copy(sha256, fileReader); err != nil {
+		return
+	}
+	hash = hex.EncodeToString(sha256.Sum(nil))
+
+	return
+}
+
+func computeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.List, err error) {
+	hashValues := make([]string, 0)
+	localFiles, err := prepareLocalFiles(types.StringUnknown(), files)
+	if err != nil {
+		return
+	}
+
+	for _, file := range localFiles {
+		sha256 := sha256.New()
+		sha256.Write(file.Content)
+		hash := hex.EncodeToString(sha256.Sum(nil))
+		hashValues = append(hashValues, hash)
+	}
+
+	// convert hashValues to types.List
+	hashes, diags := types.ListValueFrom(ctx, types.StringType, hashValues)
+	if diags.HasError() {
+		err = errors.New(diags.Errors()[0].Detail())
+		return
+	}
+
 	return
 }
 

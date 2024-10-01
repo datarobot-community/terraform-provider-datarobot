@@ -3,13 +3,17 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func TestAccDatasetFromFileResource(t *testing.T) {
@@ -22,6 +26,21 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 	useCase := "test_datasource"
 	newUseCase := "test_new_datasource"
 
+	fileName := "example.csv"
+	fileName2 := "example2.csv"
+
+	if err := os.WriteFile(fileName, []byte("col1,col2\nval1,val2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fileName)
+
+	if err := os.WriteFile(fileName2, []byte("col11,col22\nval11,val22"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fileName2)
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -30,10 +49,10 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &datasetName, &useCase),
+				Config: datasetFromFileResourceConfig(fileName, &datasetName, &useCase),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					checkDatasetFromFileResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "file_path", fileName),
 					resource.TestCheckResourceAttr(resourceName, "name", datasetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -41,10 +60,55 @@ func TestAccDatasetFromFileResource(t *testing.T) {
 			},
 			// update name and use case IDs
 			{
-				Config: datasetFromFileResourceConfig("../../test/datarobot_english_documentation_docsassist.zip", &newDatsetName, &newUseCase),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: datasetFromFileResourceConfig(fileName, &newDatsetName, &newUseCase),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkDatasetFromFileResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "file_path", "../../test/datarobot_english_documentation_docsassist.zip"),
+					checkDatasetFromFileResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "file_path", fileName),
+					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+				),
+			},
+			// update file path triggers replace
+			{
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: datasetFromFileResourceConfig(fileName2, &newDatsetName, &newUseCase),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkDatasetFromFileResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "file_path", fileName2),
+					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+				),
+			},
+			// update file contents triggers replace
+			{
+				PreConfig: func() {
+					if err := os.WriteFile(fileName2, []byte("col11,col22\nnewVal1,newVal2"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: datasetFromFileResourceConfig(fileName2, &newDatsetName, &newUseCase),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkDatasetFromFileResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "file_path", fileName2),
 					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -102,11 +166,11 @@ resource "datarobot_dataset_from_file" "test" {
 `, filePath, nameStr, useCaseIDsStr)
 }
 
-func checkDatasetFromFileResourceExists(resourceName string) resource.TestCheckFunc {
+func checkDatasetFromFileResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		rs, ok := s.RootModule().Resources["datarobot_dataset_from_file.test"]
 		if !ok {
-			return fmt.Errorf("Not found: %s", resourceName)
+			return fmt.Errorf("Not found: %s", "datarobot_dataset_from_file.test")
 		}
 
 		if rs.Primary.ID == "" {

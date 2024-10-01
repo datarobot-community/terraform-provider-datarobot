@@ -21,6 +21,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &GoogleCloudCredentialResource{}
 var _ resource.ResourceWithImportState = &GoogleCloudCredentialResource{}
+var _ resource.ResourceWithModifyPlan = &GoogleCloudCredentialResource{}
 
 func NewGoogleCloudCredentialResource() resource.Resource {
 	return &GoogleCloudCredentialResource{}
@@ -60,6 +61,10 @@ func (r *GoogleCloudCredentialResource) Schema(ctx context.Context, req resource
 			"gcp_key_file": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The file that has the GCP key. Cannot be used with `gcp_key`.",
+			},
+			"gcp_key_file_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the GCP key file contents.",
 			},
 		},
 	}
@@ -208,6 +213,34 @@ func (r GoogleCloudCredentialResource) ConfigValidators(ctx context.Context) []r
 			path.MatchRoot("gcp_key_file"),
 		),
 	}
+}
+
+func (r GoogleCloudCredentialResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
+		return
+	}
+
+	var plan GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// compute gcp key file content hash
+	hash := types.StringNull()
+	if IsKnown(plan.GCPKeyFile) {
+		fileContentHash, err := computeFileHash(plan.GCPKeyFile.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error calculating gcp key file hash", err.Error())
+			return
+		}
+		hash = types.StringValue(fileContentHash)
+	}
+	plan.GCPKeyFileHash = hash
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func (r *GoogleCloudCredentialResource) getGCPKey(data GoogleCloudCredentialResourceModel) (gcpKey client.GCPKey, err error) {

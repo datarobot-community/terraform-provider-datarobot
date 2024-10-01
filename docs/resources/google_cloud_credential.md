@@ -26,4 +26,5 @@ Api Token Credential
 
 ### Read-Only
 
+- `gcp_key_file_hash` (String) The hash of the GCP key file contents.
 - `id` (String) The ID of the Google Cloud Credential.

@@ -7,10 +7,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
-	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
-	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -22,154 +18,6 @@ import (
 func TestAccApplicationSourceResource(t *testing.T) {
 	t.Parallel()
 	testApplicationSourceResource(t, false)
-}
-
-func TestIntegrationApplicationSourceResource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
-	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
-		os.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
-
-	envID := uuid.NewString()
-	id := uuid.NewString()
-	name := uuid.NewString()
-	versionID := uuid.NewString()
-
-	// Create
-	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return(
-		&client.ListExecutionEnvironmentsResponse{
-			Data: []client.ExecutionEnvironment{
-				{
-					ID:   envID,
-					Name: baseEnvironmentName,
-				},
-			},
-		}, nil)
-
-	mockService.EXPECT().CreateApplicationSource(gomock.Any()).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().CreateApplicationSourceVersion(gomock.Any(), id, &client.CreateApplicationSourceVersionRequest{
-		Label:             "v1",
-		BaseEnvironmentID: envID,
-		Resources: client.ApplicationResources{
-			Replicas: 1,
-		},
-	}).Return(&client.ApplicationSourceVersion{
-		ID: versionID,
-	}, nil)
-	mockService.EXPECT().UpdateApplicationSourceVersionFiles(gomock.Any(), id, versionID, gomock.Any()).Return(
-		&client.ApplicationSourceVersion{
-			ID: versionID,
-		}, nil)
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: name,
-		LatestVersion: client.ApplicationSourceVersion{
-			ID:       versionID,
-			IsFrozen: false,
-		},
-	}, nil)
-
-	// Test check
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: name,
-	}, nil)
-	mockService.EXPECT().GetApplicationSourceVersion(gomock.Any(), id, versionID).Return(&client.ApplicationSourceVersion{
-		ID: versionID,
-		Items: []client.FileItem{
-			{
-				FileName: "start-app.sh",
-			},
-		},
-		Resources: client.ApplicationResources{
-			Replicas: 1,
-		},
-	}, nil)
-
-	// Read
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: name,
-	}, nil)
-
-	// Update
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: name,
-		LatestVersion: client.ApplicationSourceVersion{
-			ID:       versionID,
-			IsFrozen: false,
-		},
-	}, nil)
-	mockService.EXPECT().UpdateApplicationSource(gomock.Any(), id, &client.UpdateApplicationSourceRequest{
-		Name: "new_example_name",
-	}).Return(nil, nil)
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: "new_example_name",
-		LatestVersion: client.ApplicationSourceVersion{
-			ID:       versionID,
-			IsFrozen: false,
-		},
-	}, nil)
-	mockService.EXPECT().UpdateApplicationSourceVersion(gomock.Any(), id, versionID, &client.UpdateApplicationSourceVersionRequest{
-		Resources: client.ApplicationResources{
-			Replicas: 2,
-		},
-	}).Return(nil, nil)
-	mockService.EXPECT().GetApplicationSourceVersion(gomock.Any(), id, versionID).Return(
-		&client.ApplicationSourceVersion{
-			ID: versionID,
-			Items: []client.FileItem{
-				{
-					FileName: "streamlit-app.py",
-				},
-			},
-			Resources: client.ApplicationResources{
-				Replicas: 2,
-			},
-		}, nil)
-	mockService.EXPECT().UpdateApplicationSourceVersionFiles(gomock.Any(), id, versionID, gomock.Any()).Return(
-		&client.ApplicationSourceVersion{
-			ID: versionID,
-		}, nil)
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: "new_example_name",
-		LatestVersion: client.ApplicationSourceVersion{
-			ID:       versionID,
-			IsFrozen: false,
-		},
-	}, nil)
-
-	// Test check
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: "new_example_name",
-		LatestVersion: client.ApplicationSourceVersion{
-			ID:       versionID,
-			IsFrozen: false,
-		},
-	}, nil)
-
-	// Delete
-	mockService.EXPECT().GetApplicationSource(gomock.Any(), id).Return(&client.ApplicationSource{
-		ID:   id,
-		Name: "new_example_name",
-	}, nil)
-	mockService.EXPECT().DeleteApplicationSource(gomock.Any(), id).Return(nil)
-
-	testApplicationSourceResource(t, true)
 }
 
 func TestApplicationSourceResourceSchema(t *testing.T) {
@@ -195,6 +43,7 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
+	startAppFileName := "start-app.sh"
 	startAppScript := `#!/usr/bin/env bash
 
 echo "Starting App"
@@ -202,6 +51,7 @@ echo "Starting App"
 streamlit run streamlit-app.py
 `
 
+	appCodeFileName := "streamlit-app.py"
 	appCode := `import streamlit as st
 from datarobot import Client
 from datarobot.client import set_client
@@ -216,17 +66,23 @@ if __name__ == "__main__":
     start_streamlit()
 	`
 
-	err := os.WriteFile("start-app.sh", []byte(startAppScript), 0644)
+	err := os.WriteFile(startAppFileName, []byte(startAppScript), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("start-app.sh")
+	defer os.Remove(startAppFileName)
 
-	err = os.WriteFile("streamlit-app.py", []byte(appCode), 0644)
+	err = os.WriteFile(appCodeFileName, []byte(appCode), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("streamlit-app.py")
+	defer os.Remove(appCodeFileName)
+
+	folderPath := "dir"
+	if err = os.Mkdir(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
@@ -239,31 +95,164 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: applicationSourceResourceConfig("", []FileTuple{{LocalPath: "start-app.sh"}}, 1),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("files_hashes"),
+					),
+				},
+				Config: applicationSourceResourceConfig(
+					"",
+					[]FileTuple{
+						{
+							LocalPath: startAppFileName,
+						},
+					},
+					nil,
+					1),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkApplicationSourceResourceExists(resourceName),
+					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", "start-app.sh"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", startAppFileName),
+					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update name, local file, and replicas
+			// Update name, files, and replicas
 			{
-				Config: applicationSourceResourceConfig("new_example_name", []FileTuple{{LocalPath: "streamlit-app.py"}}, 2),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
-						tfjsonpath.New("version_id"),
+						tfjsonpath.New("files_hashes"),
+					),
+				},
+				Config: applicationSourceResourceConfig(
+					"new_example_name",
+					[]FileTuple{
+						{
+							LocalPath: appCodeFileName,
+						},
+					},
+					nil,
+					2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update file contents
+			{
+				PreConfig: func() {
+					if err := os.WriteFile(appCodeFileName, []byte("app code..."), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("files_hashes"),
+					),
+				},
+				Config: applicationSourceResourceConfig(
+					"new_example_name",
+					[]FileTuple{
+						{
+							LocalPath: appCodeFileName,
+						},
+					},
+					nil,
+					2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
+					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove files and add folder_path
+			{
+				PreConfig: func() {
+					if err := os.WriteFile("dir/"+startAppFileName, []byte(startAppScript), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: applicationSourceResourceConfig(
+					"new_example_name",
+					[]FileTuple{},
+					&folderPath,
+					2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkApplicationSourceResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", "streamlit-app.py"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Add new file to folder_path
+			{
+				PreConfig: func() {
+					if err := os.WriteFile("dir/"+appCode, []byte(appCode), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: applicationSourceResourceConfig(
+					"new_example_name",
+					nil,
+					&folderPath,
+					2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// update the contents of a file in folder_path
+			{
+				PreConfig: func() {
+					if err := os.WriteFile("dir/"+appCode, []byte("new app code"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: applicationSourceResourceConfig(
+					"new_example_name",
+					nil,
+					&folderPath,
+					2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("folder_path_hash"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -273,7 +262,7 @@ if __name__ == "__main__":
 	})
 }
 
-func applicationSourceResourceConfig(name string, files []FileTuple, replicas int) string {
+func applicationSourceResourceConfig(name string, files []FileTuple, folderPath *string, replicas int) string {
 	resourceSettingsStr := ""
 	if replicas > 1 {
 		resourceSettingsStr = fmt.Sprintf(`
@@ -288,6 +277,13 @@ func applicationSourceResourceConfig(name string, files []FileTuple, replicas in
 		nameStr = fmt.Sprintf(`
 	name = "%s"
 `, name)
+	}
+
+	folderPathStr := ""
+	if folderPath != nil {
+		folderPathStr = fmt.Sprintf(`
+	folder_path = "%s"
+`, *folderPath)
 	}
 
 	filesStr := ""
@@ -311,15 +307,16 @@ resource "datarobot_application_source" "test" {
 	%s
 	%s
 	%s
+	%s
   }
-`, nameStr, filesStr, resourceSettingsStr)
+`, nameStr, filesStr, folderPathStr, resourceSettingsStr)
 }
 
-func checkApplicationSourceResourceExists(resourceName string) resource.TestCheckFunc {
+func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		rs, ok := s.RootModule().Resources["datarobot_application_source.test"]
 		if !ok {
-			return fmt.Errorf("Not found: %s", resourceName)
+			return fmt.Errorf("Not found: %s", "datarobot_application_source.test")
 		}
 
 		if rs.Primary.ID == "" {
@@ -345,7 +342,6 @@ func checkApplicationSourceResourceExists(resourceName string) resource.TestChec
 		}
 
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
-			applicationSourceVersion.Items[0].FileName == rs.Primary.Attributes["files.0.0"] &&
 			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
 			return nil
 		}

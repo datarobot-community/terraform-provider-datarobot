@@ -45,6 +45,8 @@ output "datarobot_application_source_version_id" {
 
 ### Read-Only
 
+- `files_hashes` (List of String) The hash of file contents for each file in files.
+- `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Application Source.
 - `version_id` (String) The version ID of the Application Source.
 

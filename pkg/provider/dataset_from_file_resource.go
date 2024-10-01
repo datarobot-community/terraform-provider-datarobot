@@ -19,6 +19,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &DatasetFromFileResource{}
 var _ resource.ResourceWithImportState = &DatasetFromFileResource{}
+var _ resource.ResourceWithModifyPlan = &DatasetFromFileResource{}
 
 func NewDatasetFromFileResource() resource.Resource {
 	return &DatasetFromFileResource{}
@@ -52,6 +53,10 @@ func (r *DatasetFromFileResource) Schema(ctx context.Context, req resource.Schem
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+			},
+			"file_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the file contents.",
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
@@ -241,4 +246,43 @@ func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.Delet
 
 func (r *DatasetFromFileResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r DatasetFromFileResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
+		return
+	}
+
+	var plan DatasetFromFileResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// compute file content hash
+	fileContentHash, err := computeFileHash(plan.FilePath.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error calculating file hash", err.Error())
+		return
+	}
+	plan.FileHash = types.StringValue(fileContentHash)
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// Resource is being created
+		return
+	}
+
+	var state DatasetFromFileResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.FileHash != state.FileHash {
+		resp.RequiresReplace.Append(path.Root("file_hash"))
+	}
 }
