@@ -200,12 +200,12 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							LlmType:          basetypes.NewStringValue("openAi"),
 						},
 						{
-							TemplateName: basetypes.NewStringValue("Token Count"),
-							Name:         basetypes.NewStringValue("Token Count prompt"),
+							TemplateName: basetypes.NewStringValue("Prompt Tokens"),
+							Name:         basetypes.NewStringValue("prompt tokens"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
 							Intervention: GuardIntervention{
 								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by Token Count"),
+								Message: basetypes.NewStringValue("you have been blocked by prompt token count"),
 								Condition: GuardCondition{
 									Comparand:  basetypes.NewFloat64Value(10),
 									Comparator: basetypes.NewStringValue("greaterThan"),

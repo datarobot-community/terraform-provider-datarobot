@@ -56,11 +56,17 @@ func (r *BasicCredentialResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The user of the Basic Credential.",
 				Sensitive:           true,
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"password": schema.StringAttribute{
 				MarkdownDescription: "The password of the Basic Credential.",
 				Sensitive:           true,
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 	}
@@ -157,8 +163,6 @@ func (r *BasicCredentialResource) Update(ctx context.Context, req resource.Updat
 		&client.CredentialRequest{
 			Name:        data.Name.ValueString(),
 			Description: data.Description.ValueString(),
-			User:        data.User.ValueString(),
-			Password:    data.Password.ValueString(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {

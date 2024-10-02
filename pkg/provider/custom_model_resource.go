@@ -831,11 +831,6 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
-	if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-		return
-	}
-
 	if err = r.updateRemoteRepositories(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating remote repositories", err.Error())
 		return
@@ -853,6 +848,11 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 
 	if err = r.updateResourceSettings(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating resource settings", err.Error())
+		return
+	}
+
+	if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
 
@@ -1402,23 +1402,19 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 		}
 	}
 
-	// check for base environment update
 	updateRequest := &client.CreateCustomModelVersionFromLatestRequest{
 		IsMajorUpdate: "false",
 	}
-	if IsKnown(plan.BaseEnvironmentID) && plan.BaseEnvironmentID.ValueString() != customModel.LatestVersion.BaseEnvironmentID {
+	if IsKnown(plan.BaseEnvironmentID) {
 		updateRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
 	}
-
-	if IsKnown(plan.BaseEnvironmentVersionID) && plan.BaseEnvironmentVersionID.ValueString() != customModel.LatestVersion.BaseEnvironmentVersionID {
+	if IsKnown(plan.BaseEnvironmentVersionID) {
 		updateRequest.BaseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
 	}
 
-	if updateRequest.BaseEnvironmentID != "" || updateRequest.BaseEnvironmentVersionID != "" {
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest); err != nil {
-			return
-		}
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest); err != nil {
+		return
 	}
 
 	return

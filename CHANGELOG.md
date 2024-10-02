@@ -1,3 +1,10 @@
+## 0.2.1
+
+- Fix Runtime Parameter updates for Application Source
+- Require replace for Credential udpates
+- Always create new version for Custom Model + App Source updates
+- Fix type errors for Guard intervention comparand field
+
 ## 0.2.0
 
 - CustomModel/App Source/Dataset/Credential -- trigger updates when file contents change
