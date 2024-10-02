@@ -57,10 +57,16 @@ func (r *GoogleCloudCredentialResource) Schema(ctx context.Context, req resource
 				Optional:            true,
 				Sensitive:           true,
 				MarkdownDescription: "The GCP key in JSON format.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"gcp_key_file": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The file that has the GCP key. Cannot be used with `gcp_key`.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"gcp_key_file_hash": schema.StringAttribute{
 				Computed:            true,
@@ -155,18 +161,11 @@ func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource
 		return
 	}
 
-	gcpKey, err := r.getGCPKey(data)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting GCP key", err.Error())
-		return
-	}
-
 	traceAPICall("UpdateGoogleCloudCredential")
-	_, err = r.provider.service.UpdateCredential(ctx,
+	_, err := r.provider.service.UpdateCredential(ctx,
 		data.ID.ValueString(),
 		&client.CredentialRequest{
-			Name:   data.Name.ValueString(),
-			GCPKey: &gcpKey,
+			Name: data.Name.ValueString(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -241,6 +240,22 @@ func (r GoogleCloudCredentialResource) ModifyPlan(ctx context.Context, req resou
 	plan.GCPKeyFileHash = hash
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// Resource is being created
+		return
+	}
+
+	var state GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.GCPKeyFileHash != state.GCPKeyFileHash {
+		resp.RequiresReplace.Append(path.Root("gcp_key_file_hash"))
+	}
 }
 
 func (r *GoogleCloudCredentialResource) getGCPKey(data GoogleCloudCredentialResourceModel) (gcpKey client.GCPKey, err error) {
