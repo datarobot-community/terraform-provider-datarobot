@@ -56,6 +56,9 @@ func (r *ApiTokenCredentialResource) Schema(ctx context.Context, req resource.Sc
 				MarkdownDescription: "The description of the Api Token Credential.",
 				Sensitive:           true,
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 	}
@@ -151,7 +154,6 @@ func (r *ApiTokenCredentialResource) Update(ctx context.Context, req resource.Up
 		&client.CredentialRequest{
 			Name:        data.Name.ValueString(),
 			Description: data.Description.ValueString(),
-			ApiToken:    data.ApiToken.ValueString(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {

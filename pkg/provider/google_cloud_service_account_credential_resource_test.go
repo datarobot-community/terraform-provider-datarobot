@@ -39,6 +39,7 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 	gcpKeyFileName2 := "example2.json"
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
 	if err := os.WriteFile(gcpKeyFileName, []byte(fmt.Sprintf(gcpKeyJsonTemplate, "file")), 0644); err != nil {
 		t.Fatal(err)
@@ -59,9 +60,9 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 			// Create and Read
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
+					compareValuesSame.AddStateValue(
 						resourceName,
-						tfjsonpath.New("gcp_key_file_hash"),
+						tfjsonpath.New("id"),
 					),
 				},
 				Config: googleCloudCredentialResourceConfig(credentialName, false, &gcpKeyFileName),
@@ -73,12 +74,37 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update name and gcp_key_file
+			// Update name
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("gcp_key_file_hash"),
+					),
+					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: googleCloudCredentialResourceConfig(credentialName+"_new", false, &gcpKeyFileName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkGoogleCloudCredentialResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", credentialName+"_new"),
+					resource.TestCheckResourceAttr(resourceName, "gcp_key_file", "example.json"),
+					resource.TestCheckResourceAttrSet(resourceName, "gcp_key_file_hash"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Update gcp_key_file
+			{
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("gcp_key_file_hash"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
 					),
 				},
 				Config: googleCloudCredentialResourceConfig(credentialName+"_new", false, &gcpKeyFileName2),
@@ -96,6 +122,10 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("gcp_key_file_hash"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
 					),
 				},
 				PreConfig: func() {
@@ -115,6 +145,12 @@ func TestAccGoogleCloudCredentialResource(t *testing.T) {
 			// Use gcp_key instead of gcp_key_file
 			{
 				Config: googleCloudCredentialResourceConfig(credentialName+"_new", true, nil),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkGoogleCloudCredentialResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "gcp_key"),

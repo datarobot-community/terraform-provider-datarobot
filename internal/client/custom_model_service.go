@@ -208,8 +208,8 @@ type GuardIntervention struct {
 }
 
 type GuardCondition struct {
-	Comparator string  `json:"comparator"`
-	Comparand  float64 `json:"comparand"`
+	Comparator string `json:"comparator"`
+	Comparand  any    `json:"comparand"`
 }
 
 type GuardConfigurationResponse struct {

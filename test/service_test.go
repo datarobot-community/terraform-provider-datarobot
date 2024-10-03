@@ -438,8 +438,8 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 	require.Len(guardConfigurations.Data, 3)
 	require.Equal("Rouge 1", guardConfigurations.Data[0].Name)
-	require.Equal("Token Count", guardConfigurations.Data[1].Name)
-	require.Equal("Token Count", guardConfigurations.Data[2].Name)
+	require.Equal("Prompt Tokens", guardConfigurations.Data[1].Name)
+	require.Equal("Prompt Tokens", guardConfigurations.Data[2].Name)
 
 	overallModerationConfiguration, err := s.GetOverallModerationConfigurationForCustomModelVersion(ctx, customModel.LatestVersion.ID)
 	require.NoError(err)

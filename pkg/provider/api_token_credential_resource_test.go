@@ -7,14 +7,21 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func TestAccApiTokenCredentialResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_api_token_credential.test"
 	credentialName := uuid.NewString()
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -24,6 +31,12 @@ func TestAccApiTokenCredentialResource(t *testing.T) {
 			// Create and Read
 			{
 				Config: apiTokenCredentialResourceConfig(credentialName, "example_description", "example_api_token"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApiTokenCredentialResourceExists(resourceName),
 					// Verify name and description
@@ -33,9 +46,37 @@ func TestAccApiTokenCredentialResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update name, description, and api_token
+			// Update name and description
+			{
+				Config: apiTokenCredentialResourceConfig(credentialName+"_new", "new_example_description", "example_api_token"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApiTokenCredentialResourceExists(resourceName),
+					// Verify name and description
+					resource.TestCheckResourceAttr(resourceName, "name", credentialName+"_new"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "api_token", "example_api_token"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Update api token
 			{
 				Config: apiTokenCredentialResourceConfig(credentialName+"_new", "new_example_description", "new_example_api_token"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApiTokenCredentialResourceExists(resourceName),
 					// Verify name and description
