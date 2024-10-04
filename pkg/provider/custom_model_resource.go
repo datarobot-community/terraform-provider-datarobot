@@ -1440,7 +1440,7 @@ func (r *CustomModelResource) updateCustomModel(
 		Language:            plan.Language.ValueString(),
 	}
 
-	if state.DeploymentsCount.ValueInt64() < 1 {
+	if customModel.DeploymentsCount < 1 {
 		updateRequest.TargetName = plan.TargetName.ValueString()
 		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
 		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()

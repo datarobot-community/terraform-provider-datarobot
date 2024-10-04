@@ -1,3 +1,7 @@
+## 0.2.2
+
+- Use API return value instead of state for Custom Model deployments count
+
 ## 0.2.1
 
 - Fix Runtime Parameter updates for Application Source
