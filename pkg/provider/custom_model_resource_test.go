@@ -520,6 +520,101 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	})
 }
 
+func TestAccCustomModelWithRuntimeParamsResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_with_runtime_params"
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+
+	folderPath := "runtime_param_dir"
+	fileName := "model-metadata.yaml"
+	fileContents := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: An example of a string parameter
+    defaultValue: null`
+
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	if err = os.WriteFile(folderPath+"/"+fileName, []byte(fileContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: customModelWithRuntimeParamsConfig("val"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// update runtime param value
+			{
+				Config: customModelWithRuntimeParamsConfig("newVal"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "newVal"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// add new file
+			{
+				PreConfig: func() {
+					if err := os.WriteFile(folderPath+"/newfile.txt", []byte("contents..."), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: customModelWithRuntimeParamsConfig("newVal"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "newVal"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccBinaryCustomModelResource(t *testing.T) {
 	t.Parallel()
 
@@ -998,6 +1093,25 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 `, name, description, baseEnvironmentID, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
 }
 
+func customModelWithRuntimeParamsConfig(value string) string {
+	return fmt.Sprintf(`
+	resource "datarobot_custom_model" "test_with_runtime_params" {
+		name        		     = "with runtime params"
+		target_type              = "TextGeneration"
+		target_name              = "target"
+		base_environment_id      = "65f9b27eab986d30d4c64268"
+		folder_path 			 = "runtime_param_dir"
+		runtime_parameter_values = [
+			{
+				key="STRING_PARAMETER",
+				type="string",
+				value="%s"
+			},
+		]
+	}
+	`, value)
+}
+
 func binaryCustomModelResourceConfig(
 	name,
 	targetName,
@@ -1075,14 +1189,17 @@ func textGenerationCustomModelResourceConfig(
 
 	return fmt.Sprintf(`
 %s
+resource "datarobot_use_case" "test_text_generation" {
+	name = "test custom model text generation"
+}
 
 resource "datarobot_custom_model" "test_text_generation" {
-	name        		  							  = "%s"
-	target_type           							  = "TextGeneration"
-	target_name           							  = "%s"
-	language 			  							  = "%s"
-	base_environment_id 							  = "65f9b27eab986d30d4c64268"
-	is_proxy 										  = true
+	name        		= "%s"
+	target_type         = "TextGeneration"
+	target_name         = "%s"
+	language 			= "%s"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	is_proxy 			= true
 	%s
 }
 `, resourceBlock, name, targetName, language, customModelBlock)
@@ -1155,6 +1272,10 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 
 		if customModel.Name == rs.Primary.Attributes["name"] &&
 			customModel.Description == rs.Primary.Attributes["description"] {
+			if rs.Primary.Attributes["runtime_parameter_values.0.value"] != "" &&
+				(customModel.LatestVersion.RuntimeParameters[0].CurrentValue != rs.Primary.Attributes["runtime_parameter_values.0.value"]) {
+				return fmt.Errorf("Runtime parameter value does not match")
+			}
 			return nil
 		}
 

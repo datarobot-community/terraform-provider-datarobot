@@ -93,7 +93,7 @@ type Service interface {
 	DeletePredictionEnvironment(ctx context.Context, id string) error
 
 	// Deployment
-	CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, error)
+	CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, string, error)
 	GetDeployment(ctx context.Context, id string) (*Deployment, error)
 	UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error)
 	DeleteDeployment(ctx context.Context, id string) error
@@ -321,7 +321,7 @@ func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id 
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error) {
-	return PatchAndExpectStatus[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/fromRepository/", req)
+	return ExecuteAndExpectStatus[CustomModelVersion](s.client, ctx, http.MethodPatch, "/customModels/"+id+"/versions/fromRepository/", req)
 }
 
 func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModel, error) {
@@ -453,8 +453,8 @@ func (s *ServiceImpl) DeletePredictionEnvironment(ctx context.Context, id string
 }
 
 // Deployment Service Implementation.
-func (s *ServiceImpl) CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, error) {
-	return Post[DeploymentCreateResponse](s.client, ctx, "/deployments/fromModelPackage/", req)
+func (s *ServiceImpl) CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, string, error) {
+	return ExecuteAndExpectStatus[DeploymentCreateResponse](s.client, ctx, http.MethodPost, "/deployments/fromModelPackage/", req)
 }
 
 func (s *ServiceImpl) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
@@ -498,7 +498,7 @@ func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id
 }
 
 func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {
-	return PatchAndExpectStatus[Deployment](s.client, ctx, "/deployments/"+id+"/model/", req)
+	return ExecuteAndExpectStatus[Deployment](s.client, ctx, http.MethodPatch, "/deployments/"+id+"/model/", req)
 }
 
 // Application Service Implementation.

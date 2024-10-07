@@ -276,12 +276,13 @@ func (mr *MockServiceMockRecorder) CreateDependencyBuild(ctx, id, versionID inte
 }
 
 // CreateDeploymentFromModelPackage mocks base method.
-func (m *MockService) CreateDeploymentFromModelPackage(ctx context.Context, req *client.CreateDeploymentFromModelPackageRequest) (*client.DeploymentCreateResponse, error) {
+func (m *MockService) CreateDeploymentFromModelPackage(ctx context.Context, req *client.CreateDeploymentFromModelPackageRequest) (*client.DeploymentCreateResponse, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDeploymentFromModelPackage", ctx, req)
 	ret0, _ := ret[0].(*client.DeploymentCreateResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // CreateDeploymentFromModelPackage indicates an expected call of CreateDeploymentFromModelPackage.

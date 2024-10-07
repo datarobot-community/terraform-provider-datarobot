@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -466,7 +467,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	traceAPICall("CreateDeployment")
-	createResp, err := r.provider.service.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
+	createResp, statusID, err := r.provider.service.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
 		ModelPackageID:          data.RegisteredModelVersionID.ValueString(),
 		PredictionEnvironmentID: data.PredictionEnvironmentID.ValueString(),
 		Label:                   data.Label.ValueString(),
@@ -474,6 +475,17 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Deployment", err.Error())
+		return
+	}
+	if statusID == "" {
+		resp.Diagnostics.AddError("Unable to find Deployment creation task", "Status ID is empty")
+	}
+
+	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	if err != nil {
+		traceAPICall("DeleteDeployment")
+		_ = r.provider.service.DeleteDeployment(ctx, createResp.ID)
+		resp.Diagnostics.AddError("Deployment creation failed", err.Error())
 		return
 	}
 
@@ -654,7 +666,7 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 
 		if deployment.Status == "active" {
 			return nil
-		} else if deployment.Status == "errored" {
+		} else if strings.Contains(deployment.Status, "error") {
 			return backoff.Permanent(errors.New("deployment has errored"))
 		}
 

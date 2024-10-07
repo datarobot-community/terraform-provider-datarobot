@@ -1,3 +1,9 @@
+## 0.2.3
+
+- Throw error when Deployment fails instead of waiting indefinitely
+- Fix runtime params not being set on Custom Model update files
+- Don't hardcode base environment for Application Source
+
 ## 0.2.2
 
 - Use API return value instead of state for Custom Model deployments count
