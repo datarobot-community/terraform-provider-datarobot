@@ -190,12 +190,12 @@ type CustomModelResourceSettings struct {
 
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
-	ID                   types.String   `tfsdk:"id"`
-	VersionID            types.String   `tfsdk:"version_id"`
-	VersionName          types.String   `tfsdk:"version_name"`
-	Name                 types.String   `tfsdk:"name"`
-	Description          types.String   `tfsdk:"description"`
-	CustomModelVersionId types.String   `tfsdk:"custom_model_version_id"`
+	ID                   types.String `tfsdk:"id"`
+	VersionID            types.String `tfsdk:"version_id"`
+	VersionName          types.String `tfsdk:"version_name"`
+	Name                 types.String `tfsdk:"name"`
+	Description          types.String `tfsdk:"description"`
+	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
 }
 
 // GlobalModelDataSourceModel describes the global model data source resource.
