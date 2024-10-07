@@ -43,6 +43,9 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+	baseEnvironmentVersionID := "6602eb900513a1f3bfc9e805"
+
 	startAppFileName := "start-app.sh"
 	startAppScript := `#!/usr/bin/env bash
 
@@ -121,6 +124,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"",
+					&baseEnvironmentID,
+					nil,
 					[]FileTuple{
 						{
 							LocalPath: metadataFileName,
@@ -141,9 +146,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
-			// Update name, files, and replicas
+			// Update name, files, replicas, and environment
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -157,6 +164,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"new_example_name",
+					nil,
+					&baseEnvironmentVersionID,
 					[]FileTuple{
 						{
 							LocalPath: metadataFileName,
@@ -175,6 +184,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
 			// Update file contents
@@ -196,6 +207,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"new_example_name",
+					&baseEnvironmentID,
+					nil,
 					[]FileTuple{
 						{
 							LocalPath: metadataFileName,
@@ -215,6 +228,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
 			// Remove files and add folder_path
@@ -226,6 +241,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"new_example_name",
+					&baseEnvironmentID,
+					nil,
 					[]FileTuple{},
 					&folderPath,
 					2),
@@ -247,6 +264,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
 			// Add new file to folder_path
@@ -258,6 +277,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"new_example_name",
+					&baseEnvironmentID,
+					nil,
 					nil,
 					&folderPath,
 					2),
@@ -273,10 +294,14 @@ runtimeParameterDefinitions:
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
 			// update the contents of a file in folder_path
@@ -288,6 +313,8 @@ runtimeParameterDefinitions:
 				},
 				Config: applicationSourceResourceConfig(
 					"new_example_name",
+					&baseEnvironmentID,
+					nil,
 					nil,
 					&folderPath,
 					2),
@@ -307,6 +334,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
 			// Delete is tested automatically
@@ -314,7 +343,28 @@ runtimeParameterDefinitions:
 	})
 }
 
-func applicationSourceResourceConfig(name string, files []FileTuple, folderPath *string, replicas int) string {
+func applicationSourceResourceConfig(
+	name string,
+	baseEnvironmentID *string,
+	baseEnvironmentVersionID *string,
+	files []FileTuple,
+	folderPath *string,
+	replicas int,
+) string {
+	baseEnvironmentIDStr := ""
+	if baseEnvironmentID != nil {
+		baseEnvironmentIDStr = fmt.Sprintf(`
+	base_environment_id = "%s"
+`, *baseEnvironmentID)
+	}
+
+	baseEnvironmentVersionIDStr := ""
+	if baseEnvironmentVersionID != nil {
+		baseEnvironmentVersionIDStr = fmt.Sprintf(`
+	base_environment_version_id = "%s"
+`, *baseEnvironmentVersionID)
+	}
+
 	resourceSettingsStr := ""
 	if replicas > 1 {
 		resourceSettingsStr = fmt.Sprintf(`
@@ -371,8 +421,10 @@ resource "datarobot_application_source" "test" {
 	%s
 	%s
 	%s
+	%s
+	%s
   }
-`, nameStr, filesStr, folderPathStr, resourceSettingsStr, runtimeParamValueStr)
+`, nameStr, baseEnvironmentIDStr, baseEnvironmentVersionIDStr, filesStr, folderPathStr, resourceSettingsStr, runtimeParamValueStr)
 }
 
 func checkApplicationSourceResourceExists() resource.TestCheckFunc {
@@ -405,6 +457,8 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 		}
 
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
+			applicationSource.LatestVersion.BaseEnvironmentID == rs.Primary.Attributes["base_environment_id"] &&
+			applicationSource.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] &&
 			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
 			if runtimeParamValue, ok := rs.Primary.Attributes["runtime_parameter_values.0.value"]; ok {
 				if runtimeParamValue != applicationSourceVersion.RuntimeParameters[0].OverrideValue {

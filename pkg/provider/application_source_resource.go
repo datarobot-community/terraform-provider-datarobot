@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,11 +20,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-const baseEnvironmentName = "[Experimental] Python 3.9 Streamlit"
-
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.ResourceWithImportState = &ApplicationSourceResource{}
 var _ resource.ResourceWithModifyPlan = &ApplicationSourceResource{}
+var _ resource.ResourceWithConfigValidators = &ApplicationSourceResource{}
 
 func NewApplicationSourceResource() resource.Resource {
 	return &ApplicationSourceResource{}
@@ -61,6 +61,16 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"base_environment_id": schema.StringAttribute{
+				Computed:            true,
+				Optional:            true,
+				MarkdownDescription: "The ID of the base environment for the Application Source.",
+			},
+			"base_environment_version_id": schema.StringAttribute{
+				Computed:            true,
+				Optional:            true,
+				MarkdownDescription: "The ID of the base environment version for the Application Source.",
 			},
 			"folder_path": schema.StringAttribute{
 				Optional:            true,
@@ -149,19 +159,6 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	baseEnvironmentID, err := r.getBaseEnvironmentID(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Base Environment", err.Error())
-		return
-	}
-	if baseEnvironmentID == "" {
-		resp.Diagnostics.AddError(
-			"Base Environment not found",
-			fmt.Sprintf("Base Environment with name %s is not found.", baseEnvironmentName),
-		)
-		return
-	}
-
 	traceAPICall("CreateApplicationSource")
 	createApplicationSourceResp, err := r.provider.service.CreateApplicationSource(ctx)
 	if err != nil {
@@ -185,21 +182,31 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		data.Name = types.StringValue(createApplicationSourceResp.Name)
 	}
 
+	createApplicationSourceVersionRequest := &client.CreateApplicationSourceVersionRequest{
+		Label: "v1",
+		Resources: client.ApplicationResources{
+			Replicas: data.ResourceSettings.Replicas.ValueInt64(),
+		},
+	}
+
+	if IsKnown(data.BaseEnvironmentVersionID) {
+		createApplicationSourceVersionRequest.BaseEnvironmentVersionID = data.BaseEnvironmentVersionID.ValueString()
+	} else {
+		createApplicationSourceVersionRequest.BaseEnvironmentID = data.BaseEnvironmentID.ValueString()
+	}
+
 	traceAPICall("CreateApplicationSourceVersion")
-	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx,
+	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(
+		ctx,
 		createApplicationSourceResp.ID,
-		&client.CreateApplicationSourceVersionRequest{
-			Label:             "v1",
-			BaseEnvironmentID: baseEnvironmentID,
-			Resources: client.ApplicationResources{
-				Replicas: data.ResourceSettings.Replicas.ValueInt64(),
-			},
-		})
+		createApplicationSourceVersionRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application source version", err.Error())
 		return
 	}
 	data.VersionID = types.StringValue(createApplicationSourceVersionResp.ID)
+	data.BaseEnvironmentID = types.StringValue(createApplicationSourceVersionResp.BaseEnvironmentID)
+	data.BaseEnvironmentVersionID = types.StringValue(createApplicationSourceVersionResp.BaseEnvironmentVersionID)
 
 	err = r.addLocalFilesToApplicationSource(
 		ctx,
@@ -299,6 +306,8 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 	data.Name = types.StringValue(applicationSource.Name)
+	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
+	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -385,6 +394,12 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		},
 	}
 
+	if IsKnown(plan.BaseEnvironmentVersionID) {
+		updateVersionRequest.BaseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
+	} else {
+		updateVersionRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
+	}
+
 	runtimeParameterValues := make([]RuntimeParameterValue, 0)
 	if IsKnown(plan.RuntimeParameterValues) {
 		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
@@ -454,6 +469,8 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
+	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
+	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
 	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -530,6 +547,20 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		return
 	}
 
+	if !IsKnown(plan.BaseEnvironmentID) {
+		if plan.BaseEnvironmentVersionID == state.BaseEnvironmentVersionID {
+			// use state base environment id if base environment version id is not changed
+			plan.BaseEnvironmentID = state.BaseEnvironmentID
+		}
+	}
+
+	if !IsKnown(plan.BaseEnvironmentVersionID) {
+		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
+			// use state base environment version id if base environment id is not changed
+			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
+		}
+	}
+
 	// reset unknown version id if if hashess have been changed
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
@@ -551,21 +582,13 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
-func (r *ApplicationSourceResource) getBaseEnvironmentID(ctx context.Context) (baseEnvironmentID string, err error) {
-	traceAPICall("ListExecutionEnvironments")
-	listResp, err := r.provider.service.ListExecutionEnvironments(ctx)
-	if err != nil {
-		return
+func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.AtLeastOneOf(
+			path.MatchRoot("base_environment_id"),
+			path.MatchRoot("base_environment_version_id"),
+		),
 	}
-
-	for _, executionEnvironment := range listResp.Data {
-		if executionEnvironment.Name == baseEnvironmentName {
-			baseEnvironmentID = executionEnvironment.ID
-			break
-		}
-	}
-
-	return
 }
 
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(

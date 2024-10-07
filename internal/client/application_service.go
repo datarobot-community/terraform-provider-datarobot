@@ -37,11 +37,12 @@ type ApplicationSource struct {
 }
 
 type CreateApplicationSourceVersionRequest struct {
-	Label                  string               `json:"label"`
-	BaseVersion            string               `json:"baseVersion,omitempty"`
-	BaseEnvironmentID      string               `json:"baseEnvironmentId,omitempty"`
-	Resources              ApplicationResources `json:"resources,omitempty"`
-	RuntimeParameterValues string               `json:"runtimeParameterValues,omitempty"`
+	Label                    string               `json:"label"`
+	BaseVersion              string               `json:"baseVersion,omitempty"`
+	BaseEnvironmentID        string               `json:"baseEnvironmentId,omitempty"`
+	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId,omitempty"`
+	Resources                ApplicationResources `json:"resources,omitempty"`
+	RuntimeParameterValues   string               `json:"runtimeParameterValues,omitempty"`
 }
 
 type ListApplicationSourceVersionsResponse struct {
@@ -52,7 +53,7 @@ type ApplicationSourceVersion struct {
 	ID                       string               `json:"id"`
 	Label                    string               `json:"label"`
 	BaseEnvironmentID        string               `json:"baseEnvironmentId,omitempty"`
-	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId"`
+	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId,omitempty"`
 	IsFrozen                 bool                 `json:"isFrozen"`
 	RuntimeParameters        []RuntimeParameter   `json:"runtimeParameters,omitempty"`
 	Items                    []FileItem           `json:"items,omitempty"`
@@ -60,10 +61,11 @@ type ApplicationSourceVersion struct {
 }
 
 type UpdateApplicationSourceVersionRequest struct {
-	BaseEnvironmentID      string               `json:"baseEnvironmentId,omitempty"`
-	Resources              ApplicationResources `json:"resources,omitempty"`
-	FilesToDelete          []string             `json:"filesToDelete,omitempty"`
-	RuntimeParameterValues string               `json:"runtimeParameterValues,omitempty"`
+	BaseEnvironmentID        string               `json:"baseEnvironmentId,omitempty"`
+	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId,omitempty"`
+	Resources                ApplicationResources `json:"resources,omitempty"`
+	FilesToDelete            []string             `json:"filesToDelete,omitempty"`
+	RuntimeParameterValues   string               `json:"runtimeParameterValues,omitempty"`
 }
 
 type ApplicationResources struct {

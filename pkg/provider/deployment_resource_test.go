@@ -189,7 +189,7 @@ func deploymentResourceConfig(
 	if isPredictionsSettingsEnabled {
 		deploymentSettings += `
 	predictions_settings = {
-		min_computes = 1
+		min_computes = 0
 		max_computes = 2
 		real_time = true
 	}`
@@ -226,6 +226,9 @@ func deploymentResourceConfig(
 	}
 
 	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_deployment" {
+	name = "test deployment"
+}
 resource "datarobot_remote_repository" "test_deployment" {
 	name        = "Test Deployment"
 	description = "test"

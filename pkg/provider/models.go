@@ -190,12 +190,12 @@ type CustomModelResourceSettings struct {
 
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
-	ID                   types.String `tfsdk:"id"`
-	VersionID            types.String `tfsdk:"version_id"`
-	VersionName          types.String `tfsdk:"version_name"`
-	Name                 types.String `tfsdk:"name"`
-	Description          types.String `tfsdk:"description"`
-	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
+	ID                   types.String   `tfsdk:"id"`
+	VersionID            types.String   `tfsdk:"version_id"`
+	VersionName          types.String   `tfsdk:"version_name"`
+	Name                 types.String   `tfsdk:"name"`
+	Description          types.String   `tfsdk:"description"`
+	CustomModelVersionId types.String   `tfsdk:"custom_model_version_id"`
 }
 
 // GlobalModelDataSourceModel describes the global model data source resource.
@@ -373,15 +373,17 @@ type QAApplicationResourceModel struct {
 }
 
 type ApplicationSourceResourceModel struct {
-	ID                     types.String                 `tfsdk:"id"`
-	VersionID              types.String                 `tfsdk:"version_id"`
-	Name                   types.String                 `tfsdk:"name"`
-	FolderPath             types.String                 `tfsdk:"folder_path"`
-	FolderPathHash         types.String                 `tfsdk:"folder_path_hash"`
-	Files                  types.Dynamic                `tfsdk:"files"`
-	FilesHashes            types.List                   `tfsdk:"files_hashes"`
-	ResourceSettings       *ApplicationResourceSettings `tfsdk:"resource_settings"`
-	RuntimeParameterValues types.List                   `tfsdk:"runtime_parameter_values"`
+	ID                       types.String                 `tfsdk:"id"`
+	VersionID                types.String                 `tfsdk:"version_id"`
+	Name                     types.String                 `tfsdk:"name"`
+	BaseEnvironmentID        types.String                 `tfsdk:"base_environment_id"`
+	BaseEnvironmentVersionID types.String                 `tfsdk:"base_environment_version_id"`
+	FolderPath               types.String                 `tfsdk:"folder_path"`
+	FolderPathHash           types.String                 `tfsdk:"folder_path_hash"`
+	Files                    types.Dynamic                `tfsdk:"files"`
+	FilesHashes              types.List                   `tfsdk:"files_hashes"`
+	ResourceSettings         *ApplicationResourceSettings `tfsdk:"resource_settings"`
+	RuntimeParameterValues   types.List                   `tfsdk:"runtime_parameter_values"`
 }
 
 type ApplicationResourceSettings struct {

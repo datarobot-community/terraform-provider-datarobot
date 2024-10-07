@@ -138,8 +138,8 @@ func Patch[T any](c *Client, ctx context.Context, path string, body any) (*T, er
 	return doRequest[T](c, ctx, http.MethodPatch, path, body)
 }
 
-func PatchAndExpectStatus[T any](c *Client, ctx context.Context, path string, body any) (*T, string, error) {
-	resp, header, err := doRequestWithResponseHeaders[T](c, ctx, http.MethodPatch, path, body)
+func ExecuteAndExpectStatus[T any](c *Client, ctx context.Context, method, path string, body any) (*T, string, error) {
+	resp, header, err := doRequestWithResponseHeaders[T](c, ctx, method, path, body)
 
 	if header != nil {
 		url := (*header).Get("Location")

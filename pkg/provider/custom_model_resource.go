@@ -717,7 +717,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			resp.Diagnostics.AddError("Error waiting for Custom Model dependency build", err.Error())
 			return
 		}
-
 	}
 
 	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
@@ -851,7 +850,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
+	if err = r.updateRuntimeParameterValues(ctx, customModel, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -1393,9 +1392,11 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 	// check for major version update
 	if customModel.LatestVersion.IsFrozen {
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		keepTrainingHoldoutData := true
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:     "true",
-			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+			IsMajorUpdate:           "true",
+			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
+			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
 		})
 		if err != nil {
 			return
@@ -1471,63 +1472,32 @@ func (r *CustomModelResource) updateCustomModel(
 func (r *CustomModelResource) updateRuntimeParameterValues(
 	ctx context.Context,
 	customModel *client.CustomModel,
-	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
 	err error,
 ) {
-	planRuntimeParametersValues, _ := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-
+	runtimeParameterValues := make([]RuntimeParameterValue, 0)
 	if IsKnown(plan.RuntimeParameterValues) {
-		planRuntimeParametersValues = plan.RuntimeParameterValues
-	}
-
-	if !reflect.DeepEqual(planRuntimeParametersValues, state.RuntimeParameterValues) {
-		runtimeParameterValues := make([]RuntimeParameterValue, 0)
-		if IsKnown(plan.RuntimeParameterValues) {
-			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-				err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
-				return
-			}
-		}
-
-		params := make([]client.RuntimeParameterValueRequest, 0)
-		for _, param := range runtimeParameterValues {
-			var value any
-			if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
-				return
-			}
-			params = append(params, client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
-			})
-		}
-
-		// compute the runtime parameter values to reset
-		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
-		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
-			err = fmt.Errorf("Error reading state runtime parameter values: %s", diags.Errors()[0].Detail())
+		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+			err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
 			return
 		}
+	}
 
-		for _, param := range runtimeParametersToReset {
-			found := false
-			for _, newParam := range runtimeParameterValues {
-				if param.Key.ValueString() == newParam.Key.ValueString() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				params = append(params, client.RuntimeParameterValueRequest{
-					FieldName: param.Key.ValueString(),
-					Type:      param.Type.ValueString(),
-					Value:     nil,
-				})
-			}
+	params := make([]client.RuntimeParameterValueRequest, 0)
+	for _, param := range runtimeParameterValues {
+		var value any
+		if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
+			return
 		}
+		params = append(params, client.RuntimeParameterValueRequest{
+			FieldName: param.Key.ValueString(),
+			Type:      param.Type.ValueString(),
+			Value:     &value,
+		})
+	}
 
+	if len(params) > 0 {
 		var jsonParams []byte
 		if jsonParams, err = json.Marshal(params); err != nil {
 			return

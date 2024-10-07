@@ -542,7 +542,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NotEmpty(predictionEnvironment.ID)
 	require.NotEmpty(predictionEnvironment.Name)
 
-	createDeploymentResp, err := s.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
+	createDeploymentResp, _, err := s.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
 		ModelPackageID:          registeredModelVersion.ID,
 		PredictionEnvironmentID: predictionEnvironment.ID,
 		Label:                   registeredModelVersion.Name,
