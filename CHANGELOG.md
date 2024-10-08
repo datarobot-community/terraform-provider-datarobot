@@ -1,3 +1,7 @@
+## 0.2.4
+
+- Make sure `moderation-config.yaml` is preserved on Custom Model updates
+
 ## 0.2.3
 
 - Throw error when Deployment fails instead of waiting indefinitely
