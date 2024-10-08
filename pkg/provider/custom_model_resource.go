@@ -1663,56 +1663,54 @@ func (r *CustomModelResource) updateGuardConfigurations(
 ) (
 	err error,
 ) {
-	if !reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) {
-		var customModel *client.CustomModel
-		customModel, err = r.provider.service.GetCustomModel(ctx, plan.ID.ValueString())
-		if err != nil {
-			return
-		}
-
-		guardsToAdd := make([]GuardConfiguration, 0)
-		for _, guard := range plan.GuardConfigurations {
-			found := false
-			for _, stateGuard := range state.GuardConfigurations {
-				if reflect.DeepEqual(guard, stateGuard) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				guardsToAdd = append(guardsToAdd, guard)
-			}
-		}
-
-		guardsToRemove := make([]GuardConfiguration, 0)
-		for _, stateGuard := range state.GuardConfigurations {
-			found := false
-			for _, guard := range plan.GuardConfigurations {
-				if reflect.DeepEqual(guard, stateGuard) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				guardsToRemove = append(guardsToRemove, stateGuard)
-			}
-		}
-
-		_, errSummary, errDetail := r.createCustomModelVersionFromGuards(
-			ctx,
-			plan,
-			customModel.ID,
-			customModel.LatestVersion.ID,
-			guardsToAdd,
-			guardsToRemove,
-		)
-		if errSummary != "" {
-			err = errors.New(errDetail)
-			return
-		}
-		state.GuardConfigurations = plan.GuardConfigurations
-		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
+	var customModel *client.CustomModel
+	customModel, err = r.provider.service.GetCustomModel(ctx, plan.ID.ValueString())
+	if err != nil {
+		return
 	}
+
+	guardsToAdd := make([]GuardConfiguration, 0)
+	for _, guard := range plan.GuardConfigurations {
+		found := false
+		for _, stateGuard := range state.GuardConfigurations {
+			if reflect.DeepEqual(guard, stateGuard) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			guardsToAdd = append(guardsToAdd, guard)
+		}
+	}
+
+	guardsToRemove := make([]GuardConfiguration, 0)
+	for _, stateGuard := range state.GuardConfigurations {
+		found := false
+		for _, guard := range plan.GuardConfigurations {
+			if reflect.DeepEqual(guard, stateGuard) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			guardsToRemove = append(guardsToRemove, stateGuard)
+		}
+	}
+
+	_, errSummary, errDetail := r.createCustomModelVersionFromGuards(
+		ctx,
+		plan,
+		customModel.ID,
+		customModel.LatestVersion.ID,
+		guardsToAdd,
+		guardsToRemove,
+	)
+	if errSummary != "" {
+		err = errors.New(errDetail)
+		return
+	}
+	state.GuardConfigurations = plan.GuardConfigurations
+	state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 
 	return
 }
