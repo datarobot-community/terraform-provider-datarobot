@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -14,15 +15,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
-func TestAccRegisteredModelResource(t *testing.T) {
+func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	t.Parallel()
 
-	resourceName := "datarobot_registered_model.test"
+	resourceName := "datarobot_registered_model_from_leaderboard.test"
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	versionName := "version_name"
 	newVersionName := "new_version_name"
+
+	predictionThreshold := "0.6"
+	newPredictionThreshold := "0.7"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -32,7 +36,12 @@ func TestAccRegisteredModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: registeredModelResourceConfig("example_name", "example_description", nil, "1"),
+				Config: registeredModelFromLeaderboardResourceConfig(
+					"6706bf087c2049e466c6650b",
+					"example_name",
+					"example_description",
+					&versionName,
+					&predictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -40,51 +49,92 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
+					checkRegisteredModelFromLeaderboardResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
-					resource.TestCheckResourceAttr(resourceName, "version_name", "example_name (v1)"),
+					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "model_id"),
 				),
 			},
-			// Update name, description
+			// Update name, description, and version name
 			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &versionName, "1"),
+				Config: registeredModelFromLeaderboardResourceConfig(
+					"6706bf087c2049e466c6650b",
+					"new_example_name",
+					"new_example_description",
+					&newVersionName,
+					&predictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("version_id"),
-					),
 					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),
-				},
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-				),
-			},
-			// Update custom model version (by updating the Guard) creates new registered model version
-			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &newVersionName, "2"),
-				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
+					checkRegisteredModelFromLeaderboardResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bf087c2049e466c6650b"),
+				),
+			},
+			// Update model id creates new registered model version
+			{
+				Config: registeredModelFromLeaderboardResourceConfig(
+					"6706bbdb1f1a2176cc114440",
+					"new_example_name",
+					"new_example_description",
+					&newVersionName,
+					&predictionThreshold),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelFromLeaderboardResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update prediction threshold creates new registered model version
+			{
+				Config: registeredModelFromLeaderboardResourceConfig(
+					"6706bbdb1f1a2176cc114440",
+					"new_example_name",
+					"new_example_description",
+					&newVersionName,
+					&newPredictionThreshold),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelFromLeaderboardResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", newPredictionThreshold),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
@@ -93,7 +143,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	})
 }
 
-func TestRegisteredModelResourceSchema(t *testing.T) {
+func TestRegisteredModelFromLeaderboardResourceSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -113,61 +163,35 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 	}
 }
 
-func registeredModelResourceConfig(name, description string, versionName *string, guardName string) string {
+func registeredModelFromLeaderboardResourceConfig(modelID, name, description string, versionName, predictionThreshold *string) string {
 	versionNameStr := ""
 	if versionName != nil {
 		versionNameStr = `
 		version_name = "` + *versionName + `"`
 	}
-	return fmt.Sprintf(`
-resource "datarobot_remote_repository" "test_registered_model" {
-	name        = "Test Registered Model"
-	description = "test"
-	location    = "https://github.com/datarobot-community/custom-models"
-	source_type = "github"
+
+	predictionThresholdStr := ""
+	if predictionThreshold != nil {
+		predictionThresholdStr = `
+		prediction_threshold = "` + *predictionThreshold + `"`
 	}
-resource "datarobot_custom_model" "test_registered_model" {
-	name = "test registered model"
-	description = "test"
-	target_type = "Binary"
-	target_name = "my_label"
-	base_environment_id = "65f9b27eab986d30d4c64268"
-	source_remote_repositories = [
-		{
-			id = datarobot_remote_repository.test_registered_model.id
-			ref = "master"
-			source_paths = [
-				"custom_inference/python/gan_mnist/custom.py",
-			]
-		},
-	]
-	guard_configurations = [
-		{
-			template_name = "Rouge 1"
-			name = "Rouge 1 %v"
-			stages = [ "response" ]
-			intervention = {
-				action = "block"
-				message = "you have been blocked by rouge 1 guard"
-				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
-			}
-		},
-	]
-}
-resource "datarobot_registered_model" "test" {
+
+	return fmt.Sprintf(`
+resource "datarobot_registered_model_from_leaderboard" "test" {
 	name = "%s"
 	description = "%s"
-	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
+	model_id = "%s"
+	%s
 	%s
 }
-`, guardName, name, description, versionNameStr)
+`, name, description, modelID, versionNameStr, predictionThresholdStr)
 }
 
-func checkRegisteredModelResourceExists(resourceName string) resource.TestCheckFunc {
+func checkRegisteredModelFromLeaderboardResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		rs, ok := s.RootModule().Resources["datarobot_registered_model_from_leaderboard.test"]
 		if !ok {
-			return fmt.Errorf("Not found: %s", resourceName)
+			return fmt.Errorf("Not found: %s", "datarobot_registered_model_from_leaderboard.test")
 		}
 
 		if rs.Primary.ID == "" {
@@ -195,7 +219,14 @@ func checkRegisteredModelResourceExists(resourceName string) resource.TestCheckF
 		if registeredModel.Name == rs.Primary.Attributes["name"] &&
 			registeredModel.Description == rs.Primary.Attributes["description"] &&
 			latestRegisteredModelVersion.ID == rs.Primary.Attributes["version_id"] &&
-			latestRegisteredModelVersion.Name == rs.Primary.Attributes["version_name"] {
+			latestRegisteredModelVersion.Name == rs.Primary.Attributes["version_name"] &&
+			latestRegisteredModelVersion.ModelID == rs.Primary.Attributes["model_id"] {
+			if predictionThreshold, ok := rs.Primary.Attributes["prediction_threshold"]; ok {
+				if strconv.FormatFloat(*latestRegisteredModelVersion.Target.PredictionThreshold, 'f', -1, 64) != predictionThreshold {
+					return fmt.Errorf("Prediction threshold does not match")
+				}
+			}
+
 			return nil
 		}
 

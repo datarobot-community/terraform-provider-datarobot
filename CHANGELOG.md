@@ -1,3 +1,8 @@
+## 0.2.5
+
+- Support other types of comparand in Custom Model Guard conditions
+- Registered Model from Leaderboard resource
+
 ## 0.2.4
 
 - Make sure `moderation-config.yaml` is preserved on Custom Model updates

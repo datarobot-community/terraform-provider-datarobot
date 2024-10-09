@@ -76,6 +76,7 @@ type Service interface {
 
 	// Registered Model
 	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
+	CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error)
 	UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error)
 	ListRegisteredModelVersions(ctx context.Context, id string) (*ListRegisteredModelVersionsResponse, error)
 	GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error)
@@ -375,6 +376,10 @@ func (s *ServiceImpl) GetDependencyBuild(ctx context.Context, id string, version
 // Registered Model Service Implementation.
 func (s *ServiceImpl) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error) {
 	return Post[RegisteredModelVersion](s.client, ctx, "/modelPackages/fromCustomModelVersion/", req)
+}
+
+func (s *ServiceImpl) CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error) {
+	return Post[RegisteredModelVersion](s.client, ctx, "/modelPackages/fromLeaderboard/", req)
 }
 
 func (s *ServiceImpl) UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error) {

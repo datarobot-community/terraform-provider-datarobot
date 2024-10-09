@@ -167,9 +167,9 @@ type GuardConfiguration struct {
 }
 
 type GuardIntervention struct {
-	Action    types.String   `tfsdk:"action"`
-	Condition GuardCondition `tfsdk:"condition"`
-	Message   types.String   `tfsdk:"message"`
+	Action    types.String `tfsdk:"action"`
+	Condition types.String `tfsdk:"condition"`
+	Message   types.String `tfsdk:"message"`
 }
 
 type GuardCondition struct {
@@ -196,6 +196,23 @@ type RegisteredModelResourceModel struct {
 	Name                 types.String `tfsdk:"name"`
 	Description          types.String `tfsdk:"description"`
 	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
+}
+
+type RegisteredModelFromLeaderboardResourceModel struct {
+	ID                            types.String  `tfsdk:"id"`
+	VersionID                     types.String  `tfsdk:"version_id"`
+	VersionName                   types.String  `tfsdk:"version_name"`
+	Name                          types.String  `tfsdk:"name"`
+	Description                   types.String  `tfsdk:"description"`
+	ModelID                       types.String  `tfsdk:"model_id"`
+	PredictionThreshold           types.Float64 `tfsdk:"prediction_threshold"`
+	ComputeAllTsIntervals         types.Bool    `tfsdk:"compute_all_ts_intervals"`
+	DistributionPredictionModelID types.String  `tfsdk:"distribution_prediction_model_id"`
+}
+
+type Tag struct {
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
 }
 
 // GlobalModelDataSourceModel describes the global model data source resource.

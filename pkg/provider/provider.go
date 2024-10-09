@@ -144,6 +144,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewLLMBlueprintResource,
 		NewCustomModelResource,
 		NewRegisteredModelResource,
+		NewRegisteredModelFromLeaderboardResource,
 		NewPredictionEnvironmentResource,
 		NewDeploymentResource,
 		NewQAApplicationResource,
