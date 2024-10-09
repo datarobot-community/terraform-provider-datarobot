@@ -52,10 +52,10 @@ resource "datarobot_custom_model" "example" {
   #     intervention = {
   #       action  = "block"
   #       message = "response has been blocked by Rogue 1 guard"
-  #       condition = {
-  #         comparand  = 0.8
-  #         comparator = "lessThan"
-  #       }
+  #       condition = jsonencode({
+  #         "comparand": 0.5, 
+  #         "comparator": "greaterThan"
+  #       })
   #     }
   #   },
   # ]
@@ -144,20 +144,11 @@ Optional:
 Required:
 
 - `action` (String) The action of the guard intervention.
-- `condition` (Attributes) The list of conditions for the guard intervention. (see [below for nested schema](#nestedatt--guard_configurations--intervention--condition))
+- `condition` (String) The JSON-encoded condition of the guard intervention.
 
 Optional:
 
 - `message` (String) The message of the guard intervention.
-
-<a id="nestedatt--guard_configurations--intervention--condition"></a>
-### Nested Schema for `guard_configurations.intervention.condition`
-
-Required:
-
-- `comparand` (Number) The comparand of the guard condition.
-- `comparator` (String) The comparator of the guard condition.
-
 
 
 

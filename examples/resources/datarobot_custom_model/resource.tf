@@ -37,10 +37,10 @@ resource "datarobot_custom_model" "example" {
   #     intervention = {
   #       action  = "block"
   #       message = "response has been blocked by Rogue 1 guard"
-  #       condition = {
-  #         comparand  = 0.8
-  #         comparator = "lessThan"
-  #       }
+  #       condition = jsonencode({
+  #         "comparand": 0.5, 
+  #         "comparator": "greaterThan"
+  #       })
   #     }
   #   },
   # ]

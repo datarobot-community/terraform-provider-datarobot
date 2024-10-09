@@ -111,12 +111,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("Rouge 1 response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("report"),
-								Message: basetypes.NewStringValue("you have been blocked by Rouge 1"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(0.2),
-									Comparator: basetypes.NewStringValue("lessThan"),
-								},
+								Action:    basetypes.NewStringValue("report"),
+								Message:   basetypes.NewStringValue("you have been blocked by Rouge 1"),
+								Condition: basetypes.NewStringValue(`{"comparand": 0.2, "comparator": "lessThan"}`),
 							},
 						},
 						{
@@ -124,17 +121,24 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by Faithfulness"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(0),
-									Comparator: basetypes.NewStringValue("equals"),
-								},
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
+								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
 							},
 							OpenAICredential:   basetypes.NewStringValue("test"),
 							OpenAIApiBase:      basetypes.NewStringValue("https://datarobot-genai-enablement.openai.azure.com/"),
 							OpenAIDeploymentID: basetypes.NewStringValue("test"),
 							LlmType:            basetypes.NewStringValue("azureOpenAi"),
+						},
+						{
+							TemplateName: basetypes.NewStringValue("Emotions Classifier"),
+							Name:         basetypes.NewStringValue("Emotions Classifier response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Emotions Classifier"),
+								Condition: basetypes.NewStringValue(`{"comparand": ["anger", "amusement"], "comparator": "matches"}`),
+							},
 						},
 					},
 					nil,
@@ -161,8 +165,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "report"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Rouge 1"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0.2"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "lessThan"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0.2,"comparator":"lessThan"}`),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Faithfulness"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.template_name", "Emotions Classifier"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.condition", `{"comparand":["anger","amusement"],"comparator":"matches"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_credential"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_api_base"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_deployment_id"),
@@ -189,12 +196,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by Faithfulness"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(0),
-									Comparator: basetypes.NewStringValue("equals"),
-								},
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
+								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
 							},
 							OpenAICredential: basetypes.NewStringValue("test"),
 							LlmType:          basetypes.NewStringValue("openAi"),
@@ -204,12 +208,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("prompt tokens"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by prompt token count"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(10),
-									Comparator: basetypes.NewStringValue("greaterThan"),
-								},
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by prompt token count"),
+								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
 							},
 						},
 						{
@@ -217,12 +218,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by Stay on topic"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(10),
-									Comparator: basetypes.NewStringValue("greaterThan"),
-								},
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
+								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
 							},
 						},
 						{
@@ -230,12 +228,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Name:         basetypes.NewStringValue("Stay on topic for output"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
-								Action:  basetypes.NewStringValue("block"),
-								Message: basetypes.NewStringValue("you have been blocked by Stay on topic"),
-								Condition: GuardCondition{
-									Comparand:  basetypes.NewFloat64Value(10),
-									Comparator: basetypes.NewStringValue("greaterThan"),
-								},
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
+								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
 							},
 						},
 					},
@@ -255,8 +250,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "block"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "you have been blocked by Faithfulness"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparand", "0"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition.comparator", "equals"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
@@ -1017,10 +1011,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				intervention = {
 					action  = %s
 					message = %s
-					condition = {
-						comparand  = %v
-						comparator = %s
-					}
+					condition = jsonencode(%s)
 				}
 				%s
 			},`,
@@ -1029,8 +1020,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.Stages,
 				guard.Intervention.Action,
 				guard.Intervention.Message,
-				guard.Intervention.Condition.Comparand,
-				guard.Intervention.Condition.Comparator,
+				guard.Intervention.Condition.ValueString(),
 				guardCredentialStr)
 		}
 		guardsStr += "]"

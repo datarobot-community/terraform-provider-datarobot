@@ -258,10 +258,7 @@ resource "datarobot_custom_model" "test_deployment" {
 			intervention = {
 				action = "block"
 				message = "you have been blocked by rouge 1 guard"
-				condition = {
-					comparand = 0.8
-					comparator = "lessThan"
-				}
+				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
 			}
 		},
 	]

@@ -272,19 +272,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 									Default:             stringdefault.StaticString("This message has triggered moderation criteria and therefore been blocked by the DataRobot moderation system."),
 									MarkdownDescription: "The message of the guard intervention.",
 								},
-								"condition": schema.SingleNestedAttribute{
+								"condition": schema.StringAttribute{
 									Required:            true,
-									MarkdownDescription: "The list of conditions for the guard intervention.",
-									Attributes: map[string]schema.Attribute{
-										"comparand": schema.Float64Attribute{
-											Required:            true,
-											MarkdownDescription: "The comparand of the guard condition.",
-										},
-										"comparator": schema.StringAttribute{
-											Required:            true,
-											MarkdownDescription: "The comparator of the guard condition.",
-										},
-									},
+									MarkdownDescription: "The JSON-encoded condition of the guard intervention.",
 								},
 							},
 						},
@@ -1304,6 +1294,13 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			stages = append(stages, stage.ValueString())
 		}
 
+		var condition client.GuardCondition
+		if err = json.Unmarshal([]byte(guardConfigToAdd.Intervention.Condition.ValueString()), &condition); err != nil {
+			errSummary = fmt.Sprintf("Error unmarshalling guard condition %s", guardConfigToAdd.Intervention.Condition.ValueString())
+			errDetail = err.Error()
+			return
+		}
+
 		newGuardConfig := client.GuardConfiguration{
 			Name:        guardConfigToAdd.Name.ValueString(),
 			Description: guardTemplate.Description,
@@ -1313,12 +1310,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 				Action:         guardConfigToAdd.Intervention.Action.ValueString(),
 				AllowedActions: guardTemplate.Intervention.AllowedActions,
 				Message:        guardConfigToAdd.Intervention.Message.ValueString(),
-				Conditions: []client.GuardCondition{
-					{
-						Comparand:  guardConfigToAdd.Intervention.Condition.Comparand.ValueFloat64(),
-						Comparator: guardConfigToAdd.Intervention.Condition.Comparator.ValueString(),
-					},
-				},
+				Conditions:     []client.GuardCondition{condition},
 			},
 			ModelInfo:    guardTemplate.ModelInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
