@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -134,7 +133,7 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		}
 	}
 
-	err = r.waitForRegisteredModelVersionToBeReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+	err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
 	if err != nil {
 		resp.Diagnostics.AddError("Registered model version is not ready", err.Error())
 		return
@@ -257,7 +256,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 
-		err = r.waitForRegisteredModelVersionToBeReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+		err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
 		if err != nil {
 			resp.Diagnostics.AddError("Registered model version not ready", err.Error())
 			return
@@ -288,28 +287,6 @@ func (r *RegisteredModelResource) Delete(ctx context.Context, req resource.Delet
 
 func (r *RegisteredModelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func (r *RegisteredModelResource) waitForRegisteredModelVersionToBeReady(ctx context.Context, registeredModelId string, versionId string) error {
-	expBackoff := getExponentialBackoff()
-
-	operation := func() error {
-		ready, err := r.provider.service.IsRegisteredModelVersionReady(ctx, registeredModelId, versionId)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		if !ready {
-			return errors.New("registered model version is not ready")
-		}
-		return nil
-	}
-
-	// Retry the operation using the backoff strategy
-	err := backoff.Retry(operation, expBackoff)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {

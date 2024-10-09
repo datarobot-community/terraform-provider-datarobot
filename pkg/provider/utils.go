@@ -219,6 +219,28 @@ func waitForApplicationToBeReady(ctx context.Context, service client.Service, id
 	return service.GetApplication(ctx, id)
 }
 
+func waitForRegisteredModelVersionToBeReady(ctx context.Context, service client.Service, registeredModelId string, versionId string) error {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		ready, err := service.IsRegisteredModelVersionReady(ctx, registeredModelId, versionId)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if !ready {
+			return errors.New("registered model version is not ready")
+		}
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func checkCredentialNameAlreadyExists(err error, name string) string {
 	return checkNameAlreadyExists(err, name, "Credential")
 }
@@ -574,6 +596,14 @@ func StringValuePointerOptional(value basetypes.StringValue) *string {
 	}
 
 	return value.ValueStringPointer()
+}
+
+func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
+	if value.IsUnknown() {
+		return nil
+	}
+
+	return value.ValueBoolPointer()
 }
 
 func ConvertTfStringListToPtr(input []types.String) *[]string {

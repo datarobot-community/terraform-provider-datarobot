@@ -366,6 +366,21 @@ func (mr *MockServiceMockRecorder) CreateRegisteredModelFromCustomModelVersion(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRegisteredModelFromCustomModelVersion", reflect.TypeOf((*MockService)(nil).CreateRegisteredModelFromCustomModelVersion), ctx, req)
 }
 
+// CreateRegisteredModelFromLeaderboard mocks base method.
+func (m *MockService) CreateRegisteredModelFromLeaderboard(ctx context.Context, req *client.CreateRegisteredModelFromLeaderboardRequest) (*client.RegisteredModelVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRegisteredModelFromLeaderboard", ctx, req)
+	ret0, _ := ret[0].(*client.RegisteredModelVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRegisteredModelFromLeaderboard indicates an expected call of CreateRegisteredModelFromLeaderboard.
+func (mr *MockServiceMockRecorder) CreateRegisteredModelFromLeaderboard(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRegisteredModelFromLeaderboard", reflect.TypeOf((*MockService)(nil).CreateRegisteredModelFromLeaderboard), ctx, req)
+}
+
 // CreateRemoteRepository mocks base method.
 func (m *MockService) CreateRemoteRepository(ctx context.Context, req *client.CreateRemoteRepositoryRequest) (*client.RemoteRepositoryResponse, error) {
 	m.ctrl.T.Helper()

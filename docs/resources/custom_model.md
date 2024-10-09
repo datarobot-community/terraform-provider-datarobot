@@ -144,7 +144,7 @@ Optional:
 Required:
 
 - `action` (String) The action of the guard intervention.
-- `condition` (String) The JSON-encoded condition of the guard intervention.
+- `condition` (String) The JSON-encoded condition of the guard intervention. e.g. `{"comparand": 0.5, "comparator": "lessThan"}`
 
 Optional:
 

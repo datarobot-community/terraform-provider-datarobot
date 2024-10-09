@@ -274,7 +274,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 								},
 								"condition": schema.StringAttribute{
 									Required:            true,
-									MarkdownDescription: "The JSON-encoded condition of the guard intervention.",
+									MarkdownDescription: "The JSON-encoded condition of the guard intervention. e.g. `{\"comparand\": 0.5, \"comparator\": \"lessThan\"}`",
 								},
 							},
 						},
