@@ -1,3 +1,7 @@
+## 0.2.7
+
+- Make `description` Computed for Custom Model in order to fix phantom updates
+
 ## 0.2.6
 
 - Link entities to Use Cases
