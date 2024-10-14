@@ -24,6 +24,9 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
+	useCaseResourceName := "test_custom_application"
+	useCaseResourceName2 := "test_new_custom_application"
+
 	startAppScript := `#!/usr/bin/env bash
 
 echo "Starting App"
@@ -65,7 +68,13 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customApplicationResourceConfig("", 1, false, []string{}),
+				Config: customApplicationResourceConfig("", 1, false, []string{}, &useCaseResourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomApplicationResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
@@ -75,15 +84,20 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
 					resource.TestCheckNoResourceAttr(resourceName, "external_access_recipients"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
-			// Update name and external access
+			// Update name, external access, and use case id
 			{
-				Config: customApplicationResourceConfig("new_example_name", 1, true, []string{"test@test.com"}),
+				Config: customApplicationResourceConfig("new_example_name", 1, true, []string{"test@test.com"}, &useCaseResourceName2),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("source_version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
 					),
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -99,11 +113,12 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
-			// Update Application Source version
+			// Update Application Source version and remove use case
 			{
-				Config: customApplicationResourceConfig("new_example_name", 2, true, []string{"test2@test.com"}),
+				Config: customApplicationResourceConfig("new_example_name", 2, true, []string{"test2@test.com"}, nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -123,6 +138,7 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 				),
 			},
 			// Delete is tested automatically
@@ -135,6 +151,7 @@ func customApplicationResourceConfig(
 	applicationSourceReplicas int,
 	externalAccess bool,
 	externalAccessRecipients []string,
+	useCaseResourceName *string,
 ) string {
 	recipients := ""
 	if len(externalAccessRecipients) > 0 {
@@ -150,8 +167,21 @@ func customApplicationResourceConfig(
 		`, name)
 	}
 
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
 	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_custom_application" {
+	name = "test custom application"
+}
+resource "datarobot_use_case" "test_new_custom_application" {
+	name = "test new custom application"
+}
+
 resource "datarobot_application_source" "test" {
+	base_environment_id = "6542cd582a9d3d51bf4ac71e"
 	files = [["start-app.sh"], ["streamlit-app.py"]]
 	resource_settings = {
 		replicas = %d
@@ -163,8 +193,9 @@ resource "datarobot_custom_application" "test" {
 	external_access_enabled = %t
 	%s
 	%s
+	%s
 }
-`, applicationSourceReplicas, externalAccess, recipients, nameStr)
+`, applicationSourceReplicas, externalAccess, recipients, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {

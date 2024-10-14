@@ -80,6 +80,11 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The list of external email addresses that have access to the Custom Application.",
 				ElementType:         types.StringType,
 			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -153,6 +158,14 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+
+	for _, useCaseID := range data.UseCaseIDs {
+		traceAPICall("AddCustomApplicationToUseCase")
+		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "customApplication", application.ID); err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Custom Application to Use Case %s", useCaseID), err.Error())
+			return
+		}
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -246,6 +259,18 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
+
+	if err = UpdateUseCasesForEntity(
+		ctx,
+		r.provider.service,
+		"customApplication",
+		application.ID,
+		state.UseCaseIDs,
+		plan.UseCaseIDs,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Custom Application", err.Error())
+		return
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

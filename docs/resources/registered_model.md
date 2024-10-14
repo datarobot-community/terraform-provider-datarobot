@@ -55,6 +55,7 @@ output "datarobot_registered_model_version_id" {
 ### Optional
 
 - `description` (String) The description of the Registered Model.
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version.
 
 ### Read-Only

@@ -774,7 +774,7 @@ func TestVectorDatabase(t *testing.T) {
 	assert.NotEmpty(dataset.StatusID)
 
 	// Link the dataset to the use case
-	err = s.AddDatasetToUseCase(ctx, useCase.ID, dataset.ID)
+	err = s.AddEntityToUseCase(ctx, useCase.ID, "dataset", dataset.ID)
 	require.NoError(err)
 
 	name := "Integration Test" + uuid.New().String()
@@ -947,7 +947,7 @@ func TestAddDatasetToUseCase(t *testing.T) {
 	assert.NotEmpty(dataset.StatusID)
 
 	// add the dataset to the use case
-	err = s.AddDatasetToUseCase(ctx, useCase.ID, dataset.ID)
+	err = s.AddEntityToUseCase(ctx, useCase.ID, "dataset", dataset.ID)
 	require.NoError(err)
 
 	err = s.DeleteDataset(ctx, dataset.ID)

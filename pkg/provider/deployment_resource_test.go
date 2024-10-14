@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -20,6 +21,32 @@ func TestAccDeploymentResource(t *testing.T) {
 	resourceName := "datarobot_deployment.test"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	useCaseResourceName := "test_deployment"
+	useCaseResourceName2 := "test_new_deployment"
+
+	folderPath := "binary"
+	if err := os.Mkdir(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	modelContentsTemplate := `from typing import Any, Dict
+import pandas as pd
+
+def load_model(code_dir: str) -> Any:
+	return "%s"
+
+def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
+	positive_label = kwargs["positive_class_label"]
+	negative_label = kwargs["negative_class_label"]
+	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
+	return preds
+`
+
+	if err := os.WriteFile("binary/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy")), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -28,11 +55,19 @@ func TestAccDeploymentResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: deploymentResourceConfig("example_label", "MODERATE", "1", false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig("example_label", "MODERATE", &useCaseResourceName, false, false, false, false, false, false, false),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "label", "example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "MODERATE"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "predictions_by_forecast_date_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "challenger_models_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "segment_analysis_settings"),
@@ -47,13 +82,21 @@ func TestAccDeploymentResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update label, importance, and settings
+			// Update label, importance, settings, and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", "1", true, true, true, true, true, true, true),
+				Config: deploymentResourceConfig("new_example_label", "LOW", &useCaseResourceName2, true, true, true, true, true, true, true),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "predictions_by_forecast_date_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
@@ -64,9 +107,9 @@ func TestAccDeploymentResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Remove settings
+			// Remove settings and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", "1", false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig("new_example_label", "LOW", nil, false, false, false, false, false, false, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -77,6 +120,7 @@ func TestAccDeploymentResource(t *testing.T) {
 					checkDeploymentResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "predictions_by_forecast_date_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "challenger_models_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "segment_analysis_settings"),
@@ -91,9 +135,15 @@ func TestAccDeploymentResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update custom model version (by updating the Guard) updates registered model version of deployment
+			// Update custom model version (by updating the file contents) updates registered model version of deployment
+			// which triggers a model replacement for the Deployment
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", "2", false, false, false, false, false, false, false),
+				PreConfig: func() {
+					if err := os.WriteFile("binary/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy2")), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: deploymentResourceConfig("new_example_label", "LOW", nil, false, false, false, false, false, false, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -134,8 +184,8 @@ func TestDeploymentResourceSchema(t *testing.T) {
 
 func deploymentResourceConfig(
 	label,
-	importance,
-	guardName string,
+	importance string,
+	useCaseResourceName *string,
 	isPredictionsByForecastDateEnabled,
 	isSegmentAnalysisEnabled,
 	isChallengerReplayEnabled,
@@ -145,6 +195,11 @@ func deploymentResourceConfig(
 	isHealthSettingsEnabled bool,
 
 ) string {
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
 	deploymentSettings := ""
 
 	if isPredictionsByForecastDateEnabled {
@@ -229,39 +284,16 @@ func deploymentResourceConfig(
 resource "datarobot_use_case" "test_deployment" {
 	name = "test deployment"
 }
-resource "datarobot_remote_repository" "test_deployment" {
-	name        = "Test Deployment"
-	description = "test"
-	location    = "https://github.com/datarobot-community/custom-models"
-	source_type = "github"
-	}
+resource "datarobot_use_case" "test_new_deployment" {
+	name = "test new deployment"
+}
 resource "datarobot_custom_model" "test_deployment" {
 	name = "test deployment"
 	description = "test"
 	target_type = "Binary"
 	target_name = "my_label"
 	base_environment_id = "65f9b27eab986d30d4c64268"
-	source_remote_repositories = [
-		{
-			id = datarobot_remote_repository.test_deployment.id
-			ref = "master"
-			source_paths = [
-				"custom_inference/python/gan_mnist/custom.py",
-			]
-		},
-	]
-	guard_configurations = [
-		{
-			template_name = "Rouge 1"
-			name = "Rouge 1 %v"
-			stages = [ "response" ]
-			intervention = {
-				action = "block"
-				message = "you have been blocked by rouge 1 guard"
-				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
-			}
-		},
-	]
+	folder_path = "binary"
 }
 resource "datarobot_registered_model" "test_deployment" {
 	name = "test deployment"
@@ -279,8 +311,9 @@ resource "datarobot_deployment" "test" {
 	prediction_environment_id = datarobot_prediction_environment.test_deployment.id
 	registered_model_version_id = datarobot_registered_model.test_deployment.version_id
 	%s
+	%s
 }
-`, guardName, label, importance, deploymentSettings)
+`, label, importance, useCaseIDsStr, deploymentSettings)
 }
 
 func checkDeploymentResourceExists() resource.TestCheckFunc {

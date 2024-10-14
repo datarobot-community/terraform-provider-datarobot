@@ -84,6 +84,7 @@ output "datarobot_deployment_id" {
 - `predictions_data_collection_settings` (Attributes) The predictions data collection settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_data_collection_settings))
 - `predictions_settings` (Attributes) Settings for the predictions. (see [below for nested schema](#nestedatt--predictions_settings))
 - `segment_analysis_settings` (Attributes) The segment analysis settings for the Deployment. (see [below for nested schema](#nestedatt--segment_analysis_settings))
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Deployment to.
 
 ### Read-Only
 

@@ -1,3 +1,8 @@
+## 0.2.6
+
+- Link entities to Use Cases
+- Increase test coverage
+
 ## 0.2.5
 
 - Support other types of comparand in Custom Model Guard conditions

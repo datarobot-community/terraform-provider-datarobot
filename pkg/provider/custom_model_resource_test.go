@@ -705,6 +705,7 @@ func TestAccRegressionCustomModelResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_custom_model.test_regression"
+	useCaseResourceName := "test_regression"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -714,23 +715,25 @@ func TestAccRegressionCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: regressionCustomModelResourceConfig("example_name", "target", "python"),
+				Config: regressionCustomModelResourceConfig("example_name", "target", "python", &useCaseResourceName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
 					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update parameters
+			// Update parameters and remove use case
 			{
-				Config: regressionCustomModelResourceConfig("new_example_name", "new_target", "r"),
+				Config: regressionCustomModelResourceConfig("new_example_name", "new_target", "r", nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -744,7 +747,11 @@ func TestAccRegressionCustomModelResource(t *testing.T) {
 func TestAccTextGenerationCustomModelResource(t *testing.T) {
 	t.Parallel()
 
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
 	resourceName := "datarobot_custom_model.test_text_generation"
+	useCaseResourceName := "test_text_generation"
+	useCaseResourceName2 := "test_new_text_generation"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -754,24 +761,64 @@ func TestAccTextGenerationCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: textGenerationCustomModelResourceConfig("example_name", "target", "python"),
+				Config: textGenerationCustomModelResourceConfig("example_name", "target", "python", nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
 					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update parameters
+			// Update parameters and add use case
 			{
-				Config: textGenerationCustomModelResourceConfig("new_example_name", "new_target", "r"),
+				Config: textGenerationCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update use case
+			{
+				Config: textGenerationCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove use case
+			{
+				Config: textGenerationCustomModelResourceConfig("new_example_name", "new_target", "r", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -1154,33 +1201,52 @@ resource "datarobot_custom_model" "test_multiclass" {
 func regressionCustomModelResourceConfig(
 	name,
 	targetName,
-	language string) string {
+	language string,
+	useCaseResourceName *string) string {
 	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_regression")
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
 
 	return fmt.Sprintf(`
 %s
+resource "datarobot_use_case" "test_regression" {
+	name = "test custom model regression"
+}
 
 resource "datarobot_custom_model" "test_regression" {
 	name        		  							  = "%s"
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_version_id = "66f11c731b6e05f43b07537c"
+	base_environment_version_id = "670654bb0272ba2b5ee010e6"
+	%s
 	%s
 }
-`, resourceBlock, name, targetName, language, customModelBlock)
+`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
 func textGenerationCustomModelResourceConfig(
 	name,
 	targetName,
-	language string) string {
+	language string,
+	useCaseResourceName *string) string {
 	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_text_generation")
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
 
 	return fmt.Sprintf(`
 %s
 resource "datarobot_use_case" "test_text_generation" {
 	name = "test custom model text generation"
+}
+resource "datarobot_use_case" "test_new_text_generation" {
+	name = "test new custom model text generation"
 }
 
 resource "datarobot_custom_model" "test_text_generation" {
@@ -1191,8 +1257,9 @@ resource "datarobot_custom_model" "test_text_generation" {
 	base_environment_id = "65f9b27eab986d30d4c64268"
 	is_proxy 			= true
 	%s
+	%s
 }
-`, resourceBlock, name, targetName, language, customModelBlock)
+`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
 func basicCustomModelResourceConfig(

@@ -35,18 +35,18 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
-// AddDatasetToUseCase mocks base method.
-func (m *MockService) AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
+// AddEntityToUseCase mocks base method.
+func (m *MockService) AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDatasetToUseCase", ctx, useCaseID, datasetID)
+	ret := m.ctrl.Call(m, "AddEntityToUseCase", ctx, useCaseID, entityType, entityID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddDatasetToUseCase indicates an expected call of AddDatasetToUseCase.
-func (mr *MockServiceMockRecorder) AddDatasetToUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
+// AddEntityToUseCase indicates an expected call of AddEntityToUseCase.
+func (mr *MockServiceMockRecorder) AddEntityToUseCase(ctx, useCaseID, entityType, entityID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDatasetToUseCase", reflect.TypeOf((*MockService)(nil).AddDatasetToUseCase), ctx, useCaseID, datasetID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddEntityToUseCase", reflect.TypeOf((*MockService)(nil).AddEntityToUseCase), ctx, useCaseID, entityType, entityID)
 }
 
 // CreateApplicationFromSource mocks base method.
@@ -1132,18 +1132,18 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx)
 }
 
-// RemoveDatasetFromUseCase mocks base method.
-func (m *MockService) RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error {
+// RemoveEntityFromUseCase mocks base method.
+func (m *MockService) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveDatasetFromUseCase", ctx, useCaseID, datasetID)
+	ret := m.ctrl.Call(m, "RemoveEntityFromUseCase", ctx, useCaseID, entityType, entityID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveDatasetFromUseCase indicates an expected call of RemoveDatasetFromUseCase.
-func (mr *MockServiceMockRecorder) RemoveDatasetFromUseCase(ctx, useCaseID, datasetID interface{}) *gomock.Call {
+// RemoveEntityFromUseCase indicates an expected call of RemoveEntityFromUseCase.
+func (mr *MockServiceMockRecorder) RemoveEntityFromUseCase(ctx, useCaseID, entityType, entityID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveDatasetFromUseCase", reflect.TypeOf((*MockService)(nil).RemoveDatasetFromUseCase), ctx, useCaseID, datasetID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveEntityFromUseCase", reflect.TypeOf((*MockService)(nil).RemoveEntityFromUseCase), ctx, useCaseID, entityType, entityID)
 }
 
 // TestDataStoreConnection mocks base method.

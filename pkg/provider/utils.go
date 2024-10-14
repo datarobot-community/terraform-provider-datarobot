@@ -615,10 +615,11 @@ func ConvertTfStringListToPtr(input []types.String) *[]string {
 	return &output
 }
 
-func UpdateUseCasesForDataset(
+func UpdateUseCasesForEntity(
 	ctx context.Context,
 	service client.Service,
-	datasetID string,
+	entityType string,
+	entityID string,
 	stateUseCaseIDs []types.String,
 	planUseCaseIDs []types.String,
 ) (err error) {
@@ -637,9 +638,8 @@ func UpdateUseCasesForDataset(
 		}
 
 		for _, useCaseID := range useCasesToAdd {
-			traceAPICall("AddDatasetToUseCase")
-			err = service.AddDatasetToUseCase(ctx, useCaseID, datasetID)
-			if err != nil {
+			traceAPICall(fmt.Sprintf("Add%sToUseCase", strings.ToUpper(entityType)))
+			if err = service.AddEntityToUseCase(ctx, useCaseID, entityType, entityID); err != nil {
 				return
 			}
 		}
@@ -658,9 +658,8 @@ func UpdateUseCasesForDataset(
 		}
 
 		for _, useCaseID := range useCasesToRemove {
-			traceAPICall("RemoveDatasetFromUseCase")
-			err = service.RemoveDatasetFromUseCase(ctx, useCaseID, datasetID)
-			if err != nil {
+			traceAPICall(fmt.Sprintf("Remove%sFromUseCase", strings.ToUpper(entityType)))
+			if err = service.RemoveEntityFromUseCase(ctx, useCaseID, entityType, entityID); err != nil {
 				return
 			}
 		}

@@ -77,6 +77,11 @@ func (r *RegisteredModelFromLeaderboardResource) Schema(ctx context.Context, req
 				Optional:            true,
 				MarkdownDescription: "The ID of the DataRobot distribution prediction model trained on predictions from the DataRobot model.",
 			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -149,6 +154,14 @@ func (r *RegisteredModelFromLeaderboardResource) Create(ctx context.Context, req
 	if err != nil {
 		resp.Diagnostics.AddError("Registered model version is not ready", err.Error())
 		return
+	}
+
+	for _, useCaseID := range data.UseCaseIDs {
+		traceAPICall("AddRegisteredModelVersionToUseCase")
+		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "registeredModelVersion", registeredModelVersion.ID); err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Registered Model version to Use Case %s", useCaseID), err.Error())
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -266,6 +279,24 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 	err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, plan.ID.ValueString(), plan.VersionID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Registered model version not ready", err.Error())
+		return
+	}
+
+	// check if we created a new version
+	existingUseCaseIDs := state.UseCaseIDs
+	if state.VersionID.ValueString() != plan.VersionID.ValueString() {
+		existingUseCaseIDs = []types.String{}
+	}
+
+	if err = UpdateUseCasesForEntity(
+		ctx,
+		r.provider.service,
+		"registeredModelVersion",
+		plan.VersionID.ValueString(),
+		existingUseCaseIDs,
+		plan.UseCaseIDs,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Registered Model version", err.Error())
 		return
 	}
 

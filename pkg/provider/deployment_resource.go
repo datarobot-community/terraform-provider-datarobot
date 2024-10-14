@@ -68,6 +68,11 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Deployment to.",
+				ElementType:         types.StringType,
+			},
 			"importance": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -502,6 +507,14 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	for _, useCaseID := range data.UseCaseIDs {
+		traceAPICall("AddDeploymentToUseCase")
+		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "deployment", deployment.ID); err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Deployment to Use Case %s", useCaseID), err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -627,6 +640,18 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	err = r.updateDeploymentSettings(ctx, id, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
+		return
+	}
+
+	if err = UpdateUseCasesForEntity(
+		ctx,
+		r.provider.service,
+		"deployment",
+		plan.ID.ValueString(),
+		state.UseCaseIDs,
+		plan.UseCaseIDs,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Deployment", err.Error())
 		return
 	}
 

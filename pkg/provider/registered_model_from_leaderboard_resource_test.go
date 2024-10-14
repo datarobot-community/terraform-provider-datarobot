@@ -28,6 +28,9 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	predictionThreshold := "0.6"
 	newPredictionThreshold := "0.7"
 
+	useCaseResourceName := "test_registered_model_from_leaderboard"
+	useCaseResourceName2 := "test_new_registered_model_from_leaderboard"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -41,11 +44,16 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					"example_name",
 					"example_description",
 					&versionName,
+					&useCaseResourceName,
 					&predictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -53,19 +61,21 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "model_id"),
 				),
 			},
-			// Update name, description, and version name
+			// Update name, description, version name, and use case id
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
 					"6706bf087c2049e466c6650b",
 					"new_example_name",
 					"new_example_description",
 					&newVersionName,
+					&useCaseResourceName2,
 					&predictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
@@ -76,12 +86,17 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -89,12 +104,14 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 				),
 			},
 			// Update model id creates new registered model version
+			// and remove use case id
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
 					"6706bbdb1f1a2176cc114440",
 					"new_example_name",
 					"new_example_description",
 					&newVersionName,
+					nil,
 					&predictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -107,6 +124,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
@@ -120,6 +138,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					"new_example_name",
 					"new_example_description",
 					&newVersionName,
+					nil,
 					&newPredictionThreshold),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -132,6 +151,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", newPredictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
@@ -163,11 +183,16 @@ func TestRegisteredModelFromLeaderboardResourceSchema(t *testing.T) {
 	}
 }
 
-func registeredModelFromLeaderboardResourceConfig(modelID, name, description string, versionName, predictionThreshold *string) string {
+func registeredModelFromLeaderboardResourceConfig(modelID, name, description string, versionName, useCaseResourceName, predictionThreshold *string) string {
 	versionNameStr := ""
 	if versionName != nil {
 		versionNameStr = `
 		version_name = "` + *versionName + `"`
+	}
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
 	}
 
 	predictionThresholdStr := ""
@@ -177,14 +202,21 @@ func registeredModelFromLeaderboardResourceConfig(modelID, name, description str
 	}
 
 	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_registered_model_from_leaderboard" {
+	name = "test registered model from leaderboard"
+}
+resource "datarobot_use_case" "test_new_registered_model_from_leaderboard" {
+	name = "test new registered model from leaderboard"
+}
 resource "datarobot_registered_model_from_leaderboard" "test" {
 	name = "%s"
 	description = "%s"
 	model_id = "%s"
 	%s
 	%s
+	%s
 }
-`, name, description, modelID, versionNameStr, predictionThresholdStr)
+`, name, description, modelID, versionNameStr, useCaseIDsStr, predictionThresholdStr)
 }
 
 func checkRegisteredModelFromLeaderboardResourceExists() resource.TestCheckFunc {
