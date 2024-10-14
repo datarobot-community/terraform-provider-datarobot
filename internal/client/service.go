@@ -12,6 +12,8 @@ type Service interface {
 	GetUseCase(ctx context.Context, id string) (*UseCaseResponse, error)
 	UpdateUseCase(ctx context.Context, id string, req *UseCaseRequest) (*UseCaseResponse, error)
 	DeleteUseCase(ctx context.Context, id string) error
+	AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
+	RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
 
 	// Remote Repository
 	CreateRemoteRepository(ctx context.Context, req *CreateRemoteRepositoryRequest) (*RemoteRepositoryResponse, error)
@@ -26,8 +28,6 @@ type Service interface {
 	GetDataset(ctx context.Context, id string) (*Dataset, error)
 	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error)
 	DeleteDataset(ctx context.Context, id string) error
-	AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error
-	RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error
 
 	// Data Store
 	CreateDatastore(ctx context.Context, req *CreateDatastoreRequest) (*Datastore, error)
@@ -215,13 +215,13 @@ func (s *ServiceImpl) TestDataStoreConnection(ctx context.Context, id string, re
 }
 
 // Use Case Service Implementation.
-func (s *ServiceImpl) AddDatasetToUseCase(ctx context.Context, useCaseID, datasetID string) error {
-	_, err := Post[CreateVoidResponse](s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID+"/", &CreateVoidRequest{})
+func (s *ServiceImpl) AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/useCases/"+useCaseID+"/"+entityType+"s/"+entityID+"/", &CreateVoidRequest{})
 	return err
 }
 
-func (s *ServiceImpl) RemoveDatasetFromUseCase(ctx context.Context, useCaseID, datasetID string) error {
-	return Delete(s.client, ctx, "/useCases/"+useCaseID+"/datasets/"+datasetID+"/")
+func (s *ServiceImpl) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
+	return Delete(s.client, ctx, "/useCases/"+useCaseID+"/"+entityType+"s/"+entityID+"/")
 }
 
 func (s *ServiceImpl) CreateUseCase(ctx context.Context, req *UseCaseRequest) (resp *CreateUseCaseResponse, err error) {

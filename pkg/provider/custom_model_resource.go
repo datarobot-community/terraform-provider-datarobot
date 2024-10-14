@@ -403,6 +403,11 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 				},
 			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Custom Model version to.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -632,22 +637,17 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	if len(plan.GuardConfigurations) > 0 {
-		newVersion, errSummary, errDetail := r.createCustomModelVersionFromGuards(
+		if err = r.createCustomModelVersionFromGuards(
 			ctx,
 			plan,
 			customModelID,
 			customModel.LatestVersion.ID,
 			plan.GuardConfigurations,
 			[]GuardConfiguration{},
-		)
-		if errSummary != "" {
-			resp.Diagnostics.AddError(
-				errSummary,
-				errDetail,
-			)
+		); err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version from Guards", err.Error())
 			return
 		}
-		state.VersionID = types.StringValue(newVersion)
 		state.GuardConfigurations = plan.GuardConfigurations
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 	}
@@ -679,13 +679,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			return
 		}
 		state.ResourceSettings = plan.ResourceSettings
-
-		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	}
 
 	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
@@ -693,6 +686,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
+	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 
 	if len(customModel.LatestVersion.Dependencies) > 0 {
 		traceAPICall("CreateDependencyBuild")
@@ -708,6 +702,15 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			return
 		}
 	}
+
+	for _, useCaseID := range plan.UseCaseIDs {
+		traceAPICall("AddCustomModelVersionToUseCase")
+		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "customModelVersion", customModel.LatestVersion.ID); err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Custom Model version to Use Case %s", useCaseID), err.Error())
+			return
+		}
+	}
+	state.UseCaseIDs = plan.UseCaseIDs
 
 	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -861,6 +864,19 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Error updating Custom Model dependency build", err.Error())
 		return
 	}
+
+	if err = UpdateUseCasesForEntity(
+		ctx,
+		r.provider.service,
+		"customModelVersion",
+		customModel.LatestVersion.ID,
+		[]types.String{}, // there are no existing linked use cases because this is a new version
+		plan.UseCaseIDs,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Custom Model version", err.Error())
+		return
+	}
+	state.UseCaseIDs = plan.UseCaseIDs
 
 	if state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -1213,14 +1229,10 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	guardConfigsToAdd []GuardConfiguration,
 	guardConfigsToRemove []GuardConfiguration,
 ) (
-	latestVersion string,
-	errSummary string,
-	errDetail string,
+	err error,
 ) {
 	getGuardConfigsResp, err := r.provider.service.GetGuardConfigurationsForCustomModelVersion(ctx, customModelVersion)
 	if err != nil {
-		errSummary = "Error getting guard configurations"
-		errDetail = err.Error()
 		return
 	}
 
@@ -1268,8 +1280,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 	guardTemplates, err := r.provider.service.ListGuardTemplates(ctx)
 	if err != nil {
-		errSummary = "Error listing guard templates"
-		errDetail = err.Error()
 		return
 	}
 
@@ -1284,8 +1294,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		if guardTemplate == nil {
-			errSummary = "Guard template not found"
-			errDetail = fmt.Sprintf("Guard template with name %s is not found.", guardConfigToAdd.TemplateName.ValueString())
 			return
 		}
 
@@ -1296,8 +1304,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 		var condition client.GuardCondition
 		if err = json.Unmarshal([]byte(guardConfigToAdd.Intervention.Condition.ValueString()), &condition); err != nil {
-			errSummary = fmt.Sprintf("Error unmarshalling guard condition %s", guardConfigToAdd.Intervention.Condition.ValueString())
-			errDetail = err.Error()
 			return
 		}
 
@@ -1331,10 +1337,9 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 		if IsKnown(guardConfigToAdd.InputColumnName) && IsKnown(guardConfigToAdd.OutputColumnName) {
 			traceAPICall("GetDeployment")
-			deployment, err := r.provider.service.GetDeployment(ctx, guardConfigToAdd.DeploymentID.ValueString())
+			var deployment *client.Deployment
+			deployment, err = r.provider.service.GetDeployment(ctx, guardConfigToAdd.DeploymentID.ValueString())
 			if err != nil {
-				errSummary = fmt.Sprintf("Error getting deployment with ID %s", guardConfigToAdd.DeploymentID.ValueString())
-				errDetail = err.Error()
 				return
 			}
 
@@ -1358,19 +1363,17 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		overallModerationConfig.TimeoutAction = plan.OverallModerationConfiguration.TimeoutAction.ValueString()
 	}
 
-	traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
-	createFromGuardsResp, err := r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
-		CustomModelID: customModelID,
-		Data:          newGuardConfigs,
-		OverallConfig: overallModerationConfig,
-	})
-	if err != nil {
-		errSummary = "Error creating Custom Model version from guard configurations"
-		errDetail = err.Error()
-		return
+	if len(newGuardConfigs) > 0 {
+		traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
+		if _, err = r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
+			CustomModelID: customModelID,
+			Data:          newGuardConfigs,
+			OverallConfig: overallModerationConfig,
+		}); err != nil {
+			return
+		}
 	}
 
-	latestVersion = createFromGuardsResp.CustomModelVersionID
 	return
 }
 
@@ -1689,16 +1692,14 @@ func (r *CustomModelResource) updateGuardConfigurations(
 		}
 	}
 
-	_, errSummary, errDetail := r.createCustomModelVersionFromGuards(
+	if err = r.createCustomModelVersionFromGuards(
 		ctx,
 		plan,
 		customModel.ID,
 		customModel.LatestVersion.ID,
 		guardsToAdd,
 		guardsToRemove,
-	)
-	if errSummary != "" {
-		err = errors.New(errDetail)
+	); err != nil {
 		return
 	}
 	state.GuardConfigurations = plan.GuardConfigurations

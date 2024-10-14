@@ -26,6 +26,7 @@ registered model from leaderboard
 - `description` (String) The description of the Registered Model.
 - `distribution_prediction_model_id` (String) The ID of the DataRobot distribution prediction model trained on predictions from the DataRobot model.
 - `prediction_threshold` (Number) The prediction threshold for the model.
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version.
 
 ### Read-Only

@@ -107,6 +107,7 @@ output "example_id" {
 - `target_type` (String) The target type of the Custom Model.
 - `training_data_partition_column` (String) The name of the partition column in the training dataset assigned to the Custom Model.
 - `training_dataset_id` (String) The ID of the training dataset assigned to the Custom Model.
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Model version to.
 
 ### Read-Only
 

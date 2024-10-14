@@ -24,6 +24,9 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	versionName := "version_name"
 	newVersionName := "new_version_name"
 
+	useCaseResourceName := "test_registered_model"
+	useCaseResourceName2 := "test_new_registered_model"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -32,11 +35,15 @@ func TestAccRegisteredModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: registeredModelResourceConfig("example_name", "example_description", nil, "1"),
+				Config: registeredModelResourceConfig("example_name", "example_description", nil, &useCaseResourceName, "1"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -44,17 +51,22 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", "example_name (v1)"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update name, description
+			// Update name, description, and use case id
 			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &versionName, "1"),
+				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &versionName, &useCaseResourceName2, "1"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
 					),
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -66,13 +78,15 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
 			// Update custom model version (by updating the Guard) creates new registered model version
+			// and remove use case id
 			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &newVersionName, "2"),
+				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &newVersionName, nil, "2"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -84,6 +98,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -113,13 +128,25 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 	}
 }
 
-func registeredModelResourceConfig(name, description string, versionName *string, guardName string) string {
+func registeredModelResourceConfig(name, description string, versionName, useCaseResourceName *string, guardName string) string {
 	versionNameStr := ""
 	if versionName != nil {
 		versionNameStr = `
 		version_name = "` + *versionName + `"`
 	}
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
 	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_registered_model" {
+	name = "test registered model"
+}
+resource "datarobot_use_case" "test_new_registered_model" {
+	name = "test new registered model"
+}
 resource "datarobot_remote_repository" "test_registered_model" {
 	name        = "Test Registered Model"
 	description = "test"
@@ -159,8 +186,9 @@ resource "datarobot_registered_model" "test" {
 	description = "%s"
 	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
 	%s
+	%s
 }
-`, guardName, name, description, versionNameStr)
+`, guardName, name, description, versionNameStr, useCaseIDsStr)
 }
 
 func checkRegisteredModelResourceExists(resourceName string) resource.TestCheckFunc {

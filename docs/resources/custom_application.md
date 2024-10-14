@@ -64,6 +64,7 @@ output "datarobot_custom_application_url" {
 - `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
 - `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
 - `name` (String) The name of the Custom Application.
+- `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Application to.
 
 ### Read-Only
 

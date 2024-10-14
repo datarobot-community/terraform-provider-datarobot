@@ -116,7 +116,7 @@ func (r *DatasetFromURLResource) Create(ctx context.Context, req resource.Create
 
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddDatasetToUseCase")
-		err = r.provider.service.AddDatasetToUseCase(ctx, useCaseID.ValueString(), dataset.ID)
+		err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "dataset", dataset.ID)
 		if err != nil {
 			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Dataset to Use Case %s", useCaseID), err.Error())
 			return
@@ -183,9 +183,10 @@ func (r *DatasetFromURLResource) Update(ctx context.Context, req resource.Update
 		}
 	}
 
-	err := UpdateUseCasesForDataset(
+	err := UpdateUseCasesForEntity(
 		ctx,
 		r.provider.service,
+		"dataset",
 		plan.ID.ValueString(),
 		state.UseCaseIDs,
 		plan.UseCaseIDs)

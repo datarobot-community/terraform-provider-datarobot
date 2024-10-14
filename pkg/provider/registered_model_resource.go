@@ -68,6 +68,11 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"use_case_ids": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
+				ElementType:         types.StringType,
+			},
 		},
 	}
 }
@@ -137,6 +142,14 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 	if err != nil {
 		resp.Diagnostics.AddError("Registered model version is not ready", err.Error())
 		return
+	}
+
+	for _, useCaseID := range data.UseCaseIDs {
+		traceAPICall("AddRegisteredModelVersionToUseCase")
+		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "registeredModelVersion", registeredModelVersion.ID); err != nil {
+			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Registered Model version to Use Case %s", useCaseID), err.Error())
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -262,6 +275,24 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 		plan.VersionID = types.StringValue(registeredModelVersion.ID)
+	}
+
+	// check if we created a new version
+	existingUseCaseIDs := state.UseCaseIDs
+	if state.VersionID.ValueString() != plan.VersionID.ValueString() {
+		existingUseCaseIDs = []types.String{}
+	}
+
+	if err = UpdateUseCasesForEntity(
+		ctx,
+		r.provider.service,
+		"registeredModelVersion",
+		plan.VersionID.ValueString(),
+		existingUseCaseIDs,
+		plan.UseCaseIDs,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating Use Cases for Registered Model version", err.Error())
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)

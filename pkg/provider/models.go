@@ -133,6 +133,7 @@ type CustomModelResourceModel struct {
 	TrainingDatasetName            types.String                    `tfsdk:"training_dataset_name"`
 	TrainingDataPartitionColumn    types.String                    `tfsdk:"training_data_partition_column"`
 	ResourceSettings               *CustomModelResourceSettings    `tfsdk:"resource_settings"`
+	UseCaseIDs                     []types.String                  `tfsdk:"use_case_ids"`
 }
 
 type FileTuple struct {
@@ -190,24 +191,26 @@ type CustomModelResourceSettings struct {
 
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
-	ID                   types.String `tfsdk:"id"`
-	VersionID            types.String `tfsdk:"version_id"`
-	VersionName          types.String `tfsdk:"version_name"`
-	Name                 types.String `tfsdk:"name"`
-	Description          types.String `tfsdk:"description"`
-	CustomModelVersionId types.String `tfsdk:"custom_model_version_id"`
+	ID                   types.String   `tfsdk:"id"`
+	VersionID            types.String   `tfsdk:"version_id"`
+	VersionName          types.String   `tfsdk:"version_name"`
+	Name                 types.String   `tfsdk:"name"`
+	Description          types.String   `tfsdk:"description"`
+	CustomModelVersionId types.String   `tfsdk:"custom_model_version_id"`
+	UseCaseIDs           []types.String `tfsdk:"use_case_ids"`
 }
 
 type RegisteredModelFromLeaderboardResourceModel struct {
-	ID                            types.String  `tfsdk:"id"`
-	VersionID                     types.String  `tfsdk:"version_id"`
-	VersionName                   types.String  `tfsdk:"version_name"`
-	Name                          types.String  `tfsdk:"name"`
-	Description                   types.String  `tfsdk:"description"`
-	ModelID                       types.String  `tfsdk:"model_id"`
-	PredictionThreshold           types.Float64 `tfsdk:"prediction_threshold"`
-	ComputeAllTsIntervals         types.Bool    `tfsdk:"compute_all_ts_intervals"`
-	DistributionPredictionModelID types.String  `tfsdk:"distribution_prediction_model_id"`
+	ID                            types.String   `tfsdk:"id"`
+	VersionID                     types.String   `tfsdk:"version_id"`
+	VersionName                   types.String   `tfsdk:"version_name"`
+	Name                          types.String   `tfsdk:"name"`
+	Description                   types.String   `tfsdk:"description"`
+	ModelID                       types.String   `tfsdk:"model_id"`
+	PredictionThreshold           types.Float64  `tfsdk:"prediction_threshold"`
+	ComputeAllTsIntervals         types.Bool     `tfsdk:"compute_all_ts_intervals"`
+	DistributionPredictionModelID types.String   `tfsdk:"distribution_prediction_model_id"`
+	UseCaseIDs                    []types.String `tfsdk:"use_case_ids"`
 }
 
 type Tag struct {
@@ -238,11 +241,12 @@ type PredictionEnvironmentResourceModel struct {
 
 // DeploymentResourceModel describes the deployment resource.
 type DeploymentResourceModel struct {
-	ID                       types.String `tfsdk:"id"`
-	Label                    types.String `tfsdk:"label"`
-	RegisteredModelVersionID types.String `tfsdk:"registered_model_version_id"`
-	PredictionEnvironmentID  types.String `tfsdk:"prediction_environment_id"`
-	Importance               types.String `tfsdk:"importance"`
+	ID                       types.String   `tfsdk:"id"`
+	Label                    types.String   `tfsdk:"label"`
+	RegisteredModelVersionID types.String   `tfsdk:"registered_model_version_id"`
+	PredictionEnvironmentID  types.String   `tfsdk:"prediction_environment_id"`
+	Importance               types.String   `tfsdk:"importance"`
+	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
 
 	// settings
 	PredictionsByForecastDateSettings *PredictionsByForecastDateSettings `tfsdk:"predictions_by_forecast_date_settings"`
@@ -415,6 +419,7 @@ type CustomApplicationResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
+	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
 }
 
 // CredentialResourceModel describes the credential resource.
