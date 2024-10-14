@@ -83,6 +83,10 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"description": schema.StringAttribute{
 				MarkdownDescription: "The description of the Custom Model.",
 				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"source_llm_blueprint_id": schema.StringAttribute{
 				Optional:            true,
@@ -482,7 +486,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
 
 		state.Name = types.StringValue(name)
-		state.Description = plan.Description
 	} else {
 		classLabels, err := getClassLabels(plan)
 		if err != nil {
@@ -514,7 +517,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		state.ID = types.StringValue(customModelID)
 		state.Name = types.StringValue(name)
-		state.Description = plan.Description
 		state.TargetType = types.StringValue(plan.TargetType.ValueString())
 		state.ClassLabels = plan.ClassLabels
 		state.ClassLabelsFile = plan.ClassLabelsFile
@@ -577,6 +579,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
+	state.Description = types.StringValue(customModel.Description)
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.FolderPath = plan.FolderPath
 	state.FolderPathHash = plan.FolderPathHash

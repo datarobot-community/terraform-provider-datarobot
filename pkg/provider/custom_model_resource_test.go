@@ -968,6 +968,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	name = "%s"
 	description = "%s"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
+	base_environment_id = "65f9b27eab986d30d4c64268"
 	runtime_parameter_values = [
 	  { 
 		  key="OPENAI_API_BASE", 
@@ -1329,8 +1330,13 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 
 		if customModel.Name == rs.Primary.Attributes["name"] &&
 			customModel.Description == rs.Primary.Attributes["description"] {
-			if rs.Primary.Attributes["runtime_parameter_values.0.value"] != "" &&
-				(customModel.LatestVersion.RuntimeParameters[0].CurrentValue != rs.Primary.Attributes["runtime_parameter_values.0.value"]) {
+			if rs.Primary.Attributes["runtime_parameter_values.0.value"] != "" {
+				for _, runtimeParam := range customModel.LatestVersion.RuntimeParameters {
+					if runtimeParam.FieldName == rs.Primary.Attributes["runtime_parameter_values.0.key"] &&
+						runtimeParam.CurrentValue == rs.Primary.Attributes["runtime_parameter_values.0.value"] {
+						return nil
+					}
+				}
 				return fmt.Errorf("Runtime parameter value does not match")
 			}
 			return nil
