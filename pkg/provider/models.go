@@ -377,7 +377,6 @@ type TimelinessHealthSettings struct {
 type PredictionsSettings struct {
 	MinComputes types.Int64 `tfsdk:"min_computes"`
 	MaxComputes types.Int64 `tfsdk:"max_computes"`
-	RealTime    types.Bool  `tfsdk:"real_time"`
 }
 
 // QAApplicationResourceModel describes the Q&A application resource.
