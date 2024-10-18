@@ -246,7 +246,6 @@ func deploymentResourceConfig(
 	predictions_settings = {
 		min_computes = 0
 		max_computes = 2
-		real_time = true
 	}`
 	}
 

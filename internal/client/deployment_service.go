@@ -75,7 +75,6 @@ type BiasAndFairnessSetting struct {
 type PredictionsSettings struct {
 	MinComputes int64 `json:"minComputes"`
 	MaxComputes int64 `json:"maxComputes"`
-	RealTime    bool  `json:"realTime"`
 }
 
 type PredictionsByForecastDateSettings struct {
