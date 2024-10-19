@@ -132,7 +132,10 @@ type CustomModelResourceModel struct {
 	TrainingDatasetVersionID       types.String                    `tfsdk:"training_dataset_version_id"`
 	TrainingDatasetName            types.String                    `tfsdk:"training_dataset_name"`
 	TrainingDataPartitionColumn    types.String                    `tfsdk:"training_data_partition_column"`
-	ResourceSettings               *CustomModelResourceSettings    `tfsdk:"resource_settings"`
+	MemoryMB                       types.Int64                     `tfsdk:"memory_mb"`
+	Replicas                       types.Int64                     `tfsdk:"replicas"`
+	NetworkAccess                  types.String                    `tfsdk:"network_access"`
+	ResourceBundleID               types.String                    `tfsdk:"resource_bundle_id"`
 	UseCaseIDs                     []types.String                  `tfsdk:"use_case_ids"`
 }
 
@@ -181,12 +184,6 @@ type GuardCondition struct {
 type OverallModerationConfiguration struct {
 	TimeoutSec    types.Int64  `tfsdk:"timeout_sec"`
 	TimeoutAction types.String `tfsdk:"timeout_action"`
-}
-
-type CustomModelResourceSettings struct {
-	MemoryMB      types.Int64  `tfsdk:"memory_mb"`
-	Replicas      types.Int64  `tfsdk:"replicas"`
-	NetworkAccess types.String `tfsdk:"network_access"`
 }
 
 // RegisteredModelResourceModel describes the registered model resource.
