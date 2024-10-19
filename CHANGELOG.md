@@ -1,4 +1,4 @@
-## 0.2.8
+## 1.0.0
 
 - Remove real-time from Deployment predictions settings
 - Add Resource Bundles for Custom Models
