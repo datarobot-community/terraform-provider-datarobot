@@ -302,7 +302,7 @@ resource "datarobot_registered_model" "test_deployment" {
 resource "datarobot_prediction_environment" "test_deployment" {
 	name = "test deployment"
 	description = "test"
-	platform = "datarobotServerless"
+	platform = "aws"
 }
 resource "datarobot_deployment" "test" {
 	label = "%s"

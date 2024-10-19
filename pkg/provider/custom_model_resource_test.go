@@ -18,6 +18,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
+type CustomModelResourceSettings struct {
+	MemoryMB      basetypes.Int64Value  `json:"memory_mb,omitempty"`
+	Replicas      basetypes.Int64Value  `json:"replicas,omitempty"`
+	NetworkAccess basetypes.StringValue `json:"network_access,omitempty"`
+}
+
 func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 	t.Parallel()
 
@@ -174,9 +180,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_api_base"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_deployment_id"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.llm_type", "azureOpenAi"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "2048"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "PUBLIC"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -475,9 +478,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.memory_mb", "256"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.network_access", "NONE"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "256"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "network_access", "NONE"),
 				),
 			},
 			// Add training dataset
@@ -609,10 +612,13 @@ runtimeParameterDefinitions:
 	})
 }
 
+// TestAccBinaryCustomModelResource must be run with Resource Bundle feature enabled.
 func TestAccBinaryCustomModelResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_custom_model.test_binary"
+	resourceBundle := "cpu.micro"
+	resourceBundle2 := "cpu.small"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -622,7 +628,13 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: binaryCustomModelResourceConfig("example_name", "target", "python", "1", "0", 0.5),
+				Config: binaryCustomModelResourceConfig("example_name", "target", "python", "1", "0", 0.5,
+					&CustomModelResourceSettings{
+						MemoryMB:      basetypes.NewInt64Value(256),
+						Replicas:      basetypes.NewInt64Value(2),
+						NetworkAccess: basetypes.NewStringValue("NONE"),
+					},
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -631,13 +643,22 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "0"),
 					resource.TestCheckResourceAttr(resourceName, "language", "python"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.5"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "256"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "network_access", "NONE"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
 			// Update parameters
 			{
-				Config: binaryCustomModelResourceConfig("new_example_name", "new_target", "r", "yes", "no", 0.8),
+				Config: binaryCustomModelResourceConfig("new_example_name", "new_target", "r", "yes", "no", 0.8,
+					&CustomModelResourceSettings{
+						MemoryMB:      basetypes.NewInt64Value(512),
+						Replicas:      basetypes.NewInt64Value(1),
+						NetworkAccess: basetypes.NewStringValue("PUBLIC"),
+					},
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -646,6 +667,47 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "512"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "network_access", "PUBLIC"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove resource settings and add resource bundle
+			{
+				Config: binaryCustomModelResourceConfig("new_example_name", "new_target", "r", "yes", "no", 0.8, nil, &resourceBundle),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "yes"),
+					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "2048"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "network_access", "PUBLIC"),
+					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update resource bundle
+			{
+				Config: binaryCustomModelResourceConfig("new_example_name", "new_target", "r", "yes", "no", 0.8, nil, &resourceBundle2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "positive_class_label", "yes"),
+					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "2048"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "network_access", "PUBLIC"),
+					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle2),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -655,10 +717,13 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 	})
 }
 
+// TestAccMulticlassCustomModelResource must be run with Resource Bundle feature enabled.
 func TestAccMulticlassCustomModelResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_custom_model.test_multiclass"
+	resourceBundle := "cpu.micro"
+	resourceBundle2 := "cpu.small"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -668,7 +733,7 @@ func TestAccMulticlassCustomModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: multiclassCustomModelResourceConfig("example_name", "target", "python", []string{"class1", "class2", "class3"}),
+				Config: multiclassCustomModelResourceConfig("example_name", "target", "python", []string{"class1", "class2", "class3"}, &resourceBundle),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -677,13 +742,14 @@ func TestAccMulticlassCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "class_labels.0", "class1"),
 					resource.TestCheckResourceAttr(resourceName, "class_labels.1", "class2"),
 					resource.TestCheckResourceAttr(resourceName, "class_labels.2", "class3"),
+					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
 			// Update parameters
 			{
-				Config: multiclassCustomModelResourceConfig("new_example_name", "new_target", "r", []string{"class1", "class8", "class3"}),
+				Config: multiclassCustomModelResourceConfig("new_example_name", "new_target", "r", []string{"class1", "class8", "class3"}, &resourceBundle2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -692,6 +758,23 @@ func TestAccMulticlassCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "class_labels.0", "class1"),
 					resource.TestCheckResourceAttr(resourceName, "class_labels.1", "class8"),
 					resource.TestCheckResourceAttr(resourceName, "class_labels.2", "class3"),
+					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle2),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove resource bundle
+			{
+				Config: multiclassCustomModelResourceConfig("new_example_name", "new_target", "r", []string{"class1", "class8", "class3"}, nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.0", "class1"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.1", "class8"),
+					resource.TestCheckResourceAttr(resourceName, "class_labels.2", "class3"),
+					resource.TestCheckResourceAttr(resourceName, "memory_mb", "512"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -1077,11 +1160,9 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	resourceSettingsStr := ""
 	if resourceSettings != nil {
 		resourceSettingsStr = fmt.Sprintf(`
-		resource_settings = {
-			memory_mb	    = %d
-			replicas 	    = %d
-			network_access  = %s
-		}
+		memory_mb	    = %d
+		replicas 	    = %d
+		network_access  = %s
 		`, resourceSettings.MemoryMB.ValueInt64(), resourceSettings.Replicas.ValueInt64(), resourceSettings.NetworkAccess)
 	}
 
@@ -1156,8 +1237,26 @@ func binaryCustomModelResourceConfig(
 	language,
 	positiveClassLabel,
 	negativeClassLabel string,
-	predictionThreshold float64) string {
+	predictionThreshold float64,
+	resourceSettings *CustomModelResourceSettings,
+	resourceBundleID *string) string {
 	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_binary")
+
+	resourceSettingsStr := ""
+	if resourceSettings != nil {
+		resourceSettingsStr = fmt.Sprintf(`
+		memory_mb	    = %d
+		replicas 	    = %d
+		network_access  = %s
+		`, resourceSettings.MemoryMB.ValueInt64(), resourceSettings.Replicas.ValueInt64(), resourceSettings.NetworkAccess)
+	}
+
+	resourceBundleStr := ""
+	if resourceBundleID != nil {
+		resourceBundleStr = fmt.Sprintf(`
+	resource_bundle_id = "%s"
+	`, *resourceBundleID)
+	}
 
 	return fmt.Sprintf(`
 %s
@@ -1170,18 +1269,30 @@ resource "datarobot_custom_model" "test_binary" {
 	positive_class_label  = "%s"
 	negative_class_label  = "%s"
 	prediction_threshold  = %f
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id   = "65f9b27eab986d30d4c64268"
+	%s
+	%s
 	%s
 }
-`, resourceBlock, name, targetName, language, positiveClassLabel, negativeClassLabel, predictionThreshold, customModelBlock)
+`, resourceBlock, name, targetName, language, positiveClassLabel, negativeClassLabel, predictionThreshold, customModelBlock, resourceSettingsStr, resourceBundleStr)
 }
 
 func multiclassCustomModelResourceConfig(
 	name,
 	targetName,
 	language string,
-	classLabels []string) string {
+	classLabels []string,
+	resourceBundleID *string) string {
 	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_multiclass")
+
+	resourceBundleStr := ""
+	if resourceBundleID != nil {
+		resourceBundleStr = fmt.Sprintf(`
+	resource_bundle_id = "%s"
+	`, *resourceBundleID)
+	} else {
+		resourceBundleStr = "memory_mb = 512"
+	}
 
 	return fmt.Sprintf(`
 %s
@@ -1195,8 +1306,9 @@ resource "datarobot_custom_model" "test_multiclass" {
 	base_environment_id 							  = "65f9b27eab986d30d4c64268"
 	is_proxy 										  = true
 	%s
+	%s
 }
-`, resourceBlock, name, targetName, language, "\""+strings.Join(classLabels, "\",\"")+"\"", customModelBlock)
+`, resourceBlock, name, targetName, language, "\""+strings.Join(classLabels, "\",\"")+"\"", resourceBundleStr, customModelBlock)
 }
 
 func regressionCustomModelResourceConfig(
@@ -1222,7 +1334,7 @@ resource "datarobot_custom_model" "test_regression" {
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_version_id = "670654bb0272ba2b5ee010e6"
+	base_environment_version_id 					  = "670ef2764355b7743adcafd5"
 	%s
 	%s
 }
