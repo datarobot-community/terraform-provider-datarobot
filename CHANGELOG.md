@@ -1,3 +1,9 @@
+## 1.0.0
+
+- Remove real-time from Deployment predictions settings
+- Add Resource Bundles for Custom Models
+- Refactor Custom Model resource settings to match Python SDK and API specs
+
 ## 0.2.7
 
 - Make `description` Computed for Custom Model in order to fix phantom updates

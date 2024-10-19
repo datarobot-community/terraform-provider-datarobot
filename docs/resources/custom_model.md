@@ -63,11 +63,9 @@ resource "datarobot_custom_model" "example" {
   #   timeout_sec    = 120
   #   timeout_action = "score"
   # }
-  # resource_settings = {
-  #   memory_mb      = 512
-  #   replicas       = 2
-  #   network_access = "NONE"
-  # }
+  # memory_mb      = 512
+  # replicas       = 2
+  # network_access = "NONE"
 }
 
 output "example_id" {
@@ -95,11 +93,14 @@ output "example_id" {
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
 - `language` (String) The language used to build the Custom Model.
+- `memory_mb` (Number) The memory in MB for the Custom Model.
 - `negative_class_label` (String) The negative class label of the Custom Model.
+- `network_access` (String) The network access for the Custom Model.
 - `overall_moderation_configuration` (Attributes) The overall moderation configuration for the Custom Model. (see [below for nested schema](#nestedatt--overall_moderation_configuration))
 - `positive_class_label` (String) The positive class label of the Custom Model.
 - `prediction_threshold` (Number) The prediction threshold of the Custom Model.
-- `resource_settings` (Attributes) The resource settings for the Custom Model. (see [below for nested schema](#nestedatt--resource_settings))
+- `replicas` (Number) The replicas for the Custom Model.
+- `resource_bundle_id` (String) A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
@@ -160,16 +161,6 @@ Optional:
 
 - `timeout_action` (String) The timeout action of the overall moderation configuration.
 - `timeout_sec` (Number) The timeout in seconds of the overall moderation configuration.
-
-
-<a id="nestedatt--resource_settings"></a>
-### Nested Schema for `resource_settings`
-
-Optional:
-
-- `memory_mb` (Number) The memory in MB for the Custom Model.
-- `network_access` (String) The network access for the Custom Model.
-- `replicas` (Number) The replicas for the Custom Model.
 
 
 <a id="nestedatt--runtime_parameter_values"></a>

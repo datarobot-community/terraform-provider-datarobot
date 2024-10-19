@@ -438,10 +438,6 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Required:            true,
 						MarkdownDescription: "The maximum number of computes to use for predictions.",
 					},
-					"real_time": schema.BoolAttribute{
-						Required:            true,
-						MarkdownDescription: "Whether to use real-time predictions.",
-					},
 				},
 			},
 		},
@@ -802,7 +798,6 @@ func (r *DeploymentResource) updateDeploymentSettings(
 		req.PredictionsSettings = &client.PredictionsSettings{
 			MinComputes: data.PredictionsSettings.MinComputes.ValueInt64(),
 			MaxComputes: data.PredictionsSettings.MaxComputes.ValueInt64(),
-			RealTime:    data.PredictionsSettings.RealTime.ValueBool(),
 		}
 	}
 

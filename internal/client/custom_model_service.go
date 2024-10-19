@@ -59,6 +59,7 @@ type CustomModelVersion struct {
 	MaximumMemory            *int64                   `json:"maximumMemory"`
 	NetworkEgressPolicy      *string                  `json:"networkEgressPolicy"`
 	Replicas                 *int64                   `json:"replicas"`
+	ResourceBundleID         *string                  `json:"resourceBundleId"`
 	TrainingData             *CustomModelTrainingData `json:"trainingData"`
 	HoldoutData              *CustomModelHoldoutData  `json:"holdoutData"`
 	IsFrozen                 bool                     `json:"isFrozen"`
@@ -114,6 +115,7 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	Replicas                 int64    `json:"replicas,omitempty"`
 	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
 	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
+	ResourceBundleID         *string  `json:"resourceBundleId"`
 	KeepTrainingHoldoutData  *bool    `json:"keepTrainingHoldoutData,omitempty"`
 	TrainingData             string   `json:"trainingData,omitempty"`
 	HoldoutData              string   `json:"holdoutData,omitempty"`

@@ -310,7 +310,6 @@ Required:
 
 - `max_computes` (Number) The maximum number of computes to use for predictions.
 - `min_computes` (Number) The minimum number of computes to use for predictions.
-- `real_time` (Boolean) Whether to use real-time predictions.
 
 
 <a id="nestedatt--segment_analysis_settings"></a>

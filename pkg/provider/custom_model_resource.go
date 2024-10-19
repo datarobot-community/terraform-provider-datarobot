@@ -13,7 +13,6 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -22,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -36,9 +34,9 @@ const (
 	defaultModerationTimeout       = 60
 	defaultModerationTimeoutAction = "score"
 
-	defaultMemoryMB      = 2048
-	defaultReplicas      = 1
-	defaultNetworkAccess = "PUBLIC"
+	defaultMemoryMB      int64 = 2048
+	defaultReplicas            = 1
+	defaultNetworkAccess       = "PUBLIC"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -370,42 +368,27 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				MarkdownDescription: "The name of the partition column in the training dataset assigned to the Custom Model.",
 			},
-			"resource_settings": schema.SingleNestedAttribute{
+			"memory_mb": schema.Int64Attribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The resource settings for the Custom Model.",
-				Default: objectdefault.StaticValue(types.ObjectValueMust(
-					map[string]attr.Type{
-						"memory_mb":      types.Int64Type,
-						"replicas":       types.Int64Type,
-						"network_access": types.StringType,
-					},
-					map[string]attr.Value{
-						"memory_mb":      types.Int64Value(defaultMemoryMB),
-						"replicas":       types.Int64Value(defaultReplicas),
-						"network_access": types.StringValue(defaultNetworkAccess),
-					},
-				)),
-				Attributes: map[string]schema.Attribute{
-					"memory_mb": schema.Int64Attribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             int64default.StaticInt64(defaultMemoryMB),
-						MarkdownDescription: "The memory in MB for the Custom Model.",
-					},
-					"replicas": schema.Int64Attribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             int64default.StaticInt64(defaultReplicas),
-						MarkdownDescription: "The replicas for the Custom Model.",
-					},
-					"network_access": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             stringdefault.StaticString(defaultNetworkAccess),
-						MarkdownDescription: "The network access for the Custom Model.",
-					},
-				},
+				MarkdownDescription: "The memory in MB for the Custom Model.",
+				Default:             int64default.StaticInt64(defaultMemoryMB),
+			},
+			"replicas": schema.Int64Attribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The replicas for the Custom Model.",
+				Default:             int64default.StaticInt64(defaultReplicas),
+			},
+			"network_access": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The network access for the Custom Model.",
+				Default:             stringdefault.StaticString(defaultNetworkAccess),
+			},
+			"resource_bundle_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.",
 			},
 			"use_case_ids": schema.ListAttribute{
 				Optional:            true,
@@ -667,21 +650,29 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	if plan.ResourceSettings != nil {
-		resourceSettings := *plan.ResourceSettings
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:       "false",
-			BaseEnvironmentID:   baseEnvironmentID,
-			Replicas:            resourceSettings.Replicas.ValueInt64(),
-			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
-			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-		state.ResourceSettings = plan.ResourceSettings
+	memoryMB := defaultMemoryMB
+	if IsKnown(plan.MemoryMB) {
+		memoryMB = plan.MemoryMB.ValueInt64()
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:       "false",
+		BaseEnvironmentID:   baseEnvironmentID,
+		Replicas:            plan.Replicas.ValueInt64(),
+		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
+		MaximumMemory:       memoryMB * 1024 * 1024, // convert MB to bytes
+	}); err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+		return
+	}
+	state.Replicas = plan.Replicas
+	state.NetworkAccess = plan.NetworkAccess
+	state.MemoryMB = types.Int64Value(memoryMB)
+
+	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
+		return
 	}
 
 	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
@@ -843,6 +834,11 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 
 	if err = r.updateResourceSettings(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating resource settings", err.Error())
+		return
+	}
+
+	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
 		return
 	}
 
@@ -1010,6 +1006,10 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 			path.MatchRoot("base_environment_id"),
 			path.MatchRoot("base_environment_version_id"),
 		),
+		resourcevalidator.Conflicting(
+			path.MatchRoot("resource_bundle_id"),
+			path.MatchRoot("memory_mb"),
+		),
 	}
 }
 
@@ -1058,30 +1058,19 @@ func loadCustomModelToTerraformState(
 		state.TrainingDataPartitionColumn = types.StringPointerValue(customModel.LatestVersion.HoldoutData.PartitionColumn)
 	}
 
-	loadResourceSettingsToTerraformState(customModel.LatestVersion, state)
-}
-
-func loadResourceSettingsToTerraformState(
-	customModelVersion client.CustomModelVersion,
-	state *CustomModelResourceModel,
-) {
-	resourceSettings := &CustomModelResourceSettings{
-		MemoryMB:      types.Int64Value(defaultMemoryMB),
-		Replicas:      types.Int64Value(defaultReplicas),
-		NetworkAccess: types.StringValue(defaultNetworkAccess),
+	state.MemoryMB = types.Int64Value(defaultMemoryMB)
+	if customModel.LatestVersion.MaximumMemory != nil {
+		state.MemoryMB = types.Int64Value(*customModel.LatestVersion.MaximumMemory / (1024 * 1024))
+	}
+	state.Replicas = types.Int64Value(defaultReplicas)
+	if customModel.LatestVersion.Replicas != nil {
+		state.Replicas = types.Int64Value(*customModel.LatestVersion.Replicas)
 	}
 
-	if customModelVersion.MaximumMemory != nil {
-		resourceSettings.MemoryMB = types.Int64Value(*customModelVersion.MaximumMemory / 1024 / 1024) // convert bytes to MB
+	state.NetworkAccess = types.StringValue(defaultNetworkAccess)
+	if customModel.LatestVersion.NetworkEgressPolicy != nil {
+		state.NetworkAccess = types.StringValue(*customModel.LatestVersion.NetworkEgressPolicy)
 	}
-	if customModelVersion.Replicas != nil {
-		resourceSettings.Replicas = types.Int64Value(*customModelVersion.Replicas)
-	}
-	if customModelVersion.NetworkEgressPolicy != nil {
-		resourceSettings.NetworkAccess = types.StringValue(*customModelVersion.NetworkEgressPolicy)
-	}
-
-	state.ResourceSettings = resourceSettings
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModel, error) {
@@ -1719,22 +1708,25 @@ func (r *CustomModelResource) updateResourceSettings(
 ) (
 	err error,
 ) {
-	if !reflect.DeepEqual(plan.ResourceSettings, state.ResourceSettings) {
-		resourceSettings := *plan.ResourceSettings
-		traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:       "false",
-			BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
-			Replicas:            resourceSettings.Replicas.ValueInt64(),
-			NetworkEgressPolicy: resourceSettings.NetworkAccess.ValueString(),
-			MaximumMemory:       resourceSettings.MemoryMB.ValueInt64() * 1024 * 1024, // convert MB to bytes
-		})
-		if err != nil {
-			return
-		}
-		state.ResourceSettings = plan.ResourceSettings
-
+	memoryMB := defaultMemoryMB
+	if IsKnown(plan.MemoryMB) {
+		memoryMB = plan.MemoryMB.ValueInt64()
 	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:       "false",
+		BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
+		Replicas:            plan.Replicas.ValueInt64(),
+		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
+		MaximumMemory:       memoryMB * 1024 * 1024, // convert MB to bytes
+	}); err != nil {
+		return
+	}
+	state.Replicas = plan.Replicas
+	state.NetworkAccess = plan.NetworkAccess
+	state.MemoryMB = types.Int64Value(memoryMB)
+
 	return
 }
 
@@ -1771,6 +1763,29 @@ func (r *CustomModelResource) updateTrainingDataset(
 		}
 	}
 
+	return
+}
+
+func (r *CustomModelResource) addResourceBundle(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if IsKnown(plan.ResourceBundleID) {
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:     "false",
+			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
+			ResourceBundleID:  plan.ResourceBundleID.ValueStringPointer(),
+		}); err != nil {
+			return
+		}
+	}
+
+	state.ResourceBundleID = plan.ResourceBundleID
 	return
 }
 
