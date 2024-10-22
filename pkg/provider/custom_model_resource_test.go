@@ -72,7 +72,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	baseEnvironmentID2 := "6542cd582a9d3d51bf4ac71e" // [Experimental] Python 3.9 Streamlit
 
 	fileName := "requirements.txt"
-	folderPath := "dir"
+	folderPath := "custom_model_without_llm_blueprint"
 	err := os.WriteFile(fileName, []byte(`langchain == 0.2.8`), 0644)
 	if err != nil {
 		t.Fatal(err)
@@ -526,7 +526,7 @@ func TestAccCustomModelWithRuntimeParamsResource(t *testing.T) {
 
 	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
 
-	folderPath := "runtime_param_dir"
+	folderPath := "custom_model_with_runtime_params"
 	fileName := "model-metadata.yaml"
 	fileContents := `name: runtime-params
 
@@ -1219,7 +1219,7 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		target_type              = "TextGeneration"
 		target_name              = "target"
 		base_environment_id      = "65f9b27eab986d30d4c64268"
-		folder_path 			 = "runtime_param_dir"
+		folder_path 			 = "custom_model_with_runtime_params"
 		runtime_parameter_values = [
 			{
 				key="STRING_PARAMETER",

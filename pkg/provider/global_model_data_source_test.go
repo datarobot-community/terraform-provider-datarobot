@@ -17,8 +17,6 @@ var globalModelNames = []string{
 	"[Hugging Face] Toxicity Classifier",
 	"[Hugging Face] Sentiment Classifier",
 	"[Hugging Face] Emotions Classifier",
-	"[Guard] Prompt Injection Classifier from Hugging Face",
-	"[Guard] Presidio PII Detection from Microsoft",
 	"[DataRobot] Dummy Binary Classification",
 }
 

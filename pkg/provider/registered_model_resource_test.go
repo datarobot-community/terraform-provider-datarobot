@@ -21,6 +21,9 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	name := "registered model example name"
+	newName := "new registered model example name"
+
 	versionName := "version_name"
 	newVersionName := "new_version_name"
 
@@ -35,7 +38,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: registeredModelResourceConfig("example_name", "example_description", nil, &useCaseResourceName, "1"),
+				Config: registeredModelResourceConfig(name, "example_description", nil, &useCaseResourceName, "1"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -48,9 +51,9 @@ func TestAccRegisteredModelResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
-					resource.TestCheckResourceAttr(resourceName, "version_name", "example_name (v1)"),
+					resource.TestCheckResourceAttr(resourceName, "version_name", name+" (v1)"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -58,7 +61,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 			},
 			// Update name, description, and use case id
 			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &versionName, &useCaseResourceName2, "1"),
+				Config: registeredModelResourceConfig(newName, "new_example_description", &versionName, &useCaseResourceName2, "1"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -75,7 +78,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -86,7 +89,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 			// Update custom model version (by updating the Guard) creates new registered model version
 			// and remove use case id
 			{
-				Config: registeredModelResourceConfig("new_example_name", "new_example_description", &newVersionName, nil, "2"),
+				Config: registeredModelResourceConfig(newName, "new_example_description", &newVersionName, nil, "2"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -95,7 +98,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),

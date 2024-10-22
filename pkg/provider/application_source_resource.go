@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -89,26 +88,11 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The hash of file contents for each file in files.",
 				ElementType:         types.StringType,
 			},
-			"resource_settings": schema.SingleNestedAttribute{
+			"replicas": schema.Int64Attribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The resource settings for the Application Source.",
-				Default: objectdefault.StaticValue(types.ObjectValueMust(
-					map[string]attr.Type{
-						"replicas": types.Int64Type,
-					},
-					map[string]attr.Value{
-						"replicas": types.Int64Value(defaultReplicas),
-					},
-				)),
-				Attributes: map[string]schema.Attribute{
-					"replicas": schema.Int64Attribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             int64default.StaticInt64(defaultReplicas),
-						MarkdownDescription: "The replicas for the Application Source.",
-					},
-				},
+				Default:             int64default.StaticInt64(defaultReplicas),
+				MarkdownDescription: "The replicas for the Application Source.",
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
 				Optional:            true,
@@ -185,7 +169,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	createApplicationSourceVersionRequest := &client.CreateApplicationSourceVersionRequest{
 		Label: "v1",
 		Resources: client.ApplicationResources{
-			Replicas: data.ResourceSettings.Replicas.ValueInt64(),
+			Replicas: data.Replicas.ValueInt64(),
 		},
 	}
 
@@ -390,7 +374,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 
 	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{
 		Resources: client.ApplicationResources{
-			Replicas: plan.ResourceSettings.Replicas.ValueInt64(),
+			Replicas: plan.Replicas.ValueInt64(),
 		},
 	}
 
