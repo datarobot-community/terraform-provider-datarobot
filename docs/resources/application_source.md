@@ -43,7 +43,7 @@ output "datarobot_application_source_version_id" {
 - `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.
 - `name` (String) The name of the Application Source.
-- `resource_settings` (Attributes) The resource settings for the Application Source. (see [below for nested schema](#nestedatt--resource_settings))
+- `replicas` (Number) The replicas for the Application Source.
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 
 ### Read-Only
@@ -52,14 +52,6 @@ output "datarobot_application_source_version_id" {
 - `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Application Source.
 - `version_id` (String) The version ID of the Application Source.
-
-<a id="nestedatt--resource_settings"></a>
-### Nested Schema for `resource_settings`
-
-Optional:
-
-- `replicas` (Number) The replicas for the Application Source.
-
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`

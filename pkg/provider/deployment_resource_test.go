@@ -24,7 +24,7 @@ func TestAccDeploymentResource(t *testing.T) {
 	useCaseResourceName := "test_deployment"
 	useCaseResourceName2 := "test_new_deployment"
 
-	folderPath := "binary"
+	folderPath := "deployment"
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	return preds
 `
 
-	if err := os.WriteFile("binary/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy")), 0644); err != nil {
+	if err := os.WriteFile(folderPath+"/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy")), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,7 +139,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			// which triggers a model replacement for the Deployment
 			{
 				PreConfig: func() {
-					if err := os.WriteFile("binary/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy2")), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/custom.py", []byte(fmt.Sprintf(modelContentsTemplate, "dummy2")), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -292,7 +292,7 @@ resource "datarobot_custom_model" "test_deployment" {
 	target_type = "Binary"
 	target_name = "my_label"
 	base_environment_id = "65f9b27eab986d30d4c64268"
-	folder_path = "binary"
+	folder_path = "deployment"
 }
 resource "datarobot_registered_model" "test_deployment" {
 	name = "test deployment"

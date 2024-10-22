@@ -390,21 +390,17 @@ type QAApplicationResourceModel struct {
 }
 
 type ApplicationSourceResourceModel struct {
-	ID                       types.String                 `tfsdk:"id"`
-	VersionID                types.String                 `tfsdk:"version_id"`
-	Name                     types.String                 `tfsdk:"name"`
-	BaseEnvironmentID        types.String                 `tfsdk:"base_environment_id"`
-	BaseEnvironmentVersionID types.String                 `tfsdk:"base_environment_version_id"`
-	FolderPath               types.String                 `tfsdk:"folder_path"`
-	FolderPathHash           types.String                 `tfsdk:"folder_path_hash"`
-	Files                    types.Dynamic                `tfsdk:"files"`
-	FilesHashes              types.List                   `tfsdk:"files_hashes"`
-	ResourceSettings         *ApplicationResourceSettings `tfsdk:"resource_settings"`
-	RuntimeParameterValues   types.List                   `tfsdk:"runtime_parameter_values"`
-}
-
-type ApplicationResourceSettings struct {
-	Replicas types.Int64 `tfsdk:"replicas"`
+	ID                       types.String  `tfsdk:"id"`
+	VersionID                types.String  `tfsdk:"version_id"`
+	Name                     types.String  `tfsdk:"name"`
+	BaseEnvironmentID        types.String  `tfsdk:"base_environment_id"`
+	BaseEnvironmentVersionID types.String  `tfsdk:"base_environment_version_id"`
+	FolderPath               types.String  `tfsdk:"folder_path"`
+	FolderPathHash           types.String  `tfsdk:"folder_path_hash"`
+	Files                    types.Dynamic `tfsdk:"files"`
+	FilesHashes              types.List    `tfsdk:"files_hashes"`
+	Replicas                 types.Int64   `tfsdk:"replicas"`
+	RuntimeParameterValues   types.List    `tfsdk:"runtime_parameter_values"`
 }
 
 type CustomApplicationResourceModel struct {

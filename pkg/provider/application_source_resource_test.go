@@ -44,7 +44,7 @@ func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
-	baseEnvironmentVersionID := "6602eb900513a1f3bfc9e805"
+	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
 
 	startAppFileName := "start-app.sh"
 	startAppScript := `#!/usr/bin/env bash
@@ -95,7 +95,7 @@ runtimeParameterDefinitions:
 	}
 	defer os.Remove(metadataFileName)
 
-	folderPath := "dir"
+	folderPath := "application_source"
 	if err = os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -225,7 +225,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "resource_settings.replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "replicas", "2"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -235,7 +235,7 @@ runtimeParameterDefinitions:
 			// Remove files and add folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile("dir/"+startAppFileName, []byte(startAppScript), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+startAppFileName, []byte(startAppScript), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -271,7 +271,7 @@ runtimeParameterDefinitions:
 			// Add new file to folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile("dir/"+appCodeFileName, []byte(appCode), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+appCodeFileName, []byte(appCode), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -307,7 +307,7 @@ runtimeParameterDefinitions:
 			// update the contents of a file in folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile("dir/"+appCodeFileName, []byte("new app code"), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+appCodeFileName, []byte("new app code"), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -365,12 +365,10 @@ func applicationSourceResourceConfig(
 `, *baseEnvironmentVersionID)
 	}
 
-	resourceSettingsStr := ""
+	replicasStr := ""
 	if replicas > 1 {
-		resourceSettingsStr = fmt.Sprintf(`
-	resource_settings = {
-		replicas = %d
-	}
+		replicasStr = fmt.Sprintf(`
+	replicas = %d
 `, replicas)
 	}
 
@@ -424,7 +422,7 @@ resource "datarobot_application_source" "test" {
 	%s
 	%s
   }
-`, nameStr, baseEnvironmentIDStr, baseEnvironmentVersionIDStr, filesStr, folderPathStr, resourceSettingsStr, runtimeParamValueStr)
+`, nameStr, baseEnvironmentIDStr, baseEnvironmentVersionIDStr, filesStr, folderPathStr, replicasStr, runtimeParamValueStr)
 }
 
 func checkApplicationSourceResourceExists() resource.TestCheckFunc {
@@ -459,7 +457,7 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
 			applicationSource.LatestVersion.BaseEnvironmentID == rs.Primary.Attributes["base_environment_id"] &&
 			applicationSource.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] &&
-			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resource_settings.replicas"] {
+			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["replicas"] {
 			if runtimeParamValue, ok := rs.Primary.Attributes["runtime_parameter_values.0.value"]; ok {
 				if runtimeParamValue != applicationSourceVersion.RuntimeParameters[0].OverrideValue {
 					return fmt.Errorf("Runtime parameter value does not match")

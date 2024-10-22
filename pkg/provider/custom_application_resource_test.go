@@ -27,6 +27,13 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	useCaseResourceName := "test_custom_application"
 	useCaseResourceName2 := "test_new_custom_application"
 
+	folderPath := "custom_application"
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
 	startAppScript := `#!/usr/bin/env bash
 
 echo "Starting App"
@@ -48,17 +55,15 @@ if __name__ == "__main__":
     start_streamlit()
 	`
 
-	err := os.WriteFile("start-app.sh", []byte(startAppScript), 0644)
+	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("start-app.sh")
 
-	err = os.WriteFile("streamlit-app.py", []byte(appCode), 0644)
+	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("streamlit-app.py")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -182,10 +187,8 @@ resource "datarobot_use_case" "test_new_custom_application" {
 
 resource "datarobot_application_source" "test" {
 	base_environment_id = "6542cd582a9d3d51bf4ac71e"
-	files = [["start-app.sh"], ["streamlit-app.py"]]
-	resource_settings = {
-		replicas = %d
-	}
+	folder_path = "custom_application"
+	replicas = %d
 }
 
 resource "datarobot_custom_application" "test" {

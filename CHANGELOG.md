@@ -1,4 +1,8 @@
-## 1.0.0
+## 0.3.1
+
+- Clean up integration tests
+
+## 0.3.0
 
 - Remove real-time from Deployment predictions settings
 - Add Resource Bundles for Custom Models
