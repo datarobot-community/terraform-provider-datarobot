@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -55,7 +56,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: deploymentResourceConfig("example_label", "MODERATE", &useCaseResourceName, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig("example_label", "MODERATE", "target", &useCaseResourceName, false, false, false, false, false, false, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -84,7 +85,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			},
 			// Update label, importance, settings, and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", &useCaseResourceName2, true, true, true, true, true, true, true),
+				Config: deploymentResourceConfig("new_example_label", "LOW", "target", &useCaseResourceName2, true, true, true, true, true, true, true),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -109,7 +110,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			},
 			// Remove settings and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", nil, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig("new_example_label", "LOW", "target", nil, false, false, false, false, false, false, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -135,6 +136,11 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
+			// Try to update target_name of Custom Model (should fail)
+			{
+				Config: deploymentResourceConfig("new_example_label", "LOW", "new_target", nil, false, false, false, false, false, false, false),
+				ExpectError: regexp.MustCompile(`target_name cannot be changed if the model was deployed.`),
+			},
 			// Update custom model version (by updating the file contents) updates registered model version of deployment
 			// which triggers a model replacement for the Deployment
 			{
@@ -143,7 +149,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 						t.Fatal(err)
 					}
 				},
-				Config: deploymentResourceConfig("new_example_label", "LOW", nil, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig("new_example_label", "LOW", "target", nil, false, false, false, false, false, false, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -185,6 +191,7 @@ func TestDeploymentResourceSchema(t *testing.T) {
 func deploymentResourceConfig(
 	label,
 	importance string,
+	customModelTargetName string,
 	useCaseResourceName *string,
 	isPredictionsByForecastDateEnabled,
 	isSegmentAnalysisEnabled,
@@ -290,7 +297,7 @@ resource "datarobot_custom_model" "test_deployment" {
 	name = "test deployment"
 	description = "test"
 	target_type = "Binary"
-	target_name = "my_label"
+	target_name = "%s"
 	base_environment_id = "65f9b27eab986d30d4c64268"
 	folder_path = "deployment"
 }
@@ -312,7 +319,7 @@ resource "datarobot_deployment" "test" {
 	%s
 	%s
 }
-`, label, importance, useCaseIDsStr, deploymentSettings)
+`, customModelTargetName, label, importance, useCaseIDsStr, deploymentSettings)
 }
 
 func checkDeploymentResourceExists() resource.TestCheckFunc {

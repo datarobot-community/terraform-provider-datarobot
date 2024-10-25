@@ -1,3 +1,7 @@
+## 0.3.3
+
+- Block updating immutable Custom Model attributes if deployed
+
 ## 0.3.1
 
 - Clean up integration tests
