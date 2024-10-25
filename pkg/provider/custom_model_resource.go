@@ -20,7 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -140,7 +139,6 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The target name of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"positive_class_label": schema.StringAttribute{
@@ -149,7 +147,6 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The positive class label of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"negative_class_label": schema.StringAttribute{
@@ -158,7 +155,6 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The negative class label of the Custom Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-					stringRequiresReplaceIfDeployed(),
 				},
 			},
 			"prediction_threshold": schema.Float64Attribute{
@@ -185,16 +181,10 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Class labels for multiclass classification. Cannot be used with class_labels_file.",
-				PlanModifiers: []planmodifier.List{
-					listRequiresReplaceIfDeployed(),
-				},
 			},
 			"class_labels_file": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.",
-				PlanModifiers: []planmodifier.String{
-					stringRequiresReplaceIfDeployed(),
-				},
 			},
 			"deployments_count": schema.Int64Attribute{
 				Computed:            true,
@@ -952,6 +942,35 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	customModel, err := r.provider.service.GetCustomModel(ctx, state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting custom model", err.Error())
+		return
+	}
+
+	if customModel.DeploymentsCount > 0 {
+		if state.TargetName != plan.TargetName {
+			addCannotChangeAttributeError(resp, "target_name")
+			return
+		}
+		if state.PositiveClassLabel != plan.PositiveClassLabel {
+			addCannotChangeAttributeError(resp, "positive_class_label")
+			return
+		}
+		if state.NegativeClassLabel != plan.NegativeClassLabel {
+			addCannotChangeAttributeError(resp, "negative_class_label")
+			return
+		}
+		if !reflect.DeepEqual(state.ClassLabels, plan.ClassLabels) {
+			addCannotChangeAttributeError(resp, "class_labels")
+			return
+		}
+		if state.ClassLabelsFile != plan.ClassLabelsFile {
+			addCannotChangeAttributeError(resp, "class_labels_file")
+			return
+		}
+	}
+
 	// reset unknown version id if if hashess have been changed
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
@@ -985,6 +1004,15 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+func addCannotChangeAttributeError(
+	resp *resource.ModifyPlanResponse,
+	attribute string,
+) {
+	resp.Diagnostics.AddError(
+		"Custom Model Update Error",
+		fmt.Sprintf("%s cannot be changed if the model was deployed.", attribute))
 }
 
 func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
@@ -1903,56 +1931,4 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 	}
 
 	return
-}
-
-func stringRequiresReplaceIfDeployed() planmodifier.String {
-	return stringplanmodifier.RequiresReplaceIf(
-		func(ctx context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
-			if req.PlanValue.IsUnknown() {
-				resp.RequiresReplace = false
-				return
-			}
-
-			var state CustomModelResourceModel
-
-			diags := req.State.Get(ctx, &state)
-			resp.Diagnostics.Append(diags...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
-			if state.DeploymentsCount.ValueInt64() > 0 {
-				resp.RequiresReplace = true
-				return
-			}
-		},
-		"Requires replace if the model was deployed.",
-		"Requires replace if the model was deployed.",
-	)
-}
-
-func listRequiresReplaceIfDeployed() planmodifier.List {
-	return listplanmodifier.RequiresReplaceIf(
-		func(ctx context.Context, req planmodifier.ListRequest, resp *listplanmodifier.RequiresReplaceIfFuncResponse) {
-			if req.PlanValue.IsUnknown() {
-				resp.RequiresReplace = false
-				return
-			}
-
-			var state CustomModelResourceModel
-
-			diags := req.State.Get(ctx, &state)
-			resp.Diagnostics.Append(diags...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
-			if state.DeploymentsCount.ValueInt64() > 0 {
-				resp.RequiresReplace = true
-				return
-			}
-		},
-		"Requires replace if the model was deployed.",
-		"Requires replace if the model was deployed.",
-	)
 }
