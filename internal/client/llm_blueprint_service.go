@@ -41,10 +41,6 @@ type LLMBlueprint struct {
 	PromptType       string      `json:"promptType"`
 }
 
-type ListLLMsResponse struct {
-	Data []LanguageModelDefinitionAPIFormatted `json:"data"`
-}
-
 type LanguageModelDefinitionAPIFormatted struct {
 	ID string `json:"id"`
 }

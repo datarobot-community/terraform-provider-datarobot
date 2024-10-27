@@ -9,10 +9,17 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 type Client struct {
 	cfg *Configuration
+}
+
+type PaginatedResponse[T any] struct {
+	Data []T    `json:"data"`
+	Next string `json:"next"`
 }
 
 func NewClient(cfg *Configuration) *Client {
@@ -119,6 +126,30 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 
 func Get[T any](c *Client, ctx context.Context, path string) (*T, error) {
 	return doRequest[T](c, ctx, http.MethodGet, path, nil)
+}
+
+func GetAllPages[T any](c *Client, ctx context.Context, path string, queryReq any) ([]T, error) {
+	var results []T
+	pathValues, _ := query.Values(queryReq)
+	nextURL := path + "?" + pathValues.Encode()
+
+	// Fetch all pages.
+	for nextURL != "" {
+		result, err := Get[PaginatedResponse[T]](c, ctx, nextURL)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, result.Data...)
+
+		nextURL = result.Next
+		if nextURL != "" {
+			query := strings.Split(nextURL, "?")[1]
+			nextURL = path + "?" + query
+		}
+	}
+
+	return results, nil
 }
 
 func Post[T any](c *Client, ctx context.Context, path string, body any) (*T, error) {

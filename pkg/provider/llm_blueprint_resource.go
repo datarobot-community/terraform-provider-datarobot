@@ -170,33 +170,6 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	var llmID string
-	if IsKnown(data.LLMID) {
-		llmID = data.LLMID.ValueString()
-		listResp, err := r.provider.service.ListLLMs(ctx)
-		if err != nil {
-			resp.Diagnostics.AddError("Error getting LLM Blueprint", err.Error())
-			return
-		}
-
-		// loop through resp.data and ensure llmID exists in the list
-		llmExists := false
-		for _, llm := range listResp.Data {
-			if llm.ID == llmID {
-				llmExists = true
-				break
-			}
-		}
-
-		if !llmExists {
-			resp.Diagnostics.AddError(
-				"Error getting LLM Blueprint",
-				fmt.Sprintf("Unable to get LLM Blueprint, LLM ID does not exist: %s", llmID),
-			)
-			return
-		}
-	}
-
 	createLLMBlueprintRequest := &client.CreateLLMBlueprintRequest{
 		Name:             data.Name.ValueString(),
 		Description:      data.Description.ValueString(),

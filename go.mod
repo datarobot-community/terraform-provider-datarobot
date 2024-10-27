@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/golang/mock v1.6.0
+	github.com/google/go-querystring v1.1.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/hashicorp/terraform-plugin-docs v0.19.4

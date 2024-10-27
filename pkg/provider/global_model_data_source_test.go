@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -45,26 +46,29 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		versionNum := 2
 
 		for i := 0; i < 3; i++ {
-			mockService.EXPECT().ListRegisteredModels(gomock.Any()).Return(&client.ListRegisteredModelsResponse{
-				Data: []client.RegisteredModel{
-					{
-						ID:             id,
-						Name:           name,
-						LastVersionNum: versionNum,
-						IsGlobal:       true,
-					},
+			mockService.EXPECT().ListRegisteredModels(gomock.Any(), &client.ListRegisteredModelsRequest{
+				IsGlobal: true,
+				Search:   name,
+			}).Return([]client.RegisteredModel{
+				{
+					ID:             id,
+					Name:           name,
+					LastVersionNum: versionNum,
+					IsGlobal:       true,
 				},
 			}, nil)
-			mockService.EXPECT().ListRegisteredModelVersions(gomock.Any(), id).Return(&client.ListRegisteredModelVersionsResponse{
-				Data: []client.RegisteredModelVersion{
-					{
-						ID:                     versionID,
-						RegisteredModelVersion: versionNum,
-					},
-				},
-			}, nil)
+			mockService.EXPECT().GetLatestRegisteredModelVersion(gomock.Any(), id).Return(
+				&client.RegisteredModelVersion{
+					ID:                     versionID,
+					RegisteredModelVersion: versionNum,
+				}, nil)
 		}
 	}
+
+	mockService.EXPECT().ListRegisteredModels(gomock.Any(), &client.ListRegisteredModelsRequest{
+		IsGlobal: true,
+		Search:   "invalid",
+	}).Return([]client.RegisteredModel{}, nil)
 
 	testGlobalModelDataSource(t, globalModelNames, true)
 }
@@ -73,6 +77,7 @@ func testGlobalModelDataSource(t *testing.T, names []string, isMock bool) {
 	dataSourceName := "data.datarobot_global_model.test"
 
 	steps := []resource.TestStep{}
+
 	for _, name := range names {
 		steps = append(steps, resource.TestStep{
 			Config: globalModelDataSourceConfig(name),
@@ -83,6 +88,11 @@ func testGlobalModelDataSource(t *testing.T, names []string, isMock bool) {
 			),
 		})
 	}
+
+	steps = append(steps, resource.TestStep{
+		Config:      globalModelDataSourceConfig("invalid"),
+		ExpectError: regexp.MustCompile("Global Model not found"),
+	})
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: isMock,

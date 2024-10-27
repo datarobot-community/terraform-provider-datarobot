@@ -37,8 +37,14 @@ type UpdateRegisteredModelVersionRequest struct {
 	PredictionThreshold *float64 `json:"predictionThreshold,omitempty"`
 }
 
+type ListRegisteredModelsRequest struct {
+	IsGlobal bool   `url:"isGlobal,omitempty"`
+	Search   string `url:"search,omitempty"`
+}
+
 type ListRegisteredModelsResponse struct {
 	Data []RegisteredModel
+	Next string
 }
 
 type UpdateRegisteredModelRequest struct {
@@ -66,4 +72,5 @@ type RegisteredModelVersionTarget struct {
 
 type ListRegisteredModelVersionsResponse struct {
 	Data []RegisteredModelVersion
+	Next string
 }
