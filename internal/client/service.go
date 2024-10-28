@@ -54,7 +54,6 @@ type Service interface {
 	GetLLMBlueprint(ctx context.Context, id string) (*LLMBlueprint, error)
 	UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprint, error)
 	DeleteLLMBlueprint(ctx context.Context, id string) error
-	ListLLMs(ctx context.Context) (*ListLLMsResponse, error)
 
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
@@ -66,8 +65,7 @@ type Service interface {
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
 	UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error)
 	DeleteCustomModel(ctx context.Context, id string) error
-	ListExecutionEnvironments(ctx context.Context) (*ListExecutionEnvironmentsResponse, error)
-	ListGuardTemplates(ctx context.Context) (*ListGuardTemplatesResponse, error)
+	ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error)
 	GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error)
 	GetOverallModerationConfigurationForCustomModelVersion(ctx context.Context, id string) (*OverallModerationConfiguration, error)
 	CreateCustomModelVersionFromGuardConfigurations(ctx context.Context, id string, req *CreateCustomModelVersionFromGuardsConfigurationRequest) (*CreateCustomModelVersionFromGuardsConfigurationResponse, error)
@@ -78,11 +76,11 @@ type Service interface {
 	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
 	CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error)
 	UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error)
-	ListRegisteredModelVersions(ctx context.Context, id string) (*ListRegisteredModelVersionsResponse, error)
+	ListRegisteredModelVersions(ctx context.Context, id string) ([]RegisteredModelVersion, error)
 	GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error)
 	GetRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string) (*RegisteredModelVersion, error)
 	IsRegisteredModelVersionReady(ctx context.Context, registeredModelId string, versionId string) (bool, error)
-	ListRegisteredModels(ctx context.Context) (*ListRegisteredModelsResponse, error)
+	ListRegisteredModels(ctx context.Context, req *ListRegisteredModelsRequest) ([]RegisteredModel, error)
 	GetRegisteredModel(ctx context.Context, id string) (*RegisteredModel, error)
 	UpdateRegisteredModel(ctx context.Context, id string, req *UpdateRegisteredModelRequest) (*RegisteredModel, error)
 	DeleteRegisteredModel(ctx context.Context, id string) error
@@ -111,7 +109,6 @@ type Service interface {
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
 	GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error)
 	UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error)
-	ListApplicationSourceVersions(ctx context.Context, id string) (*ListApplicationSourceVersionsResponse, error)
 	CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error)
 	UpdateApplicationSourceVersion(ctx context.Context, id string, versionId string, req *UpdateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error)
 	UpdateApplicationSourceVersionFiles(ctx context.Context, id string, versionId string, files []FileInfo) (*ApplicationSourceVersion, error)
@@ -301,10 +298,6 @@ func (s *ServiceImpl) DeleteLLMBlueprint(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/genai/llmBlueprints/"+id+"/")
 }
 
-func (s *ServiceImpl) ListLLMs(ctx context.Context) (*ListLLMsResponse, error) {
-	return Get[ListLLMsResponse](s.client, ctx, "/genai/llms/")
-}
-
 func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {
 	return Post[CustomModel](s.client, ctx, "/customModels/", req)
 }
@@ -345,12 +338,8 @@ func (s *ServiceImpl) DeleteCustomModel(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customModels/"+id+"/")
 }
 
-func (s *ServiceImpl) ListExecutionEnvironments(ctx context.Context) (*ListExecutionEnvironmentsResponse, error) {
-	return Get[ListExecutionEnvironmentsResponse](s.client, ctx, "/executionEnvironments/")
-}
-
-func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) (*ListGuardTemplatesResponse, error) {
-	return Get[ListGuardTemplatesResponse](s.client, ctx, "/guardTemplates/")
+func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error) {
+	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", nil)
 }
 
 func (s *ServiceImpl) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error) {
@@ -390,8 +379,8 @@ func (s *ServiceImpl) GetRegisteredModelVersion(ctx context.Context, registeredM
 	return Get[RegisteredModelVersion](s.client, ctx, "/registeredModels/"+registeredModelId+"/versions/"+versionId+"/")
 }
 
-func (s *ServiceImpl) ListRegisteredModelVersions(ctx context.Context, id string) (*ListRegisteredModelVersionsResponse, error) {
-	return Get[ListRegisteredModelVersionsResponse](s.client, ctx, "/registeredModels/"+id+"/versions/")
+func (s *ServiceImpl) ListRegisteredModelVersions(ctx context.Context, id string) ([]RegisteredModelVersion, error) {
+	return GetAllPages[RegisteredModelVersion](s.client, ctx, "/registeredModels/"+id+"/versions/", nil)
 }
 
 func (s *ServiceImpl) GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error) {
@@ -405,8 +394,8 @@ func (s *ServiceImpl) GetLatestRegisteredModelVersion(ctx context.Context, id st
 		return nil, err
 	}
 
-	for index := range registeredModelVersions.Data {
-		version := registeredModelVersions.Data[index]
+	for index := range registeredModelVersions {
+		version := registeredModelVersions[index]
 		if version.RegisteredModelVersion == registeredModel.LastVersionNum {
 			return &version, nil
 		}
@@ -424,8 +413,8 @@ func (s *ServiceImpl) IsRegisteredModelVersionReady(ctx context.Context, registe
 	return modelPackage.BuildStatus == "complete", nil
 }
 
-func (s *ServiceImpl) ListRegisteredModels(ctx context.Context) (*ListRegisteredModelsResponse, error) {
-	return Get[ListRegisteredModelsResponse](s.client, ctx, "/registeredModels/")
+func (s *ServiceImpl) ListRegisteredModels(ctx context.Context, req *ListRegisteredModelsRequest) ([]RegisteredModel, error) {
+	return GetAllPages[RegisteredModel](s.client, ctx, "/registeredModels/", req)
 }
 
 func (s *ServiceImpl) GetRegisteredModel(ctx context.Context, id string) (*RegisteredModel, error) {
@@ -517,10 +506,6 @@ func (s *ServiceImpl) GetApplicationSource(ctx context.Context, id string) (*App
 
 func (s *ServiceImpl) UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error) {
 	return Patch[ApplicationSource](s.client, ctx, "/customApplicationSources/"+id+"/", req)
-}
-
-func (s *ServiceImpl) ListApplicationSourceVersions(ctx context.Context, id string) (*ListApplicationSourceVersionsResponse, error) {
-	return Get[ListApplicationSourceVersionsResponse](s.client, ctx, "/customApplicationSources/"+id+"/versions/")
 }
 
 func (s *ServiceImpl) CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {

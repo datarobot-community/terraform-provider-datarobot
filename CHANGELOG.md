@@ -1,3 +1,7 @@
+## 0.3.4
+
+- Paginate List API calls
+
 ## 0.3.3
 
 - Block updating immutable Custom Model attributes if deployed

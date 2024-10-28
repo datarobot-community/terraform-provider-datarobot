@@ -273,21 +273,6 @@ func TestCustomModelFromGitHub(t *testing.T) {
 	require.Equal(newName, remoteRepository.Name)
 	require.Equal(newDescription, remoteRepository.Description)
 
-	listResp, err := s.ListExecutionEnvironments(ctx)
-	require.NoError(err)
-
-	var environmentID string
-	var environmentVersionID string
-	for _, executionEnvironment := range listResp.Data {
-		if executionEnvironment.Name == "[GenAI] Python 3.11 with Moderations" {
-			environmentID = executionEnvironment.ID
-			environmentVersionID = executionEnvironment.LatestVersion.ID
-			break
-		}
-	}
-	require.NotEmpty(environmentID)
-	require.NotEmpty(environmentVersionID)
-
 	name = "Integration Test" + uuid.New().String()
 	description = "This is a test custom model."
 	customModel, err := s.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
@@ -301,7 +286,7 @@ func TestCustomModelFromGitHub(t *testing.T) {
 	require.NotEmpty(customModel.ID)
 
 	_, _, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
-		BaseEnvironmentID: environmentID,
+		BaseEnvironmentID: "65f9b27eab986d30d4c64268",
 		IsMajorUpdate:     true,
 		RepositoryID:      remoteRepository.ID,
 		Ref:               "master",
@@ -448,9 +433,9 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	overallModerationConfiguration.TimeoutSec = 120
 
-	listGuardTemplatesResp, err := s.ListGuardTemplates(ctx)
+	guardTemplates, err := s.ListGuardTemplates(ctx)
 	require.NoError(err)
-	require.NotEmpty(listGuardTemplatesResp.Data)
+	require.NotEmpty(guardTemplates)
 
 	var newGuardData client.GuardConfiguration
 

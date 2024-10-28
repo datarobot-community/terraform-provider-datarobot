@@ -1042,41 +1042,11 @@ func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
 }
 
-// ListApplicationSourceVersions mocks base method.
-func (m *MockService) ListApplicationSourceVersions(ctx context.Context, id string) (*client.ListApplicationSourceVersionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListApplicationSourceVersions", ctx, id)
-	ret0, _ := ret[0].(*client.ListApplicationSourceVersionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListApplicationSourceVersions indicates an expected call of ListApplicationSourceVersions.
-func (mr *MockServiceMockRecorder) ListApplicationSourceVersions(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListApplicationSourceVersions", reflect.TypeOf((*MockService)(nil).ListApplicationSourceVersions), ctx, id)
-}
-
-// ListExecutionEnvironments mocks base method.
-func (m *MockService) ListExecutionEnvironments(ctx context.Context) (*client.ListExecutionEnvironmentsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListExecutionEnvironments", ctx)
-	ret0, _ := ret[0].(*client.ListExecutionEnvironmentsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListExecutionEnvironments indicates an expected call of ListExecutionEnvironments.
-func (mr *MockServiceMockRecorder) ListExecutionEnvironments(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutionEnvironments", reflect.TypeOf((*MockService)(nil).ListExecutionEnvironments), ctx)
-}
-
 // ListGuardTemplates mocks base method.
-func (m *MockService) ListGuardTemplates(ctx context.Context) (*client.ListGuardTemplatesResponse, error) {
+func (m *MockService) ListGuardTemplates(ctx context.Context) ([]client.GuardTemplate, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListGuardTemplates", ctx)
-	ret0, _ := ret[0].(*client.ListGuardTemplatesResponse)
+	ret0, _ := ret[0].([]client.GuardTemplate)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1087,26 +1057,11 @@ func (mr *MockServiceMockRecorder) ListGuardTemplates(ctx interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGuardTemplates", reflect.TypeOf((*MockService)(nil).ListGuardTemplates), ctx)
 }
 
-// ListLLMs mocks base method.
-func (m *MockService) ListLLMs(ctx context.Context) (*client.ListLLMsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListLLMs", ctx)
-	ret0, _ := ret[0].(*client.ListLLMsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListLLMs indicates an expected call of ListLLMs.
-func (mr *MockServiceMockRecorder) ListLLMs(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLLMs", reflect.TypeOf((*MockService)(nil).ListLLMs), ctx)
-}
-
 // ListRegisteredModelVersions mocks base method.
-func (m *MockService) ListRegisteredModelVersions(ctx context.Context, id string) (*client.ListRegisteredModelVersionsResponse, error) {
+func (m *MockService) ListRegisteredModelVersions(ctx context.Context, id string) ([]client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListRegisteredModelVersions", ctx, id)
-	ret0, _ := ret[0].(*client.ListRegisteredModelVersionsResponse)
+	ret0, _ := ret[0].([]client.RegisteredModelVersion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1118,18 +1073,18 @@ func (mr *MockServiceMockRecorder) ListRegisteredModelVersions(ctx, id interface
 }
 
 // ListRegisteredModels mocks base method.
-func (m *MockService) ListRegisteredModels(ctx context.Context) (*client.ListRegisteredModelsResponse, error) {
+func (m *MockService) ListRegisteredModels(ctx context.Context, req *client.ListRegisteredModelsRequest) ([]client.RegisteredModel, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListRegisteredModels", ctx)
-	ret0, _ := ret[0].(*client.ListRegisteredModelsResponse)
+	ret := m.ctrl.Call(m, "ListRegisteredModels", ctx, req)
+	ret0, _ := ret[0].([]client.RegisteredModel)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListRegisteredModels indicates an expected call of ListRegisteredModels.
-func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx, req)
 }
 
 // RemoveEntityFromUseCase mocks base method.

@@ -67,43 +67,24 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	listRegisteredModelsResp, err := r.provider.service.ListRegisteredModels(ctx)
+	registeredModels, err := r.provider.service.ListRegisteredModels(ctx, &client.ListRegisteredModelsRequest{
+		IsGlobal: true,
+		Search:   config.Name.ValueString(),
+	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to list registered models", err.Error())
+		resp.Diagnostics.AddError("Failed to list Global Models", err.Error())
 		return
 	}
 
-	var globalModel *client.RegisteredModel
-	for index := range listRegisteredModelsResp.Data {
-		registeredModel := listRegisteredModelsResp.Data[index]
-		if registeredModel.Name == config.Name.ValueString() && registeredModel.IsGlobal {
-			globalModel = &registeredModel
-			break
-		}
-	}
-
-	if globalModel == nil {
+	if len(registeredModels) == 0 {
 		resp.Diagnostics.AddError("Global Model not found", fmt.Sprintf("Global Model with name %q not found", config.Name.ValueString()))
 		return
 	}
+	globalModel := registeredModels[0]
 
-	listRegisteredModelVersionsResp, err := r.provider.service.ListRegisteredModelVersions(ctx, globalModel.ID)
+	globalModelVersion, err := r.provider.service.GetLatestRegisteredModelVersion(ctx, globalModel.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to list global model versions", err.Error())
-		return
-	}
-
-	var globalModelVersion *client.RegisteredModelVersion
-	for index := range listRegisteredModelVersionsResp.Data {
-		registeredModelVersion := listRegisteredModelVersionsResp.Data[index]
-		if registeredModelVersion.RegisteredModelVersion == globalModel.LastVersionNum {
-			globalModelVersion = &registeredModelVersion
-			break
-		}
-	}
-
-	if globalModelVersion == nil {
-		resp.Diagnostics.AddError("Global Model Version not found", fmt.Sprintf("Global Model Version with version %d not found", globalModel.LastVersionNum))
+		resp.Diagnostics.AddError("Failed to get Global Model version", err.Error())
 		return
 	}
 

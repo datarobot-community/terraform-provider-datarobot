@@ -1305,8 +1305,8 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 	for _, guardConfigToAdd := range guardConfigsToAdd {
 		var guardTemplate *client.GuardTemplate
-		for index := range guardTemplates.Data {
-			template := guardTemplates.Data[index]
+		for index := range guardTemplates {
+			template := guardTemplates[index]
 			if template.Name == guardConfigToAdd.TemplateName.ValueString() {
 				guardTemplate = &template
 				break

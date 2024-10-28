@@ -156,10 +156,6 @@ type RuntimeParameterValueRequest struct {
 	Value     *any   `json:"value"`
 }
 
-type ListExecutionEnvironmentsResponse struct {
-	Data []ExecutionEnvironment `json:"data"`
-}
-
 type ExecutionEnvironment struct {
 	ID            string                      `json:"id"`
 	Name          string                      `json:"name"`
@@ -170,10 +166,6 @@ type ExecutionEnvironment struct {
 type ExecutionEnvironmentVersion struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
-}
-
-type ListGuardTemplatesResponse struct {
-	Data []GuardTemplate `json:"data"`
 }
 
 type GuardTemplate struct {

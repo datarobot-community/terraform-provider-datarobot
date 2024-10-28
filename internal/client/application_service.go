@@ -45,10 +45,6 @@ type CreateApplicationSourceVersionRequest struct {
 	RuntimeParameterValues   string               `json:"runtimeParameterValues,omitempty"`
 }
 
-type ListApplicationSourceVersionsResponse struct {
-	Data []ApplicationSourceVersion `json:"data"`
-}
-
 type ApplicationSourceVersion struct {
 	ID                       string               `json:"id"`
 	Label                    string               `json:"label"`
