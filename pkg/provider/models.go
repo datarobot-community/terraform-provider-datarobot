@@ -8,7 +8,7 @@ const (
 	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar string = "DATAROBOT_ENDPOINT"
 	TimeoutMinutesEnvVar    string = "DATAROBOT_TIMEOUT_MINUTES"
-	UserAgent               string = "terraform-provider-datarobot"
+	UserAgent               string = "DataRobotTerraformClient"
 )
 
 // UseCaseResourceModel describes the resource data model.

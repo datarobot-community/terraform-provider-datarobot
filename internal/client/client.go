@@ -60,10 +60,12 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("User-Agent", c.cfg.UserAgent)
 	c.addAuthHeader(req)
 
 	// Perform the request
 	resp, err := c.cfg.HTTPClient.Do(req)
+
 	if err != nil {
 		errorMessage := fmt.Sprintf("%s request %s failed", req.Method, req.URL.String())
 		if c.cfg.Debug {

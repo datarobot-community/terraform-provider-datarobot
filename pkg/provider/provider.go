@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -102,7 +103,8 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 	if endpoint != "" {
 		cfg.Endpoint = endpoint
 	}
-	cfg.UserAgent = UserAgent
+
+	cfg.UserAgent = fmt.Sprintf("%s/%s Terraform-%s", UserAgent, p.version, req.TerraformVersion)
 
 	// set debug mode if TF_LOG is set to DEBUG or TRACE
 	logLevel := os.Getenv("TF_LOG")
