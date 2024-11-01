@@ -1,3 +1,7 @@
+## 0.3.5
+
+- populate User-Agent Header for analytics tracing
+
 ## 0.3.4
 
 - Paginate List API calls
