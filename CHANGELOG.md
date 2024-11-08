@@ -1,3 +1,7 @@
+## 0.3.6
+
+- remove unnecessary Custom App replacements
+
 ## 0.3.5
 
 - populate User-Agent Header for analytics tracing

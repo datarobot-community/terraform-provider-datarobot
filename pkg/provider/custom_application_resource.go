@@ -227,13 +227,16 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		CustomApplicationSourceVersionID: plan.SourceVersionID.ValueString(),
 		ExternalAccessEnabled:            IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
 		ExternalAccessRecipients:         recipients,
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		updateRequest.Name = plan.Name.ValueString()
+	}
+
+	if state.SourceVersionID.ValueString() != plan.SourceVersionID.ValueString() {
+		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
 	}
 
 	traceAPICall("UpdateCustomApplication")
