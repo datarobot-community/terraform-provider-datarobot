@@ -61,6 +61,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("User-Agent", c.cfg.UserAgent)
+	req.Header.Add("X-DataRobot-Api-Consumer-Trace", c.cfg.TraceContext)
 	c.addAuthHeader(req)
 
 	// Perform the request

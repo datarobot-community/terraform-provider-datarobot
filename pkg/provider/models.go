@@ -5,10 +5,11 @@ import (
 )
 
 const (
-	DataRobotApiKeyEnvVar   string = "DATAROBOT_API_TOKEN"
-	DataRobotEndpointEnvVar string = "DATAROBOT_ENDPOINT"
-	TimeoutMinutesEnvVar    string = "DATAROBOT_TIMEOUT_MINUTES"
-	UserAgent               string = "DataRobotTerraformClient"
+	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
+	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
+	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
+	TimeoutMinutesEnvVar        string = "DATAROBOT_TIMEOUT_MINUTES"
+	UserAgent                   string = "DataRobotTerraformClient"
 )
 
 // UseCaseResourceModel describes the resource data model.
