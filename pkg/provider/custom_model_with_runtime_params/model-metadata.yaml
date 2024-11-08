@@ -1,0 +1,7 @@
+name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: An example of a string parameter
+    defaultValue: null

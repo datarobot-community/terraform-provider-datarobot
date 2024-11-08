@@ -227,8 +227,8 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:            IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients:         recipients,
+		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessRecipients: recipients,
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
