@@ -15,8 +15,7 @@ func TestAccDatasetFromURLResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_dataset_from_url.test"
 
-	// TODO: Update the URL to a valid URL
-	url := "url"
+	url := "https://raw.githubusercontent.com/datarobot-community/examples-for-data-scientists/refs/heads/master/Feature%20Discovery/Python/Soccer%20predictions/Data/team_gplus_bygame.csv"
 
 	datasetName := "example_dataset"
 	newDatsetName := "new_example_dataset"
