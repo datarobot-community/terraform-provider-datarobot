@@ -1,3 +1,8 @@
+## 0.3.6
+
+- add DATAROBOT_TRACE_CONTEXT env var for X-DataRobot-Api-Consumer-Trace header
+- remove unnecessary Custom App replacements
+
 ## 0.3.5
 
 - populate User-Agent Header for analytics tracing

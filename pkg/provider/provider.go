@@ -41,8 +41,9 @@ type Provider struct {
 
 // ProviderModel describes the provider data model.
 type ProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"`
-	ApiKey   types.String `tfsdk:"apikey"`
+	Endpoint     types.String `tfsdk:"endpoint"`
+	ApiKey       types.String `tfsdk:"apikey"`
+	TraceContext types.String `tfsdk:"tracecontext"`
 }
 
 func (p *Provider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -60,6 +61,11 @@ func (p *Provider) Schema(ctx context.Context, req provider.SchemaRequest, resp 
 			},
 			"apikey": schema.StringAttribute{
 				MarkdownDescription: "Key to access DataRobot API",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"tracecontext": schema.StringAttribute{
+				MarkdownDescription: "DataRobot trace context",
 				Optional:            true,
 				Sensitive:           true,
 			},
@@ -98,6 +104,13 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 		return
 	}
 
+	var traceContext string
+	if !IsKnown(data.TraceContext) {
+		traceContext = os.Getenv(DataRobotTraceContextEnvVar)
+	} else {
+		traceContext = data.TraceContext.ValueString()
+	}
+
 	// Create a new client configuration
 	cfg := client.NewConfiguration(apiKey)
 	if endpoint != "" {
@@ -105,6 +118,7 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 	}
 
 	cfg.UserAgent = fmt.Sprintf("%s/%s Terraform-%s", UserAgent, p.version, req.TerraformVersion)
+	cfg.TraceContext = traceContext
 
 	// set debug mode if TF_LOG is set to DEBUG or TRACE
 	logLevel := os.Getenv("TF_LOG")

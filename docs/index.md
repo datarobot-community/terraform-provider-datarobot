@@ -26,6 +26,9 @@ provider "datarobot" {
   # (Optional) The Endpoint of the DataRobot API can be configured using the environment variable 
   # export DATAROBOT_ENDPOINT="the API endpoint value here"
   # If not specified the default endpoint is "https://app.datarobot.com/api/v2"
+  #
+  # (Optional) The DataRobot trace context can be configured using the environment variable
+  # export DATAROBOT_TRACE_CONTEXT="the trace context value here"
 }
 ```
 
@@ -36,3 +39,4 @@ provider "datarobot" {
 
 - `apikey` (String, Sensitive) Key to access DataRobot API
 - `endpoint` (String, Sensitive) Endpoint for the DataRobot API
+- `tracecontext` (String, Sensitive) DataRobot trace context
