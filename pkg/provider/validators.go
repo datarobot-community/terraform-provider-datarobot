@@ -3,6 +3,7 @@ package provider
 import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
@@ -71,6 +72,31 @@ func BatchJobsPriorityValidators() []validator.String {
 			"low",
 			"medium",
 			"high",
+		),
+	}
+}
+
+func ExecutionEnvironmentUseCasesValidators() []validator.List {
+	return []validator.List{
+		listvalidator.ValueStringsAre(
+			stringvalidator.OneOf(
+				"customApplication",
+				"customModel",
+				"notebook",
+			),
+		),
+	}
+}
+
+func ProgrammingLanguageValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"python",
+			"java",
+			"julia",
+			"r",
+			"legacy",
+			"other",
 		),
 	}
 }
