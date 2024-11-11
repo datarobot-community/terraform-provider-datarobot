@@ -27,6 +27,11 @@ func NewClient(cfg *Configuration) *Client {
 		panic("configuration is required")
 	}
 
+	// if endpoint ends in a slash, remove it
+	if len(cfg.Endpoint) > 0 && cfg.Endpoint[len(cfg.Endpoint)-1] == '/' {
+		cfg.Endpoint = cfg.Endpoint[:len(cfg.Endpoint)-1]
+	}
+
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = http.DefaultClient
 	}

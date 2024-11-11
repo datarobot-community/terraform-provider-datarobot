@@ -1334,7 +1334,7 @@ resource "datarobot_custom_model" "test_regression" {
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_version_id 					  = "670ef2764355b7743adcafd5"
+	base_environment_id 					  		  = "65f9b27eab986d30d4c64268"
 	%s
 	%s
 }

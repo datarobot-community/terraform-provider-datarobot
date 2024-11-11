@@ -1,3 +1,7 @@
+## 0.4.1
+
+- Support DR endpoint with trailing slash
+
 ## 0.4.0
 
 - Execution Environment Resource and Data Source
