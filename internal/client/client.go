@@ -205,9 +205,10 @@ func getCurlCommand(req *http.Request, jsonBody []byte) string {
 }
 
 type FileInfo struct {
-	Name    string `json:"name,omitempty"`
-	Path    string `json:"path,omitempty"`
-	Content []byte `json:"content,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Path          string `json:"path,omitempty"`
+	Content       []byte `json:"content,omitempty"`
+	FormFieldName string `json:"formFieldName,omitempty"`
 }
 
 func uploadFileFromBinary[T any](
@@ -256,7 +257,11 @@ func uploadFilesFromBinaries[T any](
 
 	for _, file := range files {
 		// Create the form file field
-		part, err := writer.CreateFormFile("file", file.Name)
+		formFieldName := "file"
+		if file.FormFieldName != "" {
+			formFieldName = file.FormFieldName
+		}
+		part, err := writer.CreateFormFile(formFieldName, file.Name)
 		if err != nil {
 			return result, WrapGenericError("could not create form file", err)
 		}

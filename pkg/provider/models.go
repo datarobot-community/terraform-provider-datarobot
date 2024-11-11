@@ -438,3 +438,25 @@ type GoogleCloudCredentialResourceModel struct {
 	GCPKeyFile     types.String `tfsdk:"gcp_key_file"`
 	GCPKeyFileHash types.String `tfsdk:"gcp_key_file_hash"`
 }
+
+// ExecutionEnvironmentDataSourceModel describes the execution environment data source resource.
+type ExecutionEnvironmentDataSourceModel struct {
+	Name                types.String `tfsdk:"name"`
+	ID                  types.String `tfsdk:"id"`
+	Description         types.String `tfsdk:"description"`
+	ProgrammingLanguage types.String `tfsdk:"programming_language"`
+	VersionID           types.String `tfsdk:"version_id"`
+}
+
+// ExecutionEnvironmentResourceModel describes the execution environment resource.
+type ExecutionEnvironmentResourceModel struct {
+	ID                  types.String   `tfsdk:"id"`
+	Name                types.String   `tfsdk:"name"`
+	ProgrammingLanguage types.String   `tfsdk:"programming_language"`
+	Description         types.String   `tfsdk:"description"`
+	UseCases            []types.String `tfsdk:"use_cases"`
+	VersionID           types.String   `tfsdk:"version_id"`
+	VersionDescription  types.String   `tfsdk:"version_description"`
+	DockerContextPath   types.String   `tfsdk:"docker_context_path"`
+	BuildStatus         types.String   `tfsdk:"build_status"`
+}

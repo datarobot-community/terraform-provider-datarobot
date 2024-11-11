@@ -1,3 +1,7 @@
+## 0.4.0
+
+- Execution Environment Resource and Data Source
+
 ## 0.3.6
 
 - add DATAROBOT_TRACE_CONTEXT env var for X-DataRobot-Api-Consumer-Trace header

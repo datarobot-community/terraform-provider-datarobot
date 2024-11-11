@@ -291,6 +291,36 @@ func (mr *MockServiceMockRecorder) CreateDeploymentFromModelPackage(ctx, req int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeploymentFromModelPackage", reflect.TypeOf((*MockService)(nil).CreateDeploymentFromModelPackage), ctx, req)
 }
 
+// CreateExecutionEnvironment mocks base method.
+func (m *MockService) CreateExecutionEnvironment(ctx context.Context, req *client.CreateExecutionEnvironmentRequest) (*client.ExecutionEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExecutionEnvironment", ctx, req)
+	ret0, _ := ret[0].(*client.ExecutionEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateExecutionEnvironment indicates an expected call of CreateExecutionEnvironment.
+func (mr *MockServiceMockRecorder) CreateExecutionEnvironment(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExecutionEnvironment", reflect.TypeOf((*MockService)(nil).CreateExecutionEnvironment), ctx, req)
+}
+
+// CreateExecutionEnvironmentVersion mocks base method.
+func (m *MockService) CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *client.CreateExecutionEnvironmentVersionRequest) (*client.ExecutionEnvironmentVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExecutionEnvironmentVersion", ctx, id, req)
+	ret0, _ := ret[0].(*client.ExecutionEnvironmentVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateExecutionEnvironmentVersion indicates an expected call of CreateExecutionEnvironmentVersion.
+func (mr *MockServiceMockRecorder) CreateExecutionEnvironmentVersion(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExecutionEnvironmentVersion", reflect.TypeOf((*MockService)(nil).CreateExecutionEnvironmentVersion), ctx, id, req)
+}
+
 // CreateLLMBlueprint mocks base method.
 func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
@@ -522,6 +552,20 @@ func (m *MockService) DeleteDeployment(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteDeployment(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDeployment", reflect.TypeOf((*MockService)(nil).DeleteDeployment), ctx, id)
+}
+
+// DeleteExecutionEnvironment mocks base method.
+func (m *MockService) DeleteExecutionEnvironment(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExecutionEnvironment", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteExecutionEnvironment indicates an expected call of DeleteExecutionEnvironment.
+func (mr *MockServiceMockRecorder) DeleteExecutionEnvironment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecutionEnvironment", reflect.TypeOf((*MockService)(nil).DeleteExecutionEnvironment), ctx, id)
 }
 
 // DeleteLLMBlueprint mocks base method.
@@ -802,6 +846,21 @@ func (mr *MockServiceMockRecorder) GetDeploymentSettings(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentSettings), ctx, id)
 }
 
+// GetExecutionEnvironment mocks base method.
+func (m *MockService) GetExecutionEnvironment(ctx context.Context, id string) (*client.ExecutionEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionEnvironment", ctx, id)
+	ret0, _ := ret[0].(*client.ExecutionEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExecutionEnvironment indicates an expected call of GetExecutionEnvironment.
+func (mr *MockServiceMockRecorder) GetExecutionEnvironment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironment", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironment), ctx, id)
+}
+
 // GetGuardConfigurationsForCustomModelVersion mocks base method.
 func (m *MockService) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*client.GuardConfigurationResponse, error) {
 	m.ctrl.T.Helper()
@@ -1040,6 +1099,21 @@ func (m *MockService) IsVectorDatabaseReady(ctx context.Context, id string) (boo
 func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
+}
+
+// ListExecutionEnvironments mocks base method.
+func (m *MockService) ListExecutionEnvironments(ctx context.Context) ([]client.ExecutionEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExecutionEnvironments", ctx)
+	ret0, _ := ret[0].([]client.ExecutionEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExecutionEnvironments indicates an expected call of ListExecutionEnvironments.
+func (mr *MockServiceMockRecorder) ListExecutionEnvironments(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutionEnvironments", reflect.TypeOf((*MockService)(nil).ListExecutionEnvironments), ctx)
 }
 
 // ListGuardTemplates mocks base method.
@@ -1310,6 +1384,21 @@ func (m *MockService) UpdateDeploymentSettings(ctx context.Context, id string, r
 func (mr *MockServiceMockRecorder) UpdateDeploymentSettings(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentSettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentSettings), ctx, id, req)
+}
+
+// UpdateExecutionEnvironment mocks base method.
+func (m *MockService) UpdateExecutionEnvironment(ctx context.Context, id string, req *client.UpdateExecutionEnvironmentRequest) (*client.ExecutionEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateExecutionEnvironment", ctx, id, req)
+	ret0, _ := ret[0].(*client.ExecutionEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateExecutionEnvironment indicates an expected call of UpdateExecutionEnvironment.
+func (mr *MockServiceMockRecorder) UpdateExecutionEnvironment(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateExecutionEnvironment", reflect.TypeOf((*MockService)(nil).UpdateExecutionEnvironment), ctx, id, req)
 }
 
 // UpdateLLMBlueprint mocks base method.

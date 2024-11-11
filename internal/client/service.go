@@ -129,6 +129,14 @@ type Service interface {
 	UpdateCredential(ctx context.Context, id string, req *CredentialRequest) (*CredentialResponse, error)
 	DeleteCredential(ctx context.Context, id string) error
 
+	// Execution Environment
+	CreateExecutionEnvironment(ctx context.Context, req *CreateExecutionEnvironmentRequest) (*ExecutionEnvironment, error)
+	GetExecutionEnvironment(ctx context.Context, id string) (*ExecutionEnvironment, error)
+	UpdateExecutionEnvironment(ctx context.Context, id string, req *UpdateExecutionEnvironmentRequest) (*ExecutionEnvironment, error)
+	DeleteExecutionEnvironment(ctx context.Context, id string) error
+	ListExecutionEnvironments(ctx context.Context) ([]ExecutionEnvironment, error)
+	CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error)
+
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
 
@@ -572,6 +580,31 @@ func (s *ServiceImpl) UpdateCredential(ctx context.Context, id string, req *Cred
 
 func (s *ServiceImpl) DeleteCredential(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/credentials/"+id+"/")
+}
+
+// Execution Environment Service Implementation.
+func (s *ServiceImpl) CreateExecutionEnvironment(ctx context.Context, req *CreateExecutionEnvironmentRequest) (*ExecutionEnvironment, error) {
+	return Post[ExecutionEnvironment](s.client, ctx, "/executionEnvironments/", req)
+}
+
+func (s *ServiceImpl) GetExecutionEnvironment(ctx context.Context, id string) (*ExecutionEnvironment, error) {
+	return Get[ExecutionEnvironment](s.client, ctx, "/executionEnvironments/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateExecutionEnvironment(ctx context.Context, id string, req *UpdateExecutionEnvironmentRequest) (*ExecutionEnvironment, error) {
+	return Patch[ExecutionEnvironment](s.client, ctx, "/executionEnvironments/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteExecutionEnvironment(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/executionEnvironments/"+id+"/")
+}
+
+func (s *ServiceImpl) ListExecutionEnvironments(ctx context.Context) ([]ExecutionEnvironment, error) {
+	return GetAllPages[ExecutionEnvironment](s.client, ctx, "/executionEnvironments/", nil)
+}
+
+func (s *ServiceImpl) CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error) {
+	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/", http.MethodPost, req.Files, map[string]string{"description": req.Description})
 }
 
 func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {
