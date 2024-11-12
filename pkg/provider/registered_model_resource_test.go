@@ -21,11 +21,11 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	name := "registered model example name"
-	newName := "new registered model example name"
+	name := "registered model example name " + nameSalt
+	newName := "new registered model example name" + nameSalt
 
-	versionName := "version_name"
-	newVersionName := "new_version_name"
+	versionName := "version_name" + nameSalt
+	newVersionName := "new_version_name" + nameSalt
 
 	useCaseResourceName := "test_registered_model"
 	useCaseResourceName2 := "test_new_registered_model"

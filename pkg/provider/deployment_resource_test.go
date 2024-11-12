@@ -302,7 +302,7 @@ resource "datarobot_custom_model" "test_deployment" {
 	folder_path = "deployment"
 }
 resource "datarobot_registered_model" "test_deployment" {
-	name = "test deployment"
+	name = "test deployment %s"
 	description = "test"
 	custom_model_version_id = "${datarobot_custom_model.test_deployment.version_id}"
 }
@@ -319,7 +319,7 @@ resource "datarobot_deployment" "test" {
 	%s
 	%s
 }
-`, customModelTargetName, label, importance, useCaseIDsStr, deploymentSettings)
+`, customModelTargetName, nameSalt, label, importance, useCaseIDsStr, deploymentSettings)
 }
 
 func checkDeploymentResourceExists() resource.TestCheckFunc {

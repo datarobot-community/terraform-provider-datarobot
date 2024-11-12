@@ -478,6 +478,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			Language:            plan.Language.ValueString(),
 			IsProxyModel:        plan.IsProxy.ValueBool(),
 			ClassLabels:         classLabels,
+			IsTrainingDataForVersionsPermanentlyEnabled: true,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError(

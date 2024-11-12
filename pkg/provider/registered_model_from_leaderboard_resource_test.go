@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -17,6 +19,10 @@ import (
 
 func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	t.Parallel()
+
+	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
+		t.Skip("Skipping registered model from leaderboard test for staging environment")
+	}
 
 	resourceName := "datarobot_registered_model_from_leaderboard.test"
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())

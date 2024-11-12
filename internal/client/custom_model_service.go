@@ -8,17 +8,18 @@ const (
 )
 
 type CreateCustomModelRequest struct {
-	Name                string   `json:"name"`
-	TargetType          string   `json:"targetType"`
-	CustomModelType     string   `json:"customModelType"`
-	TargetName          string   `json:"targetName,omitempty"`
-	NegativeClassLabel  string   `json:"negativeClassLabel,omitempty"`
-	PositiveClassLabel  string   `json:"positiveClassLabel,omitempty"`
-	PredictionThreshold float64  `json:"predictionThreshold,omitempty"`
-	Description         string   `json:"description,omitempty"`
-	IsProxyModel        bool     `json:"isProxyModel,omitempty"`
-	Language            string   `json:"language,omitempty"`
-	ClassLabels         []string `json:"classLabels,omitempty"`
+	Name                                        string   `json:"name"`
+	TargetType                                  string   `json:"targetType"`
+	CustomModelType                             string   `json:"customModelType"`
+	TargetName                                  string   `json:"targetName,omitempty"`
+	NegativeClassLabel                          string   `json:"negativeClassLabel,omitempty"`
+	PositiveClassLabel                          string   `json:"positiveClassLabel,omitempty"`
+	PredictionThreshold                         float64  `json:"predictionThreshold,omitempty"`
+	Description                                 string   `json:"description,omitempty"`
+	IsProxyModel                                bool     `json:"isProxyModel,omitempty"`
+	Language                                    string   `json:"language,omitempty"`
+	ClassLabels                                 []string `json:"classLabels,omitempty"`
+	IsTrainingDataForVersionsPermanentlyEnabled bool     `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
 }
 
 type CreateCustomModelFromLLMBlueprintRequest struct {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/google/uuid"
 	tf_provider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
@@ -12,8 +13,10 @@ import (
 
 var testAccProvider tf_provider.Provider
 var cl *client.Client
+var nameSalt string
 
 func init() {
+	nameSalt = uuid.New().String()
 	apiKey := os.Getenv(DataRobotApiKeyEnvVar)
 	cfg := client.NewConfiguration(apiKey)
 	if endpoint := os.Getenv(DataRobotEndpointEnvVar); endpoint != "" {

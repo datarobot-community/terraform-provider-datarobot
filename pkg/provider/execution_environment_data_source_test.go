@@ -16,8 +16,6 @@ import (
 var executionEnvironmentNames = []string{
 	"[DataRobot][NVIDIA] Python 3.11 GenAI",
 	"[GenAI] vLLM Inference Server",
-	"PyONNX",
-	"[DataRobot] Python 3.12",
 }
 
 func TestAccExecutionEnvironmentDataSource(t *testing.T) {
