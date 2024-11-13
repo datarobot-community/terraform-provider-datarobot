@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -13,18 +14,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-var globalModelNames = []string{
-	"[Hugging Face] Zero-shot Classifier",
-	"[Hugging Face] Toxicity Classifier",
-	"[Hugging Face] Sentiment Classifier",
-	"[Hugging Face] Emotions Classifier",
-	"[DataRobot] Dummy Binary Classification",
-}
-
 func TestAccGlobalModelDataSource(t *testing.T) {
 	t.Parallel()
 
-	testGlobalModelDataSource(t, globalModelNames, false)
+	testGlobalModelDataSource(t, false)
 }
 
 func TestIntegrationGlobalModelDataSource(t *testing.T) {
@@ -40,7 +33,12 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		os.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
-	for _, name := range globalModelNames {
+	globalModels, err := getGlobalModels()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, globalModel := range globalModels {
 		id := uuid.NewString()
 		versionID := uuid.NewString()
 		versionNum := 2
@@ -48,11 +46,11 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			mockService.EXPECT().ListRegisteredModels(gomock.Any(), &client.ListRegisteredModelsRequest{
 				IsGlobal: true,
-				Search:   name,
+				Search:   globalModel.Name,
 			}).Return([]client.RegisteredModel{
 				{
 					ID:             id,
-					Name:           name,
+					Name:           globalModel.Name,
 					LastVersionNum: versionNum,
 					IsGlobal:       true,
 				},
@@ -70,19 +68,24 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		Search:   "invalid",
 	}).Return([]client.RegisteredModel{}, nil)
 
-	testGlobalModelDataSource(t, globalModelNames, true)
+	testGlobalModelDataSource(t, true)
 }
 
-func testGlobalModelDataSource(t *testing.T, names []string, isMock bool) {
+func testGlobalModelDataSource(t *testing.T, isMock bool) {
 	dataSourceName := "data.datarobot_global_model.test"
 
 	steps := []resource.TestStep{}
 
-	for _, name := range names {
+	globalModels, err := getGlobalModels()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, globalModel := range globalModels {
 		steps = append(steps, resource.TestStep{
-			Config: globalModelDataSourceConfig(name),
+			Config: globalModelDataSourceConfig(globalModel.Name),
 			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttr(dataSourceName, "name", name),
+				resource.TestCheckResourceAttr(dataSourceName, "name", globalModel.Name),
 				resource.TestCheckResourceAttrSet(dataSourceName, "id"),
 				resource.TestCheckResourceAttrSet(dataSourceName, "version_id"),
 			),
@@ -110,4 +113,22 @@ data "datarobot_global_model" "test" {
 	  name = "%s"
 }
 `, name)
+}
+
+func getGlobalModels() ([]client.RegisteredModel, error) {
+	p, ok := testAccProvider.(*Provider)
+	if !ok {
+		return nil, fmt.Errorf("Provider not found")
+	}
+	p.service = client.NewService(cl)
+
+	traceAPICall("ListRegisteredModels")
+	registeredModels, err := p.service.ListRegisteredModels(context.TODO(), &client.ListRegisteredModelsRequest{
+		IsGlobal: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return registeredModels, nil
 }

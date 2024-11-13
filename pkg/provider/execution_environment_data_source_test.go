@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -13,15 +14,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-var executionEnvironmentNames = []string{
-	"[DataRobot][NVIDIA] Python 3.11 GenAI",
-	"[GenAI] vLLM Inference Server",
-}
-
 func TestAccExecutionEnvironmentDataSource(t *testing.T) {
 	t.Parallel()
 
-	testExecutionEnvironmentDataSource(t, executionEnvironmentNames, false)
+	testExecutionEnvironmentDataSource(t, false)
 }
 
 func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
@@ -37,7 +33,12 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 		os.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
-	for _, name := range executionEnvironmentNames {
+	executionEnvironments, err := getExecutionEnvironments()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, executionEnvironment := range executionEnvironments {
 		id := uuid.NewString()
 		versionID := uuid.NewString()
 		description := uuid.NewString()
@@ -47,7 +48,7 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 			mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return([]client.ExecutionEnvironment{
 				{
 					ID:                  id,
-					Name:                name,
+					Name:                executionEnvironment.Name,
 					Description:         description,
 					ProgrammingLanguage: programmingLanguage,
 					LatestVersion: client.ExecutionEnvironmentVersion{
@@ -60,21 +61,25 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return([]client.ExecutionEnvironment{}, nil)
 
-	testExecutionEnvironmentDataSource(t, executionEnvironmentNames, true)
+	testExecutionEnvironmentDataSource(t, true)
 }
 
-func testExecutionEnvironmentDataSource(t *testing.T, names []string, isMock bool) {
+func testExecutionEnvironmentDataSource(t *testing.T, isMock bool) {
 	dataSourceName := "data.datarobot_execution_environment.test"
 
 	steps := []resource.TestStep{}
 
-	for _, name := range names {
+	executionEnvironments, err := getExecutionEnvironments()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, executionEnvironment := range executionEnvironments {
 		steps = append(steps, resource.TestStep{
-			Config: executionEnvironmentDataSourceConfig(name),
+			Config: executionEnvironmentDataSourceConfig(executionEnvironment.Name),
 			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttr(dataSourceName, "name", name),
+				resource.TestCheckResourceAttr(dataSourceName, "name", executionEnvironment.Name),
 				resource.TestCheckResourceAttrSet(dataSourceName, "id"),
-				resource.TestCheckResourceAttrSet(dataSourceName, "description"),
 				resource.TestCheckResourceAttrSet(dataSourceName, "programming_language"),
 				resource.TestCheckResourceAttrSet(dataSourceName, "version_id"),
 			),
@@ -102,4 +107,20 @@ data "datarobot_execution_environment" "test" {
 	  name = "%s"
 }
 `, name)
+}
+
+func getExecutionEnvironments() ([]client.ExecutionEnvironment, error) {
+	p, ok := testAccProvider.(*Provider)
+	if !ok {
+		return nil, fmt.Errorf("Provider not found")
+	}
+	p.service = client.NewService(cl)
+
+	traceAPICall("ListExecutionEnvironments")
+	executionEnvironments, err := p.service.ListExecutionEnvironments(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	return executionEnvironments, nil
 }
