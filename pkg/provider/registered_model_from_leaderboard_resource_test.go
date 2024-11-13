@@ -20,8 +20,9 @@ import (
 func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	t.Parallel()
 
-	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
-		t.Skip("Skipping registered model from leaderboard test for staging environment")
+	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") ||
+		strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "dr-app-charts") {
+		t.Skip("Skipping registered model from leaderboard test for environment")
 	}
 
 	resourceName := "datarobot_registered_model_from_leaderboard.test"

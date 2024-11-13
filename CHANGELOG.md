@@ -1,3 +1,7 @@
+## 0.4.2
+
+- Make tests more flexible
+
 ## 0.4.1
 
 - Support DR endpoint with trailing slash
