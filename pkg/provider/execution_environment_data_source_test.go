@@ -32,7 +32,7 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
 		os.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
-	
+
 	executionEnvironments, err := getExecutionEnvironments()
 	if err != nil {
 		t.Fatal(err)
@@ -124,4 +124,3 @@ func getExecutionEnvironments() ([]client.ExecutionEnvironment, error) {
 
 	return executionEnvironments, nil
 }
-
