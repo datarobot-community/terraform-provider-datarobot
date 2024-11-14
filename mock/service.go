@@ -1101,6 +1101,36 @@ func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
 }
 
+// ListCustomModelVersions mocks base method.
+func (m *MockService) ListCustomModelVersions(ctx context.Context, id string) ([]client.CustomModelVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCustomModelVersions", ctx, id)
+	ret0, _ := ret[0].([]client.CustomModelVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCustomModelVersions indicates an expected call of ListCustomModelVersions.
+func (mr *MockServiceMockRecorder) ListCustomModelVersions(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModelVersions", reflect.TypeOf((*MockService)(nil).ListCustomModelVersions), ctx, id)
+}
+
+// ListCustomModels mocks base method.
+func (m *MockService) ListCustomModels(ctx context.Context) ([]client.CustomModel, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCustomModels", ctx)
+	ret0, _ := ret[0].([]client.CustomModel)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCustomModels indicates an expected call of ListCustomModels.
+func (mr *MockServiceMockRecorder) ListCustomModels(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModels", reflect.TypeOf((*MockService)(nil).ListCustomModels), ctx)
+}
+
 // ListExecutionEnvironments mocks base method.
 func (m *MockService) ListExecutionEnvironments(ctx context.Context) ([]client.ExecutionEnvironment, error) {
 	m.ctrl.T.Helper()

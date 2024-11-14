@@ -53,15 +53,20 @@ type UpdateRegisteredModelRequest struct {
 }
 
 type RegisteredModelVersion struct {
-	ID                     string                       `json:"id"` // Registered model version ID
-	Name                   string                       `json:"name"`
-	BuildStatus            string                       `json:"buildStatus"`
-	ModelID                string                       `json:"modelId"`
-	RegisteredModelID      string                       `json:"registeredModelId"`
-	RegisteredModelVersion int                          `json:"registeredModelVersion"`
-	Stage                  string                       `json:"stage"`
-	Target                 RegisteredModelVersionTarget `json:"target"`
-	Tags                   []Tag                        `json:"tags"`
+	ID                     string                        `json:"id"` // Registered model version ID
+	Name                   string                        `json:"name"`
+	BuildStatus            string                        `json:"buildStatus"`
+	ModelID                string                        `json:"modelId"`
+	RegisteredModelID      string                        `json:"registeredModelId"`
+	RegisteredModelVersion int                           `json:"registeredModelVersion"`
+	Stage                  string                        `json:"stage"`
+	Target                 RegisteredModelVersionTarget  `json:"target"`
+	Tags                   []Tag                         `json:"tags"`
+	TextGeneration         RegisteredModelTextGeneration `json:"textGeneration"`
+}
+
+type RegisteredModelTextGeneration struct {
+	Prompt *string `json:"prompt,omitempty"`
 }
 
 type RegisteredModelVersionTarget struct {

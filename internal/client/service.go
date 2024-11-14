@@ -65,6 +65,8 @@ type Service interface {
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
 	UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error)
 	DeleteCustomModel(ctx context.Context, id string) error
+	ListCustomModels(ctx context.Context) ([]CustomModel, error)
+	ListCustomModelVersions(ctx context.Context, id string) ([]CustomModelVersion, error)
 	ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error)
 	GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error)
 	GetOverallModerationConfigurationForCustomModelVersion(ctx context.Context, id string) (*OverallModerationConfiguration, error)
@@ -344,6 +346,14 @@ func (s *ServiceImpl) UpdateCustomModel(ctx context.Context, id string, req *Upd
 
 func (s *ServiceImpl) DeleteCustomModel(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customModels/"+id+"/")
+}
+
+func (s *ServiceImpl) ListCustomModels(ctx context.Context) ([]CustomModel, error) {
+	return GetAllPages[CustomModel](s.client, ctx, "/customModels/", nil)
+}
+
+func (s *ServiceImpl) ListCustomModelVersions(ctx context.Context, id string) ([]CustomModelVersion, error) {
+	return GetAllPages[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", nil)
 }
 
 func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error) {

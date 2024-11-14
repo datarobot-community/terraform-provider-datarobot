@@ -25,6 +25,7 @@ type ExecutionEnvironment struct {
 	ProgrammingLanguage string                      `json:"programmingLanguage"`
 	UseCases            []string                    `json:"useCases"`
 	LatestVersion       ExecutionEnvironmentVersion `json:"latestVersion"`
+	IsPublic            bool                        `json:"isPublic"`
 }
 
 type ExecutionEnvironmentVersion struct {
