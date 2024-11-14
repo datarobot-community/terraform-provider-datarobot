@@ -10,6 +10,8 @@ const (
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
 	TimeoutMinutesEnvVar        string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent                   string = "DataRobotTerraformClient"
+
+	PromptRuntimeParameterName string = "PROMPT_COLUMN_NAME"
 )
 
 // UseCaseResourceModel describes the resource data model.

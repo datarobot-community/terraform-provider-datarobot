@@ -100,14 +100,34 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	versionName := getVersionName(data, 1)
+	createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
+		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
+		Name:                 getVersionName(data, 1),
+		RegisteredModelName:  data.Name.ValueString(),
+	}
+
+	customModel, err := r.findCustomModel(ctx, data.CustomModelVersionId.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error finding Custom Model", err.Error())
+		return
+	}
+
+	if customModel.TargetType == "TextGeneration" {
+		for _, runtimeParameter := range customModel.LatestVersion.RuntimeParameters {
+			if runtimeParameter.FieldName == PromptRuntimeParameterName && runtimeParameter.CurrentValue != nil {
+				prompt, ok := runtimeParameter.CurrentValue.(string)
+				if !ok {
+					resp.Diagnostics.AddError(
+						"Error getting prompt from Custom Model",
+						fmt.Sprintf("%s value is not a string", PromptRuntimeParameterName))
+				}
+				createRegisteredModelRequest.Prompt = prompt
+			}
+		}
+	}
 
 	traceAPICall("CreateRegisteredModel")
-	registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
-		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
-		Name:                 versionName,
-		RegisteredModelName:  data.Name.ValueString(),
-	})
+	registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, createRegisteredModelRequest)
 	if err != nil {
 		errMessage := checkNameAlreadyExists(err, data.Name.ValueString(), "Registered Model")
 		resp.Diagnostics.AddError("Error creating Registered Model", errMessage)
@@ -326,4 +346,33 @@ func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
 	}
 
 	return fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), versionNum)
+}
+
+func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (customModel client.CustomModel, err error) {
+	traceAPICall("ListCustomModels")
+	customModels, err := r.provider.service.ListCustomModels(ctx)
+	if err != nil {
+		return
+	}
+
+	for index := range customModels {
+		customModel = customModels[index]
+		if customModel.LatestVersion.ID == customModelVersionID {
+			return
+		}
+
+		var customModelVersions []client.CustomModelVersion
+		if customModelVersions, err = r.provider.service.ListCustomModelVersions(ctx, customModel.ID); err != nil {
+			return
+		}
+
+		for _, customModelVersion := range customModelVersions {
+			if customModelVersion.ID == customModelVersionID {
+				return
+			}
+		}
+	}
+
+	err = fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
+	return
 }

@@ -1,3 +1,7 @@
+## 0.4.3
+
+- Registered Model prompt
+
 ## 0.4.2
 
 - Make tests more flexible

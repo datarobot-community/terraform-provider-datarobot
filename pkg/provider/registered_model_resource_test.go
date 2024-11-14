@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -50,7 +51,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
+					checkRegisteredModelResourceExists(resourceName, nil),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", name+" (v1)"),
@@ -77,7 +78,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
+					checkRegisteredModelResourceExists(resourceName, nil),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
@@ -97,13 +98,84 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName),
+					checkRegisteredModelResourceExists(resourceName, nil),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccTextGenerationRegisteredModelResource(t *testing.T) {
+	t.Parallel()
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	nameSuffix := "test_registered_model_text_generation"
+	nameSuffix2 := "test_registered_model_text_generation2"
+	resourceName := "datarobot_registered_model."
+
+	prompt := "prompt"
+
+	folderPath := "registered_model_text_generation"
+	fileName := "model-metadata.yaml"
+	fileContents := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: PROMPT_COLUMN_NAME
+    type: string
+    defaultValue: null`
+
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	if err = os.WriteFile(folderPath+"/"+fileName, []byte(fileContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with prompt
+			{
+				Config: textGenerationRegisteredModelResourceConfig(nameSuffix, true, &prompt),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName+nameSuffix,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName+nameSuffix, &prompt),
+					resource.TestCheckResourceAttrSet(resourceName+nameSuffix, "id"),
+					resource.TestCheckResourceAttrSet(resourceName+nameSuffix, "version_id"),
+				),
+			},
+			// Create without prompt
+			{
+				Config: textGenerationRegisteredModelResourceConfig(nameSuffix2, false, nil),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName+nameSuffix2,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName+nameSuffix2, nil),
+					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "id"),
+					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "version_id"),
 				),
 			},
 			// Delete is tested automatically
@@ -194,7 +266,54 @@ resource "datarobot_registered_model" "test" {
 `, guardName, name, description, versionNameStr, useCaseIDsStr)
 }
 
-func checkRegisteredModelResourceExists(resourceName string) resource.TestCheckFunc {
+func textGenerationRegisteredModelResourceConfig(
+	resourceName string,
+	includePrompt bool,
+	promptParameterValue *string,
+) string {
+	promptParamStr := ""
+	if includePrompt {
+		if promptParameterValue == nil {
+			promptParamStr = `
+		runtime_parameter_values = [
+			{
+				key="PROMPT_COLUMN_NAME",
+				type="string",
+				value=null
+			},
+		]`
+		} else {
+			promptParamStr = fmt.Sprintf(`
+			runtime_parameter_values = [
+				{
+					key="PROMPT_COLUMN_NAME",
+					type="string",
+					value="%s"
+				},
+			]`, *promptParameterValue)
+		}
+	}
+
+	return fmt.Sprintf(`
+	resource "datarobot_custom_model" "%s" {
+		name        			 = "test text generation registered model %s"
+		target_type         	 = "TextGeneration"
+		target_name         	 = "target"
+		language 				 = "python"
+		base_environment_id 	 = "65f9b27eab986d30d4c64268"
+		is_proxy 				 = true
+		folder_path 			 = "registered_model_text_generation"
+		%s
+	}
+
+	resource "datarobot_registered_model" "%s" {
+		name 					= "test text generation registered model"
+		custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
+	}
+	`, resourceName, nameSalt, promptParamStr, resourceName, resourceName)
+}
+
+func checkRegisteredModelResourceExists(resourceName string, prompt *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -221,6 +340,12 @@ func checkRegisteredModelResourceExists(resourceName string) resource.TestCheckF
 		latestRegisteredModelVersion, err := p.service.GetLatestRegisteredModelVersion(context.TODO(), rs.Primary.ID)
 		if err != nil {
 			return err
+		}
+
+		if prompt != nil {
+			if *latestRegisteredModelVersion.TextGeneration.Prompt != *prompt {
+				return fmt.Errorf("Registered Model does not have prompt %s, instead: %s", *prompt, *latestRegisteredModelVersion.TextGeneration.Prompt)
+			}
 		}
 
 		if registeredModel.Name == rs.Primary.Attributes["name"] &&
