@@ -122,5 +122,12 @@ func getExecutionEnvironments() ([]client.ExecutionEnvironment, error) {
 		return nil, err
 	}
 
-	return executionEnvironments, nil
+	publicExecutionEnvironments := []client.ExecutionEnvironment{}
+	for _, executionEnvironment := range executionEnvironments {
+		if executionEnvironment.IsPublic {
+			publicExecutionEnvironments = append(publicExecutionEnvironments, executionEnvironment)
+		}
+	}
+
+	return publicExecutionEnvironments, nil
 }
