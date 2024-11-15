@@ -1255,7 +1255,7 @@ resource "datarobot_remote_repository" "%s" {
 }
 
 resource "datarobot_api_token_credential" "%s" {
-	name = "open ai credential %s"
+	name = "open ai %s %s"
 	api_token = "test"
 }
 	
@@ -1274,6 +1274,7 @@ resource "datarobot_custom_model" "%s" {
 	%s
 }
 `, resourceName,
+		resourceName,
 		resourceName,
 		resourceName,
 		resourceName,
