@@ -65,7 +65,10 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	t.Parallel()
 
-	resourceName := "datarobot_custom_model.test_without_llm_blueprint"
+	resourceType := "datarobot_custom_model"
+	resourceTestName := "test_without_llm_blueprint"
+	resourceName := resourceType + "." + resourceTestName
+
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	baseEnvironmentID := "65f9b27eab986d30d4c64268"  // [GenAI] Python 3.11 with Moderations
@@ -105,6 +108,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Create and Read
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"example_name",
 					"example_description",
 					baseEnvironmentID,
@@ -146,6 +150,23 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								Condition: basetypes.NewStringValue(`{"comparand": ["anger", "amusement"], "comparator": "matches"}`),
 							},
 						},
+						{
+							TemplateName: basetypes.NewStringValue("Stay on topic for inputs"),
+							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Nemo"),
+								Condition: basetypes.NewStringValue(`{"comparand": "TRUE", "comparator": "equals"}`),
+							},
+							OpenAICredential:   basetypes.NewStringValue("test"),
+							OpenAIApiBase:      basetypes.NewStringValue("https://datarobot-genai-enablement.openai.azure.com/"),
+							OpenAIDeploymentID: basetypes.NewStringValue("test"),
+							LlmType:            basetypes.NewStringValue("azureOpenAi"),
+							NemoInfo: &NemoInfo{
+								BlockedTerms: basetypes.NewStringValue("term1\nterm2\nterm3\n"),
+							},
+						},
 					},
 					nil,
 					false),
@@ -174,12 +195,19 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0.2,"comparator":"lessThan"}`),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Faithfulness"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.template_name", "Emotions Classifier"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.condition", `{"comparand":["anger","amusement"],"comparator":"matches"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_credential"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_api_base"),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_deployment_id"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.llm_type", "azureOpenAi"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.template_name", "Emotions Classifier"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.condition", `{"comparand":["anger","amusement"],"comparator":"matches"}`),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.3.template_name", "Stay on topic for inputs"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.3.intervention.condition", `{"comparand":"TRUE","comparator":"equals"}`),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.3.openai_credential"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.3.openai_api_base"),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.3.openai_deployment_id"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.3.llm_type", "azureOpenAi"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.3.nemo_info.blocked_terms", "term1\nterm2\nterm3\n"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -187,6 +215,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Add and update guards + update base environment
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"example_name",
 					"example_description",
 					baseEnvironmentID2,
@@ -262,6 +291,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Remove guards
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID2,
@@ -285,6 +315,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Update source remote repositories
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID2,
@@ -315,6 +346,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Remove source remote repositories
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID2,
@@ -338,6 +370,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Update files, base environment, and rebuild dependencies
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID,
@@ -362,6 +395,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Remove files, add folder path
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID,
@@ -396,6 +430,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					}
 				},
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID,
@@ -429,6 +464,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					}
 				},
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID,
@@ -457,6 +493,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 			// Add resource settings
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
 					"new_example_name",
 					"new_example_description",
 					baseEnvironmentID,
@@ -483,28 +520,45 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "network_access", "NONE"),
 				),
 			},
-			// Add training dataset
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestAccCustomModelWithTrainingDatasetResource(t *testing.T) {
+	t.Parallel()
+
+	resourceType := "datarobot_custom_model"
+	resourceTestName := "test_with_training_dataset"
+	resourceName := resourceType + "." + resourceTestName
+
+	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+
+	sourceRemoteRepositories := []SourceRemoteRepository{
+		{
+			Ref:         basetypes.NewStringValue("master"),
+			SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/custom.py")},
+		},
+	}
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with training dataset
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
-					"new_example_name",
-					"new_example_description",
+					resourceTestName,
+					"example_name",
+					"example_description",
 					baseEnvironmentID,
 					sourceRemoteRepositories,
 					nil,
 					nil,
 					nil,
-					&CustomModelResourceSettings{
-						MemoryMB:      basetypes.NewInt64Value(256),
-						Replicas:      basetypes.NewInt64Value(2),
-						NetworkAccess: basetypes.NewStringValue("NONE"),
-					},
+					nil,
 					true),
-				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("version_id"),
-					),
-				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttrSet(resourceName, "training_dataset_id"),
@@ -512,7 +566,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "training_dataset_name"),
 				),
 			},
-			// Delete is tested automatically
 		},
 	})
 }
@@ -1043,7 +1096,7 @@ resource "datarobot_llm_blueprint" "test_custom_model" {
 	llm_id = "azure-openai-gpt-3.5-turbo"
 }
 resource "datarobot_api_token_credential" "test_custom_model" {
-	name = "test custom model"
+	name = "test custom model %s"
 	description = "test"
 	api_token = "test"
 }
@@ -1065,10 +1118,11 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	  }
 	]
 }
-`, name, description)
+`, nameSalt, name, description)
 }
 
 func customModelWithoutLlmBlueprintResourceConfig(
+	resourceName,
 	name,
 	description string,
 	baseEnvironmentID string,
@@ -1085,10 +1139,10 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		for _, remoteRepository := range remoteRepositories {
 			remoteRepositoriesStr += fmt.Sprintf(`
 			{
-				id  = datarobot_remote_repository.test_custom_model_from_remote_repository.id
+				id  = datarobot_remote_repository.%s.id
 				ref = %s
 				source_paths = %v
-			},`, remoteRepository.Ref, remoteRepository.SourcePaths)
+			},`, resourceName, remoteRepository.Ref, remoteRepository.SourcePaths)
 		}
 		remoteRepositoriesStr += "]"
 	}
@@ -1123,15 +1177,23 @@ func customModelWithoutLlmBlueprintResourceConfig(
 			guardCredentialStr := ""
 			if guard.OpenAICredential != types.StringNull() {
 				guardCredentialStr = fmt.Sprintf(`
-				openai_credential = "${datarobot_api_token_credential.test_without_llm_blueprint.id}"
+				openai_credential = "${datarobot_api_token_credential.%s.id}"
 				llm_type = %s
-				`, guard.LlmType)
+				`, resourceName, guard.LlmType)
 				if IsKnown(guard.OpenAIApiBase) {
 					guardCredentialStr += fmt.Sprintf(`
 					openai_api_base = %s
 					openai_deployment_id = %s
 					`, guard.OpenAIApiBase, guard.OpenAIDeploymentID)
 				}
+			}
+
+			nemoInfoStr := ""
+			if guard.NemoInfo != nil {
+				nemoInfoStr = fmt.Sprintf(`
+				nemo_info = {
+					blocked_terms = %s
+				}`, guard.NemoInfo.BlockedTerms)
 			}
 
 			guardsStr += fmt.Sprintf(`
@@ -1145,6 +1207,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 					condition = jsonencode(%s)
 				}
 				%s
+				%s
 			},`,
 				guard.TemplateName,
 				guard.Name,
@@ -1152,7 +1215,8 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.Intervention.Action,
 				guard.Intervention.Message,
 				guard.Intervention.Condition.ValueString(),
-				guardCredentialStr)
+				guardCredentialStr,
+				nemoInfoStr)
 		}
 		guardsStr += "]"
 	}
@@ -1168,34 +1232,34 @@ func customModelWithoutLlmBlueprintResourceConfig(
 
 	trainingDatasetStr := ""
 	if addTrainingData {
-		trainingDatasetStr = `
-		training_dataset_id = "${datarobot_dataset_from_file.test_without_llm_blueprint.id}"
-		`
+		trainingDatasetStr = fmt.Sprintf(`
+		training_dataset_id = "${datarobot_dataset_from_file.%s.id}"
+		`, resourceName)
 	}
 
 	return fmt.Sprintf(`
-resource "datarobot_use_case" "test_without_llm_blueprint" {
+resource "datarobot_use_case" "%s" {
 	name = "test custom model without llm blueprint"
 }
 
-resource "datarobot_dataset_from_file" "test_without_llm_blueprint" {
+resource "datarobot_dataset_from_file" "%s" {
 	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_ids = ["${datarobot_use_case.test_without_llm_blueprint.id}"]
+	use_case_ids = ["${datarobot_use_case.%s.id}"]
 }
 
-resource "datarobot_remote_repository" "test_custom_model_from_remote_repository" {
+resource "datarobot_remote_repository" "%s" {
 	name        = "Test Custom Model from Remote Repository"
 	description = "test"
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
 }
 
-resource "datarobot_api_token_credential" "test_without_llm_blueprint" {
-	name = "open ai credential"
+resource "datarobot_api_token_credential" "%s" {
+	name = "open ai credential %s"
 	api_token = "test"
 }
 	
-resource "datarobot_custom_model" "test_without_llm_blueprint" {
+resource "datarobot_custom_model" "%s" {
 	name        		  = "%s"
 	description 		  = "%s"
 	target_type           = "TextGeneration"
@@ -1209,7 +1273,22 @@ resource "datarobot_custom_model" "test_without_llm_blueprint" {
 	%s
 	%s
 }
-`, name, description, baseEnvironmentID, remoteRepositoriesStr, folderStr, filesStr, guardsStr, resourceSettingsStr, trainingDatasetStr)
+`, resourceName,
+		resourceName,
+		resourceName,
+		resourceName,
+		resourceName,
+		nameSalt,
+		resourceName,
+		name,
+		description,
+		baseEnvironmentID,
+		remoteRepositoriesStr,
+		folderStr,
+		filesStr,
+		guardsStr,
+		resourceSettingsStr,
+		trainingDatasetStr)
 }
 
 func customModelWithRuntimeParamsConfig(value string) string {

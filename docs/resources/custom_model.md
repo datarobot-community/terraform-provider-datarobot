@@ -135,6 +135,7 @@ Optional:
 - `deployment_id` (String) The deployment ID of this guard.
 - `input_column_name` (String) The input column name of this guard.
 - `llm_type` (String) The LLM type for this guard.
+- `nemo_info` (Attributes) Configuration info for NeMo guards. (see [below for nested schema](#nestedatt--guard_configurations--nemo_info))
 - `openai_api_base` (String) The OpenAI API base URL for this guard.
 - `openai_credential` (String) The ID of an OpenAI credential for this guard.
 - `openai_deployment_id` (String) The ID of an OpenAI deployment for this guard.
@@ -151,6 +152,18 @@ Required:
 Optional:
 
 - `message` (String) The message of the guard intervention.
+
+
+<a id="nestedatt--guard_configurations--nemo_info"></a>
+### Nested Schema for `guard_configurations.nemo_info`
+
+Optional:
+
+- `actions` (String) The actions for the NeMo information.
+- `blocked_terms` (String) NeMo guardrails blocked terms list.
+- `llm_prompts` (String) NeMo guardrails prompts.
+- `main_config` (String) Overall NeMo configuration YAML.
+- `rails_config` (String) NeMo guardrails configuration Colang.
 
 
 
