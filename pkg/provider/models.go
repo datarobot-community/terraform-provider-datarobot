@@ -171,6 +171,7 @@ type GuardConfiguration struct {
 	OpenAIApiBase      types.String      `tfsdk:"openai_api_base"`
 	OpenAIDeploymentID types.String      `tfsdk:"openai_deployment_id"`
 	LlmType            types.String      `tfsdk:"llm_type"`
+	NemoInfo           *NemoInfo         `tfsdk:"nemo_info"`
 }
 
 type GuardIntervention struct {
@@ -182,6 +183,14 @@ type GuardIntervention struct {
 type GuardCondition struct {
 	Comparand  types.Float64 `tfsdk:"comparand"`
 	Comparator types.String  `tfsdk:"comparator"`
+}
+
+type NemoInfo struct {
+	Actions      types.String `tfsdk:"actions"`
+	BlockedTerms types.String `tfsdk:"blocked_terms"`
+	LlmPrompts   types.String `tfsdk:"llm_prompts"`
+	MainConfig   types.String `tfsdk:"main_config"`
+	RailsConfig  types.String `tfsdk:"rails_config"`
 }
 
 type OverallModerationConfiguration struct {

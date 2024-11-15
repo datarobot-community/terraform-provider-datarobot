@@ -33,6 +33,7 @@ const (
 
 	faithfulnessOpenAiRuntimeParam      = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_OPENAI_API_KEY"
 	faithfulnessAzureOpenAiRuntimeParam = "MODERATION_OOTB_RESPONSE_FAITHFULNESS_AZURE_OPENAI_API_KEY"
+	nemoAzureOpenAiRuntimeParam         = "MODERATION_NEMO_GUARDRAILS_PROMPT_AZURE_OPENAI_API_KEY"
 )
 
 type Knowable interface {
@@ -122,6 +123,12 @@ func contains[T any](s []T, value T) bool {
 		}
 	}
 	return false
+}
+
+func setStringValueIfKnown(target *string, source basetypes.StringValue) {
+	if IsKnown(source) {
+		*target = source.ValueString()
+	}
 }
 
 func getExponentialBackoff() backoff.BackOff {
@@ -325,7 +332,8 @@ func formatRuntimeParameterValues(
 
 func isManagedByGuards(param client.RuntimeParameter) bool {
 	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
-		param.FieldName == faithfulnessAzureOpenAiRuntimeParam
+		param.FieldName == faithfulnessAzureOpenAiRuntimeParam ||
+		param.FieldName == nemoAzureOpenAiRuntimeParam
 }
 
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {

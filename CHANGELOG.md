@@ -1,3 +1,7 @@
+## 0.4.4
+
+- Add NeMo Info to Custom Model GuardrailsConfiguration
+
 ## 0.4.3
 
 - Registered Model prompt

@@ -321,6 +321,32 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 								),
 							},
 						},
+						"nemo_info": schema.SingleNestedAttribute{
+							Optional:            true,
+							MarkdownDescription: "Configuration info for NeMo guards.",
+							Attributes: map[string]schema.Attribute{
+								"actions": schema.StringAttribute{
+									Optional:            true,
+									MarkdownDescription: "The actions for the NeMo information.",
+								},
+								"blocked_terms": schema.StringAttribute{
+									Optional:            true,
+									MarkdownDescription: "NeMo guardrails blocked terms list.",
+								},
+								"llm_prompts": schema.StringAttribute{
+									Optional:            true,
+									MarkdownDescription: "NeMo guardrails prompts.",
+								},
+								"main_config": schema.StringAttribute{
+									Optional:            true,
+									MarkdownDescription: "Overall NeMo configuration YAML.",
+								},
+								"rails_config": schema.StringAttribute{
+									Optional:            true,
+									MarkdownDescription: "NeMo guardrails configuration Colang.",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1369,6 +1395,14 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 				OutputColumnName: guardConfigToAdd.OutputColumnName.ValueString(),
 				TargetType:       deployment.Model.TargetType,
 			}
+		}
+
+		if guardConfigToAdd.NemoInfo != nil {
+			setStringValueIfKnown(&newGuardConfig.NemoInfo.Actions, guardConfigToAdd.NemoInfo.Actions)
+			setStringValueIfKnown(&newGuardConfig.NemoInfo.BlockedTerms, guardConfigToAdd.NemoInfo.BlockedTerms)
+			setStringValueIfKnown(&newGuardConfig.NemoInfo.LlmPrompts, guardConfigToAdd.NemoInfo.LlmPrompts)
+			setStringValueIfKnown(&newGuardConfig.NemoInfo.MainConfig, guardConfigToAdd.NemoInfo.MainConfig)
+			setStringValueIfKnown(&newGuardConfig.NemoInfo.RailsConfig, guardConfigToAdd.NemoInfo.RailsConfig)
 		}
 
 		newGuardConfigs = append(newGuardConfigs, newGuardConfig)

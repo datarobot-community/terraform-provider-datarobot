@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -12,7 +13,32 @@ import (
 
 func TestAccQAApplicationResource(t *testing.T) {
 	t.Parallel()
+
 	resourceName := "datarobot_qa_application.test"
+
+	folderPath := "qa_application"
+	if err := os.Mkdir(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	modelContents := `from typing import Any, Dict
+import pandas as pd
+
+def load_model(code_dir: str) -> Any:
+	return "dummy"
+
+def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
+	positive_label = kwargs["positive_class_label"]
+	negative_label = kwargs["negative_class_label"]
+	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
+	return preds
+`
+
+	if err := os.WriteFile(folderPath+"/custom.py", []byte(modelContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -48,55 +74,15 @@ func TestAccQAApplicationResource(t *testing.T) {
 
 func qaApplicationResourceConfig(name string) string {
 	return fmt.Sprintf(`
-resource "datarobot_use_case" "test_qa_application" {
-	name = "test qa application"
-	description = "test"
-}
-resource "datarobot_dataset_from_file" "test_qa_application" {
-	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_ids = ["${datarobot_use_case.test_qa_application.id}"]
-}
-resource "datarobot_vector_database" "test_qa_application" {
-	  name = "test qa application"
-	  dataset_id = "${datarobot_dataset_from_file.test_qa_application.id}"
-	  use_case_id = "${datarobot_use_case.test_qa_application.id}"
-}
-resource "datarobot_playground" "test_qa_application" {
-	name = "test Q&A application"
-	description = "test"
-	use_case_id = "${datarobot_use_case.test_qa_application.id}"
-}
-resource "datarobot_llm_blueprint" "test_qa_application" {
-	name = "test Q&A application"
-	description = "test"
-	vector_database_id = "${datarobot_vector_database.test_qa_application.id}"
-	playground_id = "${datarobot_playground.test_qa_application.id}"
-	llm_id = "azure-openai-gpt-3.5-turbo"
-}
-resource "datarobot_api_token_credential" "test_qa_application" {
-	name = "test Q&A application"
-	description = "test"
-	api_token = "test"
-}
 resource "datarobot_custom_model" "test_qa_application" {
-	name = "test Q&A application"
-	description = "test"
-	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_qa_application.id}"
-	runtime_parameter_values = [
-	  { 
-		  key="OPENAI_API_BASE", 
-		  type="string", 
-		  value="https://datarobot-genai-enablement.openai.azure.com/"
-	  },
-	  { 
-		  key="OPENAI_API_KEY", 
-		  type="credential", 
-		  value=datarobot_api_token_credential.test_qa_application.id
-	  }
-	]
+	name = "test qa application"
+	target_type = "TextGeneration"
+	target_name = "target"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	folder_path = "qa_application"
 }
 resource "datarobot_registered_model" "test_qa_application" {
-	name = "test Q&A application"
+	name = "test Q&A application %s"
 	description = "test"
 	custom_model_version_id = "${datarobot_custom_model.test_qa_application.version_id}"
 }
@@ -114,7 +100,7 @@ resource "datarobot_qa_application" "test" {
 	name = "%s"
 	deployment_id = datarobot_deployment.test_qa_application.id
   }
-`, name)
+`, nameSalt, name)
 }
 
 func checkQAApplicationResourceExists(resourceName string) resource.TestCheckFunc {
