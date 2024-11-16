@@ -20,14 +20,21 @@ import (
 func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	t.Parallel()
 
-	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") ||
-		strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "dr-app-charts") {
+	modelID := "673b722dfd279fd86944d088"
+	modelID2 := "673b6fd8e060b90658aebe66"
+	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") { 
+		modelID = "673b75ec97f1021bbfb61d3b"
+		modelID2 = "673b75ec97f1021bbfb61d34"
+	} else if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "dr-app-charts") {
 		t.Skip("Skipping registered model from leaderboard test for environment")
 	}
 
 	resourceName := "datarobot_registered_model_from_leaderboard.test"
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	name := "example_name " + nameSalt
+	newName := "new_example_name " + nameSalt
 
 	versionName := "version_name"
 	newVersionName := "new_version_name"
@@ -47,8 +54,8 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 			// Create and Read
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
-					"6706bf087c2049e466c6650b",
-					"example_name",
+					modelID,
+					name,
 					"example_description",
 					&versionName,
 					&useCaseResourceName,
@@ -65,7 +72,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", versionName),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
@@ -78,8 +85,8 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 			// Update name, description, version name, and use case id
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
-					"6706bf087c2049e466c6650b",
-					"new_example_name",
+					modelID,
+					newName,
 					"new_example_description",
 					&newVersionName,
 					&useCaseResourceName2,
@@ -100,22 +107,22 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bf087c2049e466c6650b"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", modelID),
 				),
 			},
 			// Update model id creates new registered model version
 			// and remove use case id
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
-					"6706bbdb1f1a2176cc114440",
-					"new_example_name",
+					modelID2,
+					newName,
 					"new_example_description",
 					&newVersionName,
 					nil,
@@ -128,21 +135,21 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", predictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", modelID2),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
 			// Update prediction threshold creates new registered model version
 			{
 				Config: registeredModelFromLeaderboardResourceConfig(
-					"6706bbdb1f1a2176cc114440",
-					"new_example_name",
+					modelID2,
+					newName,
 					"new_example_description",
 					&newVersionName,
 					nil,
@@ -155,13 +162,13 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", newPredictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "model_id", "6706bbdb1f1a2176cc114440"),
+					resource.TestCheckResourceAttr(resourceName, "model_id", modelID2),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},

@@ -100,3 +100,13 @@ func ProgrammingLanguageValidators() []validator.String {
 		),
 	}
 }
+
+func DataStoreTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"jdbc",
+			"dr-connector-v1",
+			"dr-database-v1",
+		),
+	}
+}
