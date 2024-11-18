@@ -55,18 +55,18 @@ type CreateDatastoreRequest struct {
 }
 
 type DatastoreParams struct {
-	Fields      []map[string]string `json:"fields"`
+	Fields      []map[string]string `json:"fields,omitempty"`
+	JDBCFields  []map[string]string `json:"jdbcFields,omitempty"`
 	DriverID    *string             `json:"driverId,omitempty"`
-	JDBCURL     *string             `json:"jdbcUrl,omitempty"`
+	JDBCUrl     *string             `json:"jdbcUrl,omitempty"`
 	ConnectorID *string             `json:"connectorId,omitempty"`
 }
 
 type Datastore struct {
-	ID              string              `json:"id"`
-	CanonicalName   string              `json:"canonicalName"`
-	Type            string              `json:"type"`
-	DriverClassType *string             `json:"driverClassType,omitempty"`
-	Fields          []map[string]string `json:"fields,omitempty"`
+	ID            string          `json:"id"`
+	CanonicalName string          `json:"canonicalName"`
+	Type          string          `json:"type"`
+	Params        DatastoreParams `json:"params"`
 }
 
 type UpdateDatastoreRequest struct {
