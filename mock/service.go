@@ -1190,6 +1190,36 @@ func (mr *MockServiceMockRecorder) ListExecutionEnvironments(ctx interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutionEnvironments", reflect.TypeOf((*MockService)(nil).ListExecutionEnvironments), ctx)
 }
 
+// ListExternalConnectors mocks base method.
+func (m *MockService) ListExternalConnectors(ctx context.Context) ([]client.ExternalConnector, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalConnectors", ctx)
+	ret0, _ := ret[0].([]client.ExternalConnector)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalConnectors indicates an expected call of ListExternalConnectors.
+func (mr *MockServiceMockRecorder) ListExternalConnectors(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalConnectors", reflect.TypeOf((*MockService)(nil).ListExternalConnectors), ctx)
+}
+
+// ListExternalDataDrivers mocks base method.
+func (m *MockService) ListExternalDataDrivers(ctx context.Context, req *client.ListExternalDataDriversRequest) ([]client.ExternalDataDriver, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalDataDrivers", ctx, req)
+	ret0, _ := ret[0].([]client.ExternalDataDriver)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalDataDrivers indicates an expected call of ListExternalDataDrivers.
+func (mr *MockServiceMockRecorder) ListExternalDataDrivers(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalDataDrivers", reflect.TypeOf((*MockService)(nil).ListExternalDataDrivers), ctx, req)
+}
+
 // ListGuardTemplates mocks base method.
 func (m *MockService) ListGuardTemplates(ctx context.Context) ([]client.GuardTemplate, error) {
 	m.ctrl.T.Helper()

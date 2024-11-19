@@ -18,6 +18,16 @@ func TestAccDatasourceResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_datasource.test"
 
+	_, _, bigQueryDriverID, err := GetExternalDataDrivers()
+	if err != nil {
+		t.Fatalf("Failed to list external data drivers: %v", err)
+	}
+
+	s3ConnectorID, _, err := GetExternalConnectors()
+	if err != nil {
+		t.Fatalf("Failed to list external connectors: %v", err)
+	}
+
 	name := "example_datasource " + nameSalt
 	newName := "new_example_datasource " + nameSalt
 
@@ -45,6 +55,8 @@ func TestAccDatasourceResource(t *testing.T) {
 					),
 				},
 				Config: datasourceResourceConfig(
+					bigQueryDriverID,
+					s3ConnectorID,
 					name,
 					databaseDatasourceType,
 					tableName),
@@ -69,6 +81,8 @@ func TestAccDatasourceResource(t *testing.T) {
 					),
 				},
 				Config: datasourceResourceConfig(
+					bigQueryDriverID,
+					s3ConnectorID,
 					newName,
 					databaseDatasourceType,
 					tableName),
@@ -89,6 +103,8 @@ func TestAccDatasourceResource(t *testing.T) {
 					),
 				},
 				Config: datasourceResourceConfig(
+					bigQueryDriverID,
+					s3ConnectorID,
 					newName,
 					databaseDatasourceType,
 					newTableName),
@@ -109,6 +125,8 @@ func TestAccDatasourceResource(t *testing.T) {
 					),
 				},
 				Config: datasourceResourceConfig(
+					bigQueryDriverID,
+					s3ConnectorID,
 					newName,
 					connectorDatasourceType,
 					newTableName),
@@ -146,6 +164,8 @@ func TestDatasourceResourceSchema(t *testing.T) {
 }
 
 func datasourceResourceConfig(
+	bigQueryDriverID,
+	s3ConnectorID,
 	name,
 	datasourceType string,
 	tableName string,
@@ -170,7 +190,7 @@ func datasourceResourceConfig(
 resource "datarobot_datastore" "test_datasource_db" {
 	canonical_name = "test datasource db"
 	data_store_type = "dr-database-v1"
-	driver_id = "64a288a50636598d75df7f82"
+	driver_id = "%s"
 	fields = [
 		{
 			"id": "bq.project_id",
@@ -182,7 +202,7 @@ resource "datarobot_datastore" "test_datasource_db" {
 resource "datarobot_datastore" "test_datasource_connector" {
 	canonical_name = "test datasource connector"
 	data_store_type = "dr-connector-v1"
-	connector_id = "65538041dde6a1d664d0b2ec"
+	connector_id = "%s"
 	fields = [
 		{
 			"id": "fs.defaultFS",
@@ -199,7 +219,7 @@ resource "datarobot_datasource" "test" {
 		%s
 	}
 }
-`, name, datasourceType, resourceName, params)
+`, bigQueryDriverID, s3ConnectorID, name, datasourceType, resourceName, params)
 }
 
 func checkDatasourceResourceExists() resource.TestCheckFunc {

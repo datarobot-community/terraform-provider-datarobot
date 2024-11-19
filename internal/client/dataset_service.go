@@ -74,6 +74,28 @@ type UpdateDatastoreRequest struct {
 	Params        DatastoreParams `json:"params"`
 }
 
+type ListExternalDataDriversRequest struct {
+	Type string `json:"type" url:"type"`
+}
+
+type ExternalDataDriver struct {
+	ID              string `json:"id"`
+	Type            string `json:"type"`
+	CanonicalName   string `json:"canonicalName"`
+	Version         string `json:"version"`
+	DatabaseDriver  string `json:"databaseDriver"`
+	ConfigurationID string `json:"configurationId"`
+	ClassName       string `json:"className"`
+}
+
+type ExternalConnector struct {
+	ID              string `json:"id"`
+	Version         string `json:"version"`
+	ConnectorType   string `json:"connectorType"`
+	CanonicalName   string `json:"canonicalName"`
+	ConfigurationID string `json:"configurationId"`
+}
+
 type TestDatastoreConnectionRequest struct {
 	CredentialID string `json:"credentialId"`
 }
