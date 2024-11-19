@@ -36,6 +36,12 @@ type Service interface {
 	DeleteDatastore(ctx context.Context, id string) error
 	TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error)
 
+	// Data Source
+	CreateDatasource(ctx context.Context, req *CreateDatasourceRequest) (*Datasource, error)
+	GetDatasource(ctx context.Context, id string) (*Datasource, error)
+	UpdateDatasource(ctx context.Context, id string, req *UpdateDatasourceRequest) (*Datasource, error)
+	DeleteDatasource(ctx context.Context, id string) error
+
 	// Vector Database
 	CreateVectorDatabase(ctx context.Context, req *CreateVectorDatabaseRequest) (*VectorDatabase, error)
 	GetVectorDatabase(ctx context.Context, id string) (*VectorDatabase, error)
@@ -219,6 +225,23 @@ func (s *ServiceImpl) DeleteDatastore(ctx context.Context, id string) error {
 
 func (s *ServiceImpl) TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error) {
 	return Post[TestDatastoreConnectionResponse](s.client, ctx, "/externalDataStores/"+id+"/test/", req)
+}
+
+// Data Source Service Implementation.
+func (s *ServiceImpl) CreateDatasource(ctx context.Context, req *CreateDatasourceRequest) (*Datasource, error) {
+	return Post[Datasource](s.client, ctx, "/externalDataSources/", req)
+}
+
+func (s *ServiceImpl) GetDatasource(ctx context.Context, id string) (*Datasource, error) {
+	return Get[Datasource](s.client, ctx, "/externalDataSources/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateDatasource(ctx context.Context, id string, req *UpdateDatasourceRequest) (*Datasource, error) {
+	return Patch[Datasource](s.client, ctx, "/externalDataSources/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteDatasource(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/externalDataSources/"+id+"/")
 }
 
 // Use Case Service Implementation.

@@ -52,6 +52,7 @@ type DatasetFromURLResourceModel struct {
 	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
 
+// DatastoreResourceModel describes the datastore resource.
 type DatastoreResourceModel struct {
 	ID            types.String `tfsdk:"id"`
 	DataStoreType types.String `tfsdk:"data_store_type"`
@@ -60,6 +61,25 @@ type DatastoreResourceModel struct {
 	JDBCUrl       types.String `tfsdk:"jdbc_url"`
 	Fields        []types.Map  `tfsdk:"fields"`
 	ConnectorID   types.String `tfsdk:"connector_id"`
+}
+
+// DatasourceResourceModel describes the datasource resource.
+type DatasourceResourceModel struct {
+	ID             types.String          `tfsdk:"id"`
+	DataSourceType types.String          `tfsdk:"data_source_type"`
+	CanonicalName  types.String          `tfsdk:"canonical_name"`
+	Params         DatasourceParamsModel `tfsdk:"params"`
+}
+
+type DatasourceParamsModel struct {
+	DataStoreID     types.String `tfsdk:"data_store_id"`
+	Table           types.String `tfsdk:"table"`
+	Schema          types.String `tfsdk:"schema"`
+	PartitionColumn types.String `tfsdk:"partition_column"`
+	Query           types.String `tfsdk:"query"`
+	FetchSize       types.Int64  `tfsdk:"fetch_size"`
+	Path            types.String `tfsdk:"path"`
+	Catalog         types.String `tfsdk:"catalog"`
 }
 
 // VectorDatabaseResourceModel describes a vector database.

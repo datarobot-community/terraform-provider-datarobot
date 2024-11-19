@@ -81,3 +81,31 @@ type TestDatastoreConnectionRequest struct {
 type TestDatastoreConnectionResponse struct {
 	Message string `json:"message"`
 }
+
+type CreateDatasourceRequest struct {
+	CanonicalName string           `json:"canonicalName"`
+	Params        DatasourceParams `json:"params"`
+	Type          string           `json:"type"`
+}
+
+type DatasourceParams struct {
+	DataStoreID     string  `json:"dataStoreId"`
+	Catalog         *string `json:"catalog,omitempty"`
+	FetchSize       *int64  `json:"fetchSize,omitempty"`
+	PartitionColumn *string `json:"partitionColumn,omitempty"`
+	Schema          *string `json:"schema,omitempty"`
+	Table           *string `json:"table,omitempty"`
+	Query           *string `json:"query,omitempty"`
+	Path            *string `json:"path,omitempty"`
+}
+
+type Datasource struct {
+	ID            string           `json:"id"`
+	CanonicalName string           `json:"canonicalName"`
+	Params        DatasourceParams `json:"params"`
+	Type          string           `json:"type"`
+}
+
+type UpdateDatasourceRequest struct {
+	CanonicalName string `json:"canonicalName"`
+}

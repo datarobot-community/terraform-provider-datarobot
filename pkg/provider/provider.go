@@ -156,6 +156,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewDatasetFromFileResource,
 		NewDatasetFromURLResource,
 		NewDatastoreResource,
+		NewDatasourceResource,
 		NewVectorDatabaseResource,
 		NewPlaygroundResource,
 		NewLLMBlueprintResource,
