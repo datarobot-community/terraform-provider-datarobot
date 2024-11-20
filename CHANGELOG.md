@@ -1,3 +1,7 @@
+## 0.4.6
+
+- Add Datasource Resource
+
 ## 0.4.5
 
 - Add Datastore Resource

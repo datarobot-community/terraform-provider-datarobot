@@ -245,6 +245,21 @@ func (mr *MockServiceMockRecorder) CreateDatasetFromURL(ctx, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromURL", reflect.TypeOf((*MockService)(nil).CreateDatasetFromURL), ctx, req)
 }
 
+// CreateDatasource mocks base method.
+func (m *MockService) CreateDatasource(ctx context.Context, req *client.CreateDatasourceRequest) (*client.Datasource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDatasource", ctx, req)
+	ret0, _ := ret[0].(*client.Datasource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDatasource indicates an expected call of CreateDatasource.
+func (mr *MockServiceMockRecorder) CreateDatasource(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasource", reflect.TypeOf((*MockService)(nil).CreateDatasource), ctx, req)
+}
+
 // CreateDatastore mocks base method.
 func (m *MockService) CreateDatastore(ctx context.Context, req *client.CreateDatastoreRequest) (*client.Datastore, error) {
 	m.ctrl.T.Helper()
@@ -526,6 +541,20 @@ func (mr *MockServiceMockRecorder) DeleteDataset(ctx, id interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDataset", reflect.TypeOf((*MockService)(nil).DeleteDataset), ctx, id)
 }
 
+// DeleteDatasource mocks base method.
+func (m *MockService) DeleteDatasource(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDatasource", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDatasource indicates an expected call of DeleteDatasource.
+func (mr *MockServiceMockRecorder) DeleteDatasource(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDatasource", reflect.TypeOf((*MockService)(nil).DeleteDatasource), ctx, id)
+}
+
 // DeleteDatastore mocks base method.
 func (m *MockService) DeleteDatastore(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -754,6 +783,21 @@ func (m *MockService) GetDataset(ctx context.Context, id string) (*client.Datase
 func (mr *MockServiceMockRecorder) GetDataset(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDataset", reflect.TypeOf((*MockService)(nil).GetDataset), ctx, id)
+}
+
+// GetDatasource mocks base method.
+func (m *MockService) GetDatasource(ctx context.Context, id string) (*client.Datasource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDatasource", ctx, id)
+	ret0, _ := ret[0].(*client.Datasource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDatasource indicates an expected call of GetDatasource.
+func (mr *MockServiceMockRecorder) GetDatasource(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDatasource", reflect.TypeOf((*MockService)(nil).GetDatasource), ctx, id)
 }
 
 // GetDatastore mocks base method.
@@ -1146,6 +1190,36 @@ func (mr *MockServiceMockRecorder) ListExecutionEnvironments(ctx interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutionEnvironments", reflect.TypeOf((*MockService)(nil).ListExecutionEnvironments), ctx)
 }
 
+// ListExternalConnectors mocks base method.
+func (m *MockService) ListExternalConnectors(ctx context.Context) ([]client.ExternalConnector, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalConnectors", ctx)
+	ret0, _ := ret[0].([]client.ExternalConnector)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalConnectors indicates an expected call of ListExternalConnectors.
+func (mr *MockServiceMockRecorder) ListExternalConnectors(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalConnectors", reflect.TypeOf((*MockService)(nil).ListExternalConnectors), ctx)
+}
+
+// ListExternalDataDrivers mocks base method.
+func (m *MockService) ListExternalDataDrivers(ctx context.Context, req *client.ListExternalDataDriversRequest) ([]client.ExternalDataDriver, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalDataDrivers", ctx, req)
+	ret0, _ := ret[0].([]client.ExternalDataDriver)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalDataDrivers indicates an expected call of ListExternalDataDrivers.
+func (mr *MockServiceMockRecorder) ListExternalDataDrivers(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalDataDrivers", reflect.TypeOf((*MockService)(nil).ListExternalDataDrivers), ctx, req)
+}
+
 // ListGuardTemplates mocks base method.
 func (m *MockService) ListGuardTemplates(ctx context.Context) ([]client.GuardTemplate, error) {
 	m.ctrl.T.Helper()
@@ -1323,6 +1397,21 @@ func (m *MockService) UpdateDataset(ctx context.Context, id string, req *client.
 func (mr *MockServiceMockRecorder) UpdateDataset(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDataset", reflect.TypeOf((*MockService)(nil).UpdateDataset), ctx, id, req)
+}
+
+// UpdateDatasource mocks base method.
+func (m *MockService) UpdateDatasource(ctx context.Context, id string, req *client.UpdateDatasourceRequest) (*client.Datasource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDatasource", ctx, id, req)
+	ret0, _ := ret[0].(*client.Datasource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDatasource indicates an expected call of UpdateDatasource.
+func (mr *MockServiceMockRecorder) UpdateDatasource(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDatasource", reflect.TypeOf((*MockService)(nil).UpdateDatasource), ctx, id, req)
 }
 
 // UpdateDatastore mocks base method.

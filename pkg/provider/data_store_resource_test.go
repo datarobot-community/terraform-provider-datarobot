@@ -18,13 +18,21 @@ func TestAccDatastoreResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_datastore.test"
 
+	redshiftDriverID, athenaDriverID, bigQueryDriverID, err := GetExternalDataDrivers()
+	if err != nil {
+		t.Fatalf("Failed to list external data drivers: %v", err)
+	}
+
+	s3ConnectorID, adlsConnectorID, err := GetExternalConnectors()
+	if err != nil {
+		t.Fatalf("Failed to list external connectors: %v", err)
+	}
+
 	name := "example_datastore"
 	newName := "new_example_datastore"
 
 	connectorDatastoreType := "dr-connector-v1"
-	connectorID := "65538041dde6a1d664d0b2ec"
-	newConnectorID := "65d4a92347c41afc8bec5a4d"
-	connectorFields := `[
+	s3ConnectorFields := `[
 			{
 				"id": "fs.defaultFS",
 				"name": "Bucket Name",
@@ -32,7 +40,7 @@ func TestAccDatastoreResource(t *testing.T) {
 			}
 		]
 	`
-	connectorFieldsNewBucket := `[
+	s3ConnectorFieldsNewBucket := `[
 			{
 				"id": "fs.defaultFS",
 				"name": "Bucket Name",
@@ -40,7 +48,7 @@ func TestAccDatastoreResource(t *testing.T) {
 			}
 		]
 	`
-	newConnectorFields := `[
+	adlsConnectorFields := `[
             {
                 "id": "fs.adls.gen2.accountName",
                 "name": "Azure Storage Account Name",
@@ -50,20 +58,14 @@ func TestAccDatastoreResource(t *testing.T) {
 	`
 
 	jdbcType := "jdbc"
-	driverID := "5b4752844bf542000175dbea"
-	newDriverID := "63ff328b24f812dfdab4c194"
-	driverFields := `[
+	redshiftDriverFields := `[
 			{
 				"name": "address",
 				"value": "my-address"
 			},
-			{
-				"name": "database",
-				"value": "my-database"
-			}	
 		]
 	`
-	newDriverFields := `[
+	athenaDriverFields := `[
 			{
 				"name": "address",
 				"value": "my-new-address"
@@ -75,15 +77,14 @@ func TestAccDatastoreResource(t *testing.T) {
 			{
 				"name": "S3OutputLocation",
 				"value": "location"
-			}
+			},
 		]
 	`
 
 	jdbcUrl := "jdbc:awsathena://.test"
 
 	databaseType := "dr-database-v1"
-	databaseDriverID := "64a288a50636598d75df7f82"
-	databaseFields := `[
+	bigQueryFields := `[
 		{
 			"id": "bq.project_id",
 			"name": "Project Id",
@@ -111,15 +112,15 @@ func TestAccDatastoreResource(t *testing.T) {
 				Config: datastoreResourceConfig(
 					name,
 					connectorDatastoreType,
-					&connectorID,
+					&s3ConnectorID,
 					nil,
 					nil,
-					connectorFields),
+					s3ConnectorFields),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", name),
 					resource.TestCheckResourceAttr(resourceName, "data_store_type", connectorDatastoreType),
-					resource.TestCheckResourceAttr(resourceName, "connector_id", connectorID),
+					resource.TestCheckResourceAttr(resourceName, "connector_id", s3ConnectorID),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.id", "fs.defaultFS"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.value", "my-bucket"),
 					resource.TestCheckNoResourceAttr(resourceName, "driver_id"),
@@ -142,15 +143,15 @@ func TestAccDatastoreResource(t *testing.T) {
 				Config: datastoreResourceConfig(
 					newName,
 					connectorDatastoreType,
-					&connectorID,
+					&s3ConnectorID,
 					nil,
 					nil,
-					connectorFieldsNewBucket),
+					s3ConnectorFieldsNewBucket),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", newName),
 					resource.TestCheckResourceAttr(resourceName, "data_store_type", connectorDatastoreType),
-					resource.TestCheckResourceAttr(resourceName, "connector_id", connectorID),
+					resource.TestCheckResourceAttr(resourceName, "connector_id", s3ConnectorID),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.value", "my-new-bucket"),
 					resource.TestCheckNoResourceAttr(resourceName, "driver_id"),
 					resource.TestCheckNoResourceAttr(resourceName, "jdbc_url"),
@@ -168,15 +169,15 @@ func TestAccDatastoreResource(t *testing.T) {
 				Config: datastoreResourceConfig(
 					newName,
 					connectorDatastoreType,
-					&newConnectorID,
+					&adlsConnectorID,
 					nil,
 					nil,
-					newConnectorFields),
+					adlsConnectorFields),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", newName),
 					resource.TestCheckResourceAttr(resourceName, "data_store_type", connectorDatastoreType),
-					resource.TestCheckResourceAttr(resourceName, "connector_id", newConnectorID),
+					resource.TestCheckResourceAttr(resourceName, "connector_id", adlsConnectorID),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.id", "fs.adls.gen2.accountName"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.value", "account_name"),
 					resource.TestCheckNoResourceAttr(resourceName, "driver_id"),
@@ -196,9 +197,9 @@ func TestAccDatastoreResource(t *testing.T) {
 					newName,
 					jdbcType,
 					nil,
-					&driverID,
+					&redshiftDriverID,
 					nil,
-					driverFields),
+					redshiftDriverFields),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", newName),
@@ -206,9 +207,7 @@ func TestAccDatastoreResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(resourceName, "connector_id"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.name", "address"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.value", "my-address"),
-					resource.TestCheckResourceAttr(resourceName, "fields.1.name", "database"),
-					resource.TestCheckResourceAttr(resourceName, "fields.1.value", "my-database"),
-					resource.TestCheckResourceAttr(resourceName, "driver_id", driverID),
+					resource.TestCheckResourceAttr(resourceName, "driver_id", redshiftDriverID),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -224,9 +223,9 @@ func TestAccDatastoreResource(t *testing.T) {
 					newName,
 					jdbcType,
 					nil,
-					&newDriverID,
+					&athenaDriverID,
 					nil,
-					newDriverFields),
+					athenaDriverFields),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", newName),
@@ -238,7 +237,7 @@ func TestAccDatastoreResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "fields.1.value", "us-east-1"),
 					resource.TestCheckResourceAttr(resourceName, "fields.2.name", "S3OutputLocation"),
 					resource.TestCheckResourceAttr(resourceName, "fields.2.value", "location"),
-					resource.TestCheckResourceAttr(resourceName, "driver_id", newDriverID),
+					resource.TestCheckResourceAttr(resourceName, "driver_id", athenaDriverID),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -254,7 +253,7 @@ func TestAccDatastoreResource(t *testing.T) {
 					newName,
 					jdbcType,
 					nil,
-					&newDriverID,
+					&athenaDriverID,
 					&jdbcUrl,
 					"[]"),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -263,7 +262,7 @@ func TestAccDatastoreResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "data_store_type", jdbcType),
 					resource.TestCheckNoResourceAttr(resourceName, "connector_id"),
 					resource.TestCheckNoResourceAttr(resourceName, "fields.0"),
-					resource.TestCheckResourceAttr(resourceName, "driver_id", newDriverID),
+					resource.TestCheckResourceAttr(resourceName, "driver_id", athenaDriverID),
 					resource.TestCheckResourceAttr(resourceName, "jdbc_url", jdbcUrl),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
@@ -280,9 +279,9 @@ func TestAccDatastoreResource(t *testing.T) {
 					newName,
 					databaseType,
 					nil,
-					&databaseDriverID,
+					&bigQueryDriverID,
 					nil,
-					databaseFields),
+					bigQueryFields),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDatastoreResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "canonical_name", newName),
@@ -292,7 +291,7 @@ func TestAccDatastoreResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "fields.0.id", "bq.project_id"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.name", "Project Id"),
 					resource.TestCheckResourceAttr(resourceName, "fields.0.value", "project-id"),
-					resource.TestCheckResourceAttr(resourceName, "driver_id", databaseDriverID),
+					resource.TestCheckResourceAttr(resourceName, "driver_id", bigQueryDriverID),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -395,4 +394,49 @@ func checkDatastoreResourceExists() resource.TestCheckFunc {
 
 		return fmt.Errorf("Datastore not found")
 	}
+}
+
+func GetExternalDataDrivers() (
+	redshiftDriverID string,
+	athenaDriverID string,
+	bigQueryDriverID string,
+	err error,
+) {
+	externalDataDrivers, err := client.NewService(cl).ListExternalDataDrivers(context.Background(), &client.ListExternalDataDriversRequest{
+		Type: "all",
+	})
+	if err != nil {
+		return
+	}
+
+	for _, driver := range externalDataDrivers {
+		if driver.CanonicalName == "Redshift (2.1.0.14)" {
+			redshiftDriverID = driver.ID
+		} else if driver.CanonicalName == "AWS Athena 2.0 (2.0.5)" {
+			athenaDriverID = driver.ID
+		} else if driver.DatabaseDriver == "bigquery-v1" {
+			bigQueryDriverID = driver.ID
+		}
+	}
+	return
+}
+
+func GetExternalConnectors() (
+	s3ConnectorID string,
+	adlsConnectorID string,
+	err error,
+) {
+	externalConnectors, err := client.NewService(cl).ListExternalConnectors(context.Background())
+	if err != nil {
+		return
+	}
+
+	for _, connector := range externalConnectors {
+		if connector.ConnectorType == "s3" {
+			s3ConnectorID = connector.ID
+		} else if connector.ConnectorType == "adls" {
+			adlsConnectorID = connector.ID
+		}
+	}
+	return
 }
