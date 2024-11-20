@@ -74,10 +74,60 @@ type UpdateDatastoreRequest struct {
 	Params        DatastoreParams `json:"params"`
 }
 
+type ListExternalDataDriversRequest struct {
+	Type string `json:"type" url:"type"`
+}
+
+type ExternalDataDriver struct {
+	ID              string `json:"id"`
+	Type            string `json:"type"`
+	CanonicalName   string `json:"canonicalName"`
+	Version         string `json:"version"`
+	DatabaseDriver  string `json:"databaseDriver"`
+	ConfigurationID string `json:"configurationId"`
+	ClassName       string `json:"className"`
+}
+
+type ExternalConnector struct {
+	ID              string `json:"id"`
+	Version         string `json:"version"`
+	ConnectorType   string `json:"connectorType"`
+	CanonicalName   string `json:"canonicalName"`
+	ConfigurationID string `json:"configurationId"`
+}
+
 type TestDatastoreConnectionRequest struct {
 	CredentialID string `json:"credentialId"`
 }
 
 type TestDatastoreConnectionResponse struct {
 	Message string `json:"message"`
+}
+
+type CreateDatasourceRequest struct {
+	CanonicalName string           `json:"canonicalName"`
+	Params        DatasourceParams `json:"params"`
+	Type          string           `json:"type"`
+}
+
+type DatasourceParams struct {
+	DataStoreID     string  `json:"dataStoreId"`
+	Catalog         *string `json:"catalog,omitempty"`
+	FetchSize       *int64  `json:"fetchSize,omitempty"`
+	PartitionColumn *string `json:"partitionColumn,omitempty"`
+	Schema          *string `json:"schema,omitempty"`
+	Table           *string `json:"table,omitempty"`
+	Query           *string `json:"query,omitempty"`
+	Path            *string `json:"path,omitempty"`
+}
+
+type Datasource struct {
+	ID            string           `json:"id"`
+	CanonicalName string           `json:"canonicalName"`
+	Params        DatasourceParams `json:"params"`
+	Type          string           `json:"type"`
+}
+
+type UpdateDatasourceRequest struct {
+	CanonicalName string `json:"canonicalName"`
 }
