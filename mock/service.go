@@ -95,10 +95,10 @@ func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req i
 }
 
 // CreateCredential mocks base method.
-func (m *MockService) CreateCredential(ctx context.Context, req *client.CredentialRequest) (*client.CredentialResponse, error) {
+func (m *MockService) CreateCredential(ctx context.Context, req *client.CredentialRequest) (*client.Credential, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCredential", ctx, req)
-	ret0, _ := ret[0].(*client.CredentialResponse)
+	ret0, _ := ret[0].(*client.Credential)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -213,6 +213,21 @@ func (m *MockService) CreateDataset(ctx context.Context, req *client.CreateDatas
 func (mr *MockServiceMockRecorder) CreateDataset(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDataset", reflect.TypeOf((*MockService)(nil).CreateDataset), ctx, req)
+}
+
+// CreateDatasetFromDataSource mocks base method.
+func (m *MockService) CreateDatasetFromDataSource(ctx context.Context, req *client.CreateDatasetFromDatasourceRequest) (*client.CreateDatasetVersionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDatasetFromDataSource", ctx, req)
+	ret0, _ := ret[0].(*client.CreateDatasetVersionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDatasetFromDataSource indicates an expected call of CreateDatasetFromDataSource.
+func (mr *MockServiceMockRecorder) CreateDatasetFromDataSource(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDatasetFromDataSource", reflect.TypeOf((*MockService)(nil).CreateDatasetFromDataSource), ctx, req)
 }
 
 // CreateDatasetFromFile mocks base method.
@@ -741,10 +756,10 @@ func (mr *MockServiceMockRecorder) GetApplicationSourceVersion(ctx, id, versionI
 }
 
 // GetCredential mocks base method.
-func (m *MockService) GetCredential(ctx context.Context, id string) (*client.CredentialResponse, error) {
+func (m *MockService) GetCredential(ctx context.Context, id string) (*client.Credential, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCredential", ctx, id)
-	ret0, _ := ret[0].(*client.CredentialResponse)
+	ret0, _ := ret[0].(*client.Credential)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1145,6 +1160,21 @@ func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
 }
 
+// ListCredentials mocks base method.
+func (m *MockService) ListCredentials(ctx context.Context) ([]client.Credential, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCredentials", ctx)
+	ret0, _ := ret[0].([]client.Credential)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCredentials indicates an expected call of ListCredentials.
+func (mr *MockServiceMockRecorder) ListCredentials(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCredentials", reflect.TypeOf((*MockService)(nil).ListCredentials), ctx)
+}
+
 // ListCustomModelVersions mocks base method.
 func (m *MockService) ListCustomModelVersions(ctx context.Context, id string) ([]client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()
@@ -1173,6 +1203,36 @@ func (m *MockService) ListCustomModels(ctx context.Context) ([]client.CustomMode
 func (mr *MockServiceMockRecorder) ListCustomModels(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModels", reflect.TypeOf((*MockService)(nil).ListCustomModels), ctx)
+}
+
+// ListDatasources mocks base method.
+func (m *MockService) ListDatasources(ctx context.Context, req *client.ListDataSourcesRequest) ([]client.Datasource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDatasources", ctx, req)
+	ret0, _ := ret[0].([]client.Datasource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDatasources indicates an expected call of ListDatasources.
+func (mr *MockServiceMockRecorder) ListDatasources(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDatasources", reflect.TypeOf((*MockService)(nil).ListDatasources), ctx, req)
+}
+
+// ListDatastoreCredentials mocks base method.
+func (m *MockService) ListDatastoreCredentials(ctx context.Context, id string) ([]client.Credential, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDatastoreCredentials", ctx, id)
+	ret0, _ := ret[0].([]client.Credential)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDatastoreCredentials indicates an expected call of ListDatastoreCredentials.
+func (mr *MockServiceMockRecorder) ListDatastoreCredentials(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDatastoreCredentials", reflect.TypeOf((*MockService)(nil).ListDatastoreCredentials), ctx, id)
 }
 
 // ListExecutionEnvironments mocks base method.
@@ -1355,10 +1415,10 @@ func (mr *MockServiceMockRecorder) UpdateApplicationSourceVersionFiles(ctx, id, 
 }
 
 // UpdateCredential mocks base method.
-func (m *MockService) UpdateCredential(ctx context.Context, id string, req *client.CredentialRequest) (*client.CredentialResponse, error) {
+func (m *MockService) UpdateCredential(ctx context.Context, id string, req *client.CredentialRequest) (*client.Credential, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateCredential", ctx, id, req)
-	ret0, _ := ret[0].(*client.CredentialResponse)
+	ret0, _ := ret[0].(*client.Credential)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

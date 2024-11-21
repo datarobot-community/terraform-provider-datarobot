@@ -110,3 +110,18 @@ func DataStoreTypeValidators() []validator.String {
 		),
 	}
 }
+
+func DatasetCategoryValidators() []validator.List {
+	return []validator.List{
+		listvalidator.ValueStringsAre(
+			stringvalidator.OneOf(
+				"BATCH_PREDICTIONS",
+				"MULTI_SERIES_CALENDAR",
+				"PREDICTION",
+				"SAMPLE",
+				"SINGLE_SERIES_CALENDAR",
+				"TRAINING",
+			),
+		),
+	}
+}

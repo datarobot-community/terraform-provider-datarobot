@@ -11,6 +11,16 @@ type CreateDatasetFromURLRequest struct {
 	SampleSize                *DatasetSampleSize `json:"sampleSize,omitempty"`
 }
 
+type CreateDatasetFromDatasourceRequest struct {
+	CredentialID              string             `json:"credentialId"`
+	DataSourceID              string             `json:"dataSourceId"`
+	DoSnapshot                *bool              `json:"doSnapshot"`
+	PersistDataAfterIngestion *bool              `json:"persistDataAfterIngestion"`
+	UseKerberos               *bool              `json:"useKerberos"`
+	SampleSize                *DatasetSampleSize `json:"sampleSize,omitempty"`
+	Categories                []string           `json:"categories,omitempty"`
+}
+
 type DatasetSampleSize struct {
 	Type  string `json:"type"`
 	Value int64  `json:"value"`
@@ -30,22 +40,27 @@ type CreateDatasetVersionResponse struct {
 }
 
 type UpdateDatasetRequest struct {
-	Name string `json:"name"`
+	Name       string    `json:"name,omitempty"`
+	Categories *[]string `json:"categories,omitempty"`
 }
 
 type Dataset struct {
-	ID                                    string  `json:"datasetId"`
-	Name                                  string  `json:"name"`
-	VersionID                             string  `json:"versionId"`
-	DataSourceType                        string  `json:"dataSourceType"`
-	ProcessingState                       string  `json:"processingState"`
-	Error                                 *string `json:"error"`
-	IsSnapshot                            bool    `json:"isSnapshot"`
-	IsVectorDatabaseEligible              bool    `json:"isVectorDatabaseEligible"`
-	IsDataEngineEligible                  bool    `json:"isDataEngineEligible"`
-	IsWranglingEligible                   bool    `json:"isWranglingEligible"`
-	IsPlaygroundEvaluationDatasetEligible bool    `json:"isPlaygroundEvaluationDatasetEligible"`
-	Uri                                   string  `json:"uri"`
+	ID                                    string            `json:"datasetId"`
+	Name                                  string            `json:"name"`
+	VersionID                             string            `json:"versionId"`
+	DataSourceType                        string            `json:"dataSourceType"`
+	DataSourceID                          string            `json:"dataSourceId"`
+	ProcessingState                       string            `json:"processingState"`
+	Error                                 *string           `json:"error"`
+	IsSnapshot                            bool              `json:"isSnapshot"`
+	IsVectorDatabaseEligible              bool              `json:"isVectorDatabaseEligible"`
+	IsDataEngineEligible                  bool              `json:"isDataEngineEligible"`
+	IsWranglingEligible                   bool              `json:"isWranglingEligible"`
+	IsPlaygroundEvaluationDatasetEligible bool              `json:"isPlaygroundEvaluationDatasetEligible"`
+	Uri                                   string            `json:"uri"`
+	SampleSize                            DatasetSampleSize `json:"sampleSize"`
+	DataPersisted                         bool              `json:"dataPersisted"`
+	Categories                            []string          `json:"categories"`
 }
 
 type CreateDatastoreRequest struct {
@@ -130,4 +145,8 @@ type Datasource struct {
 
 type UpdateDatasourceRequest struct {
 	CanonicalName string `json:"canonicalName"`
+}
+
+type ListDataSourcesRequest struct {
+	Type string `json:"type" url:"type"`
 }

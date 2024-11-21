@@ -44,9 +44,16 @@ type GCPKey struct {
 	UniverseDomain          string `json:"universe_domain,omitempty"`
 }
 
-type CredentialResponse struct {
+type Credential struct {
 	ID             string `json:"credentialId"`
 	Name           string `json:"name"`
 	Description    string `json:"description,omitempty"`
 	CredentialType string `json:"credentialType,omitempty"`
+}
+
+type CredentialAssociation struct {
+	ObjectID   string `json:"objectId"`
+	ObjectType string `json:"objectType"`
+	Link       string `json:"link"`
+	IsDefault  bool   `json:"isDefault"`
 }

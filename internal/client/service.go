@@ -25,6 +25,7 @@ type Service interface {
 	CreateDataset(ctx context.Context, req *CreateDatasetRequest) (*CreateDatasetResponse, error)
 	CreateDatasetFromFile(ctx context.Context, fileName string, content []byte) (*CreateDatasetVersionResponse, error)
 	CreateDatasetFromURL(ctx context.Context, req *CreateDatasetFromURLRequest) (*CreateDatasetVersionResponse, error)
+	CreateDatasetFromDataSource(ctx context.Context, req *CreateDatasetFromDatasourceRequest) (*CreateDatasetVersionResponse, error)
 	GetDataset(ctx context.Context, id string) (*Dataset, error)
 	UpdateDataset(ctx context.Context, id string, req *UpdateDatasetRequest) (*Dataset, error)
 	DeleteDataset(ctx context.Context, id string) error
@@ -34,6 +35,7 @@ type Service interface {
 	GetDatastore(ctx context.Context, id string) (*Datastore, error)
 	UpdateDatastore(ctx context.Context, id string, req *UpdateDatastoreRequest) (*Datastore, error)
 	DeleteDatastore(ctx context.Context, id string) error
+	ListDatastoreCredentials(ctx context.Context, id string) ([]Credential, error)
 	ListExternalDataDrivers(ctx context.Context, req *ListExternalDataDriversRequest) ([]ExternalDataDriver, error)
 	ListExternalConnectors(ctx context.Context) ([]ExternalConnector, error)
 	TestDataStoreConnection(ctx context.Context, id string, req *TestDatastoreConnectionRequest) (*TestDatastoreConnectionResponse, error)
@@ -41,6 +43,7 @@ type Service interface {
 	// Data Source
 	CreateDatasource(ctx context.Context, req *CreateDatasourceRequest) (*Datasource, error)
 	GetDatasource(ctx context.Context, id string) (*Datasource, error)
+	ListDatasources(ctx context.Context, req *ListDataSourcesRequest) ([]Datasource, error)
 	UpdateDatasource(ctx context.Context, id string, req *UpdateDatasourceRequest) (*Datasource, error)
 	DeleteDatasource(ctx context.Context, id string) error
 
@@ -134,10 +137,11 @@ type Service interface {
 	DeleteApplication(ctx context.Context, id string) error
 
 	// Credential
-	CreateCredential(ctx context.Context, req *CredentialRequest) (*CredentialResponse, error)
-	GetCredential(ctx context.Context, id string) (*CredentialResponse, error)
-	UpdateCredential(ctx context.Context, id string, req *CredentialRequest) (*CredentialResponse, error)
+	CreateCredential(ctx context.Context, req *CredentialRequest) (*Credential, error)
+	GetCredential(ctx context.Context, id string) (*Credential, error)
+	UpdateCredential(ctx context.Context, id string, req *CredentialRequest) (*Credential, error)
 	DeleteCredential(ctx context.Context, id string) error
+	ListCredentials(ctx context.Context) ([]Credential, error)
 
 	// Execution Environment
 	CreateExecutionEnvironment(ctx context.Context, req *CreateExecutionEnvironmentRequest) (*ExecutionEnvironment, error)
@@ -196,6 +200,10 @@ func (s *ServiceImpl) CreateDatasetFromURL(ctx context.Context, req *CreateDatas
 	return Post[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromURL/", req)
 }
 
+func (s *ServiceImpl) CreateDatasetFromDataSource(ctx context.Context, req *CreateDatasetFromDatasourceRequest) (*CreateDatasetVersionResponse, error) {
+	return Post[CreateDatasetVersionResponse](s.client, ctx, "/datasets/fromDataSource/", req)
+}
+
 func (s *ServiceImpl) GetDataset(ctx context.Context, id string) (*Dataset, error) {
 	return Get[Dataset](s.client, ctx, "/datasets/"+id+"/")
 }
@@ -225,6 +233,10 @@ func (s *ServiceImpl) DeleteDatastore(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/externalDataStores/"+id+"/")
 }
 
+func (s *ServiceImpl) ListDatastoreCredentials(ctx context.Context, id string) ([]Credential, error) {
+	return GetAllPages[Credential](s.client, ctx, "/externalDataStores/"+id+"/credentials/", nil)
+}
+
 func (s *ServiceImpl) ListExternalDataDrivers(ctx context.Context, req *ListExternalDataDriversRequest) ([]ExternalDataDriver, error) {
 	return GetAllPages[ExternalDataDriver](s.client, ctx, "/externalDataDrivers/", req)
 }
@@ -244,6 +256,10 @@ func (s *ServiceImpl) CreateDatasource(ctx context.Context, req *CreateDatasourc
 
 func (s *ServiceImpl) GetDatasource(ctx context.Context, id string) (*Datasource, error) {
 	return Get[Datasource](s.client, ctx, "/externalDataSources/"+id+"/")
+}
+
+func (s *ServiceImpl) ListDatasources(ctx context.Context, req *ListDataSourcesRequest) ([]Datasource, error) {
+	return GetAllPages[Datasource](s.client, ctx, "/externalDataSources/", req)
 }
 
 func (s *ServiceImpl) UpdateDatasource(ctx context.Context, id string, req *UpdateDatasourceRequest) (*Datasource, error) {
@@ -609,20 +625,24 @@ func (s *ServiceImpl) DeleteApplication(ctx context.Context, id string) error {
 }
 
 // Credentials Service Implementation.
-func (s *ServiceImpl) CreateCredential(ctx context.Context, req *CredentialRequest) (*CredentialResponse, error) {
-	return Post[CredentialResponse](s.client, ctx, "/credentials/", req)
+func (s *ServiceImpl) CreateCredential(ctx context.Context, req *CredentialRequest) (*Credential, error) {
+	return Post[Credential](s.client, ctx, "/credentials/", req)
 }
 
-func (s *ServiceImpl) GetCredential(ctx context.Context, id string) (*CredentialResponse, error) {
-	return Get[CredentialResponse](s.client, ctx, "/credentials/"+id+"/")
+func (s *ServiceImpl) GetCredential(ctx context.Context, id string) (*Credential, error) {
+	return Get[Credential](s.client, ctx, "/credentials/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateCredential(ctx context.Context, id string, req *CredentialRequest) (*CredentialResponse, error) {
-	return Patch[CredentialResponse](s.client, ctx, "/credentials/"+id+"/", req)
+func (s *ServiceImpl) UpdateCredential(ctx context.Context, id string, req *CredentialRequest) (*Credential, error) {
+	return Patch[Credential](s.client, ctx, "/credentials/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteCredential(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/credentials/"+id+"/")
+}
+
+func (s *ServiceImpl) ListCredentials(ctx context.Context) ([]Credential, error) {
+	return GetAllPages[Credential](s.client, ctx, "/credentials/", nil)
 }
 
 // Execution Environment Service Implementation.
