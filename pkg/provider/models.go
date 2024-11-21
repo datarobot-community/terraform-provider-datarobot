@@ -52,6 +52,18 @@ type DatasetFromURLResourceModel struct {
 	UseCaseIDs []types.String `tfsdk:"use_case_ids"`
 }
 
+type DatasetFromDatasourceResourceModel struct {
+	ID                        types.String   `tfsdk:"id"`
+	DataSourceID              types.String   `tfsdk:"data_source_id"`
+	CredentialID              types.String   `tfsdk:"credential_id"`
+	DoSnapshot                types.Bool     `tfsdk:"do_snapshot"`
+	PersistDataAfterIngestion types.Bool     `tfsdk:"persist_data_after_ingestion"`
+	UseKerberos               types.Bool     `tfsdk:"use_kerberos"`
+	SampleSizeRows            types.Int64    `tfsdk:"sample_size_rows"`
+	Categories                []types.String `tfsdk:"categories"`
+	UseCaseIDs                []types.String `tfsdk:"use_case_ids"`
+}
+
 // DatastoreResourceModel describes the datastore resource.
 type DatastoreResourceModel struct {
 	ID            types.String `tfsdk:"id"`
