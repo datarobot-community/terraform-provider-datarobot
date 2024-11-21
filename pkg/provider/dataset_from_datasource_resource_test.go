@@ -20,7 +20,7 @@ func TestAccDatasetFromDatasourceResource(t *testing.T) {
 
 	dataSource, credential, err := GetDemoDataSource()
 	if err != nil {
-		t.Fatalf("Failed to get demo data source: %v", err)
+		t.Skip("Demo data source not found")
 	}
 
 	useCase := "test_dataset_from_datasource"
