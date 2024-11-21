@@ -19,7 +19,7 @@ func TestAccDatasetFromDatasourceResource(t *testing.T) {
 	resourceName := "datarobot_dataset_from_datasource.test"
 
 	dataSource, credential, err := GetDemoDataSource()
-	if err != nil {
+	if err != nil || dataSource.ID == "" || credential.ID == "" {
 		t.Skip("Demo data source not found")
 	}
 
