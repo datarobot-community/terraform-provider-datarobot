@@ -66,6 +66,13 @@ type Service interface {
 	UpdateLLMBlueprint(ctx context.Context, id string, req *UpdateLLMBlueprintRequest) (*LLMBlueprint, error)
 	DeleteLLMBlueprint(ctx context.Context, id string) error
 
+	// Custom Job
+	CreateCustomJob(ctx context.Context, req *CreateCustomJobRequest) (*CustomJob, error)
+	GetCustomJob(ctx context.Context, id string) (*CustomJob, error)
+	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
+	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
+	DeleteCustomJob(ctx context.Context, id string) error
+
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
@@ -355,6 +362,26 @@ func (s *ServiceImpl) UpdateLLMBlueprint(ctx context.Context, id string, req *Up
 
 func (s *ServiceImpl) DeleteLLMBlueprint(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/genai/llmBlueprints/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateCustomJob(ctx context.Context, req *CreateCustomJobRequest) (*CustomJob, error) {
+	return Post[CustomJob](s.client, ctx, "/customJobs/", req)
+}
+
+func (s *ServiceImpl) GetCustomJob(ctx context.Context, id string) (*CustomJob, error) {
+	return Get[CustomJob](s.client, ctx, "/customJobs/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error) {
+	return Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
+}
+
+func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error) {
+	return uploadFilesFromBinaries[CustomJob](s.client, ctx, "/customJobs/"+id+"/", http.MethodPatch, files, map[string]string{})
+}
+
+func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/customJobs/"+id+"/")
 }
 
 func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {

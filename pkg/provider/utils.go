@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -345,6 +346,42 @@ func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
 	default:
 		return paramValue, nil
 	}
+}
+
+func convertRuntimeParameterValues(
+	ctx context.Context,
+	tfRuntimeParameterValues basetypes.ListValue,
+) (
+	jsonParamsStr string,
+	err error,
+) {
+	runtimeParameterValues := make([]RuntimeParameterValue, 0)
+	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameter values")
+		return
+	}
+
+	params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+	for i, param := range runtimeParameterValues {
+		var value any
+		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+		if err != nil {
+			return
+		}
+		params[i] = client.RuntimeParameterValueRequest{
+			FieldName: param.Key.ValueString(),
+			Type:      param.Type.ValueString(),
+			Value:     &value,
+		}
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	jsonParamsStr = string(jsonParams)
+
+	return
 }
 
 func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {

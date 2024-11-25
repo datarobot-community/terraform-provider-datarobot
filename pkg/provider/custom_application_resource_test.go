@@ -24,6 +24,8 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
+	newName := "new_example_name " + nameSalt
+
 	useCaseResourceName := "test_custom_application"
 	useCaseResourceName2 := "test_new_custom_application"
 
@@ -94,7 +96,7 @@ if __name__ == "__main__":
 			},
 			// Update name, external access, and use case id
 			{
-				Config: customApplicationResourceConfig("new_example_name", 1, true, []string{"test@test.com"}, &useCaseResourceName2),
+				Config: customApplicationResourceConfig(newName, 1, true, []string{"test@test.com"}, &useCaseResourceName2),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -111,7 +113,7 @@ if __name__ == "__main__":
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomApplicationResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
@@ -123,7 +125,7 @@ if __name__ == "__main__":
 			},
 			// Update Application Source version and remove use case
 			{
-				Config: customApplicationResourceConfig("new_example_name", 2, true, []string{"test2@test.com"}, nil),
+				Config: customApplicationResourceConfig(newName, 2, true, []string{"test2@test.com"}, nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -136,7 +138,7 @@ if __name__ == "__main__":
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomApplicationResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),

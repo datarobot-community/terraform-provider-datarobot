@@ -162,6 +162,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewPlaygroundResource,
 		NewLLMBlueprintResource,
 		NewCustomModelResource,
+		NewCustomJobResource,
 		NewRegisteredModelResource,
 		NewRegisteredModelFromLeaderboardResource,
 		NewPredictionEnvironmentResource,
