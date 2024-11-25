@@ -109,6 +109,21 @@ func (mr *MockServiceMockRecorder) CreateCredential(ctx, req interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCredential", reflect.TypeOf((*MockService)(nil).CreateCredential), ctx, req)
 }
 
+// CreateCustomJob mocks base method.
+func (m *MockService) CreateCustomJob(ctx context.Context, req *client.CreateCustomJobRequest) (*client.CustomJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomJob", ctx, req)
+	ret0, _ := ret[0].(*client.CustomJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomJob indicates an expected call of CreateCustomJob.
+func (mr *MockServiceMockRecorder) CreateCustomJob(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJob", reflect.TypeOf((*MockService)(nil).CreateCustomJob), ctx, req)
+}
+
 // CreateCustomModel mocks base method.
 func (m *MockService) CreateCustomModel(ctx context.Context, req *client.CreateCustomModelRequest) (*client.CustomModel, error) {
 	m.ctrl.T.Helper()
@@ -528,6 +543,20 @@ func (mr *MockServiceMockRecorder) DeleteCredential(ctx, id interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCredential", reflect.TypeOf((*MockService)(nil).DeleteCredential), ctx, id)
 }
 
+// DeleteCustomJob mocks base method.
+func (m *MockService) DeleteCustomJob(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCustomJob", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCustomJob indicates an expected call of DeleteCustomJob.
+func (mr *MockServiceMockRecorder) DeleteCustomJob(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJob", reflect.TypeOf((*MockService)(nil).DeleteCustomJob), ctx, id)
+}
+
 // DeleteCustomModel mocks base method.
 func (m *MockService) DeleteCustomModel(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -768,6 +797,21 @@ func (m *MockService) GetCredential(ctx context.Context, id string) (*client.Cre
 func (mr *MockServiceMockRecorder) GetCredential(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCredential", reflect.TypeOf((*MockService)(nil).GetCredential), ctx, id)
+}
+
+// GetCustomJob mocks base method.
+func (m *MockService) GetCustomJob(ctx context.Context, id string) (*client.CustomJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomJob", ctx, id)
+	ret0, _ := ret[0].(*client.CustomJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomJob indicates an expected call of GetCustomJob.
+func (mr *MockServiceMockRecorder) GetCustomJob(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomJob", reflect.TypeOf((*MockService)(nil).GetCustomJob), ctx, id)
 }
 
 // GetCustomModel mocks base method.
@@ -1427,6 +1471,36 @@ func (m *MockService) UpdateCredential(ctx context.Context, id string, req *clie
 func (mr *MockServiceMockRecorder) UpdateCredential(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCredential", reflect.TypeOf((*MockService)(nil).UpdateCredential), ctx, id, req)
+}
+
+// UpdateCustomJob mocks base method.
+func (m *MockService) UpdateCustomJob(ctx context.Context, id string, req *client.UpdateCustomJobRequest) (*client.CustomJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomJob", ctx, id, req)
+	ret0, _ := ret[0].(*client.CustomJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomJob indicates an expected call of UpdateCustomJob.
+func (mr *MockServiceMockRecorder) UpdateCustomJob(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJob", reflect.TypeOf((*MockService)(nil).UpdateCustomJob), ctx, id, req)
+}
+
+// UpdateCustomJobFiles mocks base method.
+func (m *MockService) UpdateCustomJobFiles(ctx context.Context, id string, files []client.FileInfo) (*client.CustomJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomJobFiles", ctx, id, files)
+	ret0, _ := ret[0].(*client.CustomJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomJobFiles indicates an expected call of UpdateCustomJobFiles.
+func (mr *MockServiceMockRecorder) UpdateCustomJobFiles(ctx, id, files interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobFiles", reflect.TypeOf((*MockService)(nil).UpdateCustomJobFiles), ctx, id, files)
 }
 
 // UpdateCustomModel mocks base method.

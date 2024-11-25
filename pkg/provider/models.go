@@ -240,6 +240,23 @@ type OverallModerationConfiguration struct {
 	TimeoutAction types.String `tfsdk:"timeout_action"`
 }
 
+// CustomJobResourceModel describes the custom job resource.
+type CustomJobResourceModel struct {
+	ID                     types.String  `tfsdk:"id"`
+	Name                   types.String  `tfsdk:"name"`
+	Description            types.String  `tfsdk:"description"`
+	JobType                types.String  `tfsdk:"job_type"`
+	EnvironmentID          types.String  `tfsdk:"environment_id"`
+	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
+	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
+	FolderPath             types.String  `tfsdk:"folder_path"`
+	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
+	Files                  types.Dynamic `tfsdk:"files"`
+	FilesHashes            types.List    `tfsdk:"files_hashes"`
+	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
+	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
+}
+
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
 	ID                   types.String   `tfsdk:"id"`

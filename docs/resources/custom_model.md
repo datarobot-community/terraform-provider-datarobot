@@ -3,12 +3,12 @@
 page_title: "datarobot_custom_model Resource - datarobot"
 subcategory: ""
 description: |-
-  Data set from file
+  Custom Model
 ---
 
 # datarobot_custom_model (Resource)
 
-Data set from file
+Custom Model
 
 ## Example Usage
 

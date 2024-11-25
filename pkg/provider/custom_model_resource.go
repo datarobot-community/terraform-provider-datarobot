@@ -59,7 +59,7 @@ func (r *CustomModelResource) Metadata(ctx context.Context, req resource.Metadat
 func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Data set from file",
+		MarkdownDescription: "Custom Model",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -594,27 +594,9 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) {
-		runtimeParameterValues := make([]RuntimeParameterValue, 0)
-		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
-		for i, param := range runtimeParameterValues {
-			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
-				return
-			}
-			params[i] = client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
-			}
-		}
-		jsonParams, err := json.Marshal(params)
+		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 		if err != nil {
-			resp.Diagnostics.AddError("Error creating runtime parameter values", err.Error())
+			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
 			return
 		}
 
@@ -622,7 +604,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
 			IsMajorUpdate:          "false",
 			BaseEnvironmentID:      baseEnvironmentID,
-			RuntimeParameterValues: string(jsonParams),
+			RuntimeParameterValues: runtimeParameterValues,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())

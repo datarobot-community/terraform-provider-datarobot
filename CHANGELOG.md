@@ -1,3 +1,7 @@
+## 0.4.8
+
+- Custom Job Resource
+
 ## 0.4.7
 
 - Dataset from Datasource Resource

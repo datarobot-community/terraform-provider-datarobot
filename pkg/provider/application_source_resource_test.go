@@ -43,6 +43,8 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
+	newName := "new_example_name " + nameSalt
+
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
 
@@ -163,7 +165,7 @@ runtimeParameterDefinitions:
 					),
 				},
 				Config: applicationSourceResourceConfig(
-					"new_example_name",
+					newName,
 					nil,
 					&baseEnvironmentVersionID,
 					[]FileTuple{
@@ -206,7 +208,7 @@ runtimeParameterDefinitions:
 					),
 				},
 				Config: applicationSourceResourceConfig(
-					"new_example_name",
+					newName,
 					&baseEnvironmentID,
 					nil,
 					[]FileTuple{
@@ -221,7 +223,7 @@ runtimeParameterDefinitions:
 					2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
@@ -240,7 +242,7 @@ runtimeParameterDefinitions:
 					}
 				},
 				Config: applicationSourceResourceConfig(
-					"new_example_name",
+					newName,
 					&baseEnvironmentID,
 					nil,
 					[]FileTuple{},
@@ -276,7 +278,7 @@ runtimeParameterDefinitions:
 					}
 				},
 				Config: applicationSourceResourceConfig(
-					"new_example_name",
+					newName,
 					&baseEnvironmentID,
 					nil,
 					nil,
@@ -312,7 +314,7 @@ runtimeParameterDefinitions:
 					}
 				},
 				Config: applicationSourceResourceConfig(
-					"new_example_name",
+					newName,
 					&baseEnvironmentID,
 					nil,
 					nil,

@@ -16,6 +16,9 @@ func TestAccQAApplicationResource(t *testing.T) {
 
 	resourceName := "datarobot_qa_application.test"
 
+	name := "example_name " + nameSalt
+	newName := "new_example_name " + nameSalt
+
 	folderPath := "qa_application"
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
@@ -47,10 +50,10 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: qaApplicationResourceConfig("example_name"),
+				Config: qaApplicationResourceConfig(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkQAApplicationResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
@@ -58,10 +61,10 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			},
 			// Update name
 			{
-				Config: qaApplicationResourceConfig("new_example_name"),
+				Config: qaApplicationResourceConfig(newName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkQAApplicationResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
