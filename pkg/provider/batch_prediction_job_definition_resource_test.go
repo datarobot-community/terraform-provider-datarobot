@@ -238,12 +238,6 @@ resource "datarobot_batch_prediction_job_definition" "test" {
 	column_names_remapping = {
 		"old_name" = "new_name"
 	}
-	prediction_instance = {
-		host_name = "https://app.datarobot.com"
-		ssl_enabled = false
-		datarobot_key = "key"
-		api_key = "key"
-	}
 	schedule = {
 		minute 			= ["10", "15"]
 		hour 			= ["*"]
