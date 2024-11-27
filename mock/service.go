@@ -94,6 +94,21 @@ func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).CreateApplicationSourceVersion), ctx, id, req)
 }
 
+// CreateBatchPredictionJobDefinition mocks base method.
+func (m *MockService) CreateBatchPredictionJobDefinition(ctx context.Context, req *client.BatchPredictionJobDefinitionRequest) (*client.BatchPredictionJobDefinition, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBatchPredictionJobDefinition", ctx, req)
+	ret0, _ := ret[0].(*client.BatchPredictionJobDefinition)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBatchPredictionJobDefinition indicates an expected call of CreateBatchPredictionJobDefinition.
+func (mr *MockServiceMockRecorder) CreateBatchPredictionJobDefinition(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBatchPredictionJobDefinition", reflect.TypeOf((*MockService)(nil).CreateBatchPredictionJobDefinition), ctx, req)
+}
+
 // CreateCredential mocks base method.
 func (m *MockService) CreateCredential(ctx context.Context, req *client.CredentialRequest) (*client.Credential, error) {
 	m.ctrl.T.Helper()
@@ -529,6 +544,20 @@ func (mr *MockServiceMockRecorder) DeleteApplicationSource(ctx, id interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteApplicationSource), ctx, id)
 }
 
+// DeleteBatchPredictionJobDefinition mocks base method.
+func (m *MockService) DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBatchPredictionJobDefinition", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteBatchPredictionJobDefinition indicates an expected call of DeleteBatchPredictionJobDefinition.
+func (mr *MockServiceMockRecorder) DeleteBatchPredictionJobDefinition(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBatchPredictionJobDefinition", reflect.TypeOf((*MockService)(nil).DeleteBatchPredictionJobDefinition), ctx, id)
+}
+
 // DeleteCredential mocks base method.
 func (m *MockService) DeleteCredential(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -782,6 +811,21 @@ func (m *MockService) GetApplicationSourceVersion(ctx context.Context, id, versi
 func (mr *MockServiceMockRecorder) GetApplicationSourceVersion(ctx, id, versionId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).GetApplicationSourceVersion), ctx, id, versionId)
+}
+
+// GetBatchPredictionJobDefinition mocks base method.
+func (m *MockService) GetBatchPredictionJobDefinition(ctx context.Context, id string) (*client.BatchPredictionJobDefinition, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBatchPredictionJobDefinition", ctx, id)
+	ret0, _ := ret[0].(*client.BatchPredictionJobDefinition)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBatchPredictionJobDefinition indicates an expected call of GetBatchPredictionJobDefinition.
+func (mr *MockServiceMockRecorder) GetBatchPredictionJobDefinition(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBatchPredictionJobDefinition", reflect.TypeOf((*MockService)(nil).GetBatchPredictionJobDefinition), ctx, id)
 }
 
 // GetCredential mocks base method.
@@ -1456,6 +1500,21 @@ func (m *MockService) UpdateApplicationSourceVersionFiles(ctx context.Context, i
 func (mr *MockServiceMockRecorder) UpdateApplicationSourceVersionFiles(ctx, id, versionId, files interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApplicationSourceVersionFiles", reflect.TypeOf((*MockService)(nil).UpdateApplicationSourceVersionFiles), ctx, id, versionId, files)
+}
+
+// UpdateBatchPredictionJobDefinition mocks base method.
+func (m *MockService) UpdateBatchPredictionJobDefinition(ctx context.Context, id string, req *client.BatchPredictionJobDefinitionRequest) (*client.BatchPredictionJobDefinition, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBatchPredictionJobDefinition", ctx, id, req)
+	ret0, _ := ret[0].(*client.BatchPredictionJobDefinition)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBatchPredictionJobDefinition indicates an expected call of UpdateBatchPredictionJobDefinition.
+func (mr *MockServiceMockRecorder) UpdateBatchPredictionJobDefinition(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBatchPredictionJobDefinition", reflect.TypeOf((*MockService)(nil).UpdateBatchPredictionJobDefinition), ctx, id, req)
 }
 
 // UpdateCredential mocks base method.

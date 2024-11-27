@@ -1,3 +1,7 @@
+## 0.5.0
+
+- Batch Prediction Job Definition Resource
+
 ## 0.4.8
 
 - Custom Job Resource
