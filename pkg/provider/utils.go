@@ -135,7 +135,7 @@ func setStringValueIfKnown(target *string, source basetypes.StringValue) {
 func getExponentialBackoff() backoff.BackOff {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
+	expBackoff.MaxInterval = 10 * time.Second
 
 	timeout, err := strconv.Atoi(os.Getenv(TimeoutMinutesEnvVar))
 	if err != nil || timeout <= 0 {
@@ -652,6 +652,34 @@ func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
 	return value.ValueBoolPointer()
 }
 
+func ConvertTfStringMap(tfMap types.Map) map[string]string {
+	convertedMap := make(map[string]string)
+	for k, v := range tfMap.Elements() {
+		if strVal, ok := v.(types.String); ok {
+			convertedMap[k] = strVal.ValueString()
+		}
+	}
+	return convertedMap
+}
+
+func ConvertTfStringList(input []types.String) []string {
+	output := make([]string, len(input))
+	for i, value := range input {
+		output[i] = value.ValueString()
+	}
+
+	return output
+}
+
+func ConvertToTfStringList(input []string) []types.String {
+	output := make([]types.String, len(input))
+	for i, value := range input {
+		output[i] = types.StringValue(value)
+	}
+
+	return output
+}
+
 func ConvertTfStringListToPtr(input []types.String) *[]string {
 	output := make([]string, len(input))
 	for i, value := range input {
@@ -659,6 +687,17 @@ func ConvertTfStringListToPtr(input []types.String) *[]string {
 	}
 
 	return &output
+}
+
+func ConvertDynamicType(tfType types.Dynamic) any {
+	switch t := tfType.UnderlyingValue().(type) {
+	case types.String:
+		return t.ValueString()
+	case types.Int64:
+		return t.ValueInt64()
+	default:
+		return nil
+	}
 }
 
 func UpdateUseCasesForEntity(
