@@ -125,6 +125,12 @@ type Service interface {
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
 
+	// Batch Prediction Job Definition
+	CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
+	GetBatchPredictionJobDefinition(ctx context.Context, id string) (*BatchPredictionJobDefinition, error)
+	UpdateBatchPredictionJobDefinition(ctx context.Context, id string, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
+	DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error
+
 	// Application Source
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
 	GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error)
@@ -587,6 +593,23 @@ func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id
 
 func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {
 	return ExecuteAndExpectStatus[Deployment](s.client, ctx, http.MethodPatch, "/deployments/"+id+"/model/", req)
+}
+
+// Batch Prediction Job Definition Service Implementation.
+func (s *ServiceImpl) CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error) {
+	return Post[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/", req)
+}
+
+func (s *ServiceImpl) GetBatchPredictionJobDefinition(ctx context.Context, id string) (*BatchPredictionJobDefinition, error) {
+	return Get[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateBatchPredictionJobDefinition(ctx context.Context, id string, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error) {
+	return Patch[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/")
 }
 
 // Application Service Implementation.
