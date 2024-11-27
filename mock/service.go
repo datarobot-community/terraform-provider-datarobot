@@ -381,6 +381,21 @@ func (mr *MockServiceMockRecorder) CreateExecutionEnvironmentVersion(ctx, id, re
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExecutionEnvironmentVersion", reflect.TypeOf((*MockService)(nil).CreateExecutionEnvironmentVersion), ctx, id, req)
 }
 
+// CreateHostedCustomMetricTemplate mocks base method.
+func (m *MockService) CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *client.HostedCustomMetricTemplateRequest) (*client.HostedCustomMetricTemplate, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateHostedCustomMetricTemplate", ctx, customJobID, req)
+	ret0, _ := ret[0].(*client.HostedCustomMetricTemplate)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateHostedCustomMetricTemplate indicates an expected call of CreateHostedCustomMetricTemplate.
+func (mr *MockServiceMockRecorder) CreateHostedCustomMetricTemplate(ctx, customJobID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateHostedCustomMetricTemplate", reflect.TypeOf((*MockService)(nil).CreateHostedCustomMetricTemplate), ctx, customJobID, req)
+}
+
 // CreateLLMBlueprint mocks base method.
 func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
@@ -1021,6 +1036,21 @@ func (m *MockService) GetGuardConfigurationsForCustomModelVersion(ctx context.Co
 func (mr *MockServiceMockRecorder) GetGuardConfigurationsForCustomModelVersion(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGuardConfigurationsForCustomModelVersion", reflect.TypeOf((*MockService)(nil).GetGuardConfigurationsForCustomModelVersion), ctx, id)
+}
+
+// GetHostedCustomMetricTemplate mocks base method.
+func (m *MockService) GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*client.HostedCustomMetricTemplate, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHostedCustomMetricTemplate", ctx, customJobID)
+	ret0, _ := ret[0].(*client.HostedCustomMetricTemplate)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHostedCustomMetricTemplate indicates an expected call of GetHostedCustomMetricTemplate.
+func (mr *MockServiceMockRecorder) GetHostedCustomMetricTemplate(ctx, customJobID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHostedCustomMetricTemplate", reflect.TypeOf((*MockService)(nil).GetHostedCustomMetricTemplate), ctx, customJobID)
 }
 
 // GetLLMBlueprint mocks base method.
@@ -1711,6 +1741,21 @@ func (m *MockService) UpdateExecutionEnvironment(ctx context.Context, id string,
 func (mr *MockServiceMockRecorder) UpdateExecutionEnvironment(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateExecutionEnvironment", reflect.TypeOf((*MockService)(nil).UpdateExecutionEnvironment), ctx, id, req)
+}
+
+// UpdateHostedCustomMetricTemplate mocks base method.
+func (m *MockService) UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *client.HostedCustomMetricTemplateRequest) (*client.HostedCustomMetricTemplate, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateHostedCustomMetricTemplate", ctx, customJobID, req)
+	ret0, _ := ret[0].(*client.HostedCustomMetricTemplate)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateHostedCustomMetricTemplate indicates an expected call of UpdateHostedCustomMetricTemplate.
+func (mr *MockServiceMockRecorder) UpdateHostedCustomMetricTemplate(ctx, customJobID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHostedCustomMetricTemplate", reflect.TypeOf((*MockService)(nil).UpdateHostedCustomMetricTemplate), ctx, customJobID, req)
 }
 
 // UpdateLLMBlueprint mocks base method.

@@ -125,3 +125,12 @@ func DatasetCategoryValidators() []validator.List {
 		),
 	}
 }
+
+func EgressNetworkPolicyValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"public",
+			"none",
+		),
+	}
+}

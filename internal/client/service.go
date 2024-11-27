@@ -73,6 +73,11 @@ type Service interface {
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
 	DeleteCustomJob(ctx context.Context, id string) error
 
+	// Custom Metric Template
+	CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
+	GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error)
+	UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
+
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
@@ -388,6 +393,18 @@ func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files
 
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Post[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
+}
+
+func (s *ServiceImpl) GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error) {
+	return Get[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/")
+}
+
+func (s *ServiceImpl) UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Patch[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
 }
 
 func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {

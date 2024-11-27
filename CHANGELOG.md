@@ -1,3 +1,7 @@
+## 0.5.1
+
+- Custom Metric Job Resource
+
 ## 0.5.0
 
 - Batch Prediction Job Definition Resource
