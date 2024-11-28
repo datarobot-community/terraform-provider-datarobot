@@ -263,7 +263,7 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
 
-	if err = UpdateUseCasesForEntity(
+	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"customApplication",

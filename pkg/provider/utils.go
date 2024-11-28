@@ -355,24 +355,9 @@ func convertRuntimeParameterValues(
 	jsonParamsStr string,
 	err error,
 ) {
-	runtimeParameterValues := make([]RuntimeParameterValue, 0)
-	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-		err = errors.New("Error converting runtime parameter values")
+	params, err := convertRuntimeParameterValuesToList(ctx, tfRuntimeParameterValues)
+	if err != nil {
 		return
-	}
-
-	params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
-	for i, param := range runtimeParameterValues {
-		var value any
-		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-		if err != nil {
-			return
-		}
-		params[i] = client.RuntimeParameterValueRequest{
-			FieldName: param.Key.ValueString(),
-			Type:      param.Type.ValueString(),
-			Value:     &value,
-		}
 	}
 
 	jsonParams, err := json.Marshal(params)
@@ -380,6 +365,35 @@ func convertRuntimeParameterValues(
 		return
 	}
 	jsonParamsStr = string(jsonParams)
+
+	return
+}
+
+func convertRuntimeParameterValuesToList(
+	ctx context.Context,
+	tfRuntimeParameterValues basetypes.ListValue,
+) (
+	params []client.RuntimeParameterValueRequest,
+	err error,
+) {
+	runtimeParameterValues := make([]RuntimeParameterValue, 0)
+	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameter values")
+		return
+	}
+
+	for _, param := range runtimeParameterValues {
+		var value any
+		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+		if err != nil {
+			return
+		}
+		params = append(params, client.RuntimeParameterValueRequest{
+			FieldName: param.Key.ValueString(),
+			Type:      param.Type.ValueString(),
+			Value:     &value,
+		})
+	}
 
 	return
 }
@@ -652,7 +666,7 @@ func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
 	return value.ValueBoolPointer()
 }
 
-func ConvertTfStringMap(tfMap types.Map) map[string]string {
+func convertTfStringMap(tfMap types.Map) map[string]string {
 	convertedMap := make(map[string]string)
 	for k, v := range tfMap.Elements() {
 		if strVal, ok := v.(types.String); ok {
@@ -662,7 +676,7 @@ func ConvertTfStringMap(tfMap types.Map) map[string]string {
 	return convertedMap
 }
 
-func ConvertTfStringList(input []types.String) []string {
+func convertTfStringList(input []types.String) []string {
 	output := make([]string, len(input))
 	for i, value := range input {
 		output[i] = value.ValueString()
@@ -671,7 +685,7 @@ func ConvertTfStringList(input []types.String) []string {
 	return output
 }
 
-func ConvertToTfStringList(input []string) []types.String {
+func convertToTfStringList(input []string) []types.String {
 	output := make([]types.String, len(input))
 	for i, value := range input {
 		output[i] = types.StringValue(value)
@@ -680,7 +694,7 @@ func ConvertToTfStringList(input []string) []types.String {
 	return output
 }
 
-func ConvertTfStringListToPtr(input []types.String) *[]string {
+func convertTfStringListToPtr(input []types.String) *[]string {
 	output := make([]string, len(input))
 	for i, value := range input {
 		output[i] = value.ValueString()
@@ -689,7 +703,7 @@ func ConvertTfStringListToPtr(input []types.String) *[]string {
 	return &output
 }
 
-func ConvertDynamicType(tfType types.Dynamic) any {
+func convertDynamicType(tfType types.Dynamic) any {
 	switch t := tfType.UnderlyingValue().(type) {
 	case types.String:
 		return t.ValueString()
@@ -700,7 +714,7 @@ func ConvertDynamicType(tfType types.Dynamic) any {
 	}
 }
 
-func UpdateUseCasesForEntity(
+func updateUseCasesForEntity(
 	ctx context.Context,
 	service client.Service,
 	entityType string,
@@ -753,7 +767,7 @@ func UpdateUseCasesForEntity(
 	return
 }
 
-func ZipDirectory(source, target string) (content []byte, err error) {
+func zipDirectory(source, target string) (content []byte, err error) {
 	zipFile, err := os.Create(target)
 	if err != nil {
 		return
@@ -809,4 +823,60 @@ func ZipDirectory(source, target string) (content []byte, err error) {
 	defer os.Remove(target)
 
 	return
+}
+
+func convertSchedule(schedule Schedule) (clientSchedule client.Schedule, err error) {
+	clientSchedule = client.Schedule{}
+	minute, err := convertScheduleExpression(schedule.Minute)
+	if err != nil {
+		return
+	}
+	clientSchedule.Minute = minute
+
+	hour, err := convertScheduleExpression(schedule.Hour)
+	if err != nil {
+		return
+	}
+	clientSchedule.Hour = hour
+
+	dayOfMonth, err := convertScheduleExpression(schedule.DayOfMonth)
+	if err != nil {
+		return
+	}
+	clientSchedule.DayOfMonth = dayOfMonth
+
+	month, err := convertScheduleExpression(schedule.Month)
+	if err != nil {
+		return
+	}
+	clientSchedule.Month = month
+
+	dayOfWeek, err := convertScheduleExpression(schedule.DayOfWeek)
+	if err != nil {
+		return
+	}
+	clientSchedule.DayOfWeek = dayOfWeek
+
+	return
+}
+
+func convertScheduleExpression(expression []types.String) (any, error) {
+	if len(expression) == 0 {
+		return nil, nil
+	}
+
+	if expression[0].ValueString() == "*" {
+		return []string{"*"}, nil
+	}
+
+	convertedExpression := make([]int, 0, len(expression))
+	for _, i := range expression {
+		converted, err := strconv.Atoi(i.ValueString())
+		if err != nil {
+			return nil, err
+		}
+		convertedExpression = append(convertedExpression, converted)
+	}
+
+	return convertedExpression, nil
 }

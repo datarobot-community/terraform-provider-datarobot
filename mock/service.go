@@ -139,6 +139,21 @@ func (mr *MockServiceMockRecorder) CreateCustomJob(ctx, req interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJob", reflect.TypeOf((*MockService)(nil).CreateCustomJob), ctx, req)
 }
 
+// CreateCustomMetricFromJob mocks base method.
+func (m *MockService) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *client.CreateCustomMetricFromJobRequest) (*client.CustomMetric, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomMetricFromJob", ctx, deploymentID, req)
+	ret0, _ := ret[0].(*client.CustomMetric)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomMetricFromJob indicates an expected call of CreateCustomMetricFromJob.
+func (mr *MockServiceMockRecorder) CreateCustomMetricFromJob(ctx, deploymentID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomMetricFromJob", reflect.TypeOf((*MockService)(nil).CreateCustomMetricFromJob), ctx, deploymentID, req)
+}
+
 // CreateCustomModel mocks base method.
 func (m *MockService) CreateCustomModel(ctx context.Context, req *client.CreateCustomModelRequest) (*client.CustomModel, error) {
 	m.ctrl.T.Helper()
@@ -601,6 +616,20 @@ func (mr *MockServiceMockRecorder) DeleteCustomJob(ctx, id interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJob", reflect.TypeOf((*MockService)(nil).DeleteCustomJob), ctx, id)
 }
 
+// DeleteCustomMetric mocks base method.
+func (m *MockService) DeleteCustomMetric(ctx context.Context, deploymentID, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCustomMetric", ctx, deploymentID, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCustomMetric indicates an expected call of DeleteCustomMetric.
+func (mr *MockServiceMockRecorder) DeleteCustomMetric(ctx, deploymentID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomMetric", reflect.TypeOf((*MockService)(nil).DeleteCustomMetric), ctx, deploymentID, id)
+}
+
 // DeleteCustomModel mocks base method.
 func (m *MockService) DeleteCustomModel(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -871,6 +900,21 @@ func (m *MockService) GetCustomJob(ctx context.Context, id string) (*client.Cust
 func (mr *MockServiceMockRecorder) GetCustomJob(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomJob", reflect.TypeOf((*MockService)(nil).GetCustomJob), ctx, id)
+}
+
+// GetCustomMetric mocks base method.
+func (m *MockService) GetCustomMetric(ctx context.Context, deploymentID, id string) (*client.CustomMetric, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomMetric", ctx, deploymentID, id)
+	ret0, _ := ret[0].(*client.CustomMetric)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomMetric indicates an expected call of GetCustomMetric.
+func (mr *MockServiceMockRecorder) GetCustomMetric(ctx, deploymentID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomMetric", reflect.TypeOf((*MockService)(nil).GetCustomMetric), ctx, deploymentID, id)
 }
 
 // GetCustomModel mocks base method.
@@ -1590,6 +1634,21 @@ func (m *MockService) UpdateCustomJobFiles(ctx context.Context, id string, files
 func (mr *MockServiceMockRecorder) UpdateCustomJobFiles(ctx, id, files interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobFiles", reflect.TypeOf((*MockService)(nil).UpdateCustomJobFiles), ctx, id, files)
+}
+
+// UpdateCustomMetric mocks base method.
+func (m *MockService) UpdateCustomMetric(ctx context.Context, deploymentID, id string, req *client.UpdateCustomMetricRequest) (*client.CustomMetric, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomMetric", ctx, deploymentID, id, req)
+	ret0, _ := ret[0].(*client.CustomMetric)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomMetric indicates an expected call of UpdateCustomMetric.
+func (mr *MockServiceMockRecorder) UpdateCustomMetric(ctx, deploymentID, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomMetric", reflect.TypeOf((*MockService)(nil).UpdateCustomMetric), ctx, deploymentID, id, req)
 }
 
 // UpdateCustomModel mocks base method.

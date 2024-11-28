@@ -241,7 +241,7 @@ func (r *DatasetFromDatasourceResource) Update(ctx context.Context, req resource
 		return
 	}
 
-	err = UpdateUseCasesForEntity(
+	err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"dataset",

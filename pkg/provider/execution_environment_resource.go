@@ -316,7 +316,7 @@ func getDockerContext(dockerContextPath string) (path string, fileContent []byte
 		return
 	} else if fileInfo.IsDir() {
 		zipPath := path + ".zip"
-		if fileContent, err = ZipDirectory(path, zipPath); err != nil {
+		if fileContent, err = zipDirectory(path, zipPath); err != nil {
 			return
 		}
 		path = zipPath

@@ -39,7 +39,7 @@ resource "datarobot_custom_metric_job" "example" {
 }
 
 output "example_id" {
-  value       = datarobot_custom_job.example.id
+  value       = datarobot_custom_metric_job.example.id
   description = "The id for the example custom metric job"
 }
 ```

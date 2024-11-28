@@ -130,6 +130,12 @@ type Service interface {
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
 
+	// Custom Metric
+	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
+	GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error)
+	UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error)
+	DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error
+
 	// Batch Prediction Job Definition
 	CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
 	GetBatchPredictionJobDefinition(ctx context.Context, id string) (*BatchPredictionJobDefinition, error)
@@ -598,6 +604,22 @@ func (s *ServiceImpl) GetDeploymentHealthSettings(ctx context.Context, id string
 
 func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error) {
 	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
+}
+
+func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {
+	return Post[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/fromCustomJob/", req)
+}
+
+func (s *ServiceImpl) GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error) {
+	return Get[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error) {
+	return Patch[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error {
+	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
 }
 
 func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {

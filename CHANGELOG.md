@@ -1,6 +1,7 @@
 ## 0.5.1
 
 - Custom Metric Job Resource
+- Custom Metric From Job Resource
 
 ## 0.5.0
 
