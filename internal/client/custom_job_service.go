@@ -35,3 +35,25 @@ type UpdateCustomJobRequest struct {
 	RuntimeParameterValues string              `json:"runtimeParameterValues,omitempty"`
 	Resources              *CustomJobResources `json:"resources,omitempty"`
 }
+
+type HostedCustomMetricTemplateRequest struct {
+	Directionality  string `json:"directionality"`
+	Type            string `json:"type"`
+	Units           string `json:"units"`
+	TimeStep        string `json:"timeStep"`
+	IsModelSpecific bool   `json:"isModelSpecific"`
+}
+
+type HostedCustomMetricTemplate struct {
+	ID              string `json:"id"`
+	Directionality  string `json:"directionality"`
+	Type            string `json:"type"`
+	Units           string `json:"units"`
+	TimeStep        string `json:"timeStep"`
+	IsModelSpecific bool   `json:"isModelSpecific"`
+}
+
+type CustomJobMetric struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

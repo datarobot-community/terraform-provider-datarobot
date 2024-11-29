@@ -639,7 +639,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	if err = UpdateUseCasesForEntity(
+	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"deployment",
@@ -727,7 +727,7 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	if data.SegmentAnalysisSettings != nil {
 		req.SegmentAnalysis = &client.SegmentAnalysisSetting{
 			Enabled:    data.SegmentAnalysisSettings.Enabled.ValueBool(),
-			Attributes: ConvertTfStringListToPtr(data.SegmentAnalysisSettings.Attributes),
+			Attributes: convertTfStringListToPtr(data.SegmentAnalysisSettings.Attributes),
 		}
 	}
 
@@ -843,8 +843,8 @@ func (r *DeploymentResource) updateDeploymentSettings(
 				LowImportanceFailingCount:  Int64ValuePointerOptional(data.HealthSettings.DataDrift.LowImportanceFailingCount),
 				HighImportanceWarningCount: Int64ValuePointerOptional(data.HealthSettings.DataDrift.HighImportanceWarningCount),
 				HighImportanceFailingCount: Int64ValuePointerOptional(data.HealthSettings.DataDrift.HighImportanceFailingCount),
-				ExcludedFeatures:           ConvertTfStringListToPtr(data.HealthSettings.DataDrift.ExcludeFeatures),
-				StarredFeatures:            ConvertTfStringListToPtr(data.HealthSettings.DataDrift.StarredFeatures),
+				ExcludedFeatures:           convertTfStringListToPtr(data.HealthSettings.DataDrift.ExcludeFeatures),
+				StarredFeatures:            convertTfStringListToPtr(data.HealthSettings.DataDrift.StarredFeatures),
 			}
 		}
 

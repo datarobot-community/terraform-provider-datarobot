@@ -75,7 +75,7 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 
 	// zip directory
 	zipFileName := "docker_context.zip"
-	contents, err := ZipDirectory(dirName, zipFileName)
+	contents, err := zipDirectory(dirName, zipFileName)
 	if err != nil {
 		t.Fatalf("Failed to zip directory: %v", err)
 	}

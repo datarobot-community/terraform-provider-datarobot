@@ -185,3 +185,53 @@ type TaskStatusResponse struct {
 	Description string `json:"description"`
 	StatusType  string `json:"statusType"`
 }
+
+type CreateCustomMetricFromJobRequest struct {
+	CustomJobID        string                         `json:"customJobId"`
+	Name               string                         `json:"name"`
+	Description        *string                        `json:"description,omitempty"`
+	BaselineValues     []MetricBaselineValue          `json:"baselineValues,omitempty"`
+	Timestamp          *MetricTimestampSpoofing       `json:"timestamp,omitempty"`
+	Value              *ColumnNameValue               `json:"value,omitempty"`
+	SampleCount        *ColumnNameValue               `json:"sampleCount,omitempty"`
+	Batch              *ColumnNameValue               `json:"batch,omitempty"`
+	Schedule           *Schedule                      `json:"schedule,omitempty"`
+	ParameterOverrides []RuntimeParameterValueRequest `json:"parameterOverrides,omitempty"`
+}
+
+type MetricTimestampSpoofing struct {
+	ColumnName *string `json:"columnName,omitempty"`
+	TimeFormat *string `json:"timeFormat,omitempty"`
+}
+
+type MetricBaselineValue struct {
+	Value float64 `json:"value"`
+}
+
+type ColumnNameValue struct {
+	ColumnName string `json:"columnName"`
+}
+
+type CustomMetric struct {
+	ID             string                   `json:"id"`
+	CustomJobID    string                   `json:"customJobId"`
+	Name           string                   `json:"name"`
+	Description    string                   `json:"description,omitempty"`
+	BaselineValues []MetricBaselineValue    `json:"baselineValues,omitempty"`
+	Timestamp      *MetricTimestampSpoofing `json:"timestamp,omitempty"`
+	Value          *ColumnNameValue         `json:"value,omitempty"`
+	SampleCount    *ColumnNameValue         `json:"sampleCount,omitempty"`
+	Batch          *ColumnNameValue         `json:"batch,omitempty"`
+	Schedule       *Schedule                `json:"schedule,omitempty"`
+}
+
+type UpdateCustomMetricRequest struct {
+	Name           string                   `json:"name,omitempty"`
+	Description    *string                  `json:"description,omitempty"`
+	BaselineValues []MetricBaselineValue    `json:"baselineValues,omitempty"`
+	Timestamp      *MetricTimestampSpoofing `json:"timestamp,omitempty"`
+	Value          *ColumnNameValue         `json:"value,omitempty"`
+	SampleCount    *ColumnNameValue         `json:"sampleCount,omitempty"`
+	Batch          *ColumnNameValue         `json:"batch,omitempty"`
+	Schedule       *Schedule                `json:"schedule,omitempty"`
+}

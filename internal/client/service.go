@@ -71,7 +71,13 @@ type Service interface {
 	GetCustomJob(ctx context.Context, id string) (*CustomJob, error)
 	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
+	ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error)
 	DeleteCustomJob(ctx context.Context, id string) error
+
+	// Custom Metric Template
+	CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
+	GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error)
+	UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
 
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
@@ -124,6 +130,12 @@ type Service interface {
 	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
+
+	// Custom Metric
+	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
+	GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error)
+	UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error)
+	DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error
 
 	// Batch Prediction Job Definition
 	CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
@@ -386,8 +398,24 @@ func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files
 	return uploadFilesFromBinaries[CustomJob](s.client, ctx, "/customJobs/"+id+"/", http.MethodPatch, files, map[string]string{})
 }
 
+func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error) {
+	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
+}
+
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Post[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
+}
+
+func (s *ServiceImpl) GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error) {
+	return Get[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/")
+}
+
+func (s *ServiceImpl) UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Patch[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
 }
 
 func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {
@@ -581,6 +609,22 @@ func (s *ServiceImpl) GetDeploymentHealthSettings(ctx context.Context, id string
 
 func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error) {
 	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
+}
+
+func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {
+	return Post[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/fromCustomJob/", req)
+}
+
+func (s *ServiceImpl) GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error) {
+	return Get[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error) {
+	return Patch[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error {
+	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
 }
 
 func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {

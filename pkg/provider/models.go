@@ -257,6 +257,50 @@ type CustomJobResourceModel struct {
 	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
 }
 
+type CustomMetricJobResourceModel struct {
+	ID                     types.String  `tfsdk:"id"`
+	Name                   types.String  `tfsdk:"name"`
+	Description            types.String  `tfsdk:"description"`
+	EnvironmentID          types.String  `tfsdk:"environment_id"`
+	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
+	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
+	FolderPath             types.String  `tfsdk:"folder_path"`
+	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
+	Files                  types.Dynamic `tfsdk:"files"`
+	FilesHashes            types.List    `tfsdk:"files_hashes"`
+	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
+	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
+	Directionality         types.String  `tfsdk:"directionality"`
+	Units                  types.String  `tfsdk:"units"`
+	Type                   types.String  `tfsdk:"type"`
+	TimeStep               types.String  `tfsdk:"time_step"`
+	IsModelSpecific        types.Bool    `tfsdk:"is_model_specific"`
+}
+
+type CustomMetricFromJobResourceModel struct {
+	ID                 types.String             `tfsdk:"id"`
+	DeploymentID       types.String             `tfsdk:"deployment_id"`
+	CustomJobID        types.String             `tfsdk:"custom_job_id"`
+	Name               types.String             `tfsdk:"name"`
+	Description        types.String             `tfsdk:"description"`
+	BaselineValue      types.Float64            `tfsdk:"baseline_value"`
+	Timestamp          *MetricTimestampSpoofing `tfsdk:"timestamp"`
+	Value              *ColumnNameValue         `tfsdk:"value"`
+	Batch              *ColumnNameValue         `tfsdk:"batch"`
+	SampleCount        *ColumnNameValue         `tfsdk:"sample_count"`
+	Schedule           *Schedule                `tfsdk:"schedule"`
+	ParameterOverrides types.List               `tfsdk:"parameter_overrides"`
+}
+
+type MetricTimestampSpoofing struct {
+	ColumnName types.String `tfsdk:"column_name"`
+	TimeFormat types.String `tfsdk:"time_format"`
+}
+
+type ColumnNameValue struct {
+	ColumnName types.String `tfsdk:"column_name"`
+}
+
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
 	ID                   types.String   `tfsdk:"id"`

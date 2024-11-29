@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
@@ -561,10 +560,10 @@ func (r *BatchPredictionJobDefinitionResource) Read(ctx context.Context, req res
 			CreateTableIfNotExists: types.BoolPointerValue(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.CreateTableIfNotExists),
 		}
 		if len(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.UpdateColumns) > 0 {
-			data.OutputSettings.UpdateColumns = ConvertToTfStringList(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.UpdateColumns)
+			data.OutputSettings.UpdateColumns = convertToTfStringList(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.UpdateColumns)
 		}
 		if len(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.WhereColumns) > 0 {
-			data.OutputSettings.WhereColumns = ConvertToTfStringList(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.WhereColumns)
+			data.OutputSettings.WhereColumns = convertToTfStringList(batchPredictionJobDefinition.BatchPredictionJob.OutputSettings.WhereColumns)
 		}
 	}
 	if batchPredictionJobDefinition.BatchPredictionJob.CSVSettings != nil {
@@ -648,12 +647,12 @@ func buildRequest(data BatchPredictionJobDefinitionResourceModel) (request *clie
 		Name:                        StringValuePointerOptional(data.Name),
 		DeploymentId:                data.DeploymentID.ValueString(),
 		AbortOnError:                BoolValuePointerOptional(data.AbortOnError),
-		ChunkSize:                   ConvertDynamicType(data.ChunkSize),
-		ColumnNamesRemapping:        ConvertTfStringMap(data.ColumnNamesRemapping),
+		ChunkSize:                   convertDynamicType(data.ChunkSize),
+		ColumnNamesRemapping:        convertTfStringMap(data.ColumnNamesRemapping),
 		ExplanationAlgorithm:        StringValuePointerOptional(data.ExplanationAlgorithm),
 		IncludePredictionStatus:     BoolValuePointerOptional(data.IncludePredictionStatus),
 		IncludeProbabilities:        BoolValuePointerOptional(data.IncludeProbabilities),
-		IncludeProbabilitiesClasses: ConvertTfStringList(data.IncludeProbabilitiesClasses),
+		IncludeProbabilitiesClasses: convertTfStringList(data.IncludeProbabilitiesClasses),
 		IntakeSettings: &client.IntakeSettings{
 			Type:         data.IntakeSettings.Type.ValueString(),
 			DatasetID:    StringValuePointerOptional(data.IntakeSettings.DatasetID),
@@ -670,7 +669,7 @@ func buildRequest(data BatchPredictionJobDefinitionResourceModel) (request *clie
 		},
 		MaxExplanations:          Int64ValuePointerOptional(data.MaxExplanations),
 		NumConcurrent:            Int64ValuePointerOptional(data.NumConcurrent),
-		PassthroughColumns:       ConvertTfStringList(data.PassthroughColumns),
+		PassthroughColumns:       convertTfStringList(data.PassthroughColumns),
 		PassthroughColumnsSet:    StringValuePointerOptional(data.PassthroughColumnsSet),
 		PredictionThreshold:      Float64ValuePointerOptional(data.PredictionThreshold),
 		PredictionWarningEnabled: BoolValuePointerOptional(data.PredictionWarningEnabled),
@@ -699,8 +698,8 @@ func buildRequest(data BatchPredictionJobDefinitionResourceModel) (request *clie
 			Schema:                 StringValuePointerOptional(data.OutputSettings.Schema),
 			Catalog:                StringValuePointerOptional(data.OutputSettings.Catalog),
 			StatementType:          StringValuePointerOptional(data.OutputSettings.StatementType),
-			UpdateColumns:          ConvertTfStringList(data.OutputSettings.UpdateColumns),
-			WhereColumns:           ConvertTfStringList(data.OutputSettings.WhereColumns),
+			UpdateColumns:          convertTfStringList(data.OutputSettings.UpdateColumns),
+			WhereColumns:           convertTfStringList(data.OutputSettings.WhereColumns),
 			CreateTableIfNotExists: BoolValuePointerOptional(data.OutputSettings.CreateTableIfNotExists),
 		}
 	}
@@ -733,60 +732,4 @@ func buildRequest(data BatchPredictionJobDefinitionResourceModel) (request *clie
 	}
 
 	return
-}
-
-func convertSchedule(schedule Schedule) (clientSchedule client.Schedule, err error) {
-	clientSchedule = client.Schedule{}
-	minute, err := convertScheduleExpression(schedule.Minute)
-	if err != nil {
-		return
-	}
-	clientSchedule.Minute = minute
-
-	hour, err := convertScheduleExpression(schedule.Hour)
-	if err != nil {
-		return
-	}
-	clientSchedule.Hour = hour
-
-	dayOfMonth, err := convertScheduleExpression(schedule.DayOfMonth)
-	if err != nil {
-		return
-	}
-	clientSchedule.DayOfMonth = dayOfMonth
-
-	month, err := convertScheduleExpression(schedule.Month)
-	if err != nil {
-		return
-	}
-	clientSchedule.Month = month
-
-	dayOfWeek, err := convertScheduleExpression(schedule.DayOfWeek)
-	if err != nil {
-		return
-	}
-	clientSchedule.DayOfWeek = dayOfWeek
-
-	return
-}
-
-func convertScheduleExpression(expression []types.String) (any, error) {
-	if len(expression) == 0 {
-		return nil, nil
-	}
-
-	if expression[0].ValueString() == "*" {
-		return []string{"*"}, nil
-	}
-
-	convertedExpression := make([]int, 0, len(expression))
-	for _, i := range expression {
-		converted, err := strconv.Atoi(i.ValueString())
-		if err != nil {
-			return nil, err
-		}
-		convertedExpression = append(convertedExpression, converted)
-	}
-
-	return convertedExpression, nil
 }

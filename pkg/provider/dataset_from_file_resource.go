@@ -212,7 +212,7 @@ func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	err := UpdateUseCasesForEntity(
+	err := updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"dataset",

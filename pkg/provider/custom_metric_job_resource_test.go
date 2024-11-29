@@ -13,12 +13,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
-func TestAccCustomJobResource(t *testing.T) {
+func TestAccCustomMetricJobResource(t *testing.T) {
 	t.Parallel()
 
-	resourceName := "datarobot_custom_job.test"
+	resourceName := "datarobot_custom_metric_job.test"
 
-	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
 	name := "example_name " + nameSalt
@@ -143,12 +142,6 @@ if __name__ == "__main__":
 	metadataFileContents := `name: runtime-params
 
 runtimeParameterDefinitions:
-  - fieldName: DEPLOYMENT
-    type: deployment
-    description: Deployment that will be used for retraining job
-  - fieldName: RETRAINING_POLICY_ID
-    type: string
-    description: Retraining policy ID
   - fieldName: OPENAI_API_BASE
     type: string
     description: OpenAI API Base URL
@@ -184,21 +177,28 @@ runtimeParameterDefinitions:
 						tfjsonpath.New("id"),
 					),
 				},
-				Config: customJobResourceConfig(
+				Config: customMetricJobResourceConfig(
 					name,
 					description,
-					defaultJobType,
 					&folderPath,
 					nil,
 					nil,
-					noneEgressNetworkPolicy),
+					noneEgressNetworkPolicy,
+					"gauge",
+					"higherIsBetter",
+					"y",
+					true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
-					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", noneEgressNetworkPolicy),
+					resource.TestCheckResourceAttr(resourceName, "directionality", "higherIsBetter"),
+					resource.TestCheckResourceAttr(resourceName, "units", "y"),
+					resource.TestCheckResourceAttr(resourceName, "type", "gauge"),
+					resource.TestCheckResourceAttr(resourceName, "time_step", "hour"),
+					resource.TestCheckResourceAttr(resourceName, "is_model_specific", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -218,21 +218,28 @@ runtimeParameterDefinitions:
 						tfjsonpath.New("id"),
 					),
 				},
-				Config: customJobResourceConfig(
+				Config: customMetricJobResourceConfig(
 					name,
 					description,
-					defaultJobType,
 					&folderPath,
 					nil,
 					nil,
-					noneEgressNetworkPolicy),
+					noneEgressNetworkPolicy,
+					"sum",
+					"lowerIsBetter",
+					"label",
+					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
-					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", noneEgressNetworkPolicy),
+					resource.TestCheckResourceAttr(resourceName, "directionality", "lowerIsBetter"),
+					resource.TestCheckResourceAttr(resourceName, "units", "label"),
+					resource.TestCheckResourceAttr(resourceName, "type", "sum"),
+					resource.TestCheckResourceAttr(resourceName, "time_step", "hour"),
+					resource.TestCheckResourceAttr(resourceName, "is_model_specific", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -246,22 +253,29 @@ runtimeParameterDefinitions:
 						tfjsonpath.New("id"),
 					),
 				},
-				Config: customJobResourceConfig(
+				Config: customMetricJobResourceConfig(
 					newName,
 					newDescription,
-					defaultJobType,
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
 					nil,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy,
+					"sum",
+					"lowerIsBetter",
+					"label",
+					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
+					resource.TestCheckResourceAttr(resourceName, "directionality", "lowerIsBetter"),
+					resource.TestCheckResourceAttr(resourceName, "units", "label"),
+					resource.TestCheckResourceAttr(resourceName, "type", "sum"),
+					resource.TestCheckResourceAttr(resourceName, "time_step", "hour"),
+					resource.TestCheckResourceAttr(resourceName, "is_model_specific", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
 				),
@@ -273,84 +287,22 @@ runtimeParameterDefinitions:
 						resourceName,
 						tfjsonpath.New("id"),
 					),
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("id"),
-					),
 				},
-				Config: customJobResourceConfig(
+				Config: customMetricJobResourceConfig(
 					newName,
 					newDescription,
-					defaultJobType,
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
 					&runtimeParameters,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy,
+					"sum",
+					"lowerIsBetter",
+					"label",
+					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
-					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
-					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-				),
-			},
-			// Update job type triggers replacement
-			{
-				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("id"),
-					),
-				},
-				Config: customJobResourceConfig(
-					newName,
-					newDescription,
-					notificationJobType,
-					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
-					&runtimeParameters,
-					publicEgressNetworkPolicy),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "job_type", notificationJobType),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
-					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
-					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-				),
-			},
-			// Update job type to retraining
-			{
-				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("id"),
-					),
-				},
-				Config: customJobResourceConfig(
-					newName,
-					newDescription,
-					retrainingJobType,
-					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
-					&runtimeParameters,
-					publicEgressNetworkPolicy),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomJobResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "job_type", retrainingJobType),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
@@ -365,14 +317,17 @@ runtimeParameterDefinitions:
 	})
 }
 
-func customJobResourceConfig(
+func customMetricJobResourceConfig(
 	name,
-	description,
-	jobType string,
+	description string,
 	folderPath *string,
 	files []FileTuple,
 	runtimeParameters *string,
-	egressNetworkPolicy string,
+	egressNetworkPolicy,
+	hostedMetricType,
+	directionality,
+	units string,
+	isModelSpecific bool,
 ) string {
 	folderPathStr := ""
 	if folderPath != nil {
@@ -403,24 +358,27 @@ func customJobResourceConfig(
 	}
 
 	return fmt.Sprintf(`
-resource "datarobot_custom_job" "test" {
+resource "datarobot_custom_metric_job" "test" {
 	name = "%s"
 	description = "%s"
-	job_type = "%s"
 	environment_id = "66d07fae0513a1edf18595bb"
 	egress_network_policy = "%s"
+	type = "%s"
+	directionality = "%s"
+	units = "%s"
+	is_model_specific = %t
 	%s
 	%s
 	%s
 }
-`, name, description, jobType, egressNetworkPolicy, folderPathStr, filesStr, runtimeParametersStr)
+`, name, description, egressNetworkPolicy, hostedMetricType, directionality, units, isModelSpecific, folderPathStr, filesStr, runtimeParametersStr)
 }
 
-func checkCustomJobResourceExists() resource.TestCheckFunc {
+func checkCustomMetricJobResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources["datarobot_custom_job.test"]
+		rs, ok := s.RootModule().Resources["datarobot_custom_metric_job.test"]
 		if !ok {
-			return fmt.Errorf("Not found: %s", "datarobot_custom_job.test")
+			return fmt.Errorf("Not found: %s", "datarobot_custom_metric_job.test")
 		}
 
 		if rs.Primary.ID == "" {
@@ -439,10 +397,19 @@ func checkCustomJobResourceExists() resource.TestCheckFunc {
 			return err
 		}
 
+		traceAPICall("GetHostedCustomMetricTemplate")
+		hostedCustomMetricTemplate, err := p.service.GetHostedCustomMetricTemplate(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
 		if job.Name == rs.Primary.Attributes["name"] &&
 			job.Description == rs.Primary.Attributes["description"] &&
-			job.JobType == rs.Primary.Attributes["job_type"] &&
-			job.Resources.EgressNetworkPolicy == rs.Primary.Attributes["egress_network_policy"] {
+			job.Resources.EgressNetworkPolicy == rs.Primary.Attributes["egress_network_policy"] &&
+			hostedCustomMetricTemplate.Directionality == rs.Primary.Attributes["directionality"] &&
+			hostedCustomMetricTemplate.Units == rs.Primary.Attributes["units"] &&
+			hostedCustomMetricTemplate.Type == rs.Primary.Attributes["type"] &&
+			hostedCustomMetricTemplate.TimeStep == rs.Primary.Attributes["time_step"] {
 			if rs.Primary.Attributes["runtime_parameter_values.0.value"] != "" {
 				for _, runtimeParam := range job.RuntimeParameters {
 					if runtimeParam.FieldName == rs.Primary.Attributes["runtime_parameter_values.0.key"] &&
