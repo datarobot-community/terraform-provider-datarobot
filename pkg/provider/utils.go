@@ -382,17 +382,18 @@ func convertRuntimeParameterValuesToList(
 		return
 	}
 
-	for _, param := range runtimeParameterValues {
+	params = make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+	for i, param := range runtimeParameterValues {
 		var value any
 		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
 		if err != nil {
 			return
 		}
-		params = append(params, client.RuntimeParameterValueRequest{
+		params[i] = client.RuntimeParameterValueRequest{
 			FieldName: param.Key.ValueString(),
 			Type:      param.Type.ValueString(),
 			Value:     &value,
-		})
+		}
 	}
 
 	return

@@ -52,3 +52,8 @@ type HostedCustomMetricTemplate struct {
 	TimeStep        string `json:"timeStep"`
 	IsModelSpecific bool   `json:"isModelSpecific"`
 }
+
+type CustomJobMetric struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

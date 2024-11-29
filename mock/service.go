@@ -1337,6 +1337,21 @@ func (mr *MockServiceMockRecorder) ListCredentials(ctx interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCredentials", reflect.TypeOf((*MockService)(nil).ListCredentials), ctx)
 }
 
+// ListCustomJobMetrics mocks base method.
+func (m *MockService) ListCustomJobMetrics(ctx context.Context, id string) ([]client.CustomJobMetric, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCustomJobMetrics", ctx, id)
+	ret0, _ := ret[0].([]client.CustomJobMetric)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCustomJobMetrics indicates an expected call of ListCustomJobMetrics.
+func (mr *MockServiceMockRecorder) ListCustomJobMetrics(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomJobMetrics", reflect.TypeOf((*MockService)(nil).ListCustomJobMetrics), ctx, id)
+}
+
 // ListCustomModelVersions mocks base method.
 func (m *MockService) ListCustomModelVersions(ctx context.Context, id string) ([]client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()

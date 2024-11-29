@@ -370,17 +370,25 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	traceAPICall("UpdateHostedCustomMetricTemplate")
-	_, err = r.provider.service.UpdateHostedCustomMetricTemplate(ctx, data.ID.ValueString(), &client.HostedCustomMetricTemplateRequest{
-		Directionality:  data.Directionality.ValueString(),
-		Type:            data.Type.ValueString(),
-		Units:           data.Units.ValueString(),
-		TimeStep:        data.TimeStep.ValueString(),
-		IsModelSpecific: data.IsModelSpecific.ValueBool(),
-	})
+	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating Hosted Custom Metric Template", err.Error())
+		resp.Diagnostics.AddError("Error listing custom metrics", err.Error())
 		return
+	}
+
+	if len(customMetrics) < 1 {
+		traceAPICall("UpdateHostedCustomMetricTemplate")
+		_, err = r.provider.service.UpdateHostedCustomMetricTemplate(ctx, data.ID.ValueString(), &client.HostedCustomMetricTemplateRequest{
+			Directionality:  data.Directionality.ValueString(),
+			Type:            data.Type.ValueString(),
+			Units:           data.Units.ValueString(),
+			TimeStep:        data.TimeStep.ValueString(),
+			IsModelSpecific: data.IsModelSpecific.ValueBool(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Hosted Custom Metric Template", err.Error())
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -469,6 +477,34 @@ func (r CustomMetricJobResource) ModifyPlan(ctx context.Context, req resource.Mo
 		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
 
+	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error listing custom metrics", err.Error())
+		return
+	}
+	if len(customMetrics) > 0 {
+		if state.Directionality != plan.Directionality {
+			addCannotChangeCustomJobAttributeError(resp, "directionality")
+			return
+		}
+		if state.Units != plan.Units {
+			addCannotChangeCustomJobAttributeError(resp, "units")
+			return
+		}
+		if state.TimeStep != plan.TimeStep {
+			addCannotChangeCustomJobAttributeError(resp, "time_step")
+			return
+		}
+		if state.Type != plan.Type {
+			addCannotChangeCustomJobAttributeError(resp, "type")
+			return
+		}
+		if state.IsModelSpecific != plan.IsModelSpecific {
+			addCannotChangeCustomJobAttributeError(resp, "is_model_specific")
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
@@ -479,4 +515,13 @@ func (r CustomMetricJobResource) ConfigValidators(ctx context.Context) []resourc
 			path.MatchRoot("environment_version_id"),
 		),
 	}
+}
+
+func addCannotChangeCustomJobAttributeError(
+	resp *resource.ModifyPlanResponse,
+	attribute string,
+) {
+	resp.Diagnostics.AddError(
+		"Custom Metric Job Update Error",
+		fmt.Sprintf("%s cannot be changed if the custom job has an associated deployment.", attribute))
 }

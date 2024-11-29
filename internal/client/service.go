@@ -71,6 +71,7 @@ type Service interface {
 	GetCustomJob(ctx context.Context, id string) (*CustomJob, error)
 	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
+	ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error)
 	DeleteCustomJob(ctx context.Context, id string) error
 
 	// Custom Metric Template
@@ -395,6 +396,10 @@ func (s *ServiceImpl) UpdateCustomJob(ctx context.Context, id string, req *Updat
 
 func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error) {
 	return uploadFilesFromBinaries[CustomJob](s.client, ctx, "/customJobs/"+id+"/", http.MethodPatch, files, map[string]string{})
+}
+
+func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error) {
+	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
 }
 
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {

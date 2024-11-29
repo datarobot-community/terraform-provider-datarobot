@@ -380,3 +380,31 @@ func (r *CustomMetricFromJobResource) Delete(ctx context.Context, req resource.D
 func (r *CustomMetricFromJobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
+
+func (r *CustomMetricFromJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
+		return
+	}
+
+	var plan CustomMetricFromJobResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// resource is being created
+		return
+	}
+
+	if !IsKnown(plan.ParameterOverrides) {
+		// use empty list if runtime parameter values are unknown
+		plan.ParameterOverrides, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}

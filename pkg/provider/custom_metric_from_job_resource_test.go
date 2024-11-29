@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -55,6 +56,29 @@ func TestAccCustomMetricFromJobResource(t *testing.T) {
 		}
 	]
 	`
+
+	folderPath := "custom_metric_from_job"
+	if err := os.Mkdir(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	modelContents := `from typing import Any, Dict
+import pandas as pd
+
+def load_model(code_dir: str) -> Any:
+	return "dummy"
+
+def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
+	positive_label = kwargs["positive_class_label"]
+	negative_label = kwargs["negative_class_label"]
+	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
+	return preds
+`
+
+	if err := os.WriteFile(folderPath+"/custom.py", []byte(modelContents), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -225,9 +249,34 @@ func customMetricFromJobResourceConfig(
 ) string {
 	timeFormat := "%Y-%m-%dT%H:%M:%SZ"
 	return fmt.Sprintf(`
+resource "datarobot_custom_metric_job" "datarobot_custom_metric_from_job" {
+	name = "%s"
+	environment_id = "66d07fae0513a1edf18595bb"
+}
+resource "datarobot_custom_model" "datarobot_custom_metric_from_job" {
+	name = "test custom metric from job"
+	target_type = "Binary"
+	target_name = "t"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	folder_path = "custom_metric_from_job"
+}
+resource "datarobot_registered_model" "datarobot_custom_metric_from_job" {
+	name = "test custom metric from job %s"
+	custom_model_version_id = "${datarobot_custom_model.datarobot_custom_metric_from_job.version_id}"
+}
+resource "datarobot_prediction_environment" "datarobot_custom_metric_from_job" {
+	name = "test custom metric from job"
+	platform = "datarobotServerless"
+}
+resource "datarobot_deployment" "datarobot_custom_metric_from_job" {
+	label = "%s"
+	importance = "LOW"
+	prediction_environment_id = datarobot_prediction_environment.datarobot_custom_metric_from_job.id
+	registered_model_version_id = datarobot_registered_model.datarobot_custom_metric_from_job.version_id
+}
 resource "datarobot_custom_metric_from_job" "test" {
-	deployment_id = "67452655fa06d1be016b3251"
-	custom_job_id = "6747a473ba228cf6d59eba3a"
+	deployment_id = datarobot_deployment.datarobot_custom_metric_from_job.id
+	custom_job_id = datarobot_custom_metric_job.datarobot_custom_metric_from_job.id
 	name = "%s"
 	baseline_value = %f
 	timestamp = {
@@ -252,7 +301,18 @@ resource "datarobot_custom_metric_from_job" "test" {
 	}
 	parameter_overrides = %s
 }
-`, name, baselineValue, timeStampColumn, timeFormat, value, batch, sampleCount, scheduleHour, parameterOverrides)
+`, name,
+		name,
+		name,
+		name,
+		baselineValue,
+		timeStampColumn,
+		timeFormat,
+		value,
+		batch,
+		sampleCount,
+		scheduleHour,
+		parameterOverrides)
 }
 
 func checkCustomMetricFromJobResourceExists() resource.TestCheckFunc {
