@@ -198,7 +198,7 @@ resource "datarobot_deployment_retraining_policy" "test" {
 	description = "%s"
 	action = "%s"
 	model_selection_strategy = "%s"
-	deployment_id = "674a4164bb69b446489eb0cd"
+	deployment_id = datarobot_deployment.deployment_retraining_policy.id
 	feature_list_strategy = "informative_features"
 	project_options_strategy = "custom"
 	trigger = {
