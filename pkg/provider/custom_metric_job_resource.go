@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
@@ -327,26 +328,33 @@ func (r *CustomMetricJobResource) Read(ctx context.Context, req resource.ReadReq
 }
 
 func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data CustomMetricJobResourceModel
+	var plan, state CustomMetricJobResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// first update the Custom Job files
-	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
-	if err != nil {
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	_, err = r.provider.service.UpdateCustomJobFiles(ctx, data.ID.ValueString(), localFiles)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating Custom Job files", err.Error())
-		return
+	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPathHash != state.FolderPathHash {
+		localFiles, err := prepareLocalFiles(plan.FolderPath, plan.Files)
+		if err != nil {
+			return
+		}
+
+		_, err = r.provider.service.UpdateCustomJobFiles(ctx, plan.ID.ValueString(), localFiles)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Custom Job files", err.Error())
+			return
+		}
 	}
 
-	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, data.RuntimeParameterValues)
+	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
 		return
@@ -354,15 +362,15 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 
 	// then update the rest of the Custom Job fields
 	traceAPICall("UpdateCustomJob")
-	_, err = r.provider.service.UpdateCustomJob(ctx, data.ID.ValueString(), &client.UpdateCustomJobRequest{
-		Name:                   data.Name.ValueString(),
-		Description:            StringValuePointerOptional(data.Description),
-		EnvironmentID:          StringValuePointerOptional(data.EnvironmentID),
-		EnvironmentVersionID:   StringValuePointerOptional(data.EnvironmentVersionID),
+	_, err = r.provider.service.UpdateCustomJob(ctx, plan.ID.ValueString(), &client.UpdateCustomJobRequest{
+		Name:                   plan.Name.ValueString(),
+		Description:            StringValuePointerOptional(plan.Description),
+		EnvironmentID:          StringValuePointerOptional(plan.EnvironmentID),
+		EnvironmentVersionID:   StringValuePointerOptional(plan.EnvironmentVersionID),
 		RuntimeParameterValues: runtimeParameterValues,
 		Resources: &client.CustomJobResources{
-			EgressNetworkPolicy: data.EgressNetworkPolicy.ValueString(),
-			ResourceBundleID:    StringValuePointerOptional(data.ResourceBundleID),
+			EgressNetworkPolicy: plan.EgressNetworkPolicy.ValueString(),
+			ResourceBundleID:    StringValuePointerOptional(plan.ResourceBundleID),
 		},
 	})
 	if err != nil {
@@ -370,7 +378,7 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, data.ID.ValueString())
+	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error listing custom metrics", err.Error())
 		return
@@ -378,12 +386,12 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 
 	if len(customMetrics) < 1 {
 		traceAPICall("UpdateHostedCustomMetricTemplate")
-		_, err = r.provider.service.UpdateHostedCustomMetricTemplate(ctx, data.ID.ValueString(), &client.HostedCustomMetricTemplateRequest{
-			Directionality:  data.Directionality.ValueString(),
-			Type:            data.Type.ValueString(),
-			Units:           data.Units.ValueString(),
-			TimeStep:        data.TimeStep.ValueString(),
-			IsModelSpecific: data.IsModelSpecific.ValueBool(),
+		_, err = r.provider.service.UpdateHostedCustomMetricTemplate(ctx, plan.ID.ValueString(), &client.HostedCustomMetricTemplateRequest{
+			Directionality:  plan.Directionality.ValueString(),
+			Type:            plan.Type.ValueString(),
+			Units:           plan.Units.ValueString(),
+			TimeStep:        plan.TimeStep.ValueString(),
+			IsModelSpecific: plan.IsModelSpecific.ValueBool(),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Hosted Custom Metric Template", err.Error())
@@ -391,7 +399,7 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *CustomMetricJobResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

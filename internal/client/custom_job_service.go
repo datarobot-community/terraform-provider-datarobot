@@ -57,3 +57,8 @@ type CustomJobMetric struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
+
+type CustomJobSchedule struct {
+	ID          string `json:"id"`
+	CustomJobID string `json:"customJobId"`
+}

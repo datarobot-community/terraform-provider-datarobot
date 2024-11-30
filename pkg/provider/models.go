@@ -491,6 +491,62 @@ type PredictionsSettings struct {
 	MaxComputes types.Int64 `tfsdk:"max_computes"`
 }
 
+// DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
+type DeploymentRetrainingPolicyResourceModel struct {
+	ID                     types.String       `tfsdk:"id"`
+	DeploymentID           types.String       `tfsdk:"deployment_id"`
+	Name                   types.String       `tfsdk:"name"`
+	Description            types.String       `tfsdk:"description"`
+	Action                 types.String       `tfsdk:"action"`
+	FeatureListStrategy    types.String       `tfsdk:"feature_list_strategy"`
+	ModelSelectionStrategy types.String       `tfsdk:"model_selection_strategy"`
+	AutopilotOptions       *AutopilotOptions  `tfsdk:"autopilot_options"`
+	ProjectOptions         *ProjectOptions    `tfsdk:"project_options"`
+	ProjectOptionsStrategy types.String       `tfsdk:"project_options_strategy"`
+	TimeSeriesOptions      *TimeSeriesOptions `tfsdk:"time_series_options"`
+	Trigger                *Trigger           `tfsdk:"trigger"`
+}
+
+type AutopilotOptions struct {
+	BlendBestModels              types.Bool   `tfsdk:"blend_best_models"`
+	Mode                         types.String `tfsdk:"mode"`
+	RunLeakageRemovedFeatureList types.Bool   `tfsdk:"run_leakage_removed_feature_list"`
+	ScoringCodeOnly              types.Bool   `tfsdk:"scoring_code_only"`
+	ShapOnlyMode                 types.Bool   `tfsdk:"shap_only_mode"`
+}
+
+type ProjectOptions struct {
+	CVMethod       types.String  `tfsdk:"cv_method"`
+	HoldoutPct     types.Float64 `tfsdk:"holdout_pct"`
+	ValidationPct  types.Float64 `tfsdk:"validation_pct"`
+	Metric         types.String  `tfsdk:"metric"`
+	Reps           types.Float64 `tfsdk:"reps"`
+	ValidationType types.String  `tfsdk:"validation_type"`
+}
+
+type TimeSeriesOptions struct {
+	CalendarID                       types.String  `tfsdk:"calendar_id"`
+	DifferencingMethod               types.String  `tfsdk:"differencing_method"`
+	ExponentiallyWeightedMovingAlpha types.Float64 `tfsdk:"exponentially_weighted_moving_alpha"`
+	Periodicities                    []Periodicity `tfsdk:"periodicities"`
+	TreatAsExponential               types.String  `tfsdk:"treat_as_exponential"`
+}
+
+type Periodicity struct {
+	TimeSteps types.Int64  `tfsdk:"time_steps"`
+	TimeUnit  types.String `tfsdk:"time_unit"`
+}
+
+type Trigger struct {
+	CustomJobID             types.String `tfsdk:"custom_job_id"`
+	MinIntervalBetweenRuns  types.String `tfsdk:"min_interval_between_runs"`
+	Schedule                *Schedule    `tfsdk:"schedule"`
+	StatusDeclinesToFailing types.Bool   `tfsdk:"status_declines_to_failing"`
+	StatusDeclinesToWarning types.Bool   `tfsdk:"status_declines_to_warning"`
+	StatusStillInDecline    types.Bool   `tfsdk:"status_still_in_decline"`
+	Type                    types.String `tfsdk:"type"`
+}
+
 // QAApplicationResourceModel describes the Q&A application resource.
 
 type QAApplicationResourceModel struct {

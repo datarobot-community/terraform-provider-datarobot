@@ -516,6 +516,21 @@ func (mr *MockServiceMockRecorder) CreateRemoteRepository(ctx, req interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRemoteRepository", reflect.TypeOf((*MockService)(nil).CreateRemoteRepository), ctx, req)
 }
 
+// CreateRetrainingPolicy mocks base method.
+func (m *MockService) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *client.RetrainingPolicyRequest) (*client.RetrainingPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRetrainingPolicy", ctx, deploymentID, req)
+	ret0, _ := ret[0].(*client.RetrainingPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRetrainingPolicy indicates an expected call of CreateRetrainingPolicy.
+func (mr *MockServiceMockRecorder) CreateRetrainingPolicy(ctx, deploymentID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRetrainingPolicy", reflect.TypeOf((*MockService)(nil).CreateRetrainingPolicy), ctx, deploymentID, req)
+}
+
 // CreateUseCase mocks base method.
 func (m *MockService) CreateUseCase(ctx context.Context, req *client.UseCaseRequest) (*client.CreateUseCaseResponse, error) {
 	m.ctrl.T.Helper()
@@ -782,6 +797,20 @@ func (m *MockService) DeleteRemoteRepository(ctx context.Context, id string) err
 func (mr *MockServiceMockRecorder) DeleteRemoteRepository(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRemoteRepository", reflect.TypeOf((*MockService)(nil).DeleteRemoteRepository), ctx, id)
+}
+
+// DeleteRetrainingPolicy mocks base method.
+func (m *MockService) DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteRetrainingPolicy", ctx, deploymentID, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteRetrainingPolicy indicates an expected call of DeleteRetrainingPolicy.
+func (mr *MockServiceMockRecorder) DeleteRetrainingPolicy(ctx, deploymentID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRetrainingPolicy", reflect.TypeOf((*MockService)(nil).DeleteRetrainingPolicy), ctx, deploymentID, id)
 }
 
 // DeleteUseCase mocks base method.
@@ -1217,6 +1246,21 @@ func (mr *MockServiceMockRecorder) GetRemoteRepository(ctx, id interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteRepository", reflect.TypeOf((*MockService)(nil).GetRemoteRepository), ctx, id)
 }
 
+// GetRetrainingPolicy mocks base method.
+func (m *MockService) GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*client.RetrainingPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRetrainingPolicy", ctx, deploymentID, id)
+	ret0, _ := ret[0].(*client.RetrainingPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRetrainingPolicy indicates an expected call of GetRetrainingPolicy.
+func (mr *MockServiceMockRecorder) GetRetrainingPolicy(ctx, deploymentID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetrainingPolicy", reflect.TypeOf((*MockService)(nil).GetRetrainingPolicy), ctx, deploymentID, id)
+}
+
 // GetTaskStatus mocks base method.
 func (m *MockService) GetTaskStatus(ctx context.Context, id string) (*client.TaskStatusResponse, error) {
 	m.ctrl.T.Helper()
@@ -1350,6 +1394,21 @@ func (m *MockService) ListCustomJobMetrics(ctx context.Context, id string) ([]cl
 func (mr *MockServiceMockRecorder) ListCustomJobMetrics(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomJobMetrics", reflect.TypeOf((*MockService)(nil).ListCustomJobMetrics), ctx, id)
+}
+
+// ListCustomJobSchedules mocks base method.
+func (m *MockService) ListCustomJobSchedules(ctx context.Context, id string) ([]client.CustomJobSchedule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCustomJobSchedules", ctx, id)
+	ret0, _ := ret[0].([]client.CustomJobSchedule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCustomJobSchedules indicates an expected call of ListCustomJobSchedules.
+func (mr *MockServiceMockRecorder) ListCustomJobSchedules(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomJobSchedules", reflect.TypeOf((*MockService)(nil).ListCustomJobSchedules), ctx, id)
 }
 
 // ListCustomModelVersions mocks base method.
@@ -1920,6 +1979,21 @@ func (m *MockService) UpdateRemoteRepository(ctx context.Context, id string, req
 func (mr *MockServiceMockRecorder) UpdateRemoteRepository(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteRepository", reflect.TypeOf((*MockService)(nil).UpdateRemoteRepository), ctx, id, req)
+}
+
+// UpdateRetrainingPolicy mocks base method.
+func (m *MockService) UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *client.RetrainingPolicyRequest) (*client.RetrainingPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRetrainingPolicy", ctx, deploymentID, id, req)
+	ret0, _ := ret[0].(*client.RetrainingPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRetrainingPolicy indicates an expected call of UpdateRetrainingPolicy.
+func (mr *MockServiceMockRecorder) UpdateRetrainingPolicy(ctx, deploymentID, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRetrainingPolicy", reflect.TypeOf((*MockService)(nil).UpdateRetrainingPolicy), ctx, deploymentID, id, req)
 }
 
 // UpdateUseCase mocks base method.

@@ -235,3 +235,70 @@ type UpdateCustomMetricRequest struct {
 	Batch          *ColumnNameValue         `json:"batch,omitempty"`
 	Schedule       *Schedule                `json:"schedule,omitempty"`
 }
+
+type RetrainingPolicyRequest struct {
+	Name                   *string            `json:"name,omitempty"`
+	Description            *string            `json:"description,omitempty"`
+	Action                 *string            `json:"action,omitempty"`
+	AutopilotOptions       *AutopilotOptions  `json:"autopilotOptions,omitempty"`
+	FeatureListStrategy    *string            `json:"featureListStrategy,omitempty"`
+	ModelSelectionStrategy *string            `json:"modelSelectionStrategy,omitempty"`
+	ProjectOptions         *ProjectOptions    `json:"projectOptions,omitempty"`
+	ProjectOptionsStrategy *string            `json:"projectOptionsStrategy,omitempty"`
+	TimeSeriesOptions      *TimeSeriesOptions `json:"timeSeriesOptions,omitempty"`
+	Trigger                *Trigger           `json:"trigger,omitempty"`
+}
+
+type AutopilotOptions struct {
+	BlendBestModels              *bool   `json:"blendBestModels,omitempty"`
+	Mode                         *string `json:"mode,omitempty"`
+	RunLeakageRemovedFeatureList *bool   `json:"runLeakageRemovedFeatureList,omitempty"`
+	ScoringCodeOnly              *bool   `json:"scoringCodeOnly,omitempty"`
+	ShapOnlyMode                 *bool   `json:"shapOnlyMode,omitempty"`
+}
+
+type ProjectOptions struct {
+	CvMethod       *string  `json:"cvMethod,omitempty"`
+	HoldoutPct     *float64 `json:"holdoutPct,omitempty"`
+	Metric         *string  `json:"metric,omitempty"`
+	Reps           *float64 `json:"reps,omitempty"`
+	ValidationPct  *float64 `json:"validationPct,omitempty"`
+	ValidationType *string  `json:"validationType,omitempty"`
+}
+
+type TimeSeriesOptions struct {
+	CalendarID                       *string       `json:"calendarId,omitempty"`
+	DifferencingMethod               *string       `json:"differencingMethod,omitempty"`
+	ExponentiallyWeightedMovingAlpha *float64      `json:"exponentiallyWeightedMovingAlpha,omitempty"`
+	Periodicities                    []Periodicity `json:"periodicities,omitempty"`
+	TreatAsExponential               *string       `json:"treatAsExponential,omitempty"`
+}
+
+type Periodicity struct {
+	TimeSteps *int    `json:"timeSteps,omitempty"`
+	TimeUnit  *string `json:"timeUnit,omitempty"`
+}
+
+type Trigger struct {
+	CustomJobID             *string   `json:"customJobId,omitempty"`
+	MinIntervalBetweenRuns  *string   `json:"minIntervalBetweenRuns,omitempty"`
+	Schedule                *Schedule `json:"schedule,omitempty"`
+	StatusDeclinesToFailing *bool     `json:"statusDeclinesToFailing,omitempty"`
+	StatusDeclinesToWarning *bool     `json:"statusDeclinesToWarning,omitempty"`
+	StatusStillInDecline    *bool     `json:"statusStillInDecline,omitempty"`
+	Type                    *string   `json:"type"`
+}
+
+type RetrainingPolicy struct {
+	ID                     string             `json:"id"`
+	Name                   string             `json:"name"`
+	Description            string             `json:"description"`
+	Action                 string             `json:"action,omitempty"`
+	AutopilotOptions       *AutopilotOptions  `json:"autopilotOptions,omitempty"`
+	FeatureListStrategy    string             `json:"featureListStrategy,omitempty"`
+	ModelSelectionStrategy string             `json:"modelSelectionStrategy,omitempty"`
+	ProjectOptions         *ProjectOptions    `json:"projectOptions,omitempty"`
+	ProjectOptionsStrategy string             `json:"projectOptionsStrategy,omitempty"`
+	TimeSeriesOptions      *TimeSeriesOptions `json:"timeSeriesOptions,omitempty"`
+	Trigger                *Trigger           `json:"trigger,omitempty"`
+}
