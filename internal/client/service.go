@@ -72,6 +72,7 @@ type Service interface {
 	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
 	ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error)
+	ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error)
 	DeleteCustomJob(ctx context.Context, id string) error
 
 	// Custom Metric Template
@@ -130,6 +131,11 @@ type Service interface {
 	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
+
+	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
+	GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error)
+	UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
+	DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error
 
 	// Custom Metric
 	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
@@ -402,6 +408,10 @@ func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]Cu
 	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
 }
 
+func (s *ServiceImpl) ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error) {
+	return GetAllPages[CustomJobSchedule](s.client, ctx, "/customJobs/"+id+"/schedules/", nil)
+}
+
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")
 }
@@ -609,6 +619,22 @@ func (s *ServiceImpl) GetDeploymentHealthSettings(ctx context.Context, id string
 
 func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error) {
 	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
+}
+
+func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
+	return Post[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/", req)
+}
+
+func (s *ServiceImpl) GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error) {
+	return Get[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
+	return Patch[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error {
+	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/")
 }
 
 func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {

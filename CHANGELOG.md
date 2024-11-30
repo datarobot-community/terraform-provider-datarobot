@@ -1,3 +1,7 @@
+## 0.5.2
+
+- Deployment Retraining Policy resource
+
 ## 0.5.1
 
 - Custom Metric Job Resource

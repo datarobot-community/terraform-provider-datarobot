@@ -277,6 +277,29 @@ func formatRuntimeParameterValues(
 	basetypes.ListValue,
 	diag.Diagnostics,
 ) {
+	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, false)
+}
+
+func formatRuntimeParameterValuesForRetrainingJob(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
+	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
+}
+
+func formatRuntimeParameterValuesInternal(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+	isRetrainingJob bool,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
 	// copy parameters in stable order
 	parameters := make([]RuntimeParameterValue, 0)
 
@@ -304,6 +327,11 @@ func formatRuntimeParameterValues(
 
 		if isManagedByGuards(param) {
 			// skip the parameter if it is managed by guards
+			continue
+		}
+
+		if isRetrainingJob && isManagedByRetrainingPolicy(param) {
+			// skip the parameter if it is managed by retraining policy
 			continue
 		}
 
@@ -335,6 +363,11 @@ func isManagedByGuards(param client.RuntimeParameter) bool {
 	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
 		param.FieldName == faithfulnessAzureOpenAiRuntimeParam ||
 		param.FieldName == nemoAzureOpenAiRuntimeParam
+}
+
+func isManagedByRetrainingPolicy(param client.RuntimeParameter) bool {
+	return param.FieldName == deploymentParamName ||
+		param.FieldName == retrainingPolicyIDParamName
 }
 
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {

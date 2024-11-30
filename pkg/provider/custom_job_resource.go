@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -18,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 const (
@@ -210,10 +212,10 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
 
 	var diags diag.Diagnostics
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
 		ctx,
 		customJob.RuntimeParameters,
-		data.RuntimeParameterValues)
+		data)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -260,10 +262,10 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
 	data.JobType = types.StringValue(customJob.JobType)
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
 		ctx,
 		customJob.RuntimeParameters,
-		data.RuntimeParameterValues)
+		data)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -274,26 +276,33 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data CustomJobResourceModel
+	var plan, state CustomJobResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// first update the Custom Job files
-	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
-	if err != nil {
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	_, err = r.provider.service.UpdateCustomJobFiles(ctx, data.ID.ValueString(), localFiles)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating Custom Job files", err.Error())
-		return
+	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPathHash != state.FolderPathHash {
+		localFiles, err := prepareLocalFiles(plan.FolderPath, plan.Files)
+		if err != nil {
+			return
+		}
+
+		_, err = r.provider.service.UpdateCustomJobFiles(ctx, plan.ID.ValueString(), localFiles)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Custom Job files", err.Error())
+			return
+		}
 	}
 
-	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, data.RuntimeParameterValues)
+	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
 		return
@@ -301,15 +310,15 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 
 	// then update the rest of the Custom Job fields
 	traceAPICall("UpdateCustomJob")
-	_, err = r.provider.service.UpdateCustomJob(ctx, data.ID.ValueString(), &client.UpdateCustomJobRequest{
-		Name:                   data.Name.ValueString(),
-		Description:            StringValuePointerOptional(data.Description),
-		EnvironmentID:          StringValuePointerOptional(data.EnvironmentID),
-		EnvironmentVersionID:   StringValuePointerOptional(data.EnvironmentVersionID),
+	_, err = r.provider.service.UpdateCustomJob(ctx, plan.ID.ValueString(), &client.UpdateCustomJobRequest{
+		Name:                   plan.Name.ValueString(),
+		Description:            StringValuePointerOptional(plan.Description),
+		EnvironmentID:          StringValuePointerOptional(plan.EnvironmentID),
+		EnvironmentVersionID:   StringValuePointerOptional(plan.EnvironmentVersionID),
 		RuntimeParameterValues: runtimeParameterValues,
 		Resources: &client.CustomJobResources{
-			EgressNetworkPolicy: data.EgressNetworkPolicy.ValueString(),
-			ResourceBundleID:    StringValuePointerOptional(data.ResourceBundleID),
+			EgressNetworkPolicy: plan.EgressNetworkPolicy.ValueString(),
+			ResourceBundleID:    StringValuePointerOptional(plan.ResourceBundleID),
 		},
 	})
 	if err != nil {
@@ -317,7 +326,7 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *CustomJobResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -439,6 +448,20 @@ func verifyMetadataForRetrainingJob(data CustomJobResourceModel, resp *resource.
 			return
 		}
 	}
+}
+
+func checkAndFormatRuntimeParameterValues(ctx context.Context, customJobRuntimeParameters []client.RuntimeParameter, data CustomJobResourceModel) (basetypes.ListValue, diag.Diagnostics) {
+	if data.JobType.ValueString() == retrainingJobType {
+		return formatRuntimeParameterValuesForRetrainingJob(
+			ctx,
+			customJobRuntimeParameters,
+			data.RuntimeParameterValues)
+	}
+
+	return formatRuntimeParameterValues(
+		ctx,
+		customJobRuntimeParameters,
+		data.RuntimeParameterValues)
 }
 
 func (r CustomJobResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
