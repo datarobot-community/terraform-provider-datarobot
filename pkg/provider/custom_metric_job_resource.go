@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
@@ -14,41 +13,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 const (
-	retrainingJobType   = "retraining"
-	defaultJobType      = "default"
-	notificationJobType = "notification"
-
-	deploymentParamName         = "DEPLOYMENT"
-	retrainingPolicyIDParamName = "RETRAINING_POLICY_ID"
+	jobType = "hostedCustomMetric"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.ResourceWithImportState = &CustomJobResource{}
-var _ resource.ResourceWithModifyPlan = &CustomJobResource{}
+var _ resource.ResourceWithImportState = &CustomMetricJobResource{}
+var _ resource.ResourceWithModifyPlan = &CustomMetricJobResource{}
 
-func NewCustomJobResource() resource.Resource {
-	return &CustomJobResource{}
+func NewCustomMetricJobResource() resource.Resource {
+	return &CustomMetricJobResource{}
 }
 
 // VectorDatabaseResource defines the resource implementation.
-type CustomJobResource struct {
+type CustomMetricJobResource struct {
 	provider *Provider
 }
 
-func (r *CustomJobResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_custom_job"
+func (r *CustomMetricJobResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_custom_metric_job"
 }
 
-func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *CustomMetricJobResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Custom Job",
@@ -56,28 +50,18 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The ID of the Custom Job.",
+				MarkdownDescription: "The ID of the Custom Metric Job.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The name of the Custom Job.",
-			},
-			"job_type": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("default"),
-				MarkdownDescription: "The type of the Custom Job.",
-				Validators:          CustomJobTypeValidators(),
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The name of the Custom Metric Job.",
 			},
 			"description": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The description of the Custom Job.",
+				MarkdownDescription: "The description of the Custom Metric Job.",
 			},
 			"environment_id": schema.StringAttribute{
 				Computed:            true,
@@ -138,11 +122,55 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 				Optional:            true,
 				MarkdownDescription: "A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.",
 			},
+			"directionality": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("higherIsBetter"),
+				MarkdownDescription: "The directionality of the Custom Metric.",
+				Validators: []validator.String{
+					stringvalidator.OneOf(
+						"higherIsBetter",
+						"lowerIsBetter",
+					),
+				},
+			},
+			"type": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("gauge"),
+				MarkdownDescription: "The aggregation type of the custom metric.",
+				Validators: []validator.String{
+					stringvalidator.OneOf(
+						"gauge",
+						"sum",
+						"average",
+						"categorical",
+					),
+				},
+			},
+			"time_step": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("hour"),
+				MarkdownDescription: "Custom metric time bucket size.",
+			},
+			"units": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("y"),
+				MarkdownDescription: "The units, or the y-axis label, of the given custom metric.",
+			},
+			"is_model_specific": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(true),
+				MarkdownDescription: "Determines whether the metric is related to the model or deployment.",
+			},
 		},
 	}
 }
 
-func (r *CustomJobResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *CustomMetricJobResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -157,18 +185,18 @@ func (r *CustomJobResource) Configure(ctx context.Context, req resource.Configur
 	}
 }
 
-func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data CustomJobResourceModel
+func (r *CustomMetricJobResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data CustomMetricJobResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	customJob, err := r.provider.service.CreateCustomJob(ctx, &client.CreateCustomJobRequest{
+	customMetricJob, err := r.provider.service.CreateCustomJob(ctx, &client.CreateCustomJobRequest{
 		Name:                 data.Name.ValueString(),
 		Description:          StringValuePointerOptional(data.Description),
-		JobType:              data.JobType.ValueString(),
+		JobType:              jobType,
 		EnvironmentID:        StringValuePointerOptional(data.EnvironmentID),
 		EnvironmentVersionID: StringValuePointerOptional(data.EnvironmentVersionID),
 		Resources: client.CustomJobResources{
@@ -186,7 +214,7 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	customJob, err = r.provider.service.UpdateCustomJobFiles(ctx, customJob.ID, localFiles)
+	customMetricJob, err = r.provider.service.UpdateCustomJobFiles(ctx, customMetricJob.ID, localFiles)
 	if err != nil {
 		resp.Diagnostics.AddError("Error adding Custom Job files", err.Error())
 		return
@@ -199,23 +227,36 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 
-		if _, err = r.provider.service.UpdateCustomJob(ctx, customJob.ID, &client.UpdateCustomJobRequest{
-			Name:                   customJob.Name,
+		if _, err = r.provider.service.UpdateCustomJob(ctx, customMetricJob.ID, &client.UpdateCustomJobRequest{
+			Name:                   customMetricJob.Name,
 			RuntimeParameterValues: runtimeParameterValues,
 		}); err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Custom Job", err.Error())
 			return
 		}
 	}
-	data.ID = types.StringValue(customJob.ID)
-	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
-	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
+	data.ID = types.StringValue(customMetricJob.ID)
+	data.EnvironmentID = types.StringValue(customMetricJob.EnvironmentID)
+	data.EnvironmentVersionID = types.StringValue(customMetricJob.EnvironmentVersionID)
+
+	traceAPICall("CreateHostedCustomMetricTemplate")
+	_, err = r.provider.service.CreateHostedCustomMetricTemplate(ctx, customMetricJob.ID, &client.HostedCustomMetricTemplateRequest{
+		Directionality:  data.Directionality.ValueString(),
+		Type:            data.Type.ValueString(),
+		Units:           data.Units.ValueString(),
+		TimeStep:        data.TimeStep.ValueString(),
+		IsModelSpecific: data.IsModelSpecific.ValueBool(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating Hosted Custom Metric Template", err.Error())
+		return
+	}
 
 	var diags diag.Diagnostics
-	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
-		customJob.RuntimeParameters,
-		data)
+		customMetricJob.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -224,8 +265,8 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data CustomJobResourceModel
+func (r *CustomMetricJobResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data CustomMetricJobResourceModel
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -240,7 +281,7 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 	id := data.ID.ValueString()
 
 	traceAPICall("GetCustomJob")
-	customJob, err := r.provider.service.GetCustomJob(ctx, id)
+	CustomMetricJob, err := r.provider.service.GetCustomJob(ctx, id)
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
@@ -255,28 +296,39 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	data.Name = types.StringValue(customJob.Name)
-	if customJob.Description != "" {
-		data.Description = types.StringValue(customJob.Description)
+	data.Name = types.StringValue(CustomMetricJob.Name)
+	if CustomMetricJob.Description != "" {
+		data.Description = types.StringValue(CustomMetricJob.Description)
 	}
-	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
-	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
-	data.JobType = types.StringValue(customJob.JobType)
-	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
+	data.EnvironmentID = types.StringValue(CustomMetricJob.EnvironmentID)
+	data.EnvironmentVersionID = types.StringValue(CustomMetricJob.EnvironmentVersionID)
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
-		customJob.RuntimeParameters,
-		data)
+		CustomMetricJob.RuntimeParameters,
+		data.RuntimeParameterValues)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
 	}
-	data.EgressNetworkPolicy = types.StringValue(customJob.Resources.EgressNetworkPolicy)
+	data.EgressNetworkPolicy = types.StringValue(CustomMetricJob.Resources.EgressNetworkPolicy)
+
+	traceAPICall("GetHostedCustomMetricTemplate")
+	hostedCustomMetricTemplate, err := r.provider.service.GetHostedCustomMetricTemplate(ctx, data.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting Hosted Custom Metric Template", err.Error())
+		return
+	}
+	data.Directionality = types.StringValue(hostedCustomMetricTemplate.Directionality)
+	data.Type = types.StringValue(hostedCustomMetricTemplate.Type)
+	data.Units = types.StringValue(hostedCustomMetricTemplate.Units)
+	data.TimeStep = types.StringValue(hostedCustomMetricTemplate.TimeStep)
+	data.IsModelSpecific = types.BoolValue(hostedCustomMetricTemplate.IsModelSpecific)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state CustomJobResourceModel
+func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, state CustomMetricJobResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -326,11 +378,32 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, plan.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error listing custom metrics", err.Error())
+		return
+	}
+
+	if len(customMetrics) < 1 {
+		traceAPICall("UpdateHostedCustomMetricTemplate")
+		_, err = r.provider.service.UpdateHostedCustomMetricTemplate(ctx, plan.ID.ValueString(), &client.HostedCustomMetricTemplateRequest{
+			Directionality:  plan.Directionality.ValueString(),
+			Type:            plan.Type.ValueString(),
+			Units:           plan.Units.ValueString(),
+			TimeStep:        plan.TimeStep.ValueString(),
+			IsModelSpecific: plan.IsModelSpecific.ValueBool(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Hosted Custom Metric Template", err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func (r *CustomJobResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data CustomJobResourceModel
+func (r *CustomMetricJobResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data CustomMetricJobResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -347,17 +420,17 @@ func (r *CustomJobResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 }
 
-func (r *CustomJobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *CustomMetricJobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r CustomJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r CustomMetricJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		// Resource is being destroyed
 		return
 	}
 
-	var plan CustomJobResourceModel
+	var plan CustomMetricJobResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -386,7 +459,7 @@ func (r CustomJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	var state CustomJobResourceModel
+	var state CustomMetricJobResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -412,59 +485,38 @@ func (r CustomJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
 
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-}
-
-func (r CustomJobResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data CustomJobResourceModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if data.JobType.ValueString() == retrainingJobType {
-		verifyMetadataForRetrainingJob(data, resp)
-	}
-}
-
-func verifyMetadataForRetrainingJob(data CustomJobResourceModel, resp *resource.ValidateConfigResponse) {
-	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
+	customMetrics, err := r.provider.service.ListCustomJobMetrics(ctx, plan.ID.ValueString())
 	if err != nil {
+		resp.Diagnostics.AddError("Error listing custom metrics", err.Error())
 		return
 	}
-
-	for _, localFile := range localFiles {
-		if localFile.Name == "metadata.yaml" {
-			content := string(localFile.Content)
-			if !strings.Contains(content, fmt.Sprintf("fieldName: %s", deploymentParamName)) ||
-				!strings.Contains(content, fmt.Sprintf("fieldName: %s", retrainingPolicyIDParamName)) {
-				resp.Diagnostics.AddError(
-					"Invalid files for Retraining Job",
-					fmt.Sprintf("Retraining Job requires a metadata.yaml that contains %s and %s runtimeParameterDefinitions", deploymentParamName, retrainingPolicyIDParamName))
-				return
-
-			}
+	if len(customMetrics) > 0 {
+		if state.Directionality != plan.Directionality {
+			addCannotChangeCustomJobAttributeError(resp, "directionality")
+			return
+		}
+		if state.Units != plan.Units {
+			addCannotChangeCustomJobAttributeError(resp, "units")
+			return
+		}
+		if state.TimeStep != plan.TimeStep {
+			addCannotChangeCustomJobAttributeError(resp, "time_step")
+			return
+		}
+		if state.Type != plan.Type {
+			addCannotChangeCustomJobAttributeError(resp, "type")
+			return
+		}
+		if state.IsModelSpecific != plan.IsModelSpecific {
+			addCannotChangeCustomJobAttributeError(resp, "is_model_specific")
 			return
 		}
 	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
-func checkAndFormatRuntimeParameterValues(ctx context.Context, customJobRuntimeParameters []client.RuntimeParameter, data CustomJobResourceModel) (basetypes.ListValue, diag.Diagnostics) {
-	if data.JobType.ValueString() == retrainingJobType {
-		return formatRuntimeParameterValuesForRetrainingJob(
-			ctx,
-			customJobRuntimeParameters,
-			data.RuntimeParameterValues)
-	}
-
-	return formatRuntimeParameterValues(
-		ctx,
-		customJobRuntimeParameters,
-		data.RuntimeParameterValues)
-}
-
-func (r CustomJobResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+func (r CustomMetricJobResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
 		resourcevalidator.AtLeastOneOf(
 			path.MatchRoot("environment_id"),
@@ -473,12 +525,11 @@ func (r CustomJobResource) ConfigValidators(ctx context.Context) []resource.Conf
 	}
 }
 
-func CustomJobTypeValidators() []validator.String {
-	return []validator.String{
-		stringvalidator.OneOf(
-			defaultJobType,
-			retrainingJobType,
-			notificationJobType,
-		),
-	}
+func addCannotChangeCustomJobAttributeError(
+	resp *resource.ModifyPlanResponse,
+	attribute string,
+) {
+	resp.Diagnostics.AddError(
+		"Custom Metric Job Update Error",
+		fmt.Sprintf("%s cannot be changed if the custom job has an associated deployment.", attribute))
 }

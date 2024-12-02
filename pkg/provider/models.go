@@ -257,6 +257,50 @@ type CustomJobResourceModel struct {
 	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
 }
 
+type CustomMetricJobResourceModel struct {
+	ID                     types.String  `tfsdk:"id"`
+	Name                   types.String  `tfsdk:"name"`
+	Description            types.String  `tfsdk:"description"`
+	EnvironmentID          types.String  `tfsdk:"environment_id"`
+	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
+	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
+	FolderPath             types.String  `tfsdk:"folder_path"`
+	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
+	Files                  types.Dynamic `tfsdk:"files"`
+	FilesHashes            types.List    `tfsdk:"files_hashes"`
+	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
+	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
+	Directionality         types.String  `tfsdk:"directionality"`
+	Units                  types.String  `tfsdk:"units"`
+	Type                   types.String  `tfsdk:"type"`
+	TimeStep               types.String  `tfsdk:"time_step"`
+	IsModelSpecific        types.Bool    `tfsdk:"is_model_specific"`
+}
+
+type CustomMetricFromJobResourceModel struct {
+	ID                 types.String             `tfsdk:"id"`
+	DeploymentID       types.String             `tfsdk:"deployment_id"`
+	CustomJobID        types.String             `tfsdk:"custom_job_id"`
+	Name               types.String             `tfsdk:"name"`
+	Description        types.String             `tfsdk:"description"`
+	BaselineValue      types.Float64            `tfsdk:"baseline_value"`
+	Timestamp          *MetricTimestampSpoofing `tfsdk:"timestamp"`
+	Value              *ColumnNameValue         `tfsdk:"value"`
+	Batch              *ColumnNameValue         `tfsdk:"batch"`
+	SampleCount        *ColumnNameValue         `tfsdk:"sample_count"`
+	Schedule           *Schedule                `tfsdk:"schedule"`
+	ParameterOverrides types.List               `tfsdk:"parameter_overrides"`
+}
+
+type MetricTimestampSpoofing struct {
+	ColumnName types.String `tfsdk:"column_name"`
+	TimeFormat types.String `tfsdk:"time_format"`
+}
+
+type ColumnNameValue struct {
+	ColumnName types.String `tfsdk:"column_name"`
+}
+
 // RegisteredModelResourceModel describes the registered model resource.
 type RegisteredModelResourceModel struct {
 	ID                   types.String   `tfsdk:"id"`
@@ -447,6 +491,62 @@ type PredictionsSettings struct {
 	MaxComputes types.Int64 `tfsdk:"max_computes"`
 }
 
+// DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
+type DeploymentRetrainingPolicyResourceModel struct {
+	ID                     types.String       `tfsdk:"id"`
+	DeploymentID           types.String       `tfsdk:"deployment_id"`
+	Name                   types.String       `tfsdk:"name"`
+	Description            types.String       `tfsdk:"description"`
+	Action                 types.String       `tfsdk:"action"`
+	FeatureListStrategy    types.String       `tfsdk:"feature_list_strategy"`
+	ModelSelectionStrategy types.String       `tfsdk:"model_selection_strategy"`
+	AutopilotOptions       *AutopilotOptions  `tfsdk:"autopilot_options"`
+	ProjectOptions         *ProjectOptions    `tfsdk:"project_options"`
+	ProjectOptionsStrategy types.String       `tfsdk:"project_options_strategy"`
+	TimeSeriesOptions      *TimeSeriesOptions `tfsdk:"time_series_options"`
+	Trigger                *Trigger           `tfsdk:"trigger"`
+}
+
+type AutopilotOptions struct {
+	BlendBestModels              types.Bool   `tfsdk:"blend_best_models"`
+	Mode                         types.String `tfsdk:"mode"`
+	RunLeakageRemovedFeatureList types.Bool   `tfsdk:"run_leakage_removed_feature_list"`
+	ScoringCodeOnly              types.Bool   `tfsdk:"scoring_code_only"`
+	ShapOnlyMode                 types.Bool   `tfsdk:"shap_only_mode"`
+}
+
+type ProjectOptions struct {
+	CVMethod       types.String  `tfsdk:"cv_method"`
+	HoldoutPct     types.Float64 `tfsdk:"holdout_pct"`
+	ValidationPct  types.Float64 `tfsdk:"validation_pct"`
+	Metric         types.String  `tfsdk:"metric"`
+	Reps           types.Float64 `tfsdk:"reps"`
+	ValidationType types.String  `tfsdk:"validation_type"`
+}
+
+type TimeSeriesOptions struct {
+	CalendarID                       types.String  `tfsdk:"calendar_id"`
+	DifferencingMethod               types.String  `tfsdk:"differencing_method"`
+	ExponentiallyWeightedMovingAlpha types.Float64 `tfsdk:"exponentially_weighted_moving_alpha"`
+	Periodicities                    []Periodicity `tfsdk:"periodicities"`
+	TreatAsExponential               types.String  `tfsdk:"treat_as_exponential"`
+}
+
+type Periodicity struct {
+	TimeSteps types.Int64  `tfsdk:"time_steps"`
+	TimeUnit  types.String `tfsdk:"time_unit"`
+}
+
+type Trigger struct {
+	CustomJobID             types.String `tfsdk:"custom_job_id"`
+	MinIntervalBetweenRuns  types.String `tfsdk:"min_interval_between_runs"`
+	Schedule                *Schedule    `tfsdk:"schedule"`
+	StatusDeclinesToFailing types.Bool   `tfsdk:"status_declines_to_failing"`
+	StatusDeclinesToWarning types.Bool   `tfsdk:"status_declines_to_warning"`
+	StatusStillInDecline    types.Bool   `tfsdk:"status_still_in_decline"`
+	Type                    types.String `tfsdk:"type"`
+}
+
 // QAApplicationResourceModel describes the Q&A application resource.
 
 type QAApplicationResourceModel struct {
@@ -529,4 +629,94 @@ type ExecutionEnvironmentResourceModel struct {
 	VersionDescription  types.String   `tfsdk:"version_description"`
 	DockerContextPath   types.String   `tfsdk:"docker_context_path"`
 	BuildStatus         types.String   `tfsdk:"build_status"`
+}
+
+// BatchPredictionJobModel describes the batch prediction job resource.
+type BatchPredictionJobDefinitionResourceModel struct {
+	ID                          types.String        `tfsdk:"id"`
+	DeploymentID                types.String        `tfsdk:"deployment_id"`
+	Name                        types.String        `tfsdk:"name"`
+	Enabled                     types.Bool          `tfsdk:"enabled"`
+	Schedule                    *Schedule           `tfsdk:"schedule"`
+	AbortOnError                types.Bool          `tfsdk:"abort_on_error"`
+	ChunkSize                   types.Dynamic       `tfsdk:"chunk_size"`
+	ColumnNamesRemapping        types.Map           `tfsdk:"column_names_remapping"`
+	CSVSettings                 *CSVSettings        `tfsdk:"csv_settings"`
+	ExplanationAlgorithm        types.String        `tfsdk:"explanation_algorithm"`
+	IncludePredictionStatus     types.Bool          `tfsdk:"include_prediction_status"`
+	IncludeProbabilities        types.Bool          `tfsdk:"include_probabilities"`
+	IncludeProbabilitiesClasses []types.String      `tfsdk:"include_probabilities_classes"`
+	IntakeSettings              IntakeSettings      `tfsdk:"intake_settings"`
+	MaxExplanations             types.Int64         `tfsdk:"max_explanations"`
+	NumConcurrent               types.Int64         `tfsdk:"num_concurrent"`
+	OutputSettings              *OutputSettings     `tfsdk:"output_settings"`
+	PassthroughColumns          []types.String      `tfsdk:"passthrough_columns"`
+	PassthroughColumnsSet       types.String        `tfsdk:"passthrough_columns_set"`
+	PredictionInstance          *PredictionInstance `tfsdk:"prediction_instance"`
+	PredictionThreshold         types.Float64       `tfsdk:"prediction_threshold"`
+	PredictionWarningEnabled    types.Bool          `tfsdk:"prediction_warning_enabled"`
+	SkipDriftTracking           types.Bool          `tfsdk:"skip_drift_tracking"`
+	ThresholdHigh               types.Float64       `tfsdk:"threshold_high"`
+	ThresholdLow                types.Float64       `tfsdk:"threshold_low"`
+	TimeseriesSettings          *TimeseriesSettings `tfsdk:"timeseries_settings"`
+}
+
+type Schedule struct {
+	Minute     []types.String `tfsdk:"minute"`
+	Hour       []types.String `tfsdk:"hour"`
+	Month      []types.String `tfsdk:"month"`
+	DayOfMonth []types.String `tfsdk:"day_of_month"`
+	DayOfWeek  []types.String `tfsdk:"day_of_week"`
+}
+
+type IntakeSettings struct {
+	Type         types.String `tfsdk:"type"`
+	DatasetID    types.String `tfsdk:"dataset_id"`
+	File         types.String `tfsdk:"file"`
+	URL          types.String `tfsdk:"url"`
+	CredentialID types.String `tfsdk:"credential_id"`
+	EndpointURL  types.String `tfsdk:"endpoint_url"`
+	DataStoreID  types.String `tfsdk:"data_store_id"`
+	Query        types.String `tfsdk:"query"`
+	Table        types.String `tfsdk:"table"`
+	Schema       types.String `tfsdk:"schema"`
+	Catalog      types.String `tfsdk:"catalog"`
+	FetchSize    types.Int64  `tfsdk:"fetch_size"`
+}
+
+type CSVSettings struct {
+	Delimiter types.String `tfsdk:"delimiter"`
+	Encoding  types.String `tfsdk:"encoding"`
+	QuoteChar types.String `tfsdk:"quotechar"`
+}
+
+type OutputSettings struct {
+	CredentialID           types.String   `tfsdk:"credential_id"`
+	Type                   types.String   `tfsdk:"type"`
+	URL                    types.String   `tfsdk:"url"`
+	Path                   types.String   `tfsdk:"path"`
+	EndpointURL            types.String   `tfsdk:"endpoint_url"`
+	DataStoreID            types.String   `tfsdk:"data_store_id"`
+	Table                  types.String   `tfsdk:"table"`
+	Schema                 types.String   `tfsdk:"schema"`
+	Catalog                types.String   `tfsdk:"catalog"`
+	StatementType          types.String   `tfsdk:"statement_type"`
+	UpdateColumns          []types.String `tfsdk:"update_columns"`
+	WhereColumns           []types.String `tfsdk:"where_columns"`
+	CreateTableIfNotExists types.Bool     `tfsdk:"create_table_if_not_exists"`
+}
+
+type PredictionInstance struct {
+	ApiKey       types.String `tfsdk:"api_key"`
+	DatarobotKey types.String `tfsdk:"datarobot_key"`
+	HostName     types.String `tfsdk:"host_name"`
+	SSLEnabled   types.Bool   `tfsdk:"ssl_enabled"`
+}
+
+type TimeseriesSettings struct {
+	ForecastPoint                    types.String `tfsdk:"forecast_point"`
+	RelaxKnownInAdvanceFeaturesCheck types.Bool   `tfsdk:"relax_known_in_advance_features_check"`
+	Type                             types.String `tfsdk:"type"`
+	PredictionsStartDate             types.String `tfsdk:"predictions_start_date"`
+	PredictionsEndDate               types.String `tfsdk:"predictions_end_date"`
 }

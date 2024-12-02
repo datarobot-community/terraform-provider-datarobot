@@ -71,7 +71,14 @@ type Service interface {
 	GetCustomJob(ctx context.Context, id string) (*CustomJob, error)
 	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
+	ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error)
+	ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error)
 	DeleteCustomJob(ctx context.Context, id string) error
+
+	// Custom Metric Template
+	CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
+	GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error)
+	UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
 
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
@@ -124,6 +131,23 @@ type Service interface {
 	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
+
+	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
+	GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error)
+	UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
+	DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error
+
+	// Custom Metric
+	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
+	GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error)
+	UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error)
+	DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error
+
+	// Batch Prediction Job Definition
+	CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
+	GetBatchPredictionJobDefinition(ctx context.Context, id string) (*BatchPredictionJobDefinition, error)
+	UpdateBatchPredictionJobDefinition(ctx context.Context, id string, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error)
+	DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error
 
 	// Application Source
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
@@ -380,8 +404,28 @@ func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files
 	return uploadFilesFromBinaries[CustomJob](s.client, ctx, "/customJobs/"+id+"/", http.MethodPatch, files, map[string]string{})
 }
 
+func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error) {
+	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
+}
+
+func (s *ServiceImpl) ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error) {
+	return GetAllPages[CustomJobSchedule](s.client, ctx, "/customJobs/"+id+"/schedules/", nil)
+}
+
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Post[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
+}
+
+func (s *ServiceImpl) GetHostedCustomMetricTemplate(ctx context.Context, customJobID string) (*HostedCustomMetricTemplate, error) {
+	return Get[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/")
+}
+
+func (s *ServiceImpl) UpdateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error) {
+	return Patch[HostedCustomMetricTemplate](s.client, ctx, "/customJobs/"+customJobID+"/hostedCustomMetricTemplate/", req)
 }
 
 func (s *ServiceImpl) CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error) {
@@ -577,6 +621,38 @@ func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id str
 	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
 }
 
+func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
+	return Post[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/", req)
+}
+
+func (s *ServiceImpl) GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error) {
+	return Get[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
+	return Patch[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error {
+	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {
+	return Post[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/fromCustomJob/", req)
+}
+
+func (s *ServiceImpl) GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error) {
+	return Get[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error) {
+	return Patch[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error {
+	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/"+id+"/")
+}
+
 func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/deployments/"+id+"/")
 }
@@ -587,6 +663,23 @@ func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id
 
 func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {
 	return ExecuteAndExpectStatus[Deployment](s.client, ctx, http.MethodPatch, "/deployments/"+id+"/model/", req)
+}
+
+// Batch Prediction Job Definition Service Implementation.
+func (s *ServiceImpl) CreateBatchPredictionJobDefinition(ctx context.Context, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error) {
+	return Post[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/", req)
+}
+
+func (s *ServiceImpl) GetBatchPredictionJobDefinition(ctx context.Context, id string) (*BatchPredictionJobDefinition, error) {
+	return Get[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateBatchPredictionJobDefinition(ctx context.Context, id string, req *BatchPredictionJobDefinitionRequest) (*BatchPredictionJobDefinition, error) {
+	return Patch[BatchPredictionJobDefinition](s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/batchPredictionJobDefinitions/"+id+"/")
 }
 
 // Application Service Implementation.

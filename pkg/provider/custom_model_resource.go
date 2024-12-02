@@ -863,7 +863,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = UpdateUseCasesForEntity(
+	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"customModelVersion",

@@ -227,17 +227,7 @@ func (r *DatastoreResource) ImportState(ctx context.Context, req resource.Import
 func convertFields(data DatastoreResourceModel) []map[string]string {
 	fieldsList := make([]map[string]string, 0)
 	for _, field := range data.Fields {
-		fieldsList = append(fieldsList, convertTfMap(field))
+		fieldsList = append(fieldsList, convertTfStringMap(field))
 	}
 	return fieldsList
-}
-
-func convertTfMap(tfMap types.Map) map[string]string {
-	convertedMap := make(map[string]string)
-	for k, v := range tfMap.Elements() {
-		if strVal, ok := v.(types.String); ok {
-			convertedMap[k] = strVal.ValueString()
-		}
-	}
-	return convertedMap
 }

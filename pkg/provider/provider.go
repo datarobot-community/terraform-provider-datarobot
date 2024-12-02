@@ -163,10 +163,13 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewLLMBlueprintResource,
 		NewCustomModelResource,
 		NewCustomJobResource,
+		NewCustomMetricJobResource,
+		NewCustomMetricFromJobResource,
 		NewRegisteredModelResource,
 		NewRegisteredModelFromLeaderboardResource,
 		NewPredictionEnvironmentResource,
 		NewDeploymentResource,
+		NewDeploymentRetrainingPolicyResource,
 		NewQAApplicationResource,
 		NewCustomApplicationResource,
 		NewApplicationSourceResource,
@@ -174,6 +177,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewBasicCredentialResource,
 		NewGoogleCloudCredentialResource,
 		NewExecutionEnvironmentResource,
+		NewBatchPredictionJobDefinitionResource,
 	}
 }
 

@@ -135,7 +135,7 @@ func setStringValueIfKnown(target *string, source basetypes.StringValue) {
 func getExponentialBackoff() backoff.BackOff {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
+	expBackoff.MaxInterval = 10 * time.Second
 
 	timeout, err := strconv.Atoi(os.Getenv(TimeoutMinutesEnvVar))
 	if err != nil || timeout <= 0 {
@@ -277,6 +277,29 @@ func formatRuntimeParameterValues(
 	basetypes.ListValue,
 	diag.Diagnostics,
 ) {
+	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, false)
+}
+
+func formatRuntimeParameterValuesForRetrainingJob(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
+	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
+}
+
+func formatRuntimeParameterValuesInternal(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+	isRetrainingJob bool,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
 	// copy parameters in stable order
 	parameters := make([]RuntimeParameterValue, 0)
 
@@ -304,6 +327,11 @@ func formatRuntimeParameterValues(
 
 		if isManagedByGuards(param) {
 			// skip the parameter if it is managed by guards
+			continue
+		}
+
+		if isRetrainingJob && isManagedByRetrainingPolicy(param) {
+			// skip the parameter if it is managed by retraining policy
 			continue
 		}
 
@@ -337,6 +365,11 @@ func isManagedByGuards(param client.RuntimeParameter) bool {
 		param.FieldName == nemoAzureOpenAiRuntimeParam
 }
 
+func isManagedByRetrainingPolicy(param client.RuntimeParameter) bool {
+	return param.FieldName == deploymentParamName ||
+		param.FieldName == retrainingPolicyIDParamName
+}
+
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
 	switch paramType {
 	case "boolean":
@@ -355,13 +388,34 @@ func convertRuntimeParameterValues(
 	jsonParamsStr string,
 	err error,
 ) {
+	params, err := convertRuntimeParameterValuesToList(ctx, tfRuntimeParameterValues)
+	if err != nil {
+		return
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	jsonParamsStr = string(jsonParams)
+
+	return
+}
+
+func convertRuntimeParameterValuesToList(
+	ctx context.Context,
+	tfRuntimeParameterValues basetypes.ListValue,
+) (
+	params []client.RuntimeParameterValueRequest,
+	err error,
+) {
 	runtimeParameterValues := make([]RuntimeParameterValue, 0)
 	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
 		err = errors.New("Error converting runtime parameter values")
 		return
 	}
 
-	params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+	params = make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
 	for i, param := range runtimeParameterValues {
 		var value any
 		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
@@ -374,12 +428,6 @@ func convertRuntimeParameterValues(
 			Value:     &value,
 		}
 	}
-
-	jsonParams, err := json.Marshal(params)
-	if err != nil {
-		return
-	}
-	jsonParamsStr = string(jsonParams)
 
 	return
 }
@@ -652,7 +700,35 @@ func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
 	return value.ValueBoolPointer()
 }
 
-func ConvertTfStringListToPtr(input []types.String) *[]string {
+func convertTfStringMap(tfMap types.Map) map[string]string {
+	convertedMap := make(map[string]string)
+	for k, v := range tfMap.Elements() {
+		if strVal, ok := v.(types.String); ok {
+			convertedMap[k] = strVal.ValueString()
+		}
+	}
+	return convertedMap
+}
+
+func convertTfStringList(input []types.String) []string {
+	output := make([]string, len(input))
+	for i, value := range input {
+		output[i] = value.ValueString()
+	}
+
+	return output
+}
+
+func convertToTfStringList(input []string) []types.String {
+	output := make([]types.String, len(input))
+	for i, value := range input {
+		output[i] = types.StringValue(value)
+	}
+
+	return output
+}
+
+func convertTfStringListToPtr(input []types.String) *[]string {
 	output := make([]string, len(input))
 	for i, value := range input {
 		output[i] = value.ValueString()
@@ -661,7 +737,18 @@ func ConvertTfStringListToPtr(input []types.String) *[]string {
 	return &output
 }
 
-func UpdateUseCasesForEntity(
+func convertDynamicType(tfType types.Dynamic) any {
+	switch t := tfType.UnderlyingValue().(type) {
+	case types.String:
+		return t.ValueString()
+	case types.Int64:
+		return t.ValueInt64()
+	default:
+		return nil
+	}
+}
+
+func updateUseCasesForEntity(
 	ctx context.Context,
 	service client.Service,
 	entityType string,
@@ -714,7 +801,7 @@ func UpdateUseCasesForEntity(
 	return
 }
 
-func ZipDirectory(source, target string) (content []byte, err error) {
+func zipDirectory(source, target string) (content []byte, err error) {
 	zipFile, err := os.Create(target)
 	if err != nil {
 		return
@@ -770,4 +857,60 @@ func ZipDirectory(source, target string) (content []byte, err error) {
 	defer os.Remove(target)
 
 	return
+}
+
+func convertSchedule(schedule Schedule) (clientSchedule client.Schedule, err error) {
+	clientSchedule = client.Schedule{}
+	minute, err := convertScheduleExpression(schedule.Minute)
+	if err != nil {
+		return
+	}
+	clientSchedule.Minute = minute
+
+	hour, err := convertScheduleExpression(schedule.Hour)
+	if err != nil {
+		return
+	}
+	clientSchedule.Hour = hour
+
+	dayOfMonth, err := convertScheduleExpression(schedule.DayOfMonth)
+	if err != nil {
+		return
+	}
+	clientSchedule.DayOfMonth = dayOfMonth
+
+	month, err := convertScheduleExpression(schedule.Month)
+	if err != nil {
+		return
+	}
+	clientSchedule.Month = month
+
+	dayOfWeek, err := convertScheduleExpression(schedule.DayOfWeek)
+	if err != nil {
+		return
+	}
+	clientSchedule.DayOfWeek = dayOfWeek
+
+	return
+}
+
+func convertScheduleExpression(expression []types.String) (any, error) {
+	if len(expression) == 0 {
+		return nil, nil
+	}
+
+	if expression[0].ValueString() == "*" {
+		return []string{"*"}, nil
+	}
+
+	convertedExpression := make([]int, 0, len(expression))
+	for _, i := range expression {
+		converted, err := strconv.Atoi(i.ValueString())
+		if err != nil {
+			return nil, err
+		}
+		convertedExpression = append(convertedExpression, converted)
+	}
+
+	return convertedExpression, nil
 }

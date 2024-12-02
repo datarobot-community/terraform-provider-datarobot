@@ -1,3 +1,16 @@
+## 0.5.2
+
+- Deployment Retraining Policy resource
+
+## 0.5.1
+
+- Custom Metric Job Resource
+- Custom Metric From Job Resource
+
+## 0.5.0
+
+- Batch Prediction Job Definition Resource
+
 ## 0.4.8
 
 - Custom Job Resource

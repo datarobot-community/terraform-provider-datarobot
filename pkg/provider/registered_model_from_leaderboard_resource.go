@@ -288,7 +288,7 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 		existingUseCaseIDs = []types.String{}
 	}
 
-	if err = UpdateUseCasesForEntity(
+	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"registeredModelVersion",
