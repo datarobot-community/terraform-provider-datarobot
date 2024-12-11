@@ -176,6 +176,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewApiTokenCredentialResource,
 		NewBasicCredentialResource,
 		NewGoogleCloudCredentialResource,
+		NewAwsCredentialResource,
 		NewExecutionEnvironmentResource,
 		NewBatchPredictionJobDefinitionResource,
 	}

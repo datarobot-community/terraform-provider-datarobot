@@ -1,3 +1,7 @@
+## 0.5.3
+
+- AWS Credential Resource
+
 ## 0.5.2
 
 - Deployment Retraining Policy resource
