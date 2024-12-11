@@ -609,6 +609,16 @@ type GoogleCloudCredentialResourceModel struct {
 	GCPKeyFileHash types.String `tfsdk:"gcp_key_file_hash"`
 }
 
+type AwsCredentialResourceModel struct {
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Description        types.String `tfsdk:"description"`
+	AWSAccessKeyID     types.String `tfsdk:"aws_access_key_id"`
+	AWSSecretAccessKey types.String `tfsdk:"aws_secret_access_key"`
+	AWSSessionToken    types.String `tfsdk:"aws_session_token"`
+	ConfigID           types.String `tfsdk:"config_id"`
+}
+
 // ExecutionEnvironmentDataSourceModel describes the execution environment data source resource.
 type ExecutionEnvironmentDataSourceModel struct {
 	Name                types.String `tfsdk:"name"`

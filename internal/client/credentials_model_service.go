@@ -28,6 +28,7 @@ type CredentialRequest struct {
 	AWSAccessKeyID     string  `json:"awsAccessKeyId,omitempty"`
 	AWSSecretAccessKey string  `json:"awsSecretAccessKey,omitempty"`
 	AWSSessionToken    string  `json:"awsSessionToken,omitempty"`
+	ConfigID           string  `json:"configId,omitempty"`
 }
 
 type GCPKey struct {
@@ -49,6 +50,7 @@ type Credential struct {
 	Name           string `json:"name"`
 	Description    string `json:"description,omitempty"`
 	CredentialType string `json:"credentialType,omitempty"`
+	ConfigID       string `json:"configId,omitempty"`
 }
 
 type CredentialAssociation struct {
