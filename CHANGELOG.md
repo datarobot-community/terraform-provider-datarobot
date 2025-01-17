@@ -1,3 +1,7 @@
+## 0.5.4
+
+- SAP Datasphere batch prediction type
+
 ## 0.5.3
 
 - AWS Credential Resource

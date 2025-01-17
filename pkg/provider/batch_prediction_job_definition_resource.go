@@ -106,7 +106,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 						Required:    true,
 						Description: "Type of data source.",
 						Validators: []validator.String{
-							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "dataset", "jdbc", "snowflake", "synapse", "bigquery"),
+							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "dataset", "jdbc", "snowflake", "synapse", "bigquery", "datasphere"),
 						},
 					},
 					"dataset_id": schema.StringAttribute{
@@ -198,7 +198,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 						Default:     stringdefault.StaticString("localFile"),
 						Description: "Type of output.",
 						Validators: []validator.String{
-							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "jdbc", "snowflake", "synapse", "bigquery"),
+							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "jdbc", "snowflake", "synapse", "bigquery", "datasphere"),
 						},
 					},
 					"path": schema.StringAttribute{
