@@ -105,7 +105,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customModel",
 					"version_description",
-					tarFileName),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -132,7 +133,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customApplication",
 					"version_description",
-					tarFileName),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -163,7 +165,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customApplication",
 					"new_version_description",
-					tarFileName),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -190,7 +193,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customApplication",
 					"new_version_description",
-					gzipFileName),
+					&gzipFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -217,7 +221,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customApplication",
 					"new_version_description",
-					zipFileName),
+					&zipFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -244,7 +249,40 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"python",
 					"customApplication",
 					"new_version_description",
-					dirName),
+					&dirName,
+					nil),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customApplication"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "new_version_description"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
+			// Update docker image
+			{
+				Config: executionEnvironmentResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					"python",
+					"customApplication",
+					"new_version_description",
+					nil,
+					&tarFileName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -275,7 +313,8 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 					"r",
 					"customApplication",
 					"new_version_description",
-					dirName),
+					&dirName,
+					&tarFileName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -328,8 +367,23 @@ func executionEnvironmentResourceConfig(
 	description,
 	programmingLanguage,
 	useCase,
-	versionDescription,
-	dockerContextPath string) string {
+	versionDescription string,
+	dockerContextPath,
+	dockerImage *string) string {
+	dockerContextPathStr := ""
+	if dockerContextPath != nil {
+		dockerContextPathStr = fmt.Sprintf(`
+	docker_context_path = "%s"
+		`, *dockerContextPath)
+	}
+
+	dockerImageStr := ""
+	if dockerImage != nil {
+		dockerImageStr = fmt.Sprintf(`
+	docker_image = "%s"
+			`, *dockerImage)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_execution_environment" "test" {
 	name = "%s"
@@ -337,9 +391,10 @@ resource "datarobot_execution_environment" "test" {
 	programming_language = "%s"
 	use_cases = ["%s"]
 	version_description = "%s"
-	docker_context_path = "%s"
+	%s
+	%s
 }
-`, name, description, programmingLanguage, useCase, versionDescription, dockerContextPath)
+`, name, description, programmingLanguage, useCase, versionDescription, dockerContextPathStr, dockerImageStr)
 }
 
 func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
