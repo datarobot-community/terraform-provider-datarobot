@@ -16,10 +16,25 @@ Application Source
 resource "datarobot_application_source" "example" {
   name                = "example application source"
   base_environment_id = "6542cd582a9d3d51bf4ac71e"
+
+  # Optional
   files = [
     ["start-app.sh"],
     ["streamlit-app.py"],
   ]
+  folder_path = "example-app"
+  runtime_parameter_values = [
+    {
+      key   = "EXAMPLE_PARAM",
+      type  = "string",
+      value = "val",
+    },
+  ]
+  resources = {
+    replicas         = 2
+    session_affinity = true
+    resource_label   = "cpu.medium"
+  }
 }
 
 output "datarobot_application_source_id" {
@@ -43,7 +58,7 @@ output "datarobot_application_source_version_id" {
 - `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.
 - `name` (String) The name of the Application Source.
-- `replicas` (Number) The replicas for the Application Source.
+- `resources` (Attributes) The resources for the Application Source. (see [below for nested schema](#nestedatt--resources))
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 
 ### Read-Only
@@ -52,6 +67,16 @@ output "datarobot_application_source_version_id" {
 - `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Application Source.
 - `version_id` (String) The version ID of the Application Source.
+
+<a id="nestedatt--resources"></a>
+### Nested Schema for `resources`
+
+Optional:
+
+- `replicas` (Number) The replicas for the Application Source.
+- `resource_label` (String) The resource label for the Application Source.
+- `session_affinity` (Boolean) The session affinity for the Application Source.
+
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`

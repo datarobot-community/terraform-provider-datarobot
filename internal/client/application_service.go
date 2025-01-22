@@ -37,12 +37,12 @@ type ApplicationSource struct {
 }
 
 type CreateApplicationSourceVersionRequest struct {
-	Label                    string               `json:"label"`
-	BaseVersion              string               `json:"baseVersion,omitempty"`
-	BaseEnvironmentID        string               `json:"baseEnvironmentId,omitempty"`
-	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId,omitempty"`
-	Resources                ApplicationResources `json:"resources,omitempty"`
-	RuntimeParameterValues   string               `json:"runtimeParameterValues,omitempty"`
+	Label                    string                `json:"label"`
+	BaseVersion              string                `json:"baseVersion,omitempty"`
+	BaseEnvironmentID        string                `json:"baseEnvironmentId,omitempty"`
+	BaseEnvironmentVersionID string                `json:"baseEnvironmentVersionId,omitempty"`
+	Resources                *ApplicationResources `json:"resources,omitempty"`
+	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
 }
 
 type ApplicationSourceVersion struct {
@@ -57,13 +57,15 @@ type ApplicationSourceVersion struct {
 }
 
 type UpdateApplicationSourceVersionRequest struct {
-	BaseEnvironmentID        string               `json:"baseEnvironmentId,omitempty"`
-	BaseEnvironmentVersionID string               `json:"baseEnvironmentVersionId,omitempty"`
-	Resources                ApplicationResources `json:"resources,omitempty"`
-	FilesToDelete            []string             `json:"filesToDelete,omitempty"`
-	RuntimeParameterValues   string               `json:"runtimeParameterValues,omitempty"`
+	BaseEnvironmentID        string                `json:"baseEnvironmentId,omitempty"`
+	BaseEnvironmentVersionID string                `json:"baseEnvironmentVersionId,omitempty"`
+	Resources                *ApplicationResources `json:"resources,omitempty"`
+	FilesToDelete            []string              `json:"filesToDelete,omitempty"`
+	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
 }
 
 type ApplicationResources struct {
-	Replicas int64 `json:"replicas,omitempty"`
+	Replicas        int64  `json:"replicas"`
+	ResourceLabel   string `json:"resourceLabel"`
+	SessionAffinity bool   `json:"sessionAffinity"`
 }

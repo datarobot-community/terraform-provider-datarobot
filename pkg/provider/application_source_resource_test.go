@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -105,6 +106,9 @@ runtimeParameterDefinitions:
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
+	resourceLabel := "cpu.medium"
+	resourceLabel2 := "cpu.small"
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: isMock,
 		PreCheck: func() {
@@ -137,14 +141,20 @@ runtimeParameterDefinitions:
 						},
 					},
 					nil,
-					1),
+					&ApplicationSourceResources{
+						Replicas:        types.Int64Value(1),
+						ResourceLabel:   types.StringValue(resourceLabel),
+						SessionAffinity: types.BoolValue(true),
+					}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "true"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -152,7 +162,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
 			},
-			// Update name, files, replicas, and environment
+			// Update name, files, resources, and environment
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -177,13 +187,20 @@ runtimeParameterDefinitions:
 						},
 					},
 					nil,
-					2),
+					&ApplicationSourceResources{
+						Replicas:        types.Int64Value(2),
+						ResourceLabel:   types.StringValue(resourceLabel2),
+						SessionAffinity: types.BoolValue(false),
+					}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
+					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -220,14 +237,16 @@ runtimeParameterDefinitions:
 						},
 					},
 					nil,
-					2),
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", "cpu.small"),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -247,7 +266,7 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{},
 					&folderPath,
-					2),
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -283,7 +302,7 @@ runtimeParameterDefinitions:
 					nil,
 					nil,
 					&folderPath,
-					2),
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -319,7 +338,7 @@ runtimeParameterDefinitions:
 					nil,
 					nil,
 					&folderPath,
-					2),
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -351,7 +370,7 @@ func applicationSourceResourceConfig(
 	baseEnvironmentVersionID *string,
 	files []FileTuple,
 	folderPath *string,
-	replicas int,
+	resources *ApplicationSourceResources,
 ) string {
 	baseEnvironmentIDStr := ""
 	if baseEnvironmentID != nil {
@@ -367,11 +386,17 @@ func applicationSourceResourceConfig(
 `, *baseEnvironmentVersionID)
 	}
 
-	replicasStr := ""
-	if replicas > 1 {
-		replicasStr = fmt.Sprintf(`
-	replicas = %d
-`, replicas)
+	resourcesStr := ""
+	if resources != nil {
+		resourcesStr = fmt.Sprintf(`
+	resources = {
+		replicas = %d
+		resource_label = "%s"
+		session_affinity = %t
+	}
+`, resources.Replicas.ValueInt64(),
+			resources.ResourceLabel.ValueString(),
+			resources.SessionAffinity.ValueBool())
 	}
 
 	nameStr := ""
@@ -424,7 +449,7 @@ resource "datarobot_application_source" "test" {
 	%s
 	%s
   }
-`, nameStr, baseEnvironmentIDStr, baseEnvironmentVersionIDStr, filesStr, folderPathStr, replicasStr, runtimeParamValueStr)
+`, nameStr, baseEnvironmentIDStr, baseEnvironmentVersionIDStr, filesStr, folderPathStr, resourcesStr, runtimeParamValueStr)
 }
 
 func checkApplicationSourceResourceExists() resource.TestCheckFunc {
@@ -459,7 +484,7 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
 			applicationSource.LatestVersion.BaseEnvironmentID == rs.Primary.Attributes["base_environment_id"] &&
 			applicationSource.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] &&
-			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["replicas"] {
+			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resources.replicas"] {
 			if runtimeParamValue, ok := rs.Primary.Attributes["runtime_parameter_values.0.value"]; ok {
 				if runtimeParamValue != applicationSourceVersion.RuntimeParameters[0].OverrideValue {
 					return fmt.Errorf("Runtime parameter value does not match")

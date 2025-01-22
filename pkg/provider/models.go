@@ -561,17 +561,23 @@ type QAApplicationResourceModel struct {
 }
 
 type ApplicationSourceResourceModel struct {
-	ID                       types.String  `tfsdk:"id"`
-	VersionID                types.String  `tfsdk:"version_id"`
-	Name                     types.String  `tfsdk:"name"`
-	BaseEnvironmentID        types.String  `tfsdk:"base_environment_id"`
-	BaseEnvironmentVersionID types.String  `tfsdk:"base_environment_version_id"`
-	FolderPath               types.String  `tfsdk:"folder_path"`
-	FolderPathHash           types.String  `tfsdk:"folder_path_hash"`
-	Files                    types.Dynamic `tfsdk:"files"`
-	FilesHashes              types.List    `tfsdk:"files_hashes"`
-	Replicas                 types.Int64   `tfsdk:"replicas"`
-	RuntimeParameterValues   types.List    `tfsdk:"runtime_parameter_values"`
+	ID                       types.String               `tfsdk:"id"`
+	VersionID                types.String               `tfsdk:"version_id"`
+	Name                     types.String               `tfsdk:"name"`
+	BaseEnvironmentID        types.String               `tfsdk:"base_environment_id"`
+	BaseEnvironmentVersionID types.String               `tfsdk:"base_environment_version_id"`
+	FolderPath               types.String               `tfsdk:"folder_path"`
+	FolderPathHash           types.String               `tfsdk:"folder_path_hash"`
+	Files                    types.Dynamic              `tfsdk:"files"`
+	FilesHashes              types.List                 `tfsdk:"files_hashes"`
+	Resources                ApplicationSourceResources `tfsdk:"resources"`
+	RuntimeParameterValues   types.List                 `tfsdk:"runtime_parameter_values"`
+}
+
+type ApplicationSourceResources struct {
+	Replicas        types.Int64  `tfsdk:"replicas"`
+	SessionAffinity types.Bool   `tfsdk:"session_affinity"`
+	ResourceLabel   types.String `tfsdk:"resource_label"`
 }
 
 type CustomApplicationResourceModel struct {

@@ -1,3 +1,7 @@
+## 0.6.0
+
+- Application Source resources
+
 ## 0.5.4
 
 - SAP Datasphere batch prediction type
