@@ -15,10 +15,23 @@ Execution Environment
 ```terraform
 resource "datarobot_execution_environment" "example" {
   name                 = "Example Execution Environment"
-  description          = "Example Execution Environment Description"
   programming_language = "python"
-  use_cases            = ["customModel"]
-  docker_context_path  = "docker_context.zip"
+
+  # Optional
+  description         = "Example Execution Environment Description"
+  docker_context_path = "docker_context.zip"
+  docker_image        = "docker_image.tar"
+  use_cases           = ["customModel"]
+}
+
+output "datarobot_execution_environment_id" {
+  value       = datarobot_execution_environment.example.id
+  description = "The id for the example execution environment"
+}
+
+output "datarobot_execution_environment_version_id" {
+  value       = datarobot_execution_environment.example.version_id
+  description = "The version id for the example execution environment"
 }
 ```
 
@@ -27,7 +40,6 @@ resource "datarobot_execution_environment" "example" {
 
 ### Required
 
-- `docker_context_path` (String) The path to a docker context archive or folder
 - `name` (String) The name of the Execution Environment.
 - `programming_language` (String) The programming language of the Execution Environment.
 - `use_cases` (List of String) The list of Use Cases that the Execution Environment supports.
@@ -35,6 +47,8 @@ resource "datarobot_execution_environment" "example" {
 ### Optional
 
 - `description` (String) The description of the Execution Environment.
+- `docker_context_path` (String) The path to a docker context archive or folder
+- `docker_image` (String) A prebuilt environment image saved as a tarball using the Docker save command.
 - `version_description` (String) The description of the Execution Environment version.
 
 ### Read-Only

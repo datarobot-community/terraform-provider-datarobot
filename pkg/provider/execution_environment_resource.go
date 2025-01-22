@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -19,6 +20,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &ExecutionEnvironmentResource{}
 var _ resource.ResourceWithImportState = &ExecutionEnvironmentResource{}
+var _ resource.ResourceWithConfigValidators = &ExecutionEnvironmentResource{}
 
 func NewExecutionEnvironmentResource() resource.Resource {
 	return &ExecutionEnvironmentResource{}
@@ -76,8 +78,15 @@ func (r *ExecutionEnvironmentResource) Schema(ctx context.Context, req resource.
 				MarkdownDescription: "The description of the Execution Environment version.",
 			},
 			"docker_context_path": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "The path to a docker context archive or folder",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"docker_image": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "A prebuilt environment image saved as a tarball using the Docker save command.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -113,10 +122,22 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	dockerContextPath, fileContent, err := getDockerContext(data.DockerContextPath.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Docker context", err.Error())
-		return
+	var dockerContextPath string
+	var fileContent []byte
+	var dockerImageContents []byte
+	var err error
+	if IsKnown(data.DockerContextPath) {
+		dockerContextPath, fileContent, err = getDockerContext(data.DockerContextPath.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting Docker context", err.Error())
+			return
+		}
+	}
+	if IsKnown(data.DockerImage) {
+		if fileContent, err = os.ReadFile(data.DockerImage.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Error getting Docker image", err.Error())
+			return
+		}
 	}
 
 	useCases := make([]string, 0, len(data.UseCases))
@@ -136,17 +157,28 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	traceAPICall("CreateExecutionEnvironmentVersion")
-	if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, &client.CreateExecutionEnvironmentVersionRequest{
+	createExecutionEnvironmentVersionRequest := &client.CreateExecutionEnvironmentVersionRequest{
 		Description: data.VersionDescription.ValueString(),
-		Files: []client.FileInfo{
-			{
-				Name:          filepath.Base(dockerContextPath),
-				Content:       fileContent,
-				FormFieldName: "docker_context",
-			},
-		},
-	}); err != nil {
+		Files:       make([]client.FileInfo, 0),
+	}
+
+	if IsKnown(data.DockerContextPath) {
+		createExecutionEnvironmentVersionRequest.Files = append(createExecutionEnvironmentVersionRequest.Files, client.FileInfo{
+			Name:          filepath.Base(dockerContextPath),
+			Content:       fileContent,
+			FormFieldName: "docker_context",
+		})
+	}
+	if IsKnown(data.DockerImage) {
+		createExecutionEnvironmentVersionRequest.Files = append(createExecutionEnvironmentVersionRequest.Files, client.FileInfo{
+			Name:          filepath.Base(data.DockerImage.ValueString()),
+			Content:       dockerImageContents,
+			FormFieldName: "docker_image",
+		})
+	}
+
+	traceAPICall("CreateExecutionEnvironmentVersion")
+	if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest); err != nil {
 		resp.Diagnostics.AddError("Error creating Execution Environment Version", err.Error())
 		return
 	}
@@ -227,10 +259,22 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 		return
 	}
 
-	dockerContextPath, fileContent, err := getDockerContext(plan.DockerContextPath.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Docker context", err.Error())
-		return
+	var dockerContextPath string
+	var fileContent []byte
+	var dockerImageContent []byte
+	var err error
+	if IsKnown(plan.DockerContextPath) {
+		dockerContextPath, fileContent, err = getDockerContext(plan.DockerContextPath.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting Docker context", err.Error())
+			return
+		}
+	}
+	if IsKnown(plan.DockerImage) {
+		if dockerImageContent, err = os.ReadFile(plan.DockerImage.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Error getting Docker image", err.Error())
+			return
+		}
 	}
 
 	useCases := make([]string, 0, len(plan.UseCases))
@@ -259,18 +303,30 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 	}
 
 	if plan.VersionDescription.ValueString() != state.VersionDescription.ValueString() ||
-		plan.DockerContextPath.ValueString() != state.DockerContextPath.ValueString() {
+		plan.DockerContextPath.ValueString() != state.DockerContextPath.ValueString() ||
+		plan.DockerImage.ValueString() != state.DockerImage.ValueString() {
 		traceAPICall("CreateExecutionEnvironmentVersion")
-		if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, &client.CreateExecutionEnvironmentVersionRequest{
+		updateExecutionEnvironmentRequest := &client.CreateExecutionEnvironmentVersionRequest{
 			Description: plan.VersionDescription.ValueString(),
-			Files: []client.FileInfo{
-				{
-					Name:          filepath.Base(dockerContextPath),
-					Content:       fileContent,
-					FormFieldName: "docker_context",
-				},
-			},
-		}); err != nil {
+			Files:       make([]client.FileInfo, 0),
+		}
+
+		if IsKnown(plan.DockerContextPath) {
+			updateExecutionEnvironmentRequest.Files = append(updateExecutionEnvironmentRequest.Files, client.FileInfo{
+				Name:          filepath.Base(dockerContextPath),
+				Content:       fileContent,
+				FormFieldName: "docker_context",
+			})
+		}
+		if IsKnown(plan.DockerImage) {
+			updateExecutionEnvironmentRequest.Files = append(updateExecutionEnvironmentRequest.Files, client.FileInfo{
+				Name:          filepath.Base(plan.DockerImage.ValueString()),
+				Content:       dockerImageContent,
+				FormFieldName: "docker_image",
+			})
+		}
+
+		if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest); err != nil {
 			resp.Diagnostics.AddError("Error creating new Execution Environment Version", err.Error())
 			return
 		}
@@ -307,6 +363,15 @@ func (r *ExecutionEnvironmentResource) Delete(ctx context.Context, req resource.
 
 func (r *ExecutionEnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r ExecutionEnvironmentResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.AtLeastOneOf(
+			path.MatchRoot("docker_context_path"),
+			path.MatchRoot("docker_image"),
+		),
+	}
 }
 
 func getDockerContext(dockerContextPath string) (path string, fileContent []byte, err error) {

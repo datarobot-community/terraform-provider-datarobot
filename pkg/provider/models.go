@@ -644,6 +644,7 @@ type ExecutionEnvironmentResourceModel struct {
 	VersionID           types.String   `tfsdk:"version_id"`
 	VersionDescription  types.String   `tfsdk:"version_description"`
 	DockerContextPath   types.String   `tfsdk:"docker_context_path"`
+	DockerImage         types.String   `tfsdk:"docker_image"`
 	BuildStatus         types.String   `tfsdk:"build_status"`
 }
 
