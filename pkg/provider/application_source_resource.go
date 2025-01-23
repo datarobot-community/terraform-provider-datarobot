@@ -334,7 +334,7 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	data.Name = types.StringValue(applicationSource.Name)
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
-	data.Resources = ApplicationSourceResources{
+	data.Resources = &ApplicationSourceResources{
 		Replicas:        types.Int64Value(applicationSource.LatestVersion.Resources.Replicas),
 		SessionAffinity: types.BoolValue(applicationSource.LatestVersion.Resources.SessionAffinity),
 		ResourceLabel:   types.StringValue(applicationSource.LatestVersion.Resources.ResourceLabel),

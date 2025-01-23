@@ -1,3 +1,7 @@
+## 0.6.3
+
+- Fix Application Source resource bug
+
 ## 0.6.2
 
 - docker_image param for Execution Environment
