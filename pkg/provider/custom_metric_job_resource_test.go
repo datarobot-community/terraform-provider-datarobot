@@ -26,7 +26,7 @@ func TestAccCustomMetricJobResource(t *testing.T) {
 	description := "example_description"
 	newDescription := "new_example_description"
 
-	folderPath := "custom_job"
+	folderPath := "custom_metric_job"
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)

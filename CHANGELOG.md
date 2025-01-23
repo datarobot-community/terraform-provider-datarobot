@@ -1,3 +1,7 @@
+## 0.6.2
+
+- docker_image param for Execution Environment
+
 ## 0.6.0
 
 - Application Source resources
