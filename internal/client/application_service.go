@@ -4,8 +4,9 @@ type CreateQAApplicationRequest struct {
 	DeploymentID string `json:"deploymentId"`
 }
 
-type CreateApplicationFromSourceRequest struct {
-	ApplicationSourceVersionID string `json:"applicationSourceVersionId"`
+type CreateCustomApplicationeRequest struct {
+	ApplicationSourceVersionID string `json:"applicationSourceVersionId,omitempty"`
+	EnvironmentID              string `json:"environmentId,omitempty"`
 }
 
 type Application struct {
@@ -14,6 +15,7 @@ type Application struct {
 	Status                           string   `json:"status"`
 	CustomApplicationSourceID        string   `json:"customApplicationSourceId"`
 	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId"`
+	EnvVersionID                     string   `json:"envVersionId"`
 	ApplicationUrl                   string   `json:"applicationUrl"`
 	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`

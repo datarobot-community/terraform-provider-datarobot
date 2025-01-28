@@ -160,10 +160,9 @@ type Service interface {
 	DeleteApplicationSource(ctx context.Context, id string) error
 
 	// Application
-	CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*Application, error)
+	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error)
 	CreateQAApplication(ctx context.Context, req *CreateQAApplicationRequest) (*Application, error)
 	GetApplication(ctx context.Context, id string) (*Application, error)
-	IsApplicationReady(ctx context.Context, id string) (bool, error)
 	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error)
 	DeleteApplication(ctx context.Context, id string) error
 
@@ -715,7 +714,7 @@ func (s *ServiceImpl) DeleteApplicationSource(ctx context.Context, id string) er
 	return Delete(s.client, ctx, "/customApplicationSources/"+id+"/")
 }
 
-func (s *ServiceImpl) CreateApplicationFromSource(ctx context.Context, req *CreateApplicationFromSourceRequest) (*Application, error) {
+func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error) {
 	return Post[Application](s.client, ctx, "/customApplications/", req)
 }
 
@@ -725,15 +724,6 @@ func (s *ServiceImpl) CreateQAApplication(ctx context.Context, req *CreateQAAppl
 
 func (s *ServiceImpl) GetApplication(ctx context.Context, id string) (*Application, error) {
 	return Get[Application](s.client, ctx, "/customApplications/"+id+"/")
-}
-
-func (s *ServiceImpl) IsApplicationReady(ctx context.Context, id string) (bool, error) {
-	customApplication, err := s.GetApplication(ctx, id)
-	if err != nil {
-		return false, err
-	}
-
-	return customApplication.Status == "running", nil
 }
 
 func (s *ServiceImpl) UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error) {

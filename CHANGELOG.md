@@ -1,3 +1,7 @@
+## 0.7.0
+
+- Custom Application from Environment resource
+
 ## 0.6.3
 
 - Fix Application Source resource bug
