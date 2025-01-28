@@ -207,14 +207,19 @@ func waitForApplicationToBeReady(ctx context.Context, service client.Service, id
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
-		traceAPICall("IsCustomApplicationReady")
-		ready, err := service.IsApplicationReady(ctx, id)
+		traceAPICall("GetCustomApplication")
+		customApplication, err := service.GetApplication(ctx, id)
 		if err != nil {
 			return backoff.Permanent(err)
 		}
-		if !ready {
+		if customApplication.Status == "failed" {
+			return backoff.Permanent(errors.New("application failed to create, review the logs for more details"))
+		}
+
+		if customApplication.Status != "running" {
 			return errors.New("application is not ready")
 		}
+
 		return nil
 	}
 

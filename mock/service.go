@@ -49,21 +49,6 @@ func (mr *MockServiceMockRecorder) AddEntityToUseCase(ctx, useCaseID, entityType
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddEntityToUseCase", reflect.TypeOf((*MockService)(nil).AddEntityToUseCase), ctx, useCaseID, entityType, entityID)
 }
 
-// CreateApplicationFromSource mocks base method.
-func (m *MockService) CreateApplicationFromSource(ctx context.Context, req *client.CreateApplicationFromSourceRequest) (*client.Application, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateApplicationFromSource", ctx, req)
-	ret0, _ := ret[0].(*client.Application)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateApplicationFromSource indicates an expected call of CreateApplicationFromSource.
-func (mr *MockServiceMockRecorder) CreateApplicationFromSource(ctx, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationFromSource", reflect.TypeOf((*MockService)(nil).CreateApplicationFromSource), ctx, req)
-}
-
 // CreateApplicationSource mocks base method.
 func (m *MockService) CreateApplicationSource(ctx context.Context) (*client.ApplicationSource, error) {
 	m.ctrl.T.Helper()
@@ -122,6 +107,21 @@ func (m *MockService) CreateCredential(ctx context.Context, req *client.Credenti
 func (mr *MockServiceMockRecorder) CreateCredential(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCredential", reflect.TypeOf((*MockService)(nil).CreateCredential), ctx, req)
+}
+
+// CreateCustomApplication mocks base method.
+func (m *MockService) CreateCustomApplication(ctx context.Context, req *client.CreateCustomApplicationeRequest) (*client.Application, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomApplication", ctx, req)
+	ret0, _ := ret[0].(*client.Application)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomApplication indicates an expected call of CreateCustomApplication.
+func (mr *MockServiceMockRecorder) CreateCustomApplication(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomApplication", reflect.TypeOf((*MockService)(nil).CreateCustomApplication), ctx, req)
 }
 
 // CreateCustomJob mocks base method.

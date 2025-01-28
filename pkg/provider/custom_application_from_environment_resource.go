@@ -16,25 +16,25 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &CustomApplicationResource{}
-var _ resource.ResourceWithImportState = &CustomApplicationResource{}
+var _ resource.Resource = &CustomApplicationFromEnvironmentResource{}
+var _ resource.ResourceWithImportState = &CustomApplicationFromEnvironmentResource{}
 
-func NewCustomApplicationResource() resource.Resource {
-	return &CustomApplicationResource{}
+func NewCustomApplicationFromEnvironmentResource() resource.Resource {
+	return &CustomApplicationFromEnvironmentResource{}
 }
 
-type CustomApplicationResource struct {
+type CustomApplicationFromEnvironmentResource struct {
 	provider *Provider
 }
 
-func (r *CustomApplicationResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_custom_application"
+func (r *CustomApplicationFromEnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_custom_application_from_environment"
 }
 
-func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Custom Application",
+		MarkdownDescription: "Custom Application created from an Execution Environment.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -44,20 +44,19 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"source_id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The ID of the Custom Application Source.",
+			"environment_id": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "The ID of the Execution Environment used to create the Custom Application.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"source_version_id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The version ID of the Custom Application Source.",
+			"environment_version_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The version ID of the Execution Environment used to create the Custom Application.",
 			},
 			"name": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
+				Required:            true,
 				MarkdownDescription: "The name of the Custom Application.",
 			},
 			"application_url": schema.StringAttribute{
@@ -89,7 +88,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 	}
 }
 
-func (r *CustomApplicationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *CustomApplicationFromEnvironmentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -104,8 +103,8 @@ func (r *CustomApplicationResource) Configure(ctx context.Context, req resource.
 	}
 }
 
-func (r *CustomApplicationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data CustomApplicationResourceModel
+func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -114,7 +113,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	traceAPICall("CreateCustomApplication")
 	application, err := r.provider.service.CreateCustomApplication(ctx, &client.CreateCustomApplicationeRequest{
-		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
+		EnvironmentID: data.EnvironmentID.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Application", err.Error())
@@ -155,7 +154,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 	data.ID = types.StringValue(application.ID)
-	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
@@ -170,8 +169,8 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data CustomApplicationResourceModel
+func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -198,23 +197,22 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 	data.Name = types.StringValue(application.Name)
+	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
-	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *CustomApplicationResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan CustomApplicationResourceModel
+func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var state CustomApplicationResourceModel
+	var state CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -233,10 +231,6 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		updateRequest.Name = plan.Name.ValueString()
-	}
-
-	if state.SourceVersionID.ValueString() != plan.SourceVersionID.ValueString() {
-		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
 	}
 
 	traceAPICall("UpdateCustomApplication")
@@ -261,7 +255,6 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError("Custom Application is not ready", err.Error())
 		return
 	}
-	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
 
 	if err = updateUseCasesForEntity(
 		ctx,
@@ -278,8 +271,8 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func (r *CustomApplicationResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data CustomApplicationResourceModel
+func (r *CustomApplicationFromEnvironmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -296,6 +289,6 @@ func (r *CustomApplicationResource) Delete(ctx context.Context, req resource.Del
 	}
 }
 
-func (r *CustomApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *CustomApplicationFromEnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

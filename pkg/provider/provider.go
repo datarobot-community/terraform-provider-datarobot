@@ -172,6 +172,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewDeploymentRetrainingPolicyResource,
 		NewQAApplicationResource,
 		NewCustomApplicationResource,
+		NewCustomApplicationFromEnvironmentResource,
 		NewApplicationSourceResource,
 		NewApiTokenCredentialResource,
 		NewBasicCredentialResource,

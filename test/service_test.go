@@ -604,19 +604,6 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.NoError(err)
 	require.NotEmpty(application.ID)
 
-	start = time.Now()
-	for {
-		status, err := s.IsApplicationReady(ctx, application.ID)
-		require.NoError(err)
-		if status {
-			break
-		}
-		if time.Since(start) > timeout {
-			require.FailNow("timeout reached while waiting for custom application to be ready")
-		}
-		time.Sleep(1 * time.Second)
-	}
-
 	newName := "Updated Integration Test" + uuid.New().String()
 	_, err = s.UpdateApplication(ctx, application.ID, &client.UpdateApplicationRequest{
 		Name: newName,
