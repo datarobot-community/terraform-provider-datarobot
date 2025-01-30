@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cenkalti/backoff/v4"
@@ -79,6 +81,26 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "The importance of the Deployment.",
 				Default:             stringdefault.StaticString("LOW"),
 				Validators:          ImportanceValidators(),
+			},
+			"runtime_parameter_values": schema.ListNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The runtime parameter values for the Deployment.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"key": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the runtime parameter.",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The type of the runtime parameter.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
+						},
+					},
+				},
 			},
 			"predictions_by_forecast_date_settings": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -462,18 +484,30 @@ func (r *DeploymentResource) Configure(ctx context.Context, req resource.Configu
 func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data DeploymentResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	traceAPICall("CreateDeployment")
-	createResp, statusID, err := r.provider.service.CreateDeploymentFromModelPackage(ctx, &client.CreateDeploymentFromModelPackageRequest{
+	request := &client.CreateDeploymentFromModelPackageRequest{
 		ModelPackageID:          data.RegisteredModelVersionID.ValueString(),
 		PredictionEnvironmentID: data.PredictionEnvironmentID.ValueString(),
 		Label:                   data.Label.ValueString(),
 		Importance:              data.Importance.ValueString(),
-	})
+	}
+
+	if IsKnown(data.RuntimeParameterValues) {
+		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, data.RuntimeParameterValues)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
+			return
+		}
+		request.RuntimeParameterValues = runtimeParameterValues
+	}
+
+	traceAPICall("CreateDeployment")
+	createResp, statusID, err := r.provider.service.CreateDeploymentFromModelPackage(ctx, request)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Deployment", err.Error())
 		return
@@ -517,7 +551,8 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data DeploymentResourceModel
 
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	diags := req.State.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -552,7 +587,8 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan DeploymentResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -639,6 +675,12 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
+		return
+	}
+
 	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
@@ -677,6 +719,10 @@ func (r *DeploymentResource) ImportState(ctx context.Context, req resource.Impor
 }
 
 func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id string) (*client.Deployment, error) {
+	return r.waitForDeploymentStatus(ctx, id, "active")
+}
+
+func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id string, status string) (*client.Deployment, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
@@ -685,7 +731,7 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 			return backoff.Permanent(err)
 		}
 
-		if deployment.Status == "active" {
+		if deployment.Status == status {
 			return nil
 		} else if strings.Contains(deployment.Status, "error") {
 			return backoff.Permanent(errors.New("deployment has errored"))
@@ -906,4 +952,101 @@ func convertCustomMetricConditions(conditions []CustomMetricCondition) []client.
 		})
 	}
 	return customMetricConditions
+}
+
+func (r *DeploymentResource) updateDeploymentRuntimeParameters(
+	ctx context.Context,
+	id string,
+	plan DeploymentResourceModel,
+	state DeploymentResourceModel,
+) (err error) {
+	if !IsKnown(plan.RuntimeParameterValues) && !IsKnown(state.RuntimeParameterValues) {
+		return
+	}
+
+	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) {
+		var stateRuntimeParameterValues []RuntimeParameterValue
+		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &stateRuntimeParameterValues, false); diags.HasError() {
+			err = errors.New("Error converting runtime parameter values")
+			return
+		}
+		var planRuntimeParameterValues []RuntimeParameterValue
+		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &planRuntimeParameterValues, false); diags.HasError() {
+			err = errors.New("Error converting runtime parameter values")
+			return
+		}
+
+		// reset runtime parameters that are not in the plan
+		newRuntimeParameterValues := make([]client.RuntimeParameterValueRequest, 0)
+		for _, stateRuntimeParameterValue := range stateRuntimeParameterValues {
+			found := false
+			for _, planRuntimeParameterValue := range planRuntimeParameterValues {
+				if stateRuntimeParameterValue.Key == planRuntimeParameterValue.Key {
+					found = true
+					break
+				}
+			}
+			if !found {
+				newRuntimeParameterValues = append(newRuntimeParameterValues, client.RuntimeParameterValueRequest{
+					FieldName: stateRuntimeParameterValue.Key.ValueString(),
+					Type:      stateRuntimeParameterValue.Type.ValueString(),
+					Value:     nil,
+				})
+			}
+		}
+
+		// add runtime parameters that are in the plan
+		for _, param := range planRuntimeParameterValues {
+			var value any
+			value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+			if err != nil {
+				return
+			}
+			newRuntimeParameterValues = append(newRuntimeParameterValues, client.RuntimeParameterValueRequest{
+				FieldName: param.Key.ValueString(),
+				Type:      param.Type.ValueString(),
+				Value:     &value,
+			})
+		}
+
+		if len(newRuntimeParameterValues) == 0 {
+			return
+		}
+
+		// the Deployment must be inactive in order to update runtime parameters
+		traceAPICall("DeactivateDeployment")
+		if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
+			err = fmt.Errorf("Error deactivating deployment: %w", err)
+			return
+		}
+		if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
+			err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+			return
+		}
+
+		var newRuntimeParameterValuesBytes []byte
+		newRuntimeParameterValuesBytes, err = json.Marshal(newRuntimeParameterValues)
+		if err != nil {
+			return
+		}
+
+		traceAPICall("UpdateDeploymentRuntimeParameters")
+		if _, err = r.provider.service.UpdateDeploymentRuntimeParameters(ctx, id, &client.UpdateDeploymentRuntimeParametersRequest{
+			RuntimeParameterValues: string(newRuntimeParameterValuesBytes),
+		}); err != nil {
+			return
+		}
+
+		traceAPICall("ActivateDeployment")
+		if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
+			err = fmt.Errorf("Error activating deployment: %w", err)
+			return
+		}
+		if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
+			err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
+			return
+		}
+	}
+
+	return
 }

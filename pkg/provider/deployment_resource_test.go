@@ -48,6 +48,28 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		t.Fatal(err)
 	}
 
+	fileContents := `name: runtime-params
+
+type: inference
+targetType: binary
+inferenceModel:
+  targetName: target
+  positiveClassLabel: 1
+  negativeClassLabel: 0
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: An example of a string parameter
+    defaultValue: null
+  - fieldName: BOOLEAN_PARAMETER
+    type: boolean
+    description: An example of a boolean parameter
+    defaultValue: null`
+
+	if err := os.WriteFile(folderPath+"/"+"model-metadata.yaml", []byte(fileContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -56,7 +78,19 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: deploymentResourceConfig("example_label", "MODERATE", "target", &useCaseResourceName, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig(
+					"example_label",
+					"MODERATE",
+					"target",
+					&useCaseResourceName,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					"value"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -69,6 +103,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttr(resourceName, "label", "example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "MODERATE"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "value"),
 					resource.TestCheckNoResourceAttr(resourceName, "predictions_by_forecast_date_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "challenger_models_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "segment_analysis_settings"),
@@ -83,9 +118,21 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update label, importance, settings, and use case id
+			// Update label, importance, settings, runtime param values and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", "target", &useCaseResourceName2, true, true, true, true, true, true, true),
+				Config: deploymentResourceConfig(
+					"new_example_label",
+					"LOW",
+					"target",
+					&useCaseResourceName2,
+					true,
+					true,
+					true,
+					true,
+					true,
+					true,
+					true,
+					"newValue"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -98,6 +145,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "newValue"),
 					resource.TestCheckResourceAttr(resourceName, "predictions_by_forecast_date_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
@@ -110,7 +158,19 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			},
 			// Remove settings and use case id
 			{
-				Config: deploymentResourceConfig("new_example_label", "LOW", "target", nil, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig(
+					"new_example_label",
+					"LOW",
+					"target",
+					nil,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					""),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -138,7 +198,19 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 			},
 			// Try to update target_name of Custom Model (should fail)
 			{
-				Config:      deploymentResourceConfig("new_example_label", "LOW", "new_target", nil, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig(
+					"new_example_label",
+					"LOW",
+					"new_target",
+					nil,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					""),
 				ExpectError: regexp.MustCompile(`target_name cannot be changed if the model was deployed.`),
 			},
 			// Update custom model version (by updating the file contents) updates registered model version of deployment
@@ -149,7 +221,19 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 						t.Fatal(err)
 					}
 				},
-				Config: deploymentResourceConfig("new_example_label", "LOW", "target", nil, false, false, false, false, false, false, false),
+				Config: deploymentResourceConfig(
+					"new_example_label",
+					"LOW",
+					"target",
+					nil,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					false,
+					"value"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -160,6 +244,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					checkDeploymentResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "value"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -200,7 +285,7 @@ func deploymentResourceConfig(
 	isPredictionsDataCollectionEnabled,
 	isPredictionsSettingsEnabled,
 	isHealthSettingsEnabled bool,
-
+	runtimeParameterValue string,
 ) string {
 	useCaseIDsStr := ""
 	if useCaseResourceName != nil {
@@ -286,6 +371,18 @@ func deploymentResourceConfig(
 	}`
 	}
 
+	runtimeParameterValuesStr := ""
+	if runtimeParameterValue != "" {
+		runtimeParameterValuesStr = fmt.Sprintf(`
+	runtime_parameter_values = [
+		{
+			key="STRING_PARAMETER",
+			type="string",
+			value="%s"
+		},
+	]`, runtimeParameterValue)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_deployment" {
 	name = "test deployment"
@@ -318,8 +415,9 @@ resource "datarobot_deployment" "test" {
 	registered_model_version_id = datarobot_registered_model.test_deployment.version_id
 	%s
 	%s
+	%s
 }
-`, customModelTargetName, nameSalt, label, importance, useCaseIDsStr, deploymentSettings)
+`, customModelTargetName, nameSalt, label, importance, useCaseIDsStr, deploymentSettings, runtimeParameterValuesStr)
 }
 
 func checkDeploymentResourceExists() resource.TestCheckFunc {

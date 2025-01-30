@@ -40,18 +40,25 @@ resource "datarobot_deployment" "example" {
   registered_model_version_id = datarobot_registered_model.example.version_id
 
   # Optional settings
-  # challenger_models_settings = {}
-  # challenger_replay_settings = {}
-  # segment_analysis_settings  = {}
-  # bias_and_fairness_settings = {}
-  # predictions_by_forecast_date_settings = {}
-  # drift_tracking_settings = {}
-  # association_id_settings = {}
-  # predictions_data_collection_settings = {}
-  # prediction_warning_settings = {}
-  # prediction_interval_settings = {}
-  # predictions_settings = {}
-  # health_settings = {}
+  challenger_models_settings            = {}
+  challenger_replay_settings            = {}
+  segment_analysis_settings             = {}
+  bias_and_fairness_settings            = {}
+  predictions_by_forecast_date_settings = {}
+  drift_tracking_settings               = {}
+  association_id_settings               = {}
+  predictions_data_collection_settings  = {}
+  prediction_warning_settings           = {}
+  prediction_intervals_settings         = {}
+  predictions_settings                  = {}
+  health_settings                       = {}
+  runtime_parameter_values = [
+    {
+      key   = "EXAMPLE_PARAM",
+      type  = "string",
+      value = "val",
+    },
+  ]
 }
 
 output "datarobot_deployment_id" {
@@ -83,6 +90,7 @@ output "datarobot_deployment_id" {
 - `predictions_by_forecast_date_settings` (Attributes) The predictions by forecase date settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_by_forecast_date_settings))
 - `predictions_data_collection_settings` (Attributes) The predictions data collection settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_data_collection_settings))
 - `predictions_settings` (Attributes) Settings for the predictions. (see [below for nested schema](#nestedatt--predictions_settings))
+- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Deployment. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `segment_analysis_settings` (Attributes) The segment analysis settings for the Deployment. (see [below for nested schema](#nestedatt--segment_analysis_settings))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Deployment to.
 
@@ -310,6 +318,16 @@ Required:
 
 - `max_computes` (Number) The maximum number of computes to use for predictions.
 - `min_computes` (Number) The minimum number of computes to use for predictions.
+
+
+<a id="nestedatt--runtime_parameter_values"></a>
+### Nested Schema for `runtime_parameter_values`
+
+Required:
+
+- `key` (String) The name of the runtime parameter.
+- `type` (String) The type of the runtime parameter.
+- `value` (String) The value of the runtime parameter (type conversion is handled internally).
 
 
 <a id="nestedatt--segment_analysis_settings"></a>

@@ -1,3 +1,7 @@
+## 0.7.3
+
+- runtime_parameter_values for Deployments
+
 ## 0.7.0
 
 - Custom Application from Environment resource
