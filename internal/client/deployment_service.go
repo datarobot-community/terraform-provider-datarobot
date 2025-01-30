@@ -5,6 +5,7 @@ type CreateDeploymentFromModelPackageRequest struct {
 	PredictionEnvironmentID string `json:"predictionEnvironmentId"`
 	Label                   string `json:"label"`
 	Importance              string `json:"importance"`
+	RuntimeParameterValues  string `json:"runtimeParameterValues,omitempty"`
 }
 
 type DeploymentCreateResponse struct {
@@ -172,9 +173,17 @@ type ValidateDeployemntModelReplacementResponse struct {
 	Message string `json:"message"`
 }
 
+type UpdateDeploymentRuntimeParametersRequest struct {
+	RuntimeParameterValues string `json:"runtimeParameterValues"`
+}
+
 type UpdateDeploymentModelRequest struct {
 	ModelPackageID string `json:"modelPackageId"`
 	Reason         string `json:"reason"`
+}
+
+type UpdateDeploymentStatusRequest struct {
+	Status string `json:"status"`
 }
 
 type TaskStatusResponse struct {

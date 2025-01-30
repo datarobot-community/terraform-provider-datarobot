@@ -358,6 +358,7 @@ type DeploymentResourceModel struct {
 	RegisteredModelVersionID types.String   `tfsdk:"registered_model_version_id"`
 	PredictionEnvironmentID  types.String   `tfsdk:"prediction_environment_id"`
 	Importance               types.String   `tfsdk:"importance"`
+	RuntimeParameterValues   types.List     `tfsdk:"runtime_parameter_values"`
 	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
 
 	// settings

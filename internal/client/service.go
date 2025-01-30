@@ -124,6 +124,10 @@ type Service interface {
 	UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error)
 	DeleteDeployment(ctx context.Context, id string) error
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
+	UpdateDeploymentRuntimeParameters(ctx context.Context, id string, req *UpdateDeploymentRuntimeParametersRequest) (*Deployment, error)
+	ListDeploymentRuntimeParameters(ctx context.Context, id string) ([]RuntimeParameter, error)
+	DeactivateDeployment(ctx context.Context, id string) (*Deployment, error)
+	ActivateDeployment(ctx context.Context, id string) (*Deployment, error)
 	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
 	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error)
 	UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error)
@@ -658,6 +662,22 @@ func (s *ServiceImpl) DeleteDeployment(ctx context.Context, id string) error {
 
 func (s *ServiceImpl) ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error) {
 	return Post[ValidateDeployemntModelReplacementResponse](s.client, ctx, "/deployments/"+id+"/model/validation/", req)
+}
+
+func (s *ServiceImpl) UpdateDeploymentRuntimeParameters(ctx context.Context, id string, req *UpdateDeploymentRuntimeParametersRequest) (*Deployment, error) {
+	return Put[Deployment](s.client, ctx, "/deployments/"+id+"/runtimeParameters/", req)
+}
+
+func (s *ServiceImpl) ListDeploymentRuntimeParameters(ctx context.Context, id string) ([]RuntimeParameter, error) {
+	return GetAllPages[RuntimeParameter](s.client, ctx, "/deployments/"+id+"/runtimeParameters/", nil)
+}
+
+func (s *ServiceImpl) DeactivateDeployment(ctx context.Context, id string) (*Deployment, error) {
+	return Patch[Deployment](s.client, ctx, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "inactive"})
+}
+
+func (s *ServiceImpl) ActivateDeployment(ctx context.Context, id string) (*Deployment, error) {
+	return Patch[Deployment](s.client, ctx, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "active"})
 }
 
 func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {

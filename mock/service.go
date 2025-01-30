@@ -35,6 +35,21 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// ActivateDeployment mocks base method.
+func (m *MockService) ActivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ActivateDeployment", ctx, id)
+	ret0, _ := ret[0].(*client.Deployment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ActivateDeployment indicates an expected call of ActivateDeployment.
+func (mr *MockServiceMockRecorder) ActivateDeployment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActivateDeployment", reflect.TypeOf((*MockService)(nil).ActivateDeployment), ctx, id)
+}
+
 // AddEntityToUseCase mocks base method.
 func (m *MockService) AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
@@ -559,6 +574,21 @@ func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.Crea
 func (mr *MockServiceMockRecorder) CreateVectorDatabase(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVectorDatabase", reflect.TypeOf((*MockService)(nil).CreateVectorDatabase), ctx, req)
+}
+
+// DeactivateDeployment mocks base method.
+func (m *MockService) DeactivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateDeployment", ctx, id)
+	ret0, _ := ret[0].(*client.Deployment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeactivateDeployment indicates an expected call of DeactivateDeployment.
+func (mr *MockServiceMockRecorder) DeactivateDeployment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateDeployment", reflect.TypeOf((*MockService)(nil).DeactivateDeployment), ctx, id)
 }
 
 // DeleteApplication mocks base method.
@@ -1306,21 +1336,6 @@ func (mr *MockServiceMockRecorder) GetVectorDatabase(ctx, id interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVectorDatabase", reflect.TypeOf((*MockService)(nil).GetVectorDatabase), ctx, id)
 }
 
-// IsApplicationReady mocks base method.
-func (m *MockService) IsApplicationReady(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsApplicationReady", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsApplicationReady indicates an expected call of IsApplicationReady.
-func (mr *MockServiceMockRecorder) IsApplicationReady(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsApplicationReady", reflect.TypeOf((*MockService)(nil).IsApplicationReady), ctx, id)
-}
-
 // IsCustomModelReady mocks base method.
 func (m *MockService) IsCustomModelReady(ctx context.Context, id string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -1469,6 +1484,21 @@ func (m *MockService) ListDatastoreCredentials(ctx context.Context, id string) (
 func (mr *MockServiceMockRecorder) ListDatastoreCredentials(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDatastoreCredentials", reflect.TypeOf((*MockService)(nil).ListDatastoreCredentials), ctx, id)
+}
+
+// ListDeploymentRuntimeParameters mocks base method.
+func (m *MockService) ListDeploymentRuntimeParameters(ctx context.Context, id string) ([]client.RuntimeParameter, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDeploymentRuntimeParameters", ctx, id)
+	ret0, _ := ret[0].([]client.RuntimeParameter)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDeploymentRuntimeParameters indicates an expected call of ListDeploymentRuntimeParameters.
+func (mr *MockServiceMockRecorder) ListDeploymentRuntimeParameters(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeploymentRuntimeParameters", reflect.TypeOf((*MockService)(nil).ListDeploymentRuntimeParameters), ctx, id)
 }
 
 // ListExecutionEnvironments mocks base method.
@@ -1844,6 +1874,21 @@ func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req 
 func (mr *MockServiceMockRecorder) UpdateDeploymentModel(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentModel", reflect.TypeOf((*MockService)(nil).UpdateDeploymentModel), ctx, id, req)
+}
+
+// UpdateDeploymentRuntimeParameters mocks base method.
+func (m *MockService) UpdateDeploymentRuntimeParameters(ctx context.Context, id string, req *client.UpdateDeploymentRuntimeParametersRequest) (*client.Deployment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentRuntimeParameters", ctx, id, req)
+	ret0, _ := ret[0].(*client.Deployment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeploymentRuntimeParameters indicates an expected call of UpdateDeploymentRuntimeParameters.
+func (mr *MockServiceMockRecorder) UpdateDeploymentRuntimeParameters(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentRuntimeParameters", reflect.TypeOf((*MockService)(nil).UpdateDeploymentRuntimeParameters), ctx, id, req)
 }
 
 // UpdateDeploymentSettings mocks base method.

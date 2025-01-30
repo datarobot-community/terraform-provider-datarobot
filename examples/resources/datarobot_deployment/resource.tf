@@ -25,18 +25,25 @@ resource "datarobot_deployment" "example" {
   registered_model_version_id = datarobot_registered_model.example.version_id
 
   # Optional settings
-  # challenger_models_settings = {}
-  # challenger_replay_settings = {}
-  # segment_analysis_settings  = {}
-  # bias_and_fairness_settings = {}
-  # predictions_by_forecast_date_settings = {}
-  # drift_tracking_settings = {}
-  # association_id_settings = {}
-  # predictions_data_collection_settings = {}
-  # prediction_warning_settings = {}
-  # prediction_interval_settings = {}
-  # predictions_settings = {}
-  # health_settings = {}
+  challenger_models_settings            = {}
+  challenger_replay_settings            = {}
+  segment_analysis_settings             = {}
+  bias_and_fairness_settings            = {}
+  predictions_by_forecast_date_settings = {}
+  drift_tracking_settings               = {}
+  association_id_settings               = {}
+  predictions_data_collection_settings  = {}
+  prediction_warning_settings           = {}
+  prediction_intervals_settings         = {}
+  predictions_settings                  = {}
+  health_settings                       = {}
+  runtime_parameter_values = [
+    {
+      key   = "EXAMPLE_PARAM",
+      type  = "string",
+      value = "val",
+    },
+  ]
 }
 
 output "datarobot_deployment_id" {

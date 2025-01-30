@@ -110,7 +110,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 		return result, &resp.Header, NewGenericError(errorMessage)
 	}
 
-	if (req.Method == http.MethodDelete || req.Method == http.MethodPatch) &&
+	if (req.Method == http.MethodDelete || req.Method == http.MethodPatch || req.Method == http.MethodPut) &&
 		resp.StatusCode == http.StatusNoContent {
 		return result, &resp.Header, nil
 	}
