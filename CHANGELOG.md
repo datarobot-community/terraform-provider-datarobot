@@ -1,3 +1,7 @@
+## 0.7.4
+
+- add Resource Bundle for Deployments
+
 ## 0.7.3
 
 - runtime_parameter_values for Deployments

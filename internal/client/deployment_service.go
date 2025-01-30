@@ -74,8 +74,9 @@ type BiasAndFairnessSetting struct {
 }
 
 type PredictionsSettings struct {
-	MinComputes int64 `json:"minComputes"`
-	MaxComputes int64 `json:"maxComputes"`
+	MinComputes      *int64  `json:"minComputes,omitempty"`
+	MaxComputes      *int64  `json:"maxComputes,omitempty"`
+	ResourceBundleID *string `json:"resourceBundleId,omitempty"`
 }
 
 type PredictionsByForecastDateSettings struct {

@@ -314,10 +314,11 @@ Required:
 <a id="nestedatt--predictions_settings"></a>
 ### Nested Schema for `predictions_settings`
 
-Required:
+Optional:
 
 - `max_computes` (Number) The maximum number of computes to use for predictions.
 - `min_computes` (Number) The minimum number of computes to use for predictions.
+- `resource_bundle_id` (String) The resource bundle ID to use for predictions.
 
 
 <a id="nestedatt--runtime_parameter_values"></a>

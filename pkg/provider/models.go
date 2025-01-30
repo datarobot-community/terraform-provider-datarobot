@@ -488,8 +488,9 @@ type TimelinessHealthSettings struct {
 }
 
 type PredictionsSettings struct {
-	MinComputes types.Int64 `tfsdk:"min_computes"`
-	MaxComputes types.Int64 `tfsdk:"max_computes"`
+	MinComputes      types.Int64  `tfsdk:"min_computes"`
+	MaxComputes      types.Int64  `tfsdk:"max_computes"`
+	ResourceBundleID types.String `tfsdk:"resource_bundle_id"`
 }
 
 // DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
