@@ -453,12 +453,16 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 				MarkdownDescription: "Settings for the predictions.",
 				Attributes: map[string]schema.Attribute{
 					"min_computes": schema.Int64Attribute{
-						Required:            true,
+						Optional:            true,
 						MarkdownDescription: "The minimum number of computes to use for predictions.",
 					},
 					"max_computes": schema.Int64Attribute{
-						Required:            true,
+						Optional:            true,
 						MarkdownDescription: "The maximum number of computes to use for predictions.",
+					},
+					"resource_bundle_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The resource bundle ID to use for predictions.",
 					},
 				},
 			},
@@ -531,10 +535,25 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 	data.ID = types.StringValue(deployment.ID)
 
+	// Deployment must be inactive in order to update Resource Bundle
+	deactivatedDeployment := false
+	if data.PredictionsSettings != nil && IsKnown(data.PredictionsSettings.ResourceBundleID) {
+		if err = r.deactivateDeployment(ctx, createResp.ID); err != nil {
+			return
+		}
+		deactivatedDeployment = true
+	}
+
 	err = r.updateDeploymentSettings(ctx, createResp.ID, data)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 		return
+	}
+
+	if deactivatedDeployment {
+		if err = r.activateDeployment(ctx, createResp.ID); err != nil {
+			return
+		}
 	}
 
 	for _, useCaseID := range data.UseCaseIDs {
@@ -669,10 +688,28 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
+	// Deployment must be inactive in order to update Resource Bundle
+	deactivatedDeployment := false
+	if plan.PredictionsSettings != nil && IsKnown(plan.PredictionsSettings.ResourceBundleID) {
+		// check that Resource Bundle has been modified
+		if state.PredictionsSettings == nil || plan.PredictionsSettings.ResourceBundleID != state.PredictionsSettings.ResourceBundleID {
+			if err = r.deactivateDeployment(ctx, id); err != nil {
+				return
+			}
+			deactivatedDeployment = true
+		}
+	}
+
 	err = r.updateDeploymentSettings(ctx, id, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 		return
+	}
+
+	if deactivatedDeployment {
+		if err = r.activateDeployment(ctx, id); err != nil {
+			return
+		}
 	}
 
 	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
@@ -842,18 +879,14 @@ func (r *DeploymentResource) updateDeploymentSettings(
 
 	if data.PredictionsSettings != nil {
 		req.PredictionsSettings = &client.PredictionsSettings{
-			MinComputes: data.PredictionsSettings.MinComputes.ValueInt64(),
-			MaxComputes: data.PredictionsSettings.MaxComputes.ValueInt64(),
+			MinComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MinComputes),
+			MaxComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MaxComputes),
+			ResourceBundleID: StringValuePointerOptional(data.PredictionsSettings.ResourceBundleID),
 		}
 	}
 
 	traceAPICall("UpdateDeploymentSettings")
 	_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
-	if err != nil {
-		return
-	}
-
-	_, err = r.waitForDeploymentToBeReady(ctx, id)
 	if err != nil {
 		return
 	}
@@ -1014,13 +1047,7 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 		}
 
 		// the Deployment must be inactive in order to update runtime parameters
-		traceAPICall("DeactivateDeployment")
-		if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
-			err = fmt.Errorf("Error deactivating deployment: %w", err)
-			return
-		}
-		if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
-			err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+		if err = r.deactivateDeployment(ctx, id); err != nil {
 			return
 		}
 
@@ -1037,15 +1064,37 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 			return
 		}
 
-		traceAPICall("ActivateDeployment")
-		if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
-			err = fmt.Errorf("Error activating deployment: %w", err)
+		if err = r.activateDeployment(ctx, id); err != nil {
 			return
 		}
-		if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
-			err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
-			return
-		}
+	}
+
+	return
+}
+
+func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string) (err error) {
+	traceAPICall("DeactivateDeployment")
+	if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
+		err = fmt.Errorf("Error deactivating deployment: %w", err)
+		return
+	}
+	if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
+		err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+		return
+	}
+
+	return
+}
+
+func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) (err error) {
+	traceAPICall("ActivateDeployment")
+	if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
+		err = fmt.Errorf("Error activating deployment: %w", err)
+		return
+	}
+	if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
+		err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
+		return
 	}
 
 	return

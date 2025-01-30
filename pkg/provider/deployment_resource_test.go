@@ -70,6 +70,8 @@ runtimeParameterDefinitions:
 		t.Fatal(err)
 	}
 
+	resourceBundleID := "cpu.micro"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -89,6 +91,7 @@ runtimeParameterDefinitions:
 					false,
 					false,
 					false,
+					nil,
 					false,
 					"value"),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -131,6 +134,7 @@ runtimeParameterDefinitions:
 					true,
 					true,
 					true,
+					&resourceBundleID,
 					true,
 					"newValue"),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -151,6 +155,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "challenger_replay_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "predictions_data_collection_settings.enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "predictions_settings.resource_bundle_id", resourceBundleID),
 					resource.TestCheckResourceAttr(resourceName, "health_settings.service.batch_count", "5"),
 					resource.TestCheckResourceAttr(resourceName, "health_settings.data_drift.batch_count", "5"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -169,6 +174,7 @@ runtimeParameterDefinitions:
 					false,
 					false,
 					false,
+					nil,
 					false,
 					""),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -209,6 +215,7 @@ runtimeParameterDefinitions:
 					false,
 					false,
 					false,
+					nil,
 					false,
 					""),
 				ExpectError: regexp.MustCompile(`target_name cannot be changed if the model was deployed.`),
@@ -232,6 +239,7 @@ runtimeParameterDefinitions:
 					false,
 					false,
 					false,
+					nil,
 					false,
 					"value"),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -283,7 +291,8 @@ func deploymentResourceConfig(
 	isChallengerReplayEnabled,
 	isAssociationIDEnabled,
 	isPredictionsDataCollectionEnabled,
-	isPredictionsSettingsEnabled,
+	isPredictionsSettingsEnabled bool,
+	resourceBundleID *string,
 	isHealthSettingsEnabled bool,
 	runtimeParameterValue string,
 ) string {
@@ -334,11 +343,18 @@ func deploymentResourceConfig(
 	}
 
 	if isPredictionsSettingsEnabled {
-		deploymentSettings += `
-	predictions_settings = {
-		min_computes = 0
-		max_computes = 2
-	}`
+		if resourceBundleID != nil {
+			deploymentSettings += fmt.Sprintf(`
+		predictions_settings = {
+			resource_bundle_id = "%s"
+		}`, *resourceBundleID)
+		} else {
+			deploymentSettings += `
+		predictions_settings = {
+			min_computes = 0
+			max_computes = 2
+		}`
+		}
 	}
 
 	if isHealthSettingsEnabled {
