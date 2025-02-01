@@ -184,6 +184,7 @@ type Service interface {
 	DeleteExecutionEnvironment(ctx context.Context, id string) error
 	ListExecutionEnvironments(ctx context.Context) ([]ExecutionEnvironment, error)
 	CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error)
+	GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error)
 
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
@@ -798,6 +799,10 @@ func (s *ServiceImpl) ListExecutionEnvironments(ctx context.Context) ([]Executio
 
 func (s *ServiceImpl) CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error) {
 	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/", http.MethodPost, req.Files, map[string]string{"description": req.Description})
+}
+
+func (s *ServiceImpl) GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error) {
+	return Get[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/"+versionId+"/")
 }
 
 func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {

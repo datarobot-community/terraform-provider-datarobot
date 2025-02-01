@@ -1,3 +1,7 @@
+## 0.7.5
+
+- wait for Execution Environments to finish building
+
 ## 0.7.4
 
 - add Resource Bundle for Deployments

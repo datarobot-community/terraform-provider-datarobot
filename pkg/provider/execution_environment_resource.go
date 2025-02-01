@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -183,10 +184,9 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	traceAPICall("GetExecutionEnvironment")
-	executionEnvironment, err = r.provider.service.GetExecutionEnvironment(ctx, executionEnvironment.ID)
+	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error getting Execution Environment", err.Error())
+		resp.Diagnostics.AddError("Execution Environment failed to build", err.Error())
 		return
 	}
 	data.ID = types.StringValue(executionEnvironment.ID)
@@ -332,9 +332,9 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 		}
 	}
 
-	traceAPICall("GetExecutionEnvironment")
-	if executionEnvironment, err = r.provider.service.GetExecutionEnvironment(ctx, plan.ID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error getting Execution Environment", err.Error())
+	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Execution Environment failed to build", err.Error())
 		return
 	}
 	plan.VersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
@@ -392,4 +392,39 @@ func getDockerContext(dockerContextPath string) (path string, fileContent []byte
 	}
 
 	return
+}
+
+func waitForExecutionEnvironmentToBeReady(ctx context.Context, service client.Service, id string) (*client.ExecutionEnvironment, error) {
+	var executionEnvironment *client.ExecutionEnvironment
+	var err error
+	if executionEnvironment, err = service.GetExecutionEnvironment(ctx, id); err != nil {
+		return nil, err
+	}
+
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("GetExecutionEnvironmentVersion")
+		executionEnvironmentVersion, err := service.GetExecutionEnvironmentVersion(ctx, id, executionEnvironment.LatestVersion.ID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if executionEnvironmentVersion.BuildStatus == "failed" {
+			return backoff.Permanent(errors.New("execution environment failed to create, review the logs for more details"))
+		}
+
+		if executionEnvironmentVersion.BuildStatus != "success" {
+			return errors.New("execution environment is not ready")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	if err = backoff.Retry(operation, expBackoff); err != nil {
+		return nil, err
+	}
+
+	traceAPICall("GetExecutionEnvironment")
+	return service.GetExecutionEnvironment(ctx, id)
 }

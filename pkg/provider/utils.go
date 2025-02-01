@@ -856,6 +856,10 @@ func zipDirectory(source, target string) (content []byte, err error) {
 		return err
 	})
 
+	if err := zipWriter.Close(); err != nil {
+		return nil, err
+	}
+
 	if content, err = os.ReadFile(target); err != nil {
 		return
 	}

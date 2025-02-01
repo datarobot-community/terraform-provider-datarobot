@@ -1126,6 +1126,21 @@ func (mr *MockServiceMockRecorder) GetExecutionEnvironment(ctx, id interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironment", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironment), ctx, id)
 }
 
+// GetExecutionEnvironmentVersion mocks base method.
+func (m *MockService) GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*client.ExecutionEnvironmentVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionEnvironmentVersion", ctx, id, versionId)
+	ret0, _ := ret[0].(*client.ExecutionEnvironmentVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExecutionEnvironmentVersion indicates an expected call of GetExecutionEnvironmentVersion.
+func (mr *MockServiceMockRecorder) GetExecutionEnvironmentVersion(ctx, id, versionId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironmentVersion", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironmentVersion), ctx, id, versionId)
+}
+
 // GetGuardConfigurationsForCustomModelVersion mocks base method.
 func (m *MockService) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*client.GuardConfigurationResponse, error) {
 	m.ctrl.T.Helper()
