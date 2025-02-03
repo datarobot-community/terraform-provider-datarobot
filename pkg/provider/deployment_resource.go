@@ -195,6 +195,16 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "If feature drift tracking is to be turned on.",
 					},
+					"feature_selection": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The feature selection method to be used for drift tracking.",
+						Validators:          FeatureSelectionValidators(),
+					},
+					"tracked_features": schema.ListAttribute{
+						Optional:            true,
+						MarkdownDescription: "List of features to be tracked for drift.",
+						ElementType:         types.StringType,
+					},
 				},
 			},
 			"association_id_settings": schema.SingleNestedAttribute{
@@ -828,8 +838,10 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	}
 
 	if data.DriftTrackingSettings != nil {
-		req.FeatureDrift = &client.BasicSetting{
-			Enabled: data.DriftTrackingSettings.FeatureDriftEnabled.ValueBool(),
+		req.FeatureDrift = &client.FeatureDriftSetting{
+			Enabled:          data.DriftTrackingSettings.FeatureDriftEnabled.ValueBool(),
+			FeatureSelection: StringValuePointerOptional(data.DriftTrackingSettings.FeatureSelection),
+			TrackedFeatures:  convertTfStringListToPtr(data.DriftTrackingSettings.TrackedFeatures),
 		}
 		req.TargetDrift = &client.BasicSetting{
 			Enabled: data.DriftTrackingSettings.TargetDriftEnabled.ValueBool(),

@@ -1,3 +1,7 @@
+## 0.7.6
+
+- enable manual feature selection for Deployment drift tracking
+
 ## 0.7.5
 
 - wait for Execution Environments to finish building

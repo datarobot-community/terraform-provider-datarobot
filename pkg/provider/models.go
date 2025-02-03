@@ -399,8 +399,10 @@ type BiasAndFairnessSettings struct {
 }
 
 type DriftTrackingSettings struct {
-	TargetDriftEnabled  types.Bool `tfsdk:"target_drift_enabled"`
-	FeatureDriftEnabled types.Bool `tfsdk:"feature_drift_enabled"`
+	TargetDriftEnabled  types.Bool     `tfsdk:"target_drift_enabled"`
+	FeatureDriftEnabled types.Bool     `tfsdk:"feature_drift_enabled"`
+	FeatureSelection    types.String   `tfsdk:"feature_selection"`
+	TrackedFeatures     []types.String `tfsdk:"tracked_features"`
 }
 
 type DeploymentSettings struct {
