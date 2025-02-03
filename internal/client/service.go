@@ -141,6 +141,18 @@ type Service interface {
 	UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
 	DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error
 
+	// Notification Channel
+	CreateNotificationChannel(ctx context.Context, req *CreateNotificationChannelRequest) (*NotificationChannel, error)
+	GetNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*NotificationChannel, error)
+	UpdateNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *UpdateNotificationChannelRequest) (*NotificationChannel, error)
+	DeleteNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) error
+
+	// Notification Policy
+	CreateNotificationPolicy(ctx context.Context, req *CreateNotificationPolicyRequest) (*NotificationPolicy, error)
+	GetNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*NotificationPolicy, error)
+	UpdateNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *UpdateNotificationPolicyRequest) (*NotificationPolicy, error)
+	DeleteNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) error
+
 	// Custom Metric
 	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
 	GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error)
@@ -639,6 +651,38 @@ func (s *ServiceImpl) UpdateRetrainingPolicy(ctx context.Context, deploymentID, 
 
 func (s *ServiceImpl) DeleteRetrainingPolicy(ctx context.Context, deploymentID, id string) error {
 	return Delete(s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateNotificationChannel(ctx context.Context, req *CreateNotificationChannelRequest) (*NotificationChannel, error) {
+	return Post[NotificationChannel](s.client, ctx, "/entityNotificationChannels/", req)
+}
+
+func (s *ServiceImpl) GetNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*NotificationChannel, error) {
+	return Get[NotificationChannel](s.client, ctx, "/entityNotificationChannels/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *UpdateNotificationChannelRequest) (*NotificationChannel, error) {
+	return Put[NotificationChannel](s.client, ctx, "/entityNotificationChannels/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) error {
+	return Delete(s.client, ctx, "/entityNotificationChannels/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/")
+}
+
+func (s *ServiceImpl) CreateNotificationPolicy(ctx context.Context, req *CreateNotificationPolicyRequest) (*NotificationPolicy, error) {
+	return Post[NotificationPolicy](s.client, ctx, "/entityNotificationPolicies/", req)
+}
+
+func (s *ServiceImpl) GetNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*NotificationPolicy, error) {
+	return Get[NotificationPolicy](s.client, ctx, "/entityNotificationPolicies/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *UpdateNotificationPolicyRequest) (*NotificationPolicy, error) {
+	return Put[NotificationPolicy](s.client, ctx, "/entityNotificationPolicies/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) error {
+	return Delete(s.client, ctx, "/entityNotificationPolicies/"+relatedEntityType+"/"+relatedEntityID+"/"+id+"/")
 }
 
 func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {

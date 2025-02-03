@@ -1,3 +1,8 @@
+## 0.8.0
+
+- Notification Channel resource
+- Notification Policy resource
+
 ## 0.7.6
 
 - enable manual feature selection for Deployment drift tracking

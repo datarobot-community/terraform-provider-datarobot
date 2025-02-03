@@ -304,3 +304,42 @@ func TimeFormatValidators() []validator.String {
 		),
 	}
 }
+
+func ChannelTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"DataRobotCustomJob",
+			"DataRobotGroup",
+			"DataRobotUser",
+			"Database",
+			"Email",
+			"InApp",
+			"InsightsComputations",
+			"MSTeams",
+			"Slack",
+			"Webhook",
+		),
+	}
+}
+
+func ContentTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"application/json",
+			"application/x-www-form-urlencoded",
+		),
+	}
+}
+
+func LanguageCodeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"en",
+			"es_419",
+			"fr",
+			"ja",
+			"ko",
+			"ptBR",
+		),
+	}
+}
