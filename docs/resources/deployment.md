@@ -141,7 +141,9 @@ Required:
 Optional:
 
 - `feature_drift_enabled` (Boolean) If feature drift tracking is to be turned on.
+- `feature_selection` (String) The feature selection method to be used for drift tracking.
 - `target_drift_enabled` (Boolean) If target drift tracking is to be turned on.
+- `tracked_features` (List of String) List of features to be tracked for drift.
 
 
 <a id="nestedatt--health_settings"></a>
