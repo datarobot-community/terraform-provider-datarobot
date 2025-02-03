@@ -86,7 +86,8 @@ if __name__ == "__main__":
 		t.Fatalf("Failed to create tar file: %v", err)
 	}
 
-	err = tarWriter.Close(); if err != nil {
+	err = tarWriter.Close()
+	if err != nil {
 		t.Fatalf("Failed to close tar writer: %v", err)
 	}
 
@@ -122,8 +123,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"version_description",
-					&tarFileName,
-					nil),
+					&tarFileName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -150,8 +151,8 @@ if __name__ == "__main__":
 					"python",
 					"customApplication",
 					"version_description",
-					&tarFileName,
-					nil),
+					&tarFileName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -182,8 +183,8 @@ if __name__ == "__main__":
 					"python",
 					"customApplication",
 					"new_version_description",
-					&tarFileName,
-					nil),
+					&tarFileName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -210,8 +211,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"new_version_description",
-					&zipFileName,
-					nil),
+					&zipFileName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -238,8 +239,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"new_version_description",
-					&dirName,
-					nil),
+					&dirName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -302,8 +303,8 @@ if __name__ == "__main__":
 					"r",
 					"customModel",
 					"new_version_description",
-					&dirName,
-					nil),
+					&dirName),
+				// nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -357,8 +358,9 @@ func executionEnvironmentResourceConfig(
 	programmingLanguage,
 	useCase,
 	versionDescription string,
-	dockerContextPath,
-	dockerImage *string) string {
+	dockerContextPath *string,
+	// dockerImage *string,
+) string {
 	dockerContextPathStr := ""
 	if dockerContextPath != nil {
 		dockerContextPathStr = fmt.Sprintf(`
@@ -366,12 +368,12 @@ func executionEnvironmentResourceConfig(
 		`, *dockerContextPath)
 	}
 
-	dockerImageStr := ""
-	if dockerImage != nil {
-		dockerImageStr = fmt.Sprintf(`
-	docker_image = "%s"
-			`, *dockerImage)
-	}
+	// dockerImageStr := ""
+	// if dockerImage != nil {
+	// 	dockerImageStr = fmt.Sprintf(`
+	// docker_image = "%s"
+	// 		`, *dockerImage)
+	// }
 
 	return fmt.Sprintf(`
 resource "datarobot_execution_environment" "test" {
@@ -381,9 +383,14 @@ resource "datarobot_execution_environment" "test" {
 	use_cases = ["%s"]
 	version_description = "%s"
 	%s
-	%s
 }
-`, name, description, programmingLanguage, useCase, versionDescription, dockerContextPathStr, dockerImageStr)
+`, name,
+		description,
+		programmingLanguage,
+		useCase,
+		versionDescription,
+		dockerContextPathStr)
+	// dockerImageStr)
 }
 
 func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
