@@ -45,7 +45,7 @@ type DeploymentSettings struct {
 	BatchMonitoring           *BasicSetting                      `json:"batchMonitoring,omitempty"`
 	BiasAndFairness           *BiasAndFairnessSetting            `json:"biasAndFairness,omitempty"`
 	ChallengerModels          *BasicSetting                      `json:"challengerModels,omitempty"`
-	FeatureDrift              *BasicSetting                      `json:"featureDrift,omitempty"`
+	FeatureDrift              *FeatureDriftSetting               `json:"featureDrift,omitempty"`
 	Humility                  *BasicSetting                      `json:"humility,omitempty"`
 	PredictionsSettings       *PredictionsSettings               `json:"predictionsSettings,omitempty"`
 	PredictionsByForecastDate *PredictionsByForecastDateSettings `json:"predictionsByForecastDate,omitempty"`
@@ -107,6 +107,12 @@ type SegmentAnalysisSetting struct {
 
 type DeploymentChallengerReplaySettings struct {
 	Enabled bool `json:"enabled"`
+}
+
+type FeatureDriftSetting struct {
+	Enabled          bool      `json:"enabled"`
+	FeatureSelection *string   `json:"featureSelection,omitempty"`
+	TrackedFeatures  *[]string `json:"trackedFeatures,omitempty"`
 }
 
 type DeploymentHealthSettings struct {

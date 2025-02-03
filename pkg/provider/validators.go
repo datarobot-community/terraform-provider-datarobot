@@ -31,6 +31,15 @@ func FairnessMetricSetValidators() []validator.String {
 	}
 }
 
+func FeatureSelectionValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"auto",
+			"manual",
+		),
+	}
+}
+
 func Float64ZeroToOneValidators() []validator.Float64 {
 	return []validator.Float64{
 		float64validator.Between(0.0, 1.0),
