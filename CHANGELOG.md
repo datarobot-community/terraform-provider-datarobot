@@ -1,3 +1,7 @@
+## 0.8.1
+
+- Add batch_monitoring Deployment setting
+
 ## 0.8.0
 
 - Notification Channel resource

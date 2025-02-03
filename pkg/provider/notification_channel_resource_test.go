@@ -155,6 +155,9 @@ resource "datarobot_deployment" "test_notification_channel" {
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_notification_channel.id
 	registered_model_version_id = datarobot_registered_model.test_notification_channel.version_id
+	batch_monitoring_settings = {
+		enabled = true
+	}
 }
 resource "datarobot_notification_channel" "test" {
 	name = "%s"
