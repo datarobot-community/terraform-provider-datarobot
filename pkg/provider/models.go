@@ -551,6 +551,46 @@ type Trigger struct {
 	Type                    types.String `tfsdk:"type"`
 }
 
+type NotificationPolicyResourceModel struct {
+	ID                types.String `tfsdk:"id"`
+	Name              types.String `tfsdk:"name"`
+	ChannelID         types.String `tfsdk:"channel_id"`
+	ChannelScope      types.String `tfsdk:"channel_scope"`
+	RelatedEntityID   types.String `tfsdk:"related_entity_id"`
+	RelatedEntityType types.String `tfsdk:"related_entity_type"`
+	Active            types.Bool   `tfsdk:"active"`
+	EventGroup        types.String `tfsdk:"event_group"`
+	EventType         types.String `tfsdk:"event_type"`
+	MaximalFrequency  types.String `tfsdk:"maximal_frequency"`
+}
+
+type NotificationChannelResourceModel struct {
+	ID                types.String   `tfsdk:"id"`
+	Name              types.String   `tfsdk:"name"`
+	ChannelType       types.String   `tfsdk:"channel_type"`
+	ContentType       types.String   `tfsdk:"content_type"`
+	CustomHeaders     []CustomHeader `tfsdk:"custom_headers"`
+	DREntities        []DREntity     `tfsdk:"dr_entities"`
+	EmailAddress      types.String   `tfsdk:"email_address"`
+	LanguageCode      types.String   `tfsdk:"language_code"`
+	PayloadUrl        types.String   `tfsdk:"payload_url"`
+	RelatedEntityID   types.String   `tfsdk:"related_entity_id"`
+	RelatedEntityType types.String   `tfsdk:"related_entity_type"`
+	SecretToken       types.String   `tfsdk:"secret_token"`
+	ValidateSsl       types.Bool     `tfsdk:"validate_ssl"`
+	VerificationCode  types.String   `tfsdk:"verification_code"`
+}
+
+type CustomHeader struct {
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+type DREntity struct {
+	ID   types.String `tfsdk:"id"`
+	Name types.String `tfsdk:"name"`
+}
+
 // QAApplicationResourceModel describes the Q&A application resource.
 
 type QAApplicationResourceModel struct {

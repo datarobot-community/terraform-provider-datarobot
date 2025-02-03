@@ -441,6 +441,36 @@ func (mr *MockServiceMockRecorder) CreateLLMBlueprint(ctx, req interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLLMBlueprint", reflect.TypeOf((*MockService)(nil).CreateLLMBlueprint), ctx, req)
 }
 
+// CreateNotificationChannel mocks base method.
+func (m *MockService) CreateNotificationChannel(ctx context.Context, req *client.CreateNotificationChannelRequest) (*client.NotificationChannel, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateNotificationChannel", ctx, req)
+	ret0, _ := ret[0].(*client.NotificationChannel)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateNotificationChannel indicates an expected call of CreateNotificationChannel.
+func (mr *MockServiceMockRecorder) CreateNotificationChannel(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNotificationChannel", reflect.TypeOf((*MockService)(nil).CreateNotificationChannel), ctx, req)
+}
+
+// CreateNotificationPolicy mocks base method.
+func (m *MockService) CreateNotificationPolicy(ctx context.Context, req *client.CreateNotificationPolicyRequest) (*client.NotificationPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateNotificationPolicy", ctx, req)
+	ret0, _ := ret[0].(*client.NotificationPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateNotificationPolicy indicates an expected call of CreateNotificationPolicy.
+func (mr *MockServiceMockRecorder) CreateNotificationPolicy(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNotificationPolicy", reflect.TypeOf((*MockService)(nil).CreateNotificationPolicy), ctx, req)
+}
+
 // CreatePlayground mocks base method.
 func (m *MockService) CreatePlayground(ctx context.Context, req *client.CreatePlaygroundRequest) (*client.CreatePlaygroundResponse, error) {
 	m.ctrl.T.Helper()
@@ -771,6 +801,34 @@ func (m *MockService) DeleteLLMBlueprint(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteLLMBlueprint(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLLMBlueprint", reflect.TypeOf((*MockService)(nil).DeleteLLMBlueprint), ctx, id)
+}
+
+// DeleteNotificationChannel mocks base method.
+func (m *MockService) DeleteNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNotificationChannel", ctx, relatedEntityType, relatedEntityID, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteNotificationChannel indicates an expected call of DeleteNotificationChannel.
+func (mr *MockServiceMockRecorder) DeleteNotificationChannel(ctx, relatedEntityType, relatedEntityID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNotificationChannel", reflect.TypeOf((*MockService)(nil).DeleteNotificationChannel), ctx, relatedEntityType, relatedEntityID, id)
+}
+
+// DeleteNotificationPolicy mocks base method.
+func (m *MockService) DeleteNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNotificationPolicy", ctx, relatedEntityType, relatedEntityID, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteNotificationPolicy indicates an expected call of DeleteNotificationPolicy.
+func (mr *MockServiceMockRecorder) DeleteNotificationPolicy(ctx, relatedEntityType, relatedEntityID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNotificationPolicy", reflect.TypeOf((*MockService)(nil).DeleteNotificationPolicy), ctx, relatedEntityType, relatedEntityID, id)
 }
 
 // DeletePlayground mocks base method.
@@ -1199,6 +1257,36 @@ func (m *MockService) GetLatestRegisteredModelVersion(ctx context.Context, id st
 func (mr *MockServiceMockRecorder) GetLatestRegisteredModelVersion(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestRegisteredModelVersion", reflect.TypeOf((*MockService)(nil).GetLatestRegisteredModelVersion), ctx, id)
+}
+
+// GetNotificationChannel mocks base method.
+func (m *MockService) GetNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*client.NotificationChannel, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNotificationChannel", ctx, relatedEntityType, relatedEntityID, id)
+	ret0, _ := ret[0].(*client.NotificationChannel)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNotificationChannel indicates an expected call of GetNotificationChannel.
+func (mr *MockServiceMockRecorder) GetNotificationChannel(ctx, relatedEntityType, relatedEntityID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNotificationChannel", reflect.TypeOf((*MockService)(nil).GetNotificationChannel), ctx, relatedEntityType, relatedEntityID, id)
+}
+
+// GetNotificationPolicy mocks base method.
+func (m *MockService) GetNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*client.NotificationPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNotificationPolicy", ctx, relatedEntityType, relatedEntityID, id)
+	ret0, _ := ret[0].(*client.NotificationPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNotificationPolicy indicates an expected call of GetNotificationPolicy.
+func (mr *MockServiceMockRecorder) GetNotificationPolicy(ctx, relatedEntityType, relatedEntityID, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNotificationPolicy", reflect.TypeOf((*MockService)(nil).GetNotificationPolicy), ctx, relatedEntityType, relatedEntityID, id)
 }
 
 // GetOverallModerationConfigurationForCustomModelVersion mocks base method.
@@ -1964,6 +2052,36 @@ func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *cl
 func (mr *MockServiceMockRecorder) UpdateLLMBlueprint(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLLMBlueprint", reflect.TypeOf((*MockService)(nil).UpdateLLMBlueprint), ctx, id, req)
+}
+
+// UpdateNotificationChannel mocks base method.
+func (m *MockService) UpdateNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *client.UpdateNotificationChannelRequest) (*client.NotificationChannel, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotificationChannel", ctx, relatedEntityType, relatedEntityID, id, req)
+	ret0, _ := ret[0].(*client.NotificationChannel)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNotificationChannel indicates an expected call of UpdateNotificationChannel.
+func (mr *MockServiceMockRecorder) UpdateNotificationChannel(ctx, relatedEntityType, relatedEntityID, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationChannel", reflect.TypeOf((*MockService)(nil).UpdateNotificationChannel), ctx, relatedEntityType, relatedEntityID, id, req)
+}
+
+// UpdateNotificationPolicy mocks base method.
+func (m *MockService) UpdateNotificationPolicy(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *client.UpdateNotificationPolicyRequest) (*client.NotificationPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotificationPolicy", ctx, relatedEntityType, relatedEntityID, id, req)
+	ret0, _ := ret[0].(*client.NotificationPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNotificationPolicy indicates an expected call of UpdateNotificationPolicy.
+func (mr *MockServiceMockRecorder) UpdateNotificationPolicy(ctx, relatedEntityType, relatedEntityID, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationPolicy", reflect.TypeOf((*MockService)(nil).UpdateNotificationPolicy), ctx, relatedEntityType, relatedEntityID, id, req)
 }
 
 // UpdatePlayground mocks base method.
