@@ -183,6 +183,16 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					},
 				},
 			},
+			"batch_monitoring_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The batch monitoring settings for the Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "If batch monitoring is enabled.",
+					},
+				},
+			},
 			"drift_tracking_settings": schema.SingleNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "The drift tracking settings for the Deployment.",
@@ -814,6 +824,12 @@ func (r *DeploymentResource) updateDeploymentSettings(
 	if data.ChallengerModelsSettings != nil {
 		req.ChallengerModels = &client.BasicSetting{
 			Enabled: data.ChallengerModelsSettings.Enabled.ValueBool(),
+		}
+	}
+
+	if data.BatchMonitoringSettings != nil {
+		req.BatchMonitoring = &client.BasicSetting{
+			Enabled: data.BatchMonitoringSettings.Enabled.ValueBool(),
 		}
 	}
 

@@ -79,6 +79,7 @@ output "datarobot_deployment_id" {
 ### Optional
 
 - `association_id_settings` (Attributes) Association ID settings for this Deployment. (see [below for nested schema](#nestedatt--association_id_settings))
+- `batch_monitoring_settings` (Attributes) The batch monitoring settings for the Deployment. (see [below for nested schema](#nestedatt--batch_monitoring_settings))
 - `bias_and_fairness_settings` (Attributes) Bias and fairness settings for the Deployment. (see [below for nested schema](#nestedatt--bias_and_fairness_settings))
 - `challenger_models_settings` (Attributes) The challenger models settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_models_settings))
 - `challenger_replay_settings` (Attributes) The challenger replay settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_replay_settings))
@@ -106,6 +107,14 @@ Optional:
 - `auto_generate_id` (Boolean) Whether to auto generate ID.
 - `column_names` (List of String) Name of the columns to be used as association ID, currently only support a list of one string.
 - `required_in_prediction_requests` (Boolean) Whether the association ID column is required in prediction requests.
+
+
+<a id="nestedatt--batch_monitoring_settings"></a>
+### Nested Schema for `batch_monitoring_settings`
+
+Required:
+
+- `enabled` (Boolean) If batch monitoring is enabled.
 
 
 <a id="nestedatt--bias_and_fairness_settings"></a>

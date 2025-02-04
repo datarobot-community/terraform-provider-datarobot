@@ -367,6 +367,7 @@ type DeploymentResourceModel struct {
 	SegmentAnalysisSettings           *SegmentAnalysisSettings           `tfsdk:"segment_analysis_settings"`
 	BiasAndFairnessSettings           *BiasAndFairnessSettings           `tfsdk:"bias_and_fairness_settings"`
 	ChallengerReplaySettings          *BasicDeploymentSetting            `tfsdk:"challenger_replay_settings"`
+	BatchMonitoringSettings           *BasicDeploymentSetting            `tfsdk:"batch_monitoring_settings"`
 	DriftTrackingSettings             *DriftTrackingSettings             `tfsdk:"drift_tracking_settings"`
 	AssociationIDSettings             *AssociationIDSettings             `tfsdk:"association_id_settings"`
 	PredictionsDataCollectionSettings *BasicDeploymentSetting            `tfsdk:"predictions_data_collection_settings"`
