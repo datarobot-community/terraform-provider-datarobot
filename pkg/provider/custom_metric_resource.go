@@ -342,8 +342,14 @@ func (r *CustomMetricResource) Update(ctx context.Context, req resource.UpdateRe
 		}
 	}
 	if data.Batch != nil {
-		request.Value = &client.ColumnNameValue{
+		request.Batch = &client.ColumnNameValue{
 			ColumnName: data.Batch.ColumnName.ValueString(),
+		}
+	}
+
+	if data.AssociationID != nil {
+		request.AssociationID = &client.ColumnNameValue{
+			ColumnName: data.AssociationID.ColumnName.ValueString(),
 		}
 	}
 
