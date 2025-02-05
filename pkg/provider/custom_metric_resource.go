@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -66,10 +67,16 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 			"is_model_specific": schema.BoolAttribute{
 				Required:            true,
 				MarkdownDescription: "Determines whether the metric is related to the model or deployment.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"is_geospatial": schema.BoolAttribute{
 				Required:            true,
 				MarkdownDescription: "Determines whether the metric is geospatial.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"type": schema.StringAttribute{
 				Required:            true,
@@ -78,6 +85,7 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 			"directionality": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "Directionality of the Custom Metric",
+				Validators:          DirectionalityValidators(),
 			},
 			"baseline_value": schema.Float64Attribute{
 				Optional:            true,
@@ -86,6 +94,9 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 			"time_step": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Custom metric time bucket size.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"timestamp": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -305,14 +316,11 @@ func (r *CustomMetricResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	request := &client.UpdateCustomMetricRequest{
-		Name:            StringValuePointerOptional(data.Name),
-		Description:     StringValuePointerOptional(data.Description),
-		Units:           StringValuePointerOptional(data.Units),
-		Directionality:  StringValuePointerOptional(data.Directionality),
-		Type:            StringValuePointerOptional(data.Type),
-		TimeStep:        StringValuePointerOptional(data.TimeStep),
-		IsModelSpecific: BoolValuePointerOptional(data.IsModelSpecific),
-		IsGeospatial:    BoolValuePointerOptional(data.IsGeospatial),
+		Name:           StringValuePointerOptional(data.Name),
+		Description:    StringValuePointerOptional(data.Description),
+		Units:          StringValuePointerOptional(data.Units),
+		Directionality: StringValuePointerOptional(data.Directionality),
+		Type:           StringValuePointerOptional(data.Type),
 	}
 
 	request.BaselineValues = &[]client.MetricBaselineValue{}

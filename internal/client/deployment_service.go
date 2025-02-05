@@ -270,20 +270,17 @@ type CustomMetric struct {
 }
 
 type UpdateCustomMetricRequest struct {
-	Name            *string                  `json:"name,omitempty"`
-	Units           *string                  `json:"units,omitempty"`
-	Directionality  *string                  `json:"directionality,omitempty"`
-	Type            *string                  `json:"type,omitempty"`
-	IsModelSpecific *bool                    `json:"isModelSpecific,omitempty"`
-	IsGeospatial    *bool                    `json:"isGeospatial,omitempty"`
-	Description     *string                  `json:"description,omitempty"`
-	TimeStep        *string                  `json:"timeStep,omitempty"`
-	BaselineValues  *[]MetricBaselineValue   `json:"baselineValues,omitempty"`
-	Timestamp       *MetricTimestampSpoofing `json:"timestamp,omitempty"`
-	AssociationID   *ColumnNameValue         `json:"associationId,omitempty"`
-	Value           *ColumnNameValue         `json:"value,omitempty"`
-	SampleCount     *ColumnNameValue         `json:"sampleCount,omitempty"`
-	Batch           *ColumnNameValue         `json:"batch,omitempty"`
+	Name           *string                  `json:"name,omitempty"`
+	Units          *string                  `json:"units,omitempty"`
+	Directionality *string                  `json:"directionality,omitempty"`
+	Type           *string                  `json:"type,omitempty"`
+	Description    *string                  `json:"description,omitempty"`
+	BaselineValues *[]MetricBaselineValue   `json:"baselineValues,omitempty"`
+	Timestamp      *MetricTimestampSpoofing `json:"timestamp,omitempty"`
+	AssociationID  *ColumnNameValue         `json:"associationId,omitempty"`
+	Value          *ColumnNameValue         `json:"value,omitempty"`
+	SampleCount    *ColumnNameValue         `json:"sampleCount,omitempty"`
+	Batch          *ColumnNameValue         `json:"batch,omitempty"`
 }
 
 type RetrainingPolicyRequest struct {

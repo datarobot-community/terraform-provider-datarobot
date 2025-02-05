@@ -25,7 +25,7 @@ resource "datarobot_custom_metric" "example" {
   is_geospatial     = false
 
   # Optional
-  time_step = "hours"
+  time_step = "hour"
   timestamp = {
     column_name = "timestamp_column"
     time_format = "%Y-%m-%dT%H:%M:%SZ"

@@ -127,12 +127,7 @@ func (r *CustomMetricJobResource) Schema(ctx context.Context, req resource.Schem
 				Computed:            true,
 				Default:             stringdefault.StaticString("higherIsBetter"),
 				MarkdownDescription: "The directionality of the Custom Metric.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"higherIsBetter",
-						"lowerIsBetter",
-					),
-				},
+				Validators:          DirectionalityValidators(),
 			},
 			"type": schema.StringAttribute{
 				Optional:            true,

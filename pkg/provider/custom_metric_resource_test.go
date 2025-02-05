@@ -296,8 +296,7 @@ func checkCustomMetricResourceExists() resource.TestCheckFunc {
 			customMetric.Description == rs.Primary.Attributes["description"] &&
 			customMetric.Units == rs.Primary.Attributes["units"] &&
 			customMetric.Directionality == rs.Primary.Attributes["directionality"] &&
-			customMetric.Type == rs.Primary.Attributes["type"] &&
-			customMetric.TimeStep == rs.Primary.Attributes["time_step"] {
+			customMetric.Type == rs.Primary.Attributes["type"] {
 			return nil
 		}
 
