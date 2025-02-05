@@ -1,3 +1,7 @@
+## 0.8.2
+
+- Deployment feature cache settings
+
 ## 0.8.1
 
 - Add batch_monitoring Deployment setting

@@ -51,6 +51,7 @@ resource "datarobot_deployment" "example" {
   prediction_warning_settings           = {}
   prediction_intervals_settings         = {}
   predictions_settings                  = {}
+  feature_cache_settings                = {}
   health_settings                       = {}
   runtime_parameter_values = [
     {
@@ -84,6 +85,7 @@ output "datarobot_deployment_id" {
 - `challenger_models_settings` (Attributes) The challenger models settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_models_settings))
 - `challenger_replay_settings` (Attributes) The challenger replay settings for the Deployment. (see [below for nested schema](#nestedatt--challenger_replay_settings))
 - `drift_tracking_settings` (Attributes) The drift tracking settings for the Deployment. (see [below for nested schema](#nestedatt--drift_tracking_settings))
+- `feature_cache_settings` (Attributes) The feature cache settings for this Deployment. (see [below for nested schema](#nestedatt--feature_cache_settings))
 - `health_settings` (Attributes) The health settings for this Deployment. (see [below for nested schema](#nestedatt--health_settings))
 - `importance` (String) The importance of the Deployment.
 - `prediction_intervals_settings` (Attributes) The prediction intervals settings for this Deployment. (see [below for nested schema](#nestedatt--prediction_intervals_settings))
@@ -153,6 +155,31 @@ Optional:
 - `feature_selection` (String) The feature selection method to be used for drift tracking.
 - `target_drift_enabled` (Boolean) If target drift tracking is to be turned on.
 - `tracked_features` (List of String) List of features to be tracked for drift.
+
+
+<a id="nestedatt--feature_cache_settings"></a>
+### Nested Schema for `feature_cache_settings`
+
+Required:
+
+- `enabled` (Boolean) If feature cache is enabled for this Deployment.
+
+Optional:
+
+- `fetching` (Boolean) If feature cache fetching is enabled.
+- `schedule` (Attributes) Defines the feature cache schedule. (see [below for nested schema](#nestedatt--feature_cache_settings--schedule))
+
+<a id="nestedatt--feature_cache_settings--schedule"></a>
+### Nested Schema for `feature_cache_settings.schedule`
+
+Required:
+
+- `day_of_month` (List of String) Days of the month.
+- `day_of_week` (List of String) Days of the week.
+- `hour` (List of String) Hours of the day.
+- `minute` (List of String) Minutes of the day.
+- `month` (List of String) Months of the year.
+
 
 
 <a id="nestedatt--health_settings"></a>

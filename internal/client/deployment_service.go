@@ -165,6 +165,12 @@ type DeploymentTimelinessHealthSettings struct {
 	ExpectedFrequency *string `json:"expectedFrequency,omitempty"`
 }
 
+type DeploymentFeatureCacheSettings struct {
+	Enabled  bool      `json:"enabled"`
+	Fetching *bool     `json:"fetching,omitempty"`
+	Schedule *Schedule `json:"schedule,omitempty"`
+}
+
 type CustomMetricCondition struct {
 	MetricID        string  `json:"metricId"`
 	CompareOperator string  `json:"compareOperator"`

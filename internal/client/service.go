@@ -135,6 +135,8 @@ type Service interface {
 	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
 	GetDeploymentHealthSettings(ctx context.Context, id string) (*DeploymentHealthSettings, error)
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
+	GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*DeploymentFeatureCacheSettings, error)
+	UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *DeploymentFeatureCacheSettings) (*DeploymentFeatureCacheSettings, error)
 
 	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
 	GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error)
@@ -635,6 +637,14 @@ func (s *ServiceImpl) GetDeploymentHealthSettings(ctx context.Context, id string
 
 func (s *ServiceImpl) UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error) {
 	return Patch[DeploymentHealthSettings](s.client, ctx, "/deployments/"+id+"/healthSettings/", req)
+}
+
+func (s *ServiceImpl) GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*DeploymentFeatureCacheSettings, error) {
+	return Get[DeploymentFeatureCacheSettings](s.client, ctx, "/deployments/"+id+"/featureCache/")
+}
+
+func (s *ServiceImpl) UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *DeploymentFeatureCacheSettings) (*DeploymentFeatureCacheSettings, error) {
+	return Patch[DeploymentFeatureCacheSettings](s.client, ctx, "/deployments/"+id+"/featureCache/", req)
 }
 
 func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {

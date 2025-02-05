@@ -486,6 +486,51 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					},
 				},
 			},
+			"feature_cache_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The feature cache settings for this Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Required:            true,
+						MarkdownDescription: "If feature cache is enabled for this Deployment.",
+					},
+					"fetching": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "If feature cache fetching is enabled.",
+					},
+					"schedule": schema.SingleNestedAttribute{
+						Optional:    true,
+						Description: "Defines the feature cache schedule.",
+						Attributes: map[string]schema.Attribute{
+							"minute": schema.ListAttribute{
+								Required:    true,
+								Description: "Minutes of the day.",
+								ElementType: types.StringType,
+							},
+							"hour": schema.ListAttribute{
+								Required:    true,
+								Description: "Hours of the day.",
+								ElementType: types.StringType,
+							},
+							"month": schema.ListAttribute{
+								Required:    true,
+								Description: "Months of the year.",
+								ElementType: types.StringType,
+							},
+							"day_of_month": schema.ListAttribute{
+								Required:    true,
+								Description: "Days of the month.",
+								ElementType: types.StringType,
+							},
+							"day_of_week": schema.ListAttribute{
+								Required:    true,
+								Description: "Days of the week.",
+								ElementType: types.StringType,
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -995,6 +1040,29 @@ func (r *DeploymentResource) updateDeploymentSettings(
 
 		traceAPICall("UpdateDeploymentHealthSettings")
 		_, err = r.provider.service.UpdateDeploymentHealthSettings(ctx, id, req)
+		if err != nil {
+			return
+		}
+	}
+
+	if data.FeatureCacheSettings != nil {
+		req := &client.DeploymentFeatureCacheSettings{
+			Enabled:  data.FeatureCacheSettings.Enabled.ValueBool(),
+			Fetching: BoolValuePointerOptional(data.FeatureCacheSettings.Fetching),
+		}
+
+		if data.FeatureCacheSettings.Schedule != nil {
+			req.Schedule = &client.Schedule{
+				Minute:     convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Minute),
+				Hour:       convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Hour),
+				Month:      convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Month),
+				DayOfMonth: convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.DayOfMonth),
+				DayOfWeek:  convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.DayOfWeek),
+			}
+		}
+
+		traceAPICall("UpdateDeploymentFeatureCacheSettings")
+		_, err = r.provider.service.UpdateDeploymentFeatureCacheSettings(ctx, id, req)
 		if err != nil {
 			return
 		}
