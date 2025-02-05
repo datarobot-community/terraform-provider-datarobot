@@ -106,16 +106,6 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 					},
 				},
 			},
-			"association_id": schema.SingleNestedAttribute{
-				Optional:    true,
-				Description: "A Custom Metric association_id column source when reading values from columnar dataset.",
-				Attributes: map[string]schema.Attribute{
-					"column_name": schema.StringAttribute{
-						Optional:    true,
-						Description: "Column name.",
-					},
-				},
-			},
 			"value": schema.SingleNestedAttribute{
 				Optional:    true,
 				Description: "A Custom Metric value source when reading values from columnar dataset.",
@@ -268,11 +258,6 @@ func (r *CustomMetricResource) Read(ctx context.Context, req resource.ReadReques
 		baselineValues := *customMetric.BaselineValues
 		data.BaselineValue = types.Float64Value(baselineValues[0].Value)
 	}
-	if customMetric.AssocationID != nil {
-		data.AssociationID = &ColumnNameValue{
-			ColumnName: types.StringValue(customMetric.AssocationID.ColumnName),
-		}
-	}
 	if customMetric.Batch != nil {
 		data.Batch = &ColumnNameValue{
 			ColumnName: types.StringValue(customMetric.Batch.ColumnName),
@@ -344,12 +329,6 @@ func (r *CustomMetricResource) Update(ctx context.Context, req resource.UpdateRe
 	if data.Batch != nil {
 		request.Batch = &client.ColumnNameValue{
 			ColumnName: data.Batch.ColumnName.ValueString(),
-		}
-	}
-
-	if data.AssociationID != nil {
-		request.AssociationID = &client.ColumnNameValue{
-			ColumnName: data.AssociationID.ColumnName.ValueString(),
 		}
 	}
 

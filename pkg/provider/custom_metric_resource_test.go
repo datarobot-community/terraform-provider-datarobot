@@ -72,9 +72,6 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	sampleCountColumn := "sample_count"
 	newSampleCountColumn := "new_sample_count"
 
-	associationIDColumn := "association_id"
-	newAssociationIDColumn := "new_association_id"
-
 	baselineValue := 0.4
 	newBaselineValue := 0.5
 
@@ -102,7 +99,6 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					valueColumn,
 					batchColumn,
 					sampleCountColumn,
-					associationIDColumn,
 					baselineValue,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -118,7 +114,6 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttr(resourceName, "value.column_name", valueColumn),
 					resource.TestCheckResourceAttr(resourceName, "batch.column_name", batchColumn),
 					resource.TestCheckResourceAttr(resourceName, "sample_count.column_name", sampleCountColumn),
-					resource.TestCheckResourceAttr(resourceName, "association_id.column_name", associationIDColumn),
 				),
 			},
 			// Update attributes
@@ -143,7 +138,6 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					newValueColumn,
 					newBatchColumn,
 					newSampleCountColumn,
-					newAssociationIDColumn,
 					newBaselineValue,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -159,7 +153,6 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					resource.TestCheckResourceAttr(resourceName, "value.column_name", newValueColumn),
 					resource.TestCheckResourceAttr(resourceName, "batch.column_name", newBatchColumn),
 					resource.TestCheckResourceAttr(resourceName, "sample_count.column_name", newSampleCountColumn),
-					resource.TestCheckResourceAttr(resourceName, "association_id.column_name", newAssociationIDColumn),
 				),
 			},
 			// Delete is tested automatically
@@ -196,8 +189,7 @@ func customMetricResourceConfig(
 	timeStampColumn,
 	value,
 	batch,
-	sampleCount,
-	associationID string,
+	sampleCount string,
 	baselineValue float64,
 ) string {
 	timeFormat := "%Y-%m-%dT%H:%M:%SZ"
@@ -249,9 +241,6 @@ resource "datarobot_custom_metric" "test" {
 	sample_count = {
 		column_name = "%s"
 	}
-	association_id = {
-		column_name = "%s"
-	}
 }
 `, nameSalt,
 		name,
@@ -265,7 +254,6 @@ resource "datarobot_custom_metric" "test" {
 		value,
 		batch,
 		sampleCount,
-		associationID,
 	)
 }
 

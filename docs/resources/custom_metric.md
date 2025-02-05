@@ -65,7 +65,6 @@ output "example_id" {
 
 ### Optional
 
-- `association_id` (Attributes) A Custom Metric association_id column source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--association_id))
 - `baseline_value` (Number) The baseline value used to add “reference dots” to the values over time chart.
 - `batch` (Attributes) A Custom Metric batch ID source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--batch))
 - `description` (String) Description of the Custom Metric.
@@ -76,14 +75,6 @@ output "example_id" {
 ### Read-Only
 
 - `id` (String) ID of the Custom Metric.
-
-<a id="nestedatt--association_id"></a>
-### Nested Schema for `association_id`
-
-Optional:
-
-- `column_name` (String) Column name.
-
 
 <a id="nestedatt--batch"></a>
 ### Nested Schema for `batch`

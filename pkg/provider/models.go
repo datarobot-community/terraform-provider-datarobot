@@ -304,7 +304,6 @@ type CustomMetricResourceModel struct {
 	IsGeospatial    types.Bool               `tfsdk:"is_geospatial"`
 	BaselineValue   types.Float64            `tfsdk:"baseline_value"`
 	Timestamp       *MetricTimestampSpoofing `tfsdk:"timestamp"`
-	AssociationID   *ColumnNameValue         `tfsdk:"association_id"`
 	Value           *ColumnNameValue         `tfsdk:"value"`
 	SampleCount     *ColumnNameValue         `tfsdk:"sample_count"`
 	Batch           *ColumnNameValue         `tfsdk:"batch"`
