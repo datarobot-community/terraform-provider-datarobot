@@ -70,7 +70,6 @@ output "example_id" {
 - `batch` (Attributes) A Custom Metric batch ID source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--batch))
 - `description` (String) Description of the Custom Metric.
 - `sample_count` (Attributes) A Custom Metric sample source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--sample_count))
-- `time_step` (String) Custom metric time bucket size.
 - `timestamp` (Attributes) A Custom Metric timestamp column source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--timestamp))
 - `value` (Attributes) A Custom Metric value source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--value))
 
