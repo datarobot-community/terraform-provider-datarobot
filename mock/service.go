@@ -154,6 +154,21 @@ func (mr *MockServiceMockRecorder) CreateCustomJob(ctx, req interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJob", reflect.TypeOf((*MockService)(nil).CreateCustomJob), ctx, req)
 }
 
+// CreateCustomMetric mocks base method.
+func (m *MockService) CreateCustomMetric(ctx context.Context, deploymentID string, req *client.CreateCustomMetricRequest) (*client.CustomMetric, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomMetric", ctx, deploymentID, req)
+	ret0, _ := ret[0].(*client.CustomMetric)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomMetric indicates an expected call of CreateCustomMetric.
+func (mr *MockServiceMockRecorder) CreateCustomMetric(ctx, deploymentID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomMetric", reflect.TypeOf((*MockService)(nil).CreateCustomMetric), ctx, deploymentID, req)
+}
+
 // CreateCustomMetricFromJob mocks base method.
 func (m *MockService) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *client.CreateCustomMetricFromJobRequest) (*client.CustomMetric, error) {
 	m.ctrl.T.Helper()

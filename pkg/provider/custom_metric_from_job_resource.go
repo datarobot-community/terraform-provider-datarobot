@@ -17,6 +17,7 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &CustomMetricFromJobResource{}
 var _ resource.ResourceWithImportState = &CustomMetricFromJobResource{}
 
 func NewCustomMetricFromJobResource() resource.Resource {
@@ -314,12 +315,12 @@ func (r *CustomMetricFromJobResource) Update(ctx context.Context, req resource.U
 	}
 
 	request := &client.UpdateCustomMetricRequest{
-		Name:        data.Name.ValueString(),
+		Name:        StringValuePointerOptional(data.Name),
 		Description: StringValuePointerOptional(data.Description),
 	}
 
 	if IsKnown(data.BaselineValue) {
-		request.BaselineValues = []client.MetricBaselineValue{
+		request.BaselineValues = &[]client.MetricBaselineValue{
 			{
 				Value: data.BaselineValue.ValueFloat64(),
 			},

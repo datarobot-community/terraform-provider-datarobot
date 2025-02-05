@@ -234,28 +234,50 @@ type ColumnNameValue struct {
 	ColumnName string `json:"columnName"`
 }
 
+type CreateCustomMetricRequest struct {
+	Name            string                   `json:"name"`
+	Description     string                   `json:"description"`
+	Directionality  string                   `json:"directionality"`
+	Units           string                   `json:"units"`
+	Type            string                   `json:"type"`
+	IsModelSpecific bool                     `json:"isModelSpecific"`
+	IsGeospatial    bool                     `json:"isGeospatial"`
+	BaselineValues  []MetricBaselineValue    `json:"baselineValues,omitempty"`
+	Timestamp       *MetricTimestampSpoofing `json:"timestamp,omitempty"`
+	Value           *ColumnNameValue         `json:"value,omitempty"`
+	SampleCount     *ColumnNameValue         `json:"sampleCount,omitempty"`
+	Batch           *ColumnNameValue         `json:"batch,omitempty"`
+}
+
 type CustomMetric struct {
-	ID             string                   `json:"id"`
-	CustomJobID    string                   `json:"customJobId"`
-	Name           string                   `json:"name"`
-	Description    string                   `json:"description,omitempty"`
-	BaselineValues []MetricBaselineValue    `json:"baselineValues,omitempty"`
-	Timestamp      *MetricTimestampSpoofing `json:"timestamp,omitempty"`
-	Value          *ColumnNameValue         `json:"value,omitempty"`
-	SampleCount    *ColumnNameValue         `json:"sampleCount,omitempty"`
-	Batch          *ColumnNameValue         `json:"batch,omitempty"`
-	Schedule       *Schedule                `json:"schedule,omitempty"`
+	ID              string                   `json:"id"`
+	CustomJobID     string                   `json:"customJobId"`
+	Name            string                   `json:"name"`
+	Description     string                   `json:"description,omitempty"`
+	Units           string                   `json:"units"`
+	Directionality  string                   `json:"directionality"`
+	Type            string                   `json:"type"`
+	IsModelSpecific bool                     `json:"isModelSpecific"`
+	IsGeospatial    bool                     `json:"isGeospatial"`
+	TimeStep        string                   `json:"timeStep,omitempty"`
+	BaselineValues  *[]MetricBaselineValue   `json:"baselineValues,omitempty"`
+	Timestamp       *MetricTimestampSpoofing `json:"timestamp,omitempty"`
+	Value           *ColumnNameValue         `json:"value,omitempty"`
+	SampleCount     *ColumnNameValue         `json:"sampleCount,omitempty"`
+	Batch           *ColumnNameValue         `json:"batch,omitempty"`
 }
 
 type UpdateCustomMetricRequest struct {
-	Name           string                   `json:"name,omitempty"`
+	Name           *string                  `json:"name,omitempty"`
+	Units          *string                  `json:"units,omitempty"`
+	Directionality *string                  `json:"directionality,omitempty"`
+	Type           *string                  `json:"type,omitempty"`
 	Description    *string                  `json:"description,omitempty"`
-	BaselineValues []MetricBaselineValue    `json:"baselineValues,omitempty"`
+	BaselineValues *[]MetricBaselineValue   `json:"baselineValues,omitempty"`
 	Timestamp      *MetricTimestampSpoofing `json:"timestamp,omitempty"`
 	Value          *ColumnNameValue         `json:"value,omitempty"`
 	SampleCount    *ColumnNameValue         `json:"sampleCount,omitempty"`
 	Batch          *ColumnNameValue         `json:"batch,omitempty"`
-	Schedule       *Schedule                `json:"schedule,omitempty"`
 }
 
 type RetrainingPolicyRequest struct {

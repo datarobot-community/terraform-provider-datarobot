@@ -305,6 +305,15 @@ func TimeFormatValidators() []validator.String {
 	}
 }
 
+func DirectionalityValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"lowerIsBetter",
+			"higherIsBetter",
+		),
+	}
+}
+
 func ChannelTypeValidators() []validator.String {
 	return []validator.String{
 		stringvalidator.OneOf(

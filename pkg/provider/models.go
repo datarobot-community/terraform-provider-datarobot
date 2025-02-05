@@ -292,6 +292,23 @@ type CustomMetricFromJobResourceModel struct {
 	ParameterOverrides types.List               `tfsdk:"parameter_overrides"`
 }
 
+type CustomMetricResourceModel struct {
+	ID              types.String             `tfsdk:"id"`
+	DeploymentID    types.String             `tfsdk:"deployment_id"`
+	Name            types.String             `tfsdk:"name"`
+	Description     types.String             `tfsdk:"description"`
+	Directionality  types.String             `tfsdk:"directionality"`
+	Units           types.String             `tfsdk:"units"`
+	Type            types.String             `tfsdk:"type"`
+	IsModelSpecific types.Bool               `tfsdk:"is_model_specific"`
+	IsGeospatial    types.Bool               `tfsdk:"is_geospatial"`
+	BaselineValue   types.Float64            `tfsdk:"baseline_value"`
+	Timestamp       *MetricTimestampSpoofing `tfsdk:"timestamp"`
+	Value           *ColumnNameValue         `tfsdk:"value"`
+	SampleCount     *ColumnNameValue         `tfsdk:"sample_count"`
+	Batch           *ColumnNameValue         `tfsdk:"batch"`
+}
+
 type MetricTimestampSpoofing struct {
 	ColumnName types.String `tfsdk:"column_name"`
 	TimeFormat types.String `tfsdk:"time_format"`

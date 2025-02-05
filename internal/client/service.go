@@ -157,6 +157,7 @@ type Service interface {
 
 	// Custom Metric
 	CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error)
+	CreateCustomMetric(ctx context.Context, deploymentID string, req *CreateCustomMetricRequest) (*CustomMetric, error)
 	GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error)
 	UpdateCustomMetric(ctx context.Context, deploymentID string, id string, req *UpdateCustomMetricRequest) (*CustomMetric, error)
 	DeleteCustomMetric(ctx context.Context, deploymentID string, id string) error
@@ -697,6 +698,10 @@ func (s *ServiceImpl) DeleteNotificationPolicy(ctx context.Context, relatedEntit
 
 func (s *ServiceImpl) CreateCustomMetricFromJob(ctx context.Context, deploymentID string, req *CreateCustomMetricFromJobRequest) (*CustomMetric, error) {
 	return Post[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/fromCustomJob/", req)
+}
+
+func (s *ServiceImpl) CreateCustomMetric(ctx context.Context, deploymentID string, req *CreateCustomMetricRequest) (*CustomMetric, error) {
+	return Post[CustomMetric](s.client, ctx, "/deployments/"+deploymentID+"/customMetrics/", req)
 }
 
 func (s *ServiceImpl) GetCustomMetric(ctx context.Context, deploymentID string, id string) (*CustomMetric, error) {
