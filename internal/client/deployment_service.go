@@ -239,7 +239,6 @@ type CreateCustomMetricRequest struct {
 	Description     string                   `json:"description"`
 	Directionality  string                   `json:"directionality"`
 	Units           string                   `json:"units"`
-	TimeStep        *string                  `json:"timeStep,omitempty"`
 	Type            string                   `json:"type"`
 	IsModelSpecific bool                     `json:"isModelSpecific"`
 	IsGeospatial    bool                     `json:"isGeospatial"`

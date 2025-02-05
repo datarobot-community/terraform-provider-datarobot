@@ -300,7 +300,6 @@ type CustomMetricResourceModel struct {
 	Directionality  types.String             `tfsdk:"directionality"`
 	Units           types.String             `tfsdk:"units"`
 	Type            types.String             `tfsdk:"type"`
-	TimeStep        types.String             `tfsdk:"time_step"`
 	IsModelSpecific types.Bool               `tfsdk:"is_model_specific"`
 	IsGeospatial    types.Bool               `tfsdk:"is_geospatial"`
 	BaselineValue   types.Float64            `tfsdk:"baseline_value"`

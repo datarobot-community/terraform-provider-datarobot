@@ -91,13 +91,6 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 				Optional:            true,
 				MarkdownDescription: "The baseline value used to add “reference dots” to the values over time chart.",
 			},
-			"time_step": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "Custom metric time bucket size.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
 			"timestamp": schema.SingleNestedAttribute{
 				Optional:    true,
 				Description: "A Custom Metric timestamp column source when reading values from columnar dataset.",
@@ -188,7 +181,6 @@ func (r *CustomMetricResource) Create(ctx context.Context, req resource.CreateRe
 		IsGeospatial:    data.IsGeospatial.ValueBool(),
 		Type:            data.Type.ValueString(),
 		Directionality:  data.Directionality.ValueString(),
-		TimeStep:        StringValuePointerOptional(data.TimeStep),
 	}
 
 	if IsKnown(data.BaselineValue) {
@@ -272,7 +264,6 @@ func (r *CustomMetricResource) Read(ctx context.Context, req resource.ReadReques
 	data.Type = types.StringValue(customMetric.Type)
 	data.IsModelSpecific = types.BoolValue(customMetric.IsModelSpecific)
 	data.IsGeospatial = types.BoolValue(customMetric.IsGeospatial)
-	data.TimeStep = types.StringValue(customMetric.TimeStep)
 	if customMetric.BaselineValues != nil && len(*customMetric.BaselineValues) > 0 {
 		baselineValues := *customMetric.BaselineValues
 		data.BaselineValue = types.Float64Value(baselineValues[0].Value)
