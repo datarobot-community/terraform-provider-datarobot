@@ -165,6 +165,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewCustomJobResource,
 		NewCustomMetricJobResource,
 		NewCustomMetricFromJobResource,
+		NewCustomMetricResource,
 		NewRegisteredModelResource,
 		NewRegisteredModelFromLeaderboardResource,
 		NewPredictionEnvironmentResource,

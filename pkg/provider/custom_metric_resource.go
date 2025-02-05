@@ -9,34 +9,32 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &CustomMetricFromJobResource{}
-var _ resource.ResourceWithImportState = &CustomMetricFromJobResource{}
+var _ resource.Resource = &CustomMetricResource{}
+var _ resource.ResourceWithImportState = &CustomMetricResource{}
 
-func NewCustomMetricFromJobResource() resource.Resource {
-	return &CustomMetricFromJobResource{}
+func NewCustomMetricResource() resource.Resource {
+	return &CustomMetricResource{}
 }
 
 // VectorDatabaseResource defines the resource implementation.
-type CustomMetricFromJobResource struct {
+type CustomMetricResource struct {
 	provider *Provider
 }
 
-func (r *CustomMetricFromJobResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_custom_metric_from_job"
+func (r *CustomMetricResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_custom_metric"
 }
 
-func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Custom Metric From Job",
+		MarkdownDescription: "Custom Metric",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -46,35 +44,52 @@ func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.S
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"custom_job_id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "ID of the Custom Job.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
 			"deployment_id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "ID of the Deployment.",
+				MarkdownDescription: "ID of the Deployment for the Custom Metric.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Name of the metric.",
+				MarkdownDescription: "Name of the Custom Metric.",
 			},
 			"description": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "Description of the metric.",
+				MarkdownDescription: "Description of the Custom Metric.",
+			},
+			"units": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "The units, or the y-axis label, of the given Custom Metric.",
+			},
+			"is_model_specific": schema.BoolAttribute{
+				Required:            true,
+				MarkdownDescription: "Determines whether the metric is related to the model or deployment.",
+			},
+			"is_geospatial": schema.BoolAttribute{
+				Required:            true,
+				MarkdownDescription: "Determines whether the metric is geospatial.",
+			},
+			"type": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "Aggregation type of the Custom Metric.",
+			},
+			"directionality": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "Directionality of the Custom Metric",
 			},
 			"baseline_value": schema.Float64Attribute{
 				Optional:            true,
-				MarkdownDescription: "Baseline value for the metric.",
+				MarkdownDescription: "The baseline value used to add “reference dots” to the values over time chart.",
+			},
+			"time_step": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Custom metric time bucket size.",
 			},
 			"timestamp": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Timestamp spoofing when reading values from file, like dataset. By default, we replicate pd.to_datetime formatting behaviour.",
+				Description: "A Custom Metric timestamp column source when reading values from columnar dataset.",
 				Attributes: map[string]schema.Attribute{
 					"column_name": schema.StringAttribute{
 						Optional:    true,
@@ -87,9 +102,9 @@ func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.S
 					},
 				},
 			},
-			"value": schema.SingleNestedAttribute{
+			"association_id": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Value source when reading values from columnar dataset like a file.",
+				Description: "A Custom Metric association_id column source when reading values from columnar dataset.",
 				Attributes: map[string]schema.Attribute{
 					"column_name": schema.StringAttribute{
 						Optional:    true,
@@ -97,9 +112,9 @@ func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.S
 					},
 				},
 			},
-			"batch": schema.SingleNestedAttribute{
+			"value": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Batch ID source when reading values from columnar dataset like a file.",
+				Description: "A Custom Metric value source when reading values from columnar dataset.",
 				Attributes: map[string]schema.Attribute{
 					"column_name": schema.StringAttribute{
 						Optional:    true,
@@ -109,68 +124,21 @@ func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.S
 			},
 			"sample_count": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Points to a weight column if users provide pre-aggregated metric values. Used with columnar datasets.",
+				Description: "A Custom Metric sample source when reading values from columnar dataset.",
 				Attributes: map[string]schema.Attribute{
 					"column_name": schema.StringAttribute{
-						Required:    true,
+						Optional:    true,
 						Description: "Column name.",
 					},
 				},
 			},
-			"schedule": schema.SingleNestedAttribute{
+			"batch": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Defines at what intervals the metric job should run.",
-				PlanModifiers: []planmodifier.Object{
-					objectplanmodifier.RequiresReplace(),
-				},
+				Description: "A Custom Metric batch ID source when reading values from columnar dataset.",
 				Attributes: map[string]schema.Attribute{
-					"minute": schema.ListAttribute{
-						Required:    true,
-						Description: "Minutes of the day when the metric job will run.",
-						ElementType: types.StringType,
-					},
-					"hour": schema.ListAttribute{
-						Required:    true,
-						Description: "Hours of the day when the metric job will run.",
-						ElementType: types.StringType,
-					},
-					"month": schema.ListAttribute{
-						Required:    true,
-						Description: "Months of the year when the metric job will run.",
-						ElementType: types.StringType,
-					},
-					"day_of_month": schema.ListAttribute{
-						Required:    true,
-						Description: "Days of the month when the metric job will run.",
-						ElementType: types.StringType,
-					},
-					"day_of_week": schema.ListAttribute{
-						Required:    true,
-						Description: "Days of the week when the metric job will run.",
-						ElementType: types.StringType,
-					},
-				},
-			},
-			"parameter_overrides": schema.ListNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Additional parameters to be injected into the Metric Job at runtime.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
-				},
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"key": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The name of the runtime parameter.",
-						},
-						"type": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The type of the runtime parameter.",
-						},
-						"value": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
-						},
+					"column_name": schema.StringAttribute{
+						Optional:    true,
+						Description: "Column name.",
 					},
 				},
 			},
@@ -178,7 +146,7 @@ func (r *CustomMetricFromJobResource) Schema(ctx context.Context, req resource.S
 	}
 }
 
-func (r *CustomMetricFromJobResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *CustomMetricResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -193,18 +161,23 @@ func (r *CustomMetricFromJobResource) Configure(ctx context.Context, req resourc
 	}
 }
 
-func (r *CustomMetricFromJobResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data CustomMetricFromJobResourceModel
+func (r *CustomMetricResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data CustomMetricResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	request := &client.CreateCustomMetricFromJobRequest{
-		CustomJobID: data.CustomJobID.ValueString(),
-		Name:        data.Name.ValueString(),
-		Description: StringValuePointerOptional(data.Description),
+	request := &client.CreateCustomMetricRequest{
+		Name:            data.Name.ValueString(),
+		Description:     data.Description.ValueString(),
+		Units:           data.Units.ValueString(),
+		IsModelSpecific: data.IsModelSpecific.ValueBool(),
+		IsGeospatial:    data.IsGeospatial.ValueBool(),
+		Type:            data.Type.ValueString(),
+		Directionality:  data.Directionality.ValueString(),
+		TimeStep:        StringValuePointerOptional(data.TimeStep),
 	}
 
 	if IsKnown(data.BaselineValue) {
@@ -240,24 +213,7 @@ func (r *CustomMetricFromJobResource) Create(ctx context.Context, req resource.C
 		}
 	}
 
-	if data.Schedule != nil {
-		schedule, err := convertSchedule(*data.Schedule)
-		if err != nil {
-			return
-		}
-		request.Schedule = &schedule
-	}
-
-	if IsKnown(data.ParameterOverrides) {
-		parameterOverrides, err := convertRuntimeParameterValuesToList(ctx, data.ParameterOverrides)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading parameter overrides", err.Error())
-			return
-		}
-		request.ParameterOverrides = parameterOverrides
-	}
-
-	customMetric, err := r.provider.service.CreateCustomMetricFromJob(ctx, data.DeploymentID.ValueString(), request)
+	customMetric, err := r.provider.service.CreateCustomMetric(ctx, data.DeploymentID.ValueString(), request)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Metric", err.Error())
 		return
@@ -267,8 +223,8 @@ func (r *CustomMetricFromJobResource) Create(ctx context.Context, req resource.C
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomMetricFromJobResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data CustomMetricFromJobResourceModel
+func (r *CustomMetricResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data CustomMetricResourceModel
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -299,15 +255,49 @@ func (r *CustomMetricFromJobResource) Read(ctx context.Context, req resource.Rea
 	}
 
 	data.Name = types.StringValue(customMetric.Name)
-	if customMetric.Description != "" {
-		data.Description = types.StringValue(customMetric.Description)
+	data.Description = types.StringValue(customMetric.Description)
+	data.Units = types.StringValue(customMetric.Units)
+	data.Directionality = types.StringValue(customMetric.Directionality)
+	data.Type = types.StringValue(customMetric.Type)
+	data.IsModelSpecific = types.BoolValue(customMetric.IsModelSpecific)
+	data.IsGeospatial = types.BoolValue(customMetric.IsGeospatial)
+	data.TimeStep = types.StringValue(customMetric.TimeStep)
+	if customMetric.BaselineValues != nil && len(*customMetric.BaselineValues) > 0 {
+		baselineValues := *customMetric.BaselineValues
+		data.BaselineValue = types.Float64Value(baselineValues[0].Value)
+	}
+	if customMetric.AssocationID != nil {
+		data.AssociationID = &ColumnNameValue{
+			ColumnName: types.StringValue(customMetric.AssocationID.ColumnName),
+		}
+	}
+	if customMetric.Batch != nil {
+		data.Batch = &ColumnNameValue{
+			ColumnName: types.StringValue(customMetric.Batch.ColumnName),
+		}
+	}
+	if customMetric.Value != nil {
+		data.Value = &ColumnNameValue{
+			ColumnName: types.StringValue(customMetric.Value.ColumnName),
+		}
+	}
+	if customMetric.SampleCount != nil {
+		data.SampleCount = &ColumnNameValue{
+			ColumnName: types.StringValue(customMetric.SampleCount.ColumnName),
+		}
+	}
+	if customMetric.Timestamp != nil {
+		data.Timestamp = &MetricTimestampSpoofing{
+			ColumnName: types.StringPointerValue(customMetric.Timestamp.ColumnName),
+			TimeFormat: types.StringPointerValue(customMetric.Timestamp.TimeFormat),
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomMetricFromJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data CustomMetricFromJobResourceModel
+func (r *CustomMetricResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data CustomMetricResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -315,10 +305,17 @@ func (r *CustomMetricFromJobResource) Update(ctx context.Context, req resource.U
 	}
 
 	request := &client.UpdateCustomMetricRequest{
-		Name:        StringValuePointerOptional(data.Name),
-		Description: StringValuePointerOptional(data.Description),
+		Name:            StringValuePointerOptional(data.Name),
+		Description:     StringValuePointerOptional(data.Description),
+		Units:           StringValuePointerOptional(data.Units),
+		Directionality:  StringValuePointerOptional(data.Directionality),
+		Type:            StringValuePointerOptional(data.Type),
+		TimeStep:        StringValuePointerOptional(data.TimeStep),
+		IsModelSpecific: BoolValuePointerOptional(data.IsModelSpecific),
+		IsGeospatial:    BoolValuePointerOptional(data.IsGeospatial),
 	}
 
+	request.BaselineValues = &[]client.MetricBaselineValue{}
 	if IsKnown(data.BaselineValue) {
 		request.BaselineValues = &[]client.MetricBaselineValue{
 			{
@@ -360,8 +357,8 @@ func (r *CustomMetricFromJobResource) Update(ctx context.Context, req resource.U
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func (r *CustomMetricFromJobResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data CustomMetricFromJobResourceModel
+func (r *CustomMetricResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data CustomMetricResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
@@ -378,34 +375,6 @@ func (r *CustomMetricFromJobResource) Delete(ctx context.Context, req resource.D
 	}
 }
 
-func (r *CustomMetricFromJobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *CustomMetricResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func (r *CustomMetricFromJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.Plan.Raw.IsNull() {
-		// Resource is being destroyed
-		return
-	}
-
-	var plan CustomMetricFromJobResourceModel
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-
-	if req.State.Raw.IsNull() {
-		// resource is being created
-		return
-	}
-
-	if !IsKnown(plan.ParameterOverrides) {
-		// use empty list if runtime parameter values are unknown
-		plan.ParameterOverrides, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-	}
-
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }

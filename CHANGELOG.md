@@ -1,3 +1,7 @@
+## 0.8.3
+
+- Custom Metric resource
+
 ## 0.8.2
 
 - Deployment feature cache settings
