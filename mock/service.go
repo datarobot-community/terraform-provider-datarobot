@@ -1139,6 +1139,21 @@ func (mr *MockServiceMockRecorder) GetDeploymentChallengerReplaySettings(ctx, id
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentChallengerReplaySettings", reflect.TypeOf((*MockService)(nil).GetDeploymentChallengerReplaySettings), ctx, id)
 }
 
+// GetDeploymentFeatureCacheSettings mocks base method.
+func (m *MockService) GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*client.DeploymentFeatureCacheSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentFeatureCacheSettings", ctx, id)
+	ret0, _ := ret[0].(*client.DeploymentFeatureCacheSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentFeatureCacheSettings indicates an expected call of GetDeploymentFeatureCacheSettings.
+func (mr *MockServiceMockRecorder) GetDeploymentFeatureCacheSettings(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentFeatureCacheSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentFeatureCacheSettings), ctx, id)
+}
+
 // GetDeploymentHealthSettings mocks base method.
 func (m *MockService) GetDeploymentHealthSettings(ctx context.Context, id string) (*client.DeploymentHealthSettings, error) {
 	m.ctrl.T.Helper()
@@ -1946,6 +1961,21 @@ func (m *MockService) UpdateDeploymentChallengerReplaySettings(ctx context.Conte
 func (mr *MockServiceMockRecorder) UpdateDeploymentChallengerReplaySettings(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentChallengerReplaySettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentChallengerReplaySettings), ctx, id, req)
+}
+
+// UpdateDeploymentFeatureCacheSettings mocks base method.
+func (m *MockService) UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *client.DeploymentFeatureCacheSettings) (*client.DeploymentFeatureCacheSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentFeatureCacheSettings", ctx, id, req)
+	ret0, _ := ret[0].(*client.DeploymentFeatureCacheSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeploymentFeatureCacheSettings indicates an expected call of UpdateDeploymentFeatureCacheSettings.
+func (mr *MockServiceMockRecorder) UpdateDeploymentFeatureCacheSettings(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentFeatureCacheSettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentFeatureCacheSettings), ctx, id, req)
 }
 
 // UpdateDeploymentHealthSettings mocks base method.

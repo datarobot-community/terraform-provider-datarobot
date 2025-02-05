@@ -36,6 +36,7 @@ resource "datarobot_deployment" "example" {
   prediction_warning_settings           = {}
   prediction_intervals_settings         = {}
   predictions_settings                  = {}
+  feature_cache_settings                = {}
   health_settings                       = {}
   runtime_parameter_values = [
     {

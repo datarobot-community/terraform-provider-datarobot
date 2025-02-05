@@ -375,6 +375,7 @@ type DeploymentResourceModel struct {
 	PredictionIntervalsSettings       *PredictionIntervalsSettings       `tfsdk:"prediction_intervals_settings"`
 	HealthSettings                    *HealthSettings                    `tfsdk:"health_settings"`
 	PredictionsSettings               *PredictionsSettings               `tfsdk:"predictions_settings"`
+	FeatureCacheSettings              *FeatureCacheSettings              `tfsdk:"feature_cache_settings"`
 }
 
 type BasicDeploymentSetting struct {
@@ -494,6 +495,12 @@ type PredictionsSettings struct {
 	MinComputes      types.Int64  `tfsdk:"min_computes"`
 	MaxComputes      types.Int64  `tfsdk:"max_computes"`
 	ResourceBundleID types.String `tfsdk:"resource_bundle_id"`
+}
+
+type FeatureCacheSettings struct {
+	Enabled  types.Bool `tfsdk:"enabled"`
+	Fetching types.Bool `tfsdk:"fetching"`
+	Schedule *Schedule  `tfsdk:"schedule"`
 }
 
 // DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
