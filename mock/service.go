@@ -79,6 +79,21 @@ func (mr *MockServiceMockRecorder) CreateApplicationSource(ctx interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSource", reflect.TypeOf((*MockService)(nil).CreateApplicationSource), ctx)
 }
 
+// CreateApplicationSourceFromTemplate mocks base method.
+func (m *MockService) CreateApplicationSourceFromTemplate(ctx context.Context, req *client.CreateApplicationSourceFromTemplateRequest) (*client.ApplicationSource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApplicationSourceFromTemplate", ctx, req)
+	ret0, _ := ret[0].(*client.ApplicationSource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateApplicationSourceFromTemplate indicates an expected call of CreateApplicationSourceFromTemplate.
+func (mr *MockServiceMockRecorder) CreateApplicationSourceFromTemplate(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSourceFromTemplate", reflect.TypeOf((*MockService)(nil).CreateApplicationSourceFromTemplate), ctx, req)
+}
+
 // CreateApplicationSourceVersion mocks base method.
 func (m *MockService) CreateApplicationSourceVersion(ctx context.Context, id string, req *client.CreateApplicationSourceVersionRequest) (*client.ApplicationSourceVersion, error) {
 	m.ctrl.T.Helper()
@@ -1062,6 +1077,36 @@ func (m *MockService) GetCustomModel(ctx context.Context, id string) (*client.Cu
 func (mr *MockServiceMockRecorder) GetCustomModel(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomModel", reflect.TypeOf((*MockService)(nil).GetCustomModel), ctx, id)
+}
+
+// GetCustomTemplate mocks base method.
+func (m *MockService) GetCustomTemplate(ctx context.Context, id string) (*client.CustomTemplate, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomTemplate", ctx, id)
+	ret0, _ := ret[0].(*client.CustomTemplate)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomTemplate indicates an expected call of GetCustomTemplate.
+func (mr *MockServiceMockRecorder) GetCustomTemplate(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomTemplate", reflect.TypeOf((*MockService)(nil).GetCustomTemplate), ctx, id)
+}
+
+// GetCustomTemplateFile mocks base method.
+func (m *MockService) GetCustomTemplateFile(ctx context.Context, customTemplateID, fileID string) (*client.CustomTemplateFile, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomTemplateFile", ctx, customTemplateID, fileID)
+	ret0, _ := ret[0].(*client.CustomTemplateFile)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomTemplateFile indicates an expected call of GetCustomTemplateFile.
+func (mr *MockServiceMockRecorder) GetCustomTemplateFile(ctx, customTemplateID, fileID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomTemplateFile", reflect.TypeOf((*MockService)(nil).GetCustomTemplateFile), ctx, customTemplateID, fileID)
 }
 
 // GetDataset mocks base method.

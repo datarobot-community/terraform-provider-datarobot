@@ -28,6 +28,10 @@ type UpdateApplicationRequest struct {
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
 }
 
+type CreateApplicationSourceFromTemplateRequest struct {
+	CustomTemplateID string `json:"customTemplateId"`
+}
+
 type UpdateApplicationSourceRequest struct {
 	Name string `json:"name"`
 }
@@ -70,4 +74,21 @@ type ApplicationResources struct {
 	Replicas        int64  `json:"replicas"`
 	ResourceLabel   string `json:"resourceLabel"`
 	SessionAffinity bool   `json:"sessionAffinity"`
+}
+
+type CustomTemplate struct {
+	ID    string               `json:"id"`
+	Name  string               `json:"name"`
+	Items []CustomTemplateItem `json:"items"`
+}
+
+type CustomTemplateItem struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type CustomTemplateFile struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
 }
