@@ -246,3 +246,35 @@ type CreateCustomModelVersionFromGuardsConfigurationResponse struct {
 type DependencyBuild struct {
 	BuildStatus string `json:"buildStatus"`
 }
+
+type CreateCustomModelLLMValidationRequest struct {
+	DeploymentID      string  `json:"deploymentId"`
+	ModelID           *string `json:"modelId,omitempty"`
+	Name              *string `json:"name,omitempty"`
+	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
+	PromptColumnName  string  `json:"promptColumnName"`
+	TargetColumnName  string  `json:"targetColumnName"`
+	UseCaseID         *string `json:"useCaseId,omitempty"`
+}
+
+type UpdateCustomModelLLMValidationRequest struct {
+	DeploymentID      *string `json:"deploymentId,omitempty"`
+	ModelID           *string `json:"modelId,omitempty"`
+	Name              *string `json:"name,omitempty"`
+	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
+	PromptColumnName  *string `json:"promptColumnName,omitempty"`
+	TargetColumnName  *string `json:"targetColumnName,omitempty"`
+}
+
+type CustomModelLLMValidation struct {
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	ModelID           string  `json:"modelId"`
+	DeploymentID      string  `json:"deploymentId"`
+	PredictionTimeout int64   `json:"predictionTimeout"`
+	PromptColumnName  string  `json:"promptColumnName"`
+	TargetColumnName  string  `json:"targetColumnName"`
+	UseCaseID         string  `json:"useCaseId"`
+	ValidationStatus  string  `json:"validationStatus"`
+	ErrorMessage      *string `json:"errorMessage,omitempty"`
+}

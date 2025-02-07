@@ -146,12 +146,28 @@ func getExponentialBackoff() backoff.BackOff {
 	return expBackoff
 }
 
+func waitForGenAITaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, true)
+}
+
 func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, false)
+}
+
+func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, id string, isGenAI bool) error {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
-		traceAPICall("GetTaskStatus")
-		task, err := s.GetTaskStatus(ctx, id)
+		var task *client.TaskStatusResponse
+		var err error
+		if isGenAI {
+			traceAPICall("GetGenAITaskStatus")
+			task, err = s.GetGenAITaskStatus(ctx, id)
+		} else {
+			traceAPICall("GetTaskStatus")
+			task, err = s.GetTaskStatus(ctx, id)
+		}
+
 		if err != nil {
 			if err.Error() == "request was redirected" { // the task was completed, so the request got redirected
 				return nil

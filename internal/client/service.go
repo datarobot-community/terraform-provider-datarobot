@@ -99,6 +99,12 @@ type Service interface {
 	CreateDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error)
 	GetDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error)
 
+	// Custom Model LLM Validation
+	CreateCustomModelLLMValidation(ctx context.Context, req *CreateCustomModelLLMValidationRequest) (*CustomModelLLMValidation, string, error)
+	GetCustomModelLLMValidation(ctx context.Context, id string) (*CustomModelLLMValidation, error)
+	UpdateCustomModelLLMValidation(ctx context.Context, id string, req *UpdateCustomModelLLMValidationRequest) (*CustomModelLLMValidation, error)
+	DeleteCustomModelLLMValidation(ctx context.Context, id string) error
+
 	// Registered Model
 	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
 	CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error)
@@ -208,6 +214,7 @@ type Service interface {
 
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
+	GetGenAITaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
 
 	// Add your service methods here
 }
@@ -522,6 +529,22 @@ func (s *ServiceImpl) CreateDependencyBuild(ctx context.Context, id string, vers
 
 func (s *ServiceImpl) GetDependencyBuild(ctx context.Context, id string, versionID string) (*DependencyBuild, error) {
 	return Get[DependencyBuild](s.client, ctx, "/customModels/"+id+"/versions/"+versionID+"/dependencyBuild/")
+}
+
+func (s *ServiceImpl) CreateCustomModelLLMValidation(ctx context.Context, req *CreateCustomModelLLMValidationRequest) (*CustomModelLLMValidation, string, error) {
+	return ExecuteAndExpectStatus[CustomModelLLMValidation](s.client, ctx, http.MethodPost, "/genai/customModelLLMValidations/", req)
+}
+
+func (s *ServiceImpl) GetCustomModelLLMValidation(ctx context.Context, id string) (*CustomModelLLMValidation, error) {
+	return Get[CustomModelLLMValidation](s.client, ctx, "/genai/customModelLLMValidations/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomModelLLMValidation(ctx context.Context, id string, req *UpdateCustomModelLLMValidationRequest) (*CustomModelLLMValidation, error) {
+	return Patch[CustomModelLLMValidation](s.client, ctx, "/genai/customModelLLMValidations/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteCustomModelLLMValidation(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/genai/customModelLLMValidations/"+id+"/")
 }
 
 // Registered Model Service Implementation.
@@ -883,4 +906,8 @@ func (s *ServiceImpl) GetExecutionEnvironmentVersion(ctx context.Context, id, ve
 
 func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {
 	return Get[TaskStatusResponse](s.client, ctx, "/status/"+id+"/")
+}
+
+func (s *ServiceImpl) GetGenAITaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {
+	return Get[TaskStatusResponse](s.client, ctx, "/genai/status/"+id+"/")
 }

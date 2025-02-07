@@ -77,7 +77,7 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"llm_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the LLM for the LLM Blueprint.",
-				Required:            true,
+				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					// in order to generate an update to the custom model resource, we need to force a replace
 					stringplanmodifier.RequiresReplace(),
@@ -143,6 +143,27 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 					},
 				},
 			},
+			"custom_model_llm_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The custom model LLM settings for the LLM Blueprint.",
+				Attributes: map[string]schema.Attribute{
+					"external_llm_context_size": schema.Int64Attribute{
+						Optional:            true,
+						MarkdownDescription: "The external LLM's context size, in tokens. This value is only used for pruning documents supplied to the LLM when a vector database is associated with the LLM blueprint. It does not affect the external LLM's actual context size in any way and is not supplied to the LLM.",
+					},
+					"system_prompt": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "System prompt guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.",
+					},
+					"validation_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The validation ID of the custom model LLM.",
+					},
+				},
+				PlanModifiers: []planmodifier.Object{
+					objectplanmodifier.RequiresReplace(),
+				},
+			},
 		},
 	}
 }
@@ -175,7 +196,7 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 		Description:      data.Description.ValueString(),
 		PlaygroundID:     data.PlaygroundID.ValueString(),
 		VectorDatabaseID: data.VectorDatabaseID.ValueString(),
-		LLMID:            data.LLMID.ValueString(),
+		LLMID:            StringValuePointerOptional(data.LLMID),
 		PromptType:       data.PromptType.ValueString(),
 	}
 
@@ -202,6 +223,14 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 		}
 		if IsKnown(data.VectorDatabaseSettings.MaxTokens) {
 			createLLMBlueprintRequest.VectorDatabaseSettings.MaxTokens = data.VectorDatabaseSettings.MaxTokens.ValueInt64()
+		}
+	}
+
+	if data.CustomModelLLMSettings != nil {
+		createLLMBlueprintRequest.CustomModelLLMSettings = &client.CustomModelLLMSettings{
+			ExternalLLMContextSize: Int64ValuePointerOptional(data.CustomModelLLMSettings.ExternalLLMContextSize),
+			SystemPrompt:           StringValuePointerOptional(data.CustomModelLLMSettings.SystemPrompt),
+			ValidationID:           StringValuePointerOptional(data.CustomModelLLMSettings.ValidationID),
 		}
 	}
 
@@ -249,7 +278,7 @@ func (r *LLMBlueprintResource) Read(ctx context.Context, req resource.ReadReques
 		data.Description = types.StringValue(llmBlueprint.Description)
 	}
 	data.PlaygroundID = types.StringValue(llmBlueprint.PlaygroundID)
-	data.LLMID = types.StringValue(llmBlueprint.LLMID)
+	data.LLMID = types.StringPointerValue(llmBlueprint.LLMID)
 	if llmBlueprint.VectorDatabaseID != "" {
 		data.VectorDatabaseID = types.StringValue(llmBlueprint.VectorDatabaseID)
 	}

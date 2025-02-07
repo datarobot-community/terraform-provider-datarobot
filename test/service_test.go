@@ -131,12 +131,13 @@ func TestCustomModel(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
+	llmID := "azure-openai-gpt-3.5-turbo"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
 		Description:  "This is a test LLM blueprint.",
 		PlaygroundID: playground.ID,
-		LLMID:        "azure-openai-gpt-3.5-turbo",
+		LLMID:        &llmID,
 	})
 	require.NoError(err)
 	require.NotEmpty(llmBlueprint.ID)
@@ -372,12 +373,13 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
+	llmID := "azure-openai-gpt-3.5-turbo"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
 		Description:  "This is a test LLM blueprint.",
 		PlaygroundID: playground.ID,
-		LLMID:        "azure-openai-gpt-3.5-turbo",
+		LLMID:        &llmID,
 	})
 	require.NoError(err)
 	require.NotEmpty(llmBlueprint.ID)
@@ -685,12 +687,13 @@ func TestLLMBlueprint(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
+	llmID := "azure-openai-gpt-3.5-turbo"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
 		Description:  "This is a test LLM blueprint.",
 		PlaygroundID: playground.ID,
-		LLMID:        "azure-openai-gpt-3.5-turbo",
+		LLMID:        &llmID,
 	})
 	require.NoError(err)
 	require.NotEmpty(llmBlueprint.ID)

@@ -6,8 +6,9 @@ type CreateLLMBlueprintRequest struct {
 	Description            string                  `json:"description,omitempty"`
 	VectorDatabaseID       string                  `json:"vectorDatabaseId,omitempty"`
 	VectorDatabaseSettings *VectorDatabaseSettings `json:"vectorDatabaseSettings,omitempty"`
-	LLMID                  string                  `json:"llmId,omitempty"`
+	LLMID                  *string                 `json:"llmId,omitempty"`
 	LLMSettings            *LLMSettings            `json:"llmSettings,omitempty"`
+	CustomModelLLMSettings *CustomModelLLMSettings `json:"customModelLlmSettings,omitempty"`
 	PromptType             string                  `json:"promptType,omitempty"`
 }
 
@@ -23,6 +24,12 @@ type LLMSettings struct {
 	SystemPrompt        string  `json:"systemPrompt"`
 }
 
+type CustomModelLLMSettings struct {
+	ExternalLLMContextSize *int64  `json:"externalLlmContextSize"`
+	SystemPrompt           *string `json:"systemPrompt,omitempty"`
+	ValidationID           *string `json:"validationId,omitempty"`
+}
+
 type UpdateLLMBlueprintRequest struct {
 	Name             string `json:"name,omitempty"`
 	Description      string `json:"description,omitempty"`
@@ -31,14 +38,15 @@ type UpdateLLMBlueprintRequest struct {
 }
 
 type LLMBlueprint struct {
-	ID               string      `json:"id"`
-	Name             string      `json:"name"`
-	Description      string      `json:"description"`
-	PlaygroundID     string      `json:"playgroundId"`
-	VectorDatabaseID string      `json:"vectorDatabaseId"`
-	LLMID            string      `json:"llmId"`
-	LLMSettings      LLMSettings `json:"llmSettings"`
-	PromptType       string      `json:"promptType"`
+	ID                     string                  `json:"id"`
+	Name                   string                  `json:"name"`
+	Description            string                  `json:"description"`
+	PlaygroundID           string                  `json:"playgroundId"`
+	VectorDatabaseID       string                  `json:"vectorDatabaseId"`
+	LLMID                  *string                 `json:"llmId,omitempty"`
+	LLMSettings            *LLMSettings            `json:"llmSettings,omitempty"`
+	CustomModelLLMSettings *CustomModelLLMSettings `json:"customModelLlmSettings,omitempty"`
+	PromptType             string                  `json:"promptType"`
 }
 
 type LanguageModelDefinitionAPIFormatted struct {

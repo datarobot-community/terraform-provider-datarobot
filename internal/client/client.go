@@ -185,7 +185,10 @@ func ExecuteAndExpectStatus[T any](c *Client, ctx context.Context, method, path 
 		if url != "" {
 			urlParts := strings.Split(url, "/")
 			if len(urlParts) > 6 {
-				statusId := urlParts[6] // e.g. https://app.datarobot.com/api/v2/status/<statusId>/
+				statusId := urlParts[6]             // e.g. https://app.datarobot.com/api/v2/status/<statusId>/
+				if strings.Contains(url, "genai") { // e.g. https://app.datarobot.com/api/v2/genai/status/<statusId>/
+					statusId = urlParts[7]
+				}
 				return resp, statusId, err
 			}
 		}

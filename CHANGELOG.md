@@ -1,3 +1,7 @@
+## 0.8.5
+
+- Custom Model LLM Validation Resource
+
 ## 0.8.4
 
 - Application Source from Template Resource
