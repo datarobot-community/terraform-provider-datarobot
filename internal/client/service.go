@@ -170,6 +170,7 @@ type Service interface {
 
 	// Application Source
 	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
+	CreateApplicationSourceFromTemplate(ctx context.Context, req *CreateApplicationSourceFromTemplateRequest) (*ApplicationSource, error)
 	GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error)
 	UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error)
 	CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error)
@@ -177,6 +178,10 @@ type Service interface {
 	UpdateApplicationSourceVersionFiles(ctx context.Context, id string, versionId string, files []FileInfo) (*ApplicationSourceVersion, error)
 	GetApplicationSourceVersion(ctx context.Context, id string, versionId string) (*ApplicationSourceVersion, error)
 	DeleteApplicationSource(ctx context.Context, id string) error
+
+	// Custom Template
+	GetCustomTemplate(ctx context.Context, id string) (*CustomTemplate, error)
+	GetCustomTemplateFile(ctx context.Context, customTemplateID, fileID string) (*CustomTemplateFile, error)
 
 	// Application
 	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error)
@@ -766,6 +771,10 @@ func (s *ServiceImpl) CreateApplicationSource(ctx context.Context) (*Application
 	return Post[ApplicationSource](s.client, ctx, "/customApplicationSources/", map[string]string{})
 }
 
+func (s *ServiceImpl) CreateApplicationSourceFromTemplate(ctx context.Context, req *CreateApplicationSourceFromTemplateRequest) (*ApplicationSource, error) {
+	return Post[ApplicationSource](s.client, ctx, "/customApplicationSources/fromCustomTemplate/", req)
+}
+
 func (s *ServiceImpl) GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error) {
 	return Get[ApplicationSource](s.client, ctx, "/customApplicationSources/"+id+"/")
 }
@@ -792,6 +801,14 @@ func (s *ServiceImpl) GetApplicationSourceVersion(ctx context.Context, id string
 
 func (s *ServiceImpl) DeleteApplicationSource(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customApplicationSources/"+id+"/")
+}
+
+func (s *ServiceImpl) GetCustomTemplate(ctx context.Context, id string) (*CustomTemplate, error) {
+	return Get[CustomTemplate](s.client, ctx, "/customTemplates/"+id+"/")
+}
+
+func (s *ServiceImpl) GetCustomTemplateFile(ctx context.Context, customTemplateID, fileID string) (*CustomTemplateFile, error) {
+	return Get[CustomTemplateFile](s.client, ctx, "/customTemplates/"+customTemplateID+"/files/"+fileID+"/")
 }
 
 func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error) {

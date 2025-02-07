@@ -1,3 +1,7 @@
+## 0.8.4
+
+- Application Source from Template Resource
+
 ## 0.8.3
 
 - Custom Metric resource
