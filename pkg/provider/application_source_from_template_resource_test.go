@@ -44,7 +44,7 @@ func TestApplicationSourceFromTemplateResourceSchema(t *testing.T) {
 func testApplicationSourceFromTemplateResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source_from_template.test"
 
-	newName := "new_example_name " + nameSalt
+	newName := "new_from_template " + nameSalt
 
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
