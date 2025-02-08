@@ -132,6 +132,7 @@ type LLMBlueprintResourceModel struct {
 	LLMID                  types.String            `tfsdk:"llm_id"`
 	LLMSettings            *LLMSettings            `tfsdk:"llm_settings"`
 	PromptType             types.String            `tfsdk:"prompt_type"`
+	CustomModelLLMSettings *CustomModelLLMSettings `tfsdk:"custom_model_llm_settings"`
 }
 
 type VectorDatabaseSettings struct {
@@ -144,6 +145,12 @@ type LLMSettings struct {
 	Temperature         types.Float64 `tfsdk:"temperature"`
 	TopP                types.Float64 `tfsdk:"top_p"`
 	SystemPrompt        types.String  `tfsdk:"system_prompt"`
+}
+
+type CustomModelLLMSettings struct {
+	ExternalLLMContextSize types.Int64  `tfsdk:"external_llm_context_size"`
+	SystemPrompt           types.String `tfsdk:"system_prompt"`
+	ValidationID           types.String `tfsdk:"validation_id"`
 }
 
 // ModelResourceModel describes the custom model resource.
@@ -238,6 +245,18 @@ type NemoInfo struct {
 type OverallModerationConfiguration struct {
 	TimeoutSec    types.Int64  `tfsdk:"timeout_sec"`
 	TimeoutAction types.String `tfsdk:"timeout_action"`
+}
+
+// CustomModelLLMValidationResourceModel describes the custom model LLM validation resource.
+type CustomModelLLMValidationResourceModel struct {
+	ID                types.String `tfsdk:"id"`
+	DeploymentID      types.String `tfsdk:"deployment_id"`
+	ModelID           types.String `tfsdk:"model_id"`
+	Name              types.String `tfsdk:"name"`
+	PredictionTimeout types.Int64  `tfsdk:"prediction_timeout"`
+	PromptColumnName  types.String `tfsdk:"prompt_column_name"`
+	TargetColumnName  types.String `tfsdk:"target_column_name"`
+	UseCaseID         types.String `tfsdk:"use_case_id"`
 }
 
 // CustomJobResourceModel describes the custom job resource.

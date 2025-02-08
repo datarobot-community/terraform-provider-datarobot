@@ -229,6 +229,22 @@ func (mr *MockServiceMockRecorder) CreateCustomModelFromLLMBlueprint(ctx, req in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomModelFromLLMBlueprint", reflect.TypeOf((*MockService)(nil).CreateCustomModelFromLLMBlueprint), ctx, req)
 }
 
+// CreateCustomModelLLMValidation mocks base method.
+func (m *MockService) CreateCustomModelLLMValidation(ctx context.Context, req *client.CreateCustomModelLLMValidationRequest) (*client.CustomModelLLMValidation, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomModelLLMValidation", ctx, req)
+	ret0, _ := ret[0].(*client.CustomModelLLMValidation)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreateCustomModelLLMValidation indicates an expected call of CreateCustomModelLLMValidation.
+func (mr *MockServiceMockRecorder) CreateCustomModelLLMValidation(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomModelLLMValidation", reflect.TypeOf((*MockService)(nil).CreateCustomModelLLMValidation), ctx, req)
+}
+
 // CreateCustomModelVersionCreateFromLatest mocks base method.
 func (m *MockService) CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *client.CreateCustomModelVersionFromLatestRequest) (*client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()
@@ -749,6 +765,20 @@ func (mr *MockServiceMockRecorder) DeleteCustomModel(ctx, id interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomModel", reflect.TypeOf((*MockService)(nil).DeleteCustomModel), ctx, id)
 }
 
+// DeleteCustomModelLLMValidation mocks base method.
+func (m *MockService) DeleteCustomModelLLMValidation(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCustomModelLLMValidation", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCustomModelLLMValidation indicates an expected call of DeleteCustomModelLLMValidation.
+func (mr *MockServiceMockRecorder) DeleteCustomModelLLMValidation(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomModelLLMValidation", reflect.TypeOf((*MockService)(nil).DeleteCustomModelLLMValidation), ctx, id)
+}
+
 // DeleteDataset mocks base method.
 func (m *MockService) DeleteDataset(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -1079,6 +1109,21 @@ func (mr *MockServiceMockRecorder) GetCustomModel(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomModel", reflect.TypeOf((*MockService)(nil).GetCustomModel), ctx, id)
 }
 
+// GetCustomModelLLMValidation mocks base method.
+func (m *MockService) GetCustomModelLLMValidation(ctx context.Context, id string) (*client.CustomModelLLMValidation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomModelLLMValidation", ctx, id)
+	ret0, _ := ret[0].(*client.CustomModelLLMValidation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomModelLLMValidation indicates an expected call of GetCustomModelLLMValidation.
+func (mr *MockServiceMockRecorder) GetCustomModelLLMValidation(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomModelLLMValidation", reflect.TypeOf((*MockService)(nil).GetCustomModelLLMValidation), ctx, id)
+}
+
 // GetCustomTemplate mocks base method.
 func (m *MockService) GetCustomTemplate(ctx context.Context, id string) (*client.CustomTemplate, error) {
 	m.ctrl.T.Helper()
@@ -1272,6 +1317,21 @@ func (m *MockService) GetExecutionEnvironmentVersion(ctx context.Context, id, ve
 func (mr *MockServiceMockRecorder) GetExecutionEnvironmentVersion(ctx, id, versionId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironmentVersion", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironmentVersion), ctx, id, versionId)
+}
+
+// GetGenAITaskStatus mocks base method.
+func (m *MockService) GetGenAITaskStatus(ctx context.Context, id string) (*client.TaskStatusResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGenAITaskStatus", ctx, id)
+	ret0, _ := ret[0].(*client.TaskStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGenAITaskStatus indicates an expected call of GetGenAITaskStatus.
+func (mr *MockServiceMockRecorder) GetGenAITaskStatus(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenAITaskStatus", reflect.TypeOf((*MockService)(nil).GetGenAITaskStatus), ctx, id)
 }
 
 // GetGuardConfigurationsForCustomModelVersion mocks base method.
@@ -1946,6 +2006,21 @@ func (m *MockService) UpdateCustomModel(ctx context.Context, id string, req *cli
 func (mr *MockServiceMockRecorder) UpdateCustomModel(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomModel", reflect.TypeOf((*MockService)(nil).UpdateCustomModel), ctx, id, req)
+}
+
+// UpdateCustomModelLLMValidation mocks base method.
+func (m *MockService) UpdateCustomModelLLMValidation(ctx context.Context, id string, req *client.UpdateCustomModelLLMValidationRequest) (*client.CustomModelLLMValidation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomModelLLMValidation", ctx, id, req)
+	ret0, _ := ret[0].(*client.CustomModelLLMValidation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomModelLLMValidation indicates an expected call of UpdateCustomModelLLMValidation.
+func (mr *MockServiceMockRecorder) UpdateCustomModelLLMValidation(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomModelLLMValidation", reflect.TypeOf((*MockService)(nil).UpdateCustomModelLLMValidation), ctx, id, req)
 }
 
 // UpdateDataset mocks base method.

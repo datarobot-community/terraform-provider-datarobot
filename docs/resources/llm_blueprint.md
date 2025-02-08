@@ -54,13 +54,14 @@ output "example_id" {
 
 ### Required
 
-- `llm_id` (String) The id of the LLM for the LLM Blueprint.
 - `name` (String) The name of the LLM Blueprint.
 - `playground_id` (String) The id of the Playground for the LLM Blueprint.
 
 ### Optional
 
+- `custom_model_llm_settings` (Attributes) The custom model LLM settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--custom_model_llm_settings))
 - `description` (String) The description of the LLM Blueprint.
+- `llm_id` (String) The id of the LLM for the LLM Blueprint.
 - `llm_settings` (Attributes) The LLM settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--llm_settings))
 - `prompt_type` (String) The prompt type for the LLM Blueprint.
 - `vector_database_id` (String) The id of the Vector Database for the LLM Blueprint.
@@ -69,6 +70,16 @@ output "example_id" {
 ### Read-Only
 
 - `id` (String) The ID of the LLM Blueprint.
+
+<a id="nestedatt--custom_model_llm_settings"></a>
+### Nested Schema for `custom_model_llm_settings`
+
+Optional:
+
+- `external_llm_context_size` (Number) The external LLM's context size, in tokens. This value is only used for pruning documents supplied to the LLM when a vector database is associated with the LLM blueprint. It does not affect the external LLM's actual context size in any way and is not supplied to the LLM.
+- `system_prompt` (String) System prompt guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.
+- `validation_id` (String) The validation ID of the custom model LLM.
+
 
 <a id="nestedatt--llm_settings"></a>
 ### Nested Schema for `llm_settings`
