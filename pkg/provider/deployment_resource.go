@@ -1052,13 +1052,11 @@ func (r *DeploymentResource) updateDeploymentSettings(
 		}
 
 		if data.FeatureCacheSettings.Schedule != nil {
-			req.Schedule = &client.Schedule{
-				Minute:     convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Minute),
-				Hour:       convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Hour),
-				Month:      convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.Month),
-				DayOfMonth: convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.DayOfMonth),
-				DayOfWeek:  convertTfStringListToPtr(data.FeatureCacheSettings.Schedule.DayOfWeek),
+			var schedule client.Schedule
+			if schedule, err = convertSchedule(*data.FeatureCacheSettings.Schedule); err != nil {
+				return
 			}
+			req.Schedule = &schedule
 		}
 
 		traceAPICall("UpdateDeploymentFeatureCacheSettings")
