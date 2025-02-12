@@ -1,3 +1,7 @@
+## 0.8.6
+
+- Fix Schedule conversion for Deployment feature cache settings
+
 ## 0.8.5
 
 - Custom Model LLM Validation Resource

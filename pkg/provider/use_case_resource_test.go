@@ -29,7 +29,7 @@ func TestIntegrationUseCaseResource(t *testing.T) {
 	})()
 
 	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
-		os.Setenv(DataRobotApiKeyEnvVar, "fake")
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
 	id := uuid.NewString()
