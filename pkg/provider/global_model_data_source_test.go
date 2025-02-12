@@ -30,7 +30,7 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 	})()
 
 	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
-		os.Setenv(DataRobotApiKeyEnvVar, "fake")
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
 	globalModels, err := getGlobalModels()
