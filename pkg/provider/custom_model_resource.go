@@ -1400,15 +1400,13 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		overallModerationConfig.TimeoutAction = plan.OverallModerationConfiguration.TimeoutAction.ValueString()
 	}
 
-	if len(newGuardConfigs) > 0 {
-		traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
-		if _, err = r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
-			CustomModelID: customModelID,
-			Data:          newGuardConfigs,
-			OverallConfig: overallModerationConfig,
-		}); err != nil {
-			return
-		}
+	traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
+	if _, err = r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
+		CustomModelID: customModelID,
+		Data:          newGuardConfigs,
+		OverallConfig: overallModerationConfig,
+	}); err != nil {
+		return
 	}
 
 	return

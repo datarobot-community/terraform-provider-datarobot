@@ -1520,16 +1520,43 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 			return err
 		}
 
+		traceAPICall("GetGuardConfigurationsForCustomModelVersion")
+		getGuardConfigsResp, err := p.service.GetGuardConfigurationsForCustomModelVersion(context.TODO(), customModel.LatestVersion.ID)
+		if err != nil {
+			return err
+		}
+
 		if customModel.Name == rs.Primary.Attributes["name"] &&
 			customModel.Description == rs.Primary.Attributes["description"] {
 			if rs.Primary.Attributes["runtime_parameter_values.0.value"] != "" {
+				found := false
 				for _, runtimeParam := range customModel.LatestVersion.RuntimeParameters {
 					if runtimeParam.FieldName == rs.Primary.Attributes["runtime_parameter_values.0.key"] &&
 						runtimeParam.CurrentValue == rs.Primary.Attributes["runtime_parameter_values.0.value"] {
-						return nil
+						found = true
+						break
 					}
 				}
-				return fmt.Errorf("Runtime parameter value does not match")
+				if !found {
+					return fmt.Errorf("Runtime parameter value %s does not match", rs.Primary.Attributes["runtime_parameter_values.0.value"])
+				}
+			}
+			if rs.Primary.Attributes["guard_configurations.0.name"] != "" {
+				found := false
+				for _, guardConfig := range getGuardConfigsResp.Data {
+					if guardConfig.Name == rs.Primary.Attributes["guard_configurations.0.name"] &&
+						guardConfig.Stages[0] == rs.Primary.Attributes["guard_configurations.0.stages.0"] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("Guard configuration %s does not match", rs.Primary.Attributes["guard_configurations.0.name"])
+				}
+			} else {
+				if len(getGuardConfigsResp.Data) > 0 {
+					return fmt.Errorf("Guard configuration found in state but not in config")
+				}
 			}
 			return nil
 		}
