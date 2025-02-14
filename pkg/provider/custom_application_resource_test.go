@@ -75,7 +75,13 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customApplicationResourceConfig("", 1, false, []string{}, &useCaseResourceName),
+				Config: customApplicationResourceConfig(
+					"",
+					1,
+					false,
+					[]string{},
+					false,
+					&useCaseResourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -91,12 +97,19 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
 					resource.TestCheckNoResourceAttr(resourceName, "external_access_recipients"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
 			// Update name, external access, and use case id
 			{
-				Config: customApplicationResourceConfig(newName, 1, true, []string{"test@test.com"}, &useCaseResourceName2),
+				Config: customApplicationResourceConfig(
+					newName,
+					1,
+					true,
+					[]string{"test@test.com"},
+					true,
+					&useCaseResourceName2),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -120,12 +133,19 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
 			// Update Application Source version and remove use case
 			{
-				Config: customApplicationResourceConfig(newName, 2, true, []string{"test2@test.com"}, nil),
+				Config: customApplicationResourceConfig(
+					newName,
+					2,
+					true,
+					[]string{"test2@test.com"},
+					true,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -145,6 +165,7 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 				),
 			},
@@ -158,6 +179,7 @@ func customApplicationResourceConfig(
 	applicationSourceReplicas int,
 	externalAccess bool,
 	externalAccessRecipients []string,
+	allowAutoStopping bool,
 	useCaseResourceName *string,
 ) string {
 	recipients := ""
@@ -198,11 +220,12 @@ resource "datarobot_application_source" "test" {
 resource "datarobot_custom_application" "test" {
 	source_version_id = "${datarobot_application_source.test.version_id}"
 	external_access_enabled = %t
+	allow_auto_stopping = %t
 	%s
 	%s
 	%s
 }
-`, applicationSourceReplicas, externalAccess, recipients, nameStr, useCaseIDsStr)
+`, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {
@@ -232,15 +255,20 @@ func checkCustomApplicationResourceExists() resource.TestCheckFunc {
 			application.ApplicationUrl == rs.Primary.Attributes["application_url"] &&
 			application.CustomApplicationSourceID == rs.Primary.Attributes["source_id"] &&
 			application.CustomApplicationSourceVersionID == rs.Primary.Attributes["source_version_id"] {
-			b, err := strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"])
+			b, err := strconv.ParseBool(rs.Primary.Attributes["allow_auto_stopping"])
+			if err == nil {
+				if application.AllowAutoStopping != b {
+					return fmt.Errorf("AllowAutoStopping is %t but should be %t", application.AllowAutoStopping, b)
+				}
+			}
+
+			b, err = strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"])
 			if err == nil {
 				if application.ExternalAccessEnabled == b {
 					if len(application.ExternalAccessRecipients) > 0 {
-						if application.ExternalAccessRecipients[0] == rs.Primary.Attributes["external_access_recipients.0"] {
-							return nil
+						if application.ExternalAccessRecipients[0] != rs.Primary.Attributes["external_access_recipients.0"] {
+							return fmt.Errorf("ExternalAccessRecipient is %s but should be %s", application.ExternalAccessRecipients[0], rs.Primary.Attributes["external_access_recipients.0"])
 						}
-					} else if rs.Primary.Attributes["external_access_recipients.0"] == "" {
-						return nil
 					}
 				}
 			}

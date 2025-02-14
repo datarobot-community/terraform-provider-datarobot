@@ -646,6 +646,7 @@ type QAApplicationResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
 }
 
 type ApplicationSourceResourceModel struct {
@@ -691,6 +692,7 @@ type CustomApplicationResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
 	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
 }
 
@@ -702,6 +704,7 @@ type CustomApplicationFromEnvironmentResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
 	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
 }
 

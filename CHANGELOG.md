@@ -1,3 +1,7 @@
+## 0.8.8
+
+- Add allow_auto_stopping attribute to Custom Applications
+
 ## 0.8.7
 
 - Fix bug in Custom Model guard updates, by making sure to update the Custom Model guards even if there are no new guard configs

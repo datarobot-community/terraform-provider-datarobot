@@ -26,12 +26,15 @@ resource "datarobot_deployment" "example" {
 }
 
 resource "datarobot_qa_application" "example" {
-  name                    = "An example Q&A application"
-  deployment_id           = datarobot_deployment.example.id
+  name          = "An example Q&A application"
+  deployment_id = datarobot_deployment.example.id
+
+  # Optional
   external_access_enabled = true
   external_access_recipients = [
     "recipient@example.com",
   ]
+  allow_auto_stopping = false
 }
 
 output "datarobot_qa_application_id" {

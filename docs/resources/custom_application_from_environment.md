@@ -22,6 +22,7 @@ resource "datarobot_custom_application_from_environment" "example" {
   external_access_recipients = [
     "recipient@example.com",
   ]
+  allow_auto_stopping = false
 }
 
 output "datarobot_custom_application_id" {
@@ -45,6 +46,7 @@ output "datarobot_custom_application_url" {
 
 ### Optional
 
+- `allow_auto_stopping` (Boolean) Whether auto stopping is allowed for the Custom Application.
 - `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
 - `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Application to.
