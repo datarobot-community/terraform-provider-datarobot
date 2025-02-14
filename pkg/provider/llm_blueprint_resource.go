@@ -8,6 +8,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -76,8 +77,9 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 				},
 			},
 			"llm_id": schema.StringAttribute{
-				MarkdownDescription: "The id of the LLM for the LLM Blueprint.",
+				MarkdownDescription: "The id of the LLM for the LLM Blueprint. If custom_model_llm_settings is set, this value must be 'custom-model'.",
 				Optional:            true,
+				Validators:          LlmIDValidators(),
 				PlanModifiers: []planmodifier.String{
 					// in order to generate an update to the custom model resource, we need to force a replace
 					stringplanmodifier.RequiresReplace(),
@@ -201,18 +203,11 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	if data.LLMSettings != nil {
-		createLLMBlueprintRequest.LLMSettings = &client.LLMSettings{}
-		if IsKnown(data.LLMSettings.MaxCompletionLength) {
-			createLLMBlueprintRequest.LLMSettings.MaxCompletionLength = data.LLMSettings.MaxCompletionLength.ValueInt64()
-		}
-		if IsKnown(data.LLMSettings.Temperature) {
-			createLLMBlueprintRequest.LLMSettings.Temperature = data.LLMSettings.Temperature.ValueFloat64()
-		}
-		if IsKnown(data.LLMSettings.TopP) {
-			createLLMBlueprintRequest.LLMSettings.TopP = data.LLMSettings.TopP.ValueFloat64()
-		}
-		if IsKnown(data.LLMSettings.SystemPrompt) {
-			createLLMBlueprintRequest.LLMSettings.SystemPrompt = data.LLMSettings.SystemPrompt.ValueString()
+		createLLMBlueprintRequest.LLMSettings = client.LLMSettings{
+			MaxCompletionLength: Int64ValuePointerOptional(data.LLMSettings.MaxCompletionLength),
+			Temperature:         Float64ValuePointerOptional(data.LLMSettings.Temperature),
+			TopP:                Float64ValuePointerOptional(data.LLMSettings.TopP),
+			SystemPrompt:        StringValuePointerOptional(data.LLMSettings.SystemPrompt),
 		}
 	}
 
@@ -227,7 +222,7 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	if data.CustomModelLLMSettings != nil {
-		createLLMBlueprintRequest.CustomModelLLMSettings = &client.CustomModelLLMSettings{
+		createLLMBlueprintRequest.LLMSettings = client.CustomModelLLMSettings{
 			ExternalLLMContextSize: Int64ValuePointerOptional(data.CustomModelLLMSettings.ExternalLLMContextSize),
 			SystemPrompt:           StringValuePointerOptional(data.CustomModelLLMSettings.SystemPrompt),
 			ValidationID:           StringValuePointerOptional(data.CustomModelLLMSettings.ValidationID),
@@ -337,4 +332,13 @@ func (r *LLMBlueprintResource) Delete(ctx context.Context, req resource.DeleteRe
 
 func (r *LLMBlueprintResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r LLMBlueprintResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.Conflicting(
+			path.MatchRoot("llm_settings"),
+			path.MatchRoot("custom_model_llm_settings"),
+		),
+	}
 }

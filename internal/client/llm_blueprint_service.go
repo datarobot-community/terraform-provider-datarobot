@@ -7,8 +7,7 @@ type CreateLLMBlueprintRequest struct {
 	VectorDatabaseID       string                  `json:"vectorDatabaseId,omitempty"`
 	VectorDatabaseSettings *VectorDatabaseSettings `json:"vectorDatabaseSettings,omitempty"`
 	LLMID                  *string                 `json:"llmId,omitempty"`
-	LLMSettings            *LLMSettings            `json:"llmSettings,omitempty"`
-	CustomModelLLMSettings *CustomModelLLMSettings `json:"customModelLlmSettings,omitempty"`
+	LLMSettings            interface{}             `json:"llmSettings,omitempty"`
 	PromptType             string                  `json:"promptType,omitempty"`
 }
 
@@ -18,10 +17,10 @@ type VectorDatabaseSettings struct {
 }
 
 type LLMSettings struct {
-	MaxCompletionLength int64   `json:"maxCompletionLength"`
-	Temperature         float64 `json:"temperature"`
-	TopP                float64 `json:"topP"`
-	SystemPrompt        string  `json:"systemPrompt"`
+	MaxCompletionLength *int64   `json:"maxCompletionLength,omitempty"`
+	Temperature         *float64 `json:"temperature,omitempty"`
+	TopP                *float64 `json:"topP,omitempty"`
+	SystemPrompt        *string  `json:"systemPrompt,omitempty"`
 }
 
 type CustomModelLLMSettings struct {

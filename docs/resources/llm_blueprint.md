@@ -31,16 +31,21 @@ resource "datarobot_llm_blueprint" "example" {
   prompt_type   = "ONE_TIME_PROMPT"
 
   # Optional
-  # llm_settings {
-  #   max_completion_length = 1000
-  #   temperature           = 0.5
-  #   top_p                 = 0.9
-  #   system_prompt         = "My Prompt:"
-  # }
-  # vector_database_settings = {
-  #   max_documents_retrieved_per_prompt = 5
-  #   max_tokens = 1000
-  # }
+  llm_settings = {
+    max_completion_length = 1000
+    temperature           = 0.5
+    top_p                 = 0.9
+    system_prompt         = "My Prompt:"
+  }
+  custom_model_llm_settings = {
+    external_llm_context_size = 100
+    system_prompt             = "My Prompt:"
+    validation_id             = "111111111111"
+  }
+  vector_database_settings = {
+    max_documents_retrieved_per_prompt = 5
+    max_tokens                         = 1000
+  }
 }
 
 output "example_id" {
@@ -61,7 +66,7 @@ output "example_id" {
 
 - `custom_model_llm_settings` (Attributes) The custom model LLM settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--custom_model_llm_settings))
 - `description` (String) The description of the LLM Blueprint.
-- `llm_id` (String) The id of the LLM for the LLM Blueprint.
+- `llm_id` (String) The id of the LLM for the LLM Blueprint. If custom_model_llm_settings is set, this value must be 'custom-model'.
 - `llm_settings` (Attributes) The LLM settings for the LLM Blueprint. (see [below for nested schema](#nestedatt--llm_settings))
 - `prompt_type` (String) The prompt type for the LLM Blueprint.
 - `vector_database_id` (String) The id of the Vector Database for the LLM Blueprint.
