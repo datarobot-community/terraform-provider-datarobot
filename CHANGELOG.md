@@ -1,3 +1,7 @@
+## 0.8.9
+
+- Fix custom_model_llm_settings for LLM Blueprint resource
+
 ## 0.8.8
 
 - Add allow_auto_stopping attribute to Custom Applications

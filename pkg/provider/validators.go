@@ -352,3 +352,31 @@ func LanguageCodeValidators() []validator.String {
 		),
 	}
 }
+
+func LlmIDValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"azure-openai-gpt-3.5-turbo",
+			"azure-openai-gpt-3.5-turbo-16k",
+			"azure-openai-gpt-4",
+			"azure-openai-gpt-4-32k",
+			"azure-openai-gpt-4-turbo",
+			"azure-openai-gpt-4-o",
+			"azure-openai-gpt-4-o-mini",
+			"amazon-titan",
+			"amazon-nova-micro",
+			"amazon-nova-lite",
+			"amazon-nova-pro",
+			"anthropic-claude-2",
+			"anthropic-claude-3-haiku",
+			"anthropic-claude-3-sonnet",
+			"anthropic-claude-3-opus",
+			"anthropic-claude-3.5-sonnet-v1",
+			"amazon-anthropic-claude-3.5-sonnet-v2",
+			"google-bison",
+			"google-gemini-1.5-flash",
+			"google-gemini-1.5-pro",
+			"custom-model",
+		),
+	}
+}

@@ -116,6 +116,11 @@ func customModelLLMValidationResourceConfig(
 resource "datarobot_use_case" "test_custom_model_llm_validation" {
 	name = "test custom model llm validation"
 }
+resource "datarobot_playground" "test_custom_model_llm_validation" {
+	name = "llm validation test"
+	description = "test"
+	use_case_id = "${datarobot_use_case.test_custom_model_llm_validation.id}"
+}
 resource "datarobot_custom_model" "test_custom_model_llm_validation" {
 	name = "test custom model llm validation"
 	description = "test"
@@ -146,6 +151,11 @@ resource "datarobot_custom_model_llm_validation" "test" {
 	target_column_name = "%s"
 	prediction_timeout = %d
 	use_case_id = datarobot_use_case.test_custom_model_llm_validation.id
+}
+resource "datarobot_llm_blueprint" "test_custom_model_llm_validation" {
+	name = "test custom model llm validation"
+	playground_id = "${datarobot_playground.test_custom_model_llm_validation.id}"
+	llm_id = "custom-model"
 }
 `, nameSalt,
 		name,
