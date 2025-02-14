@@ -19,6 +19,7 @@ type Application struct {
 	ApplicationUrl                   string   `json:"applicationUrl"`
 	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
+	AllowAutoStopping                bool     `json:"allowAutoStopping"`
 }
 
 type UpdateApplicationRequest struct {
@@ -26,6 +27,7 @@ type UpdateApplicationRequest struct {
 	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId,omitempty"`
 	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
+	AllowAutoStopping                bool     `json:"allowAutoStopping"`
 }
 
 type CreateApplicationSourceFromTemplateRequest struct {

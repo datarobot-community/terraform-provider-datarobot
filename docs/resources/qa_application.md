@@ -41,12 +41,15 @@ resource "datarobot_deployment" "example" {
 }
 
 resource "datarobot_qa_application" "example" {
-  name                    = "An example Q&A application"
-  deployment_id           = datarobot_deployment.example.id
+  name          = "An example Q&A application"
+  deployment_id = datarobot_deployment.example.id
+
+  # Optional
   external_access_enabled = true
   external_access_recipients = [
     "recipient@example.com",
   ]
+  allow_auto_stopping = false
 }
 
 output "datarobot_qa_application_id" {
@@ -80,6 +83,7 @@ output "datarobot_qa_application_url" {
 
 ### Optional
 
+- `allow_auto_stopping` (Boolean) Whether auto stopping is allowed for the Q&A Application.
 - `external_access_enabled` (Boolean) Whether external access is enabled for the Q&A Application.
 - `external_access_recipients` (List of String) The list of external email addresses that have access to the Q&A Application.
 

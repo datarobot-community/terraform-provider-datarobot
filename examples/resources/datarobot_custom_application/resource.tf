@@ -14,6 +14,7 @@ resource "datarobot_custom_application" "example" {
   external_access_recipients = [
     "recipient@example.com",
   ]
+  allow_auto_stopping = false
 }
 
 output "datarobot_custom_application_id" {

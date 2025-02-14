@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -89,6 +90,12 @@ func (r *QAApplicationResource) Schema(ctx context.Context, req resource.SchemaR
 				MarkdownDescription: "The list of external email addresses that have access to the Q&A Application.",
 				ElementType:         types.StringType,
 			},
+			"allow_auto_stopping": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(true),
+				MarkdownDescription: "Whether auto stopping is allowed for the Q&A Application.",
+			},
 		},
 	}
 }
@@ -137,6 +144,7 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 			Name:                     data.Name.ValueString(),
 			ExternalAccessEnabled:    IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool(),
 			ExternalAccessRecipients: recipients,
+			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -195,6 +203,7 @@ func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadReque
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 
@@ -251,6 +260,7 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 	updateRequest := &client.UpdateApplicationRequest{
 		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
 		ExternalAccessRecipients: recipients,
+		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
