@@ -380,3 +380,143 @@ func LlmIDValidators() []validator.String {
 		),
 	}
 }
+
+func TimeUnitValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"MILLISECOND",
+			"SECOND",
+			"MINUTE",
+			"HOUR",
+			"DAY",
+			"WEEK",
+			"MONTH",
+			"QUARTER",
+			"YEAR",
+			"ROW",
+		),
+	}
+}
+
+func TreatAsExponentialValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"auto",
+			"never",
+			"always",
+		),
+	}
+}
+
+func RetrainingPolicyActionValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"create_challenger",
+			"create_model_package",
+			"model_replacement"),
+	}
+}
+
+func RetrainingPolicyFeatureListStrategyValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"same_as_champion",
+			"informative_features",
+		),
+	}
+}
+
+func RetrainingPolicyModelSelectionStrategyValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"autopilot_recommended",
+			"same_blueprint",
+			"same_hyperparameters",
+			"custom_job",
+		),
+	}
+}
+
+func RetrainingPolicyTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"schedule",
+			"data_drift_decline",
+			"accuracy_decline",
+			"custom_job",
+			"None",
+		),
+	}
+}
+
+func RetrainingPolicyModelSelectionMetricValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"Accuracy",
+			"AUC",
+			"Balanced Accuracy",
+			"FVE Binomial",
+			"Gini Norm",
+			"Kolmogorov-Smirnov",
+			"LogLoss",
+			"Rate@Top5%",
+			"Rate@Top10%",
+			"TPR",
+			"FPR",
+			"TNR",
+			"PPV",
+			"NPV",
+			"F1",
+			"MCC",
+			"FVE Gamma",
+			"FVE Poisson",
+			"FVE Tweedie",
+			"Gamma Deviance",
+			"MAE",
+			"MAPE",
+			"Poisson Deviance",
+			"R Squared",
+			"RMSE",
+			"RMSLE",
+			"Tweedie Deviance",
+		),
+	}
+}
+
+func AutopilotModeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"quick",
+			"comprehensive",
+			"auto",
+		),
+	}
+}
+
+func CVMethodValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"RandomCV",
+			"StratifiedCV",
+		),
+	}
+}
+
+func ModelValidationTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"CV",
+			"TVH",
+		),
+	}
+}
+
+func ProjectOptionsStrategyValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"same_as_champion",
+			"override_champion",
+			"custom",
+		),
+	}
+}

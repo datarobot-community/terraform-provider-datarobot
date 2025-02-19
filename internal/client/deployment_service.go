@@ -346,3 +346,11 @@ type RetrainingPolicy struct {
 	TimeSeriesOptions      *TimeSeriesOptions `json:"timeSeriesOptions,omitempty"`
 	Trigger                *Trigger           `json:"trigger,omitempty"`
 }
+
+type RetrainingSettings struct{}
+type UpdateRetrainingSettingsRequest struct {
+	RetrainingUserID        *string `json:"retrainingUserId,omitempty"`
+	DatasetID               *string `json:"datasetId,omitempty"`
+	PredictionEnvironmentID *string `json:"predictionEnvironmentId,omitempty"`
+	CredentialID            *string `json:"credentialId,omitempty"`
+}

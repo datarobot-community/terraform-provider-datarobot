@@ -8,7 +8,6 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -72,38 +71,21 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 				Computed:            true,
 				Default:             stringdefault.StaticString("create_challenger"),
 				MarkdownDescription: "The the action to take on the resultant new model.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"create_challenger",
-						"create_model_package",
-						"model_replacement"),
-				},
+				Validators:          RetrainingPolicyActionValidators(),
 			},
 			"feature_list_strategy": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("same_as_champion"),
 				MarkdownDescription: "The feature list strategy used for modeling.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"same_as_champion",
-						"informative_features",
-					),
-				},
+				Validators:          RetrainingPolicyFeatureListStrategyValidators(),
 			},
 			"model_selection_strategy": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("autopilot_recommended"),
 				MarkdownDescription: "Determines how the new model is selected when the retraining policy runs.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"autopilot_recommended",
-						"same_blueprint",
-						"same_hyperparameters",
-						"custom_job",
-					),
-				},
+				Validators:          RetrainingPolicyModelSelectionStrategyValidators(),
 			},
 			"autopilot_options": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -137,13 +119,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 						Computed:            true,
 						Default:             stringdefault.StaticString("quick"),
 						MarkdownDescription: "The autopiltot mode.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"quick",
-								"comprehensive",
-								"auto",
-							),
-						},
+						Validators:          AutopilotModeValidators(),
 					},
 					"run_leakage_removed_feature_list": schema.BoolAttribute{
 						Optional:            true,
@@ -193,12 +169,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 						Computed:            true,
 						Default:             stringdefault.StaticString("RandomCV"),
 						MarkdownDescription: "The partitioning method for projects used to build new models.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"RandomCV",
-								"StratifiedCV",
-							),
-						},
+						Validators:          CVMethodValidators(),
 					},
 					"holdout_pct": schema.Float64Attribute{
 						Optional:            true,
@@ -219,37 +190,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 					"metric": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "The model selection metric in projects used to build new models.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"Accuracy",
-								"AUC",
-								"Balanced Accuracy",
-								"FVE Binomial",
-								"Gini Norm",
-								"Kolmogorov-Smirnov",
-								"LogLoss",
-								"Rate@Top5%",
-								"Rate@Top10%",
-								"TPR",
-								"FPR",
-								"TNR",
-								"PPV",
-								"NPV",
-								"F1",
-								"MCC",
-								"FVE Gamma",
-								"FVE Poisson",
-								"FVE Tweedie",
-								"Gamma Deviance",
-								"MAE",
-								"MAPE",
-								"Poisson Deviance",
-								"R Squared",
-								"RMSE",
-								"RMSLE",
-								"Tweedie Deviance",
-							),
-						},
+						Validators:          RetrainingPolicyModelSelectionMetricValidators(),
 					},
 					"reps": schema.Float64Attribute{
 						Optional:            true,
@@ -265,12 +206,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 						Computed:            true,
 						Default:             stringdefault.StaticString("CV"),
 						MarkdownDescription: "The validation type for projects used to build new models.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"CV",
-								"TVH",
-							),
-						},
+						Validators:          ModelValidationTypeValidators(),
 					},
 				},
 			},
@@ -279,13 +215,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 				Computed:            true,
 				MarkdownDescription: "The project option strategy used for modeling.",
 				Default:             stringdefault.StaticString("same_as_champion"),
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"same_as_champion",
-						"override_champion",
-						"custom",
-					),
-				},
+				Validators:          ProjectOptionsStrategyValidators(),
 			},
 			"time_series_options": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -321,20 +251,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 								"time_unit": schema.StringAttribute{
 									Required:            true,
 									MarkdownDescription: "The time unit or ROW if windowsBasisUnit is ROW",
-									Validators: []validator.String{
-										stringvalidator.OneOf(
-											"MILLISECOND",
-											"SECOND",
-											"MINUTE",
-											"HOUR",
-											"DAY",
-											"WEEK",
-											"MONTH",
-											"QUARTER",
-											"YEAR",
-											"ROW",
-										),
-									},
+									Validators:          TimeUnitValidators(),
 								},
 							},
 						},
@@ -342,13 +259,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 					"treat_as_exponential": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "For time series projects only. Used to specify whether to treat data as exponential trend and apply transformations like log-transform. For classification problems always is not allowed. Defaults to auto.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"auto",
-								"never",
-								"always",
-							),
-						},
+						Validators:          TreatAsExponentialValidators(),
 					},
 				},
 			},
@@ -416,15 +327,7 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 					"type": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "Type of retraining policy trigger.",
-						Validators: []validator.String{
-							stringvalidator.OneOf(
-								"schedule",
-								"data_drift_decline",
-								"accuracy_decline",
-								"custom_job",
-								"None",
-							),
-						},
+						Validators:          RetrainingPolicyTypeValidators(),
 					},
 				},
 			},
@@ -452,6 +355,11 @@ func (r *DeploymentRetrainingPolicyResource) Create(ctx context.Context, req res
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if err := r.checkDeploymentRetrainingSettings(ctx, data); err != nil {
+		resp.Diagnostics.AddError("Error checking deployment retraining settings", err.Error())
 		return
 	}
 
@@ -537,6 +445,11 @@ func (r *DeploymentRetrainingPolicyResource) Update(ctx context.Context, req res
 		return
 	}
 
+	if err := r.checkDeploymentRetrainingSettings(ctx, data); err != nil {
+		resp.Diagnostics.AddError("Error checking deployment retraining settings", err.Error())
+		return
+	}
+
 	request, err := buildRetrainingPolicyRequest(data)
 	if err != nil {
 		resp.Diagnostics.AddError("Error building Retraining Policy request", err.Error())
@@ -573,6 +486,24 @@ func (r *DeploymentRetrainingPolicyResource) Delete(ctx context.Context, req res
 
 func (r *DeploymentRetrainingPolicyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r *DeploymentRetrainingPolicyResource) checkDeploymentRetrainingSettings(ctx context.Context, data DeploymentRetrainingPolicyResourceModel) (err error) {
+	if data.Trigger != nil && data.Trigger.Schedule != nil {
+		var userInfo *client.UserInfo
+		userInfo, err = r.provider.service.GetUserInfo(ctx)
+		if err != nil {
+			return
+		}
+
+		if _, err = r.provider.service.UpdateDeploymentRetrainingSettings(ctx, data.DeploymentID.ValueString(), &client.UpdateRetrainingSettingsRequest{
+			RetrainingUserID: &userInfo.UID,
+		}); err != nil {
+			return
+		}
+	}
+
+	return
 }
 
 func buildRetrainingPolicyRequest(data DeploymentRetrainingPolicyResourceModel) (request *client.RetrainingPolicyRequest, err error) {
