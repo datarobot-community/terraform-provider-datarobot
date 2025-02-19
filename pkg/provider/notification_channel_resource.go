@@ -113,6 +113,7 @@ func (r *NotificationChannelResource) Schema(ctx context.Context, req resource.S
 			"related_entity_type": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The type of related entity.",
+				Validators:          NotificationRelatedEntityTypeValidators(),
 			},
 			"secret_token": schema.StringAttribute{
 				Optional:            true,

@@ -58,6 +58,7 @@ func (r *NotificationPolicyResource) Schema(ctx context.Context, req resource.Sc
 			"channel_scope": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The Channel scope of the Notification Policy.",
+				Validators:          NotificationPolicyChannelScopeValidators(),
 			},
 			"related_entity_id": schema.StringAttribute{
 				Required:            true,
@@ -69,6 +70,7 @@ func (r *NotificationPolicyResource) Schema(ctx context.Context, req resource.Sc
 			"related_entity_type": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The Type of the related entity for the Notification Policy.",
+				Validators:          NotificationRelatedEntityTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -82,10 +84,12 @@ func (r *NotificationPolicyResource) Schema(ctx context.Context, req resource.Sc
 			"event_group": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The group of the events that trigger the Notification.",
+				Validators:          NotificationPolicyEventGroupValidators(),
 			},
 			"event_type": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The group of the event that triggers the Notification.",
+				Validators:          NotificationPolicyEventTypeValidators(),
 			},
 			"maximal_frequency": schema.StringAttribute{
 				Optional:            true,

@@ -116,6 +116,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 						"type": schema.StringAttribute{
 							Required:            true,
 							MarkdownDescription: "The type of the runtime parameter.",
+							Validators:          RuntimeParameterTypeValidators(),
 						},
 						"value": schema.StringAttribute{
 							Required:            true,
@@ -132,6 +133,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
 				},
+				Validators: CustomModelTargetTypeValidators(),
 			},
 			"target_name": schema.StringAttribute{
 				Optional:            true,
@@ -249,6 +251,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 							Required:            true,
 							MarkdownDescription: "The list of stages for the guard configuration.",
 							ElementType:         types.StringType,
+							Validators:          GuardStagesValidators(),
 						},
 						"intervention": schema.SingleNestedAttribute{
 							Required:            true,
@@ -257,6 +260,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 								"action": schema.StringAttribute{
 									Required:            true,
 									MarkdownDescription: "The action of the guard intervention.",
+									Validators:          GuardInterventionActionValidators(),
 								},
 								"message": schema.StringAttribute{
 									Optional:            true,
@@ -314,12 +318,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 						"llm_type": schema.StringAttribute{
 							Optional:            true,
 							MarkdownDescription: "The LLM type for this guard.",
-							Validators: []validator.String{
-								stringvalidator.OneOf("openAi", "azureOpenAi"),
-								stringvalidator.AlsoRequires(
-									path.MatchRelative().AtParent().AtName("openai_credential"),
-								),
-							},
+							Validators:          CustomModelLLMTypeValidators(),
 						},
 						"nemo_info": schema.SingleNestedAttribute{
 							Optional:            true,
@@ -401,6 +400,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The network access for the Custom Model.",
 				Default:             stringdefault.StaticString(defaultNetworkAccess),
+				Validators:          CustomModelNetworkEgressPolicyValidators(),
 			},
 			"resource_bundle_id": schema.StringAttribute{
 				Optional:            true,

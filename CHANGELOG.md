@@ -1,3 +1,7 @@
+## 0.8.11
+
+- Add more parameter validators for Enum parameters
+
 ## 0.8.10
 
 - Set retraining_user_id when Retraining Policy has a schedule trigger
