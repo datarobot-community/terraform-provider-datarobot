@@ -82,7 +82,7 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 
 	var globalModel *client.RegisteredModel
-	for i, _ := range registeredModels {
+	for i := range registeredModels {
 		model := registeredModels[i]
 		if model.Name == config.Name.ValueString() {
 			globalModel = &model
