@@ -143,6 +143,7 @@ type Service interface {
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
 	GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*DeploymentFeatureCacheSettings, error)
 	UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *DeploymentFeatureCacheSettings) (*DeploymentFeatureCacheSettings, error)
+	UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error)
 
 	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
 	GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error)
@@ -215,6 +216,9 @@ type Service interface {
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
 	GetGenAITaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
+
+	// User Info
+	GetUserInfo(ctx context.Context) (*UserInfo, error)
 
 	// Add your service methods here
 }
@@ -676,6 +680,10 @@ func (s *ServiceImpl) UpdateDeploymentFeatureCacheSettings(ctx context.Context, 
 	return Patch[DeploymentFeatureCacheSettings](s.client, ctx, "/deployments/"+id+"/featureCache/", req)
 }
 
+func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error) {
+	return Patch[RetrainingSettings](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/", req)
+}
+
 func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
 	return Post[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/", req)
 }
@@ -910,4 +918,8 @@ func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatus
 
 func (s *ServiceImpl) GetGenAITaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {
 	return Get[TaskStatusResponse](s.client, ctx, "/genai/status/"+id+"/")
+}
+
+func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
+	return Get[UserInfo](s.client, ctx, "/account/info/")
 }

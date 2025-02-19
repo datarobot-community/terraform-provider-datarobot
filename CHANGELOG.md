@@ -1,3 +1,7 @@
+## 0.8.10
+
+- Set retraining_user_id when Retraining Policy has a schedule trigger
+
 ## 0.8.9
 
 - Fix custom_model_llm_settings for LLM Blueprint resource

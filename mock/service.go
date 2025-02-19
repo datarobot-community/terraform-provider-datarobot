@@ -1559,6 +1559,21 @@ func (mr *MockServiceMockRecorder) GetUseCase(ctx, id interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUseCase", reflect.TypeOf((*MockService)(nil).GetUseCase), ctx, id)
 }
 
+// GetUserInfo mocks base method.
+func (m *MockService) GetUserInfo(ctx context.Context) (*client.UserInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserInfo", ctx)
+	ret0, _ := ret[0].(*client.UserInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserInfo indicates an expected call of GetUserInfo.
+func (mr *MockServiceMockRecorder) GetUserInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserInfo", reflect.TypeOf((*MockService)(nil).GetUserInfo), ctx)
+}
+
 // GetVectorDatabase mocks base method.
 func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()
@@ -2142,6 +2157,21 @@ func (m *MockService) UpdateDeploymentModel(ctx context.Context, id string, req 
 func (mr *MockServiceMockRecorder) UpdateDeploymentModel(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentModel", reflect.TypeOf((*MockService)(nil).UpdateDeploymentModel), ctx, id, req)
+}
+
+// UpdateDeploymentRetrainingSettings mocks base method.
+func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *client.UpdateRetrainingSettingsRequest) (*client.RetrainingSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentRetrainingSettings", ctx, deploymentID, req)
+	ret0, _ := ret[0].(*client.RetrainingSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeploymentRetrainingSettings indicates an expected call of UpdateDeploymentRetrainingSettings.
+func (mr *MockServiceMockRecorder) UpdateDeploymentRetrainingSettings(ctx, deploymentID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentRetrainingSettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentRetrainingSettings), ctx, deploymentID, req)
 }
 
 // UpdateDeploymentRuntimeParameters mocks base method.

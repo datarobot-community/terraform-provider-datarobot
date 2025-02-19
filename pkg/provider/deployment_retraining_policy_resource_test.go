@@ -203,6 +203,14 @@ resource "datarobot_deployment_retraining_policy" "test" {
 	project_options_strategy = "custom"
 	trigger = {
 		custom_job_id = datarobot_custom_job.deployment_retraining_policy.id
+		type = "schedule"
+		schedule = {
+			minute 			= ["10"]
+			hour 			= ["10"]
+			month 			= ["*"]
+			day_of_month 	= ["*"]
+			day_of_week 	= ["*"]
+		}
 	}
 }
 `, name, name, name, name, description, action, modelSelectionStrategy)
