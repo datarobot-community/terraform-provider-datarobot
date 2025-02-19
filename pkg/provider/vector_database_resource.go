@@ -119,6 +119,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						Optional:            true,
 						Computed:            true,
 						Default:             stringdefault.StaticString(defaultEmbeddingModel),
+						Validators:          EmbeddingModelValidators(),
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -146,6 +147,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						Optional:            true,
 						Computed:            true,
 						Default:             stringdefault.StaticString(defaultChunkingMethod),
+						Validators:          ChunkingMethodValidators(),
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},

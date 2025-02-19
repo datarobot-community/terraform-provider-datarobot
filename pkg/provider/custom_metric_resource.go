@@ -81,6 +81,7 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 			"type": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "Aggregation type of the Custom Metric.",
+				Validators:          CustomMetricAggregationTypeValidators(),
 			},
 			"directionality": schema.StringAttribute{
 				Required:            true,

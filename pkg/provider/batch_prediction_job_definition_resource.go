@@ -105,9 +105,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 					"type": schema.StringAttribute{
 						Required:    true,
 						Description: "Type of data source.",
-						Validators: []validator.String{
-							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "dataset", "jdbc", "snowflake", "synapse", "bigquery", "datasphere"),
-						},
+						Validators:  BatchPredictionJobIntakeTypeValidators(),
 					},
 					"dataset_id": schema.StringAttribute{
 						Optional:    true,
@@ -197,9 +195,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 						Computed:    true,
 						Default:     stringdefault.StaticString("localFile"),
 						Description: "Type of output.",
-						Validators: []validator.String{
-							stringvalidator.OneOf("localFile", "s3", "azure", "gcp", "jdbc", "snowflake", "synapse", "bigquery", "datasphere"),
-						},
+						Validators:  BatchPredictionJobOutputTypeValidators(),
 					},
 					"path": schema.StringAttribute{
 						Optional:    true,
@@ -297,9 +293,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 					"type": schema.StringAttribute{
 						Optional:    true,
 						Description: "Type of time-series prediction. Must be 'forecast' or 'historical'. Default is 'forecast'.",
-						Validators: []validator.String{
-							stringvalidator.OneOf("forecast", "historical"),
-						},
+						Validators:  BatchPredictionJobTimeSeriesTypeValidators(),
 					},
 					"forecast_point": schema.StringAttribute{
 						Optional:    true,
@@ -353,9 +347,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 				Computed:    true,
 				Description: "Which algorithm will be used to calculate prediction explanations.",
 				Default:     stringdefault.StaticString("xemp"),
-				Validators: []validator.String{
-					stringvalidator.OneOf("shap", "xemp"),
-				},
+				Validators:  BatchPredictionJobExplanationAlgorithmValidators(),
 			},
 			"threshold_high": schema.Float64Attribute{
 				Optional:    true,

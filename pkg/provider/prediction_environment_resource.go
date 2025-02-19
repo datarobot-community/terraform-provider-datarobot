@@ -70,6 +70,7 @@ func (r *PredictionEnvironmentResource) Schema(ctx context.Context, req resource
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				Validators: PredictionEnvironmentPlatformValidators(),
 			},
 			"batch_jobs_max_concurrent": schema.Int64Attribute{
 				Optional:            true,
@@ -87,6 +88,7 @@ func (r *PredictionEnvironmentResource) Schema(ctx context.Context, req resource
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.RequiresReplace(),
 				},
+				Validators: PredictionEnvironmentSupportedModelFormatsValidators(),
 			},
 			"managed_by": schema.StringAttribute{
 				Optional:            true,

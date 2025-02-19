@@ -8,7 +8,6 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -17,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -134,14 +132,7 @@ func (r *CustomMetricJobResource) Schema(ctx context.Context, req resource.Schem
 				Computed:            true,
 				Default:             stringdefault.StaticString("gauge"),
 				MarkdownDescription: "The aggregation type of the custom metric.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"gauge",
-						"sum",
-						"average",
-						"categorical",
-					),
-				},
+				Validators:          CustomMetricAggregationTypeValidators(),
 			},
 			"time_step": schema.StringAttribute{
 				Optional:            true,
