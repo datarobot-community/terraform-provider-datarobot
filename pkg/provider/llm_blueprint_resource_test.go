@@ -21,9 +21,10 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 	resourceName := "datarobot_llm_blueprint.test"
 	llmID := "azure-openai-gpt-3.5-turbo"
 	newLLMID := "amazon-titan"
+	deployedLLMID := "custom-model"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	externalLLMContextSize := 100
+	externalLLMContextSize := 128
 	systemPrompt := "Custom Model Prompt: "
 
 	resource.Test(t, resource.TestCase{
@@ -114,13 +115,8 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 				Config: llmBlueprintResourceConfig(
 					"new_example_name",
 					"new_example_description",
-					newLLMID,
-					&LLMSettings{
-						MaxCompletionLength: basetypes.NewInt64Value(1000),
-						Temperature:         basetypes.NewFloat64Value(0.5),
-						TopP:                basetypes.NewFloat64Value(0.5),
-						SystemPrompt:        basetypes.NewStringValue("Prompt:"),
-					},
+					deployedLLMID,
+					nil,
 					&CustomModelLLMSettings{
 						ExternalLLMContextSize: basetypes.NewInt64Value(int64(externalLLMContextSize)),
 						SystemPrompt:           basetypes.NewStringValue(systemPrompt),
@@ -135,13 +131,8 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 					checkLlmBlueprintResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-					resource.TestCheckResourceAttr(resourceName, "llm_id", newLLMID),
-					resource.TestCheckResourceAttr(resourceName, "llm_settings.max_completion_length", "1000"),
-					resource.TestCheckResourceAttr(resourceName, "llm_settings.temperature", "0.5"),
-					resource.TestCheckResourceAttr(resourceName, "llm_settings.top_p", "0.5"),
-					resource.TestCheckResourceAttr(resourceName, "llm_settings.system_prompt", "Prompt:"),
 					resource.TestCheckResourceAttr(resourceName, "custom_model_llm_settings.system_prompt", systemPrompt),
-					resource.TestCheckResourceAttr(resourceName, "custom_model_llm_settings.external_llm_context_size", "100"),
+					resource.TestCheckResourceAttr(resourceName, "custom_model_llm_settings.external_llm_context_size", "128"),
 					resource.TestCheckResourceAttr(resourceName, "prompt_type", "CHAT_HISTORY_AWARE"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),

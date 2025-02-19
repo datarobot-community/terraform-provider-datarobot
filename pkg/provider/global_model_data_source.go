@@ -80,7 +80,18 @@ func (r *GlobalModelDataSource) Read(ctx context.Context, req datasource.ReadReq
 		resp.Diagnostics.AddError("Global Model not found", fmt.Sprintf("Global Model with name %q not found", config.Name.ValueString()))
 		return
 	}
-	globalModel := registeredModels[0]
+
+	var globalModel *client.RegisteredModel
+	for i, _ := range registeredModels {
+		model := registeredModels[i]
+		if model.Name == config.Name.ValueString() {
+			globalModel = &model
+		}
+	}
+	if globalModel == nil {
+		resp.Diagnostics.AddError("Global Model not found", fmt.Sprintf("Global Model with name %q not found", config.Name.ValueString()))
+		return
+	}
 
 	globalModelVersion, err := r.provider.service.GetLatestRegisteredModelVersion(ctx, globalModel.ID)
 	if err != nil {
