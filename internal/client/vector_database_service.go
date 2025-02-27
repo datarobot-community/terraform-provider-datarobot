@@ -1,10 +1,13 @@
 package client
 
 type CreateVectorDatabaseRequest struct {
-	DatasetID          string             `json:"datasetId"`
-	Name               string             `json:"name"`
-	UseCaseID          string             `json:"useCaseId"`
-	ChunkingParameters ChunkingParameters `json:"chunkingParameters"`
+	DatasetID              string             `json:"datasetId"`
+	Name                   string             `json:"name"`
+	UseCaseID              string             `json:"useCaseId"`
+	ChunkingParameters     ChunkingParameters `json:"chunkingParameters"`
+	ParentVectorDatabaseID *string            `json:"parentVectorDatabaseId,omitempty"`
+	UpdateDeployments      *bool              `json:"updateDeployments,omitempty"`
+	UpdateLlmBlueprints    *bool              `json:"updateLlmBlueprints,omitempty"`
 }
 
 type ChunkingParameters struct {
@@ -29,6 +32,9 @@ type VectorDatabase struct {
 	ChunkOverlapPercentage int64    `json:"chunkOverlapPercentage"`
 	IsSeparatorRegex       bool     `json:"isSeparatorRegex"`
 	Separators             []string `json:"separators"`
+	ParentID               *string  `json:"parentId"`
+	FamilyID               *string  `json:"familyId"`
+	Version                int64    `json:"version"`
 }
 
 type UpdateVectorDatabaseRequest struct {

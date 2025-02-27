@@ -38,6 +38,7 @@ func TestAccDatasetFromURLResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", datasetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.1"),
 				),
 			},
 			// update name and use case IDs
@@ -49,6 +50,7 @@ func TestAccDatasetFromURLResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", newDatsetName),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.1"),
 				),
 			},
 			// Delete is tested automatically
@@ -84,7 +86,8 @@ func datasetFromURLResourceConfig(url string, name *string, useCaseID *string) s
 
 	useCaseIDsStr := ""
 	if useCaseID != nil {
-		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseID)
+		// verify idempotency for adding use case to entity
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}","${datarobot_use_case.%s.id}"]`, *useCaseID, *useCaseID)
 	}
 
 	return fmt.Sprintf(`

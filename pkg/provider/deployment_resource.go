@@ -623,7 +623,13 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddDeploymentToUseCase")
-		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "deployment", deployment.ID); err != nil {
+		if err = addEntityToUseCase(
+			ctx,
+			r.provider.service,
+			useCaseID.ValueString(),
+			"deployment",
+			deployment.ID,
+		); err != nil {
 			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Deployment to Use Case %s", useCaseID), err.Error())
 			return
 		}

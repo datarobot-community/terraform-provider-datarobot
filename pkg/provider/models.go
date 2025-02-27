@@ -97,6 +97,7 @@ type DatasourceParamsModel struct {
 // VectorDatabaseResourceModel describes a vector database.
 type VectorDatabaseResourceModel struct {
 	ID                 types.String             `tfsdk:"id"`
+	Version            types.Int64              `tfsdk:"version"`
 	Name               types.String             `tfsdk:"name"`
 	UseCaseID          types.String             `tfsdk:"use_case_id"`
 	DatasetID          types.String             `tfsdk:"dataset_id"`

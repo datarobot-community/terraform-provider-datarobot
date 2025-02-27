@@ -168,7 +168,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddCustomApplicationToUseCase")
-		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "customApplication", application.ID); err != nil {
+		if err = addEntityToUseCase(
+			ctx,
+			r.provider.service,
+			useCaseID.ValueString(),
+			"customApplication",
+			application.ID,
+		); err != nil {
 			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Custom Application to Use Case %s", useCaseID), err.Error())
 			return
 		}

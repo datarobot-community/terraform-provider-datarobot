@@ -166,7 +166,13 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddRegisteredModelVersionToUseCase")
-		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "registeredModelVersion", registeredModelVersion.ID); err != nil {
+		if err = addEntityToUseCase(
+			ctx,
+			r.provider.service,
+			useCaseID.ValueString(),
+			"registeredModelVersion",
+			registeredModelVersion.ID,
+		); err != nil {
 			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Registered Model version to Use Case %s", useCaseID), err.Error())
 			return
 		}
