@@ -1,3 +1,8 @@
+## 0.8.12
+
+- Vector Database versioning
+- Fix adding Use Case to entity idempotency issue
+
 ## 0.8.11
 
 - Add more parameter validators for Enum parameters

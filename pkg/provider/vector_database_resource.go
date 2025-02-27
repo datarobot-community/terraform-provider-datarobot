@@ -61,9 +61,10 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 			"id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID of the VectorDatabase.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+			},
+			"version": schema.Int64Attribute{
+				Computed:            true,
+				MarkdownDescription: "The version of the VectorDatabase.",
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the VectorDatabase.",
@@ -72,9 +73,6 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 			"dataset_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the Vector Database.",
 				Required:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"use_case_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the Use Case.",
@@ -317,33 +315,63 @@ func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// TODO : Support what can be changed or handle more gracefully, possibly with a custom plan modifier ?
-	if !reflect.DeepEqual(state.ChunkingParameters, plan.ChunkingParameters) {
-		resp.Diagnostics.AddError(
-			"Chunking parameters change",
-			"Changing the chunking parameters is not supported. Please create a new VectorDatabase.",
-		)
-		return
-	}
-
-	traceAPICall("UpdateVectorDatabase")
-	_, err := r.provider.service.UpdateVectorDatabase(ctx,
-		plan.ID.ValueString(),
-		&client.UpdateVectorDatabaseRequest{
-			Name: plan.Name.ValueString(),
-		})
-	if err != nil {
-		if errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddWarning(
-				"VectorDatabase not found",
-				fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", plan.ID.ValueString()))
-			resp.State.RemoveResource(ctx)
-		} else {
-			resp.Diagnostics.AddError("Error updating VectorDatabase", err.Error())
+	var vectorDatabase *client.VectorDatabase
+	var err error
+	if !reflect.DeepEqual(state.ChunkingParameters, plan.ChunkingParameters) ||
+		!reflect.DeepEqual(state.DatasetID, plan.DatasetID) ||
+		!reflect.DeepEqual(state.UseCaseID, plan.UseCaseID) {
+		// create new vector database version
+		separators := make([]string, 0)
+		for _, separator := range plan.ChunkingParameters.Separators {
+			separators = append(separators, separator.ValueString())
 		}
-		return
+
+		traceAPICall("CreateVectorDatabase")
+		vectorDatabase, err = r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
+			ParentVectorDatabaseID: state.ID.ValueStringPointer(),
+			DatasetID:              plan.DatasetID.ValueString(),
+			UseCaseID:              plan.UseCaseID.ValueString(),
+			Name:                   plan.Name.ValueString(),
+			ChunkingParameters: client.ChunkingParameters{
+				EmbeddingModel:         plan.ChunkingParameters.EmbeddingModel.ValueString(),
+				ChunkOverlapPercentage: plan.ChunkingParameters.ChunkOverlapPercentage.ValueInt64(),
+				ChunkSize:              plan.ChunkingParameters.ChunkSize.ValueInt64(),
+				ChunkingMethod:         plan.ChunkingParameters.ChunkingMethod.ValueString(),
+				IsSeparatorRegex:       plan.ChunkingParameters.IsSeparatorRegex.ValueBool(),
+				Separators:             separators,
+			},
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating VectorDatabase version", err.Error())
+			return
+		}
+
+		err = r.waitForVectorDatabaseToBeReady(ctx, vectorDatabase.ID)
+		if err != nil {
+			resp.Diagnostics.AddError("Vector Database not ready", err.Error())
+			return
+		}
+	} else {
+		traceAPICall("UpdateVectorDatabase")
+		vectorDatabase, err = r.provider.service.UpdateVectorDatabase(ctx,
+			state.ID.ValueString(),
+			&client.UpdateVectorDatabaseRequest{
+				Name: plan.Name.ValueString(),
+			})
+		if err != nil {
+			if errors.Is(err, &client.NotFoundError{}) {
+				resp.Diagnostics.AddWarning(
+					"VectorDatabase not found",
+					fmt.Sprintf("VectorDatabase with ID %s is not found. Removing from state.", state.ID.ValueString()))
+				resp.State.RemoveResource(ctx)
+			} else {
+				resp.Diagnostics.AddError("Error updating VectorDatabase", err.Error())
+			}
+			return
+		}
 	}
 
+	loadVectorDatabaseToTerraformState(vectorDatabase, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -394,6 +422,7 @@ func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Cont
 
 func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, data *VectorDatabaseResourceModel) {
 	data.ID = types.StringValue(vectorDatabase.ID)
+	data.Version = types.Int64Value(vectorDatabase.Version)
 	data.Name = types.StringValue(vectorDatabase.Name)
 	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
 	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)

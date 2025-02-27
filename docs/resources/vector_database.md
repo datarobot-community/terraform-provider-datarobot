@@ -60,6 +60,7 @@ output "example_id" {
 ### Read-Only
 
 - `id` (String) The ID of the VectorDatabase.
+- `version` (Number) The version of the VectorDatabase.
 
 <a id="nestedatt--chunking_parameters"></a>
 ### Nested Schema for `chunking_parameters`

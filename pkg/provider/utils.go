@@ -769,6 +769,22 @@ func convertDynamicType(tfType types.Dynamic) any {
 	}
 }
 
+func addEntityToUseCase(
+	ctx context.Context,
+	service client.Service,
+	useCaseID,
+	entityType,
+	entityID string,
+) (err error) {
+	if err = service.AddEntityToUseCase(ctx, useCaseID, entityType, entityID); err != nil {
+		if strings.Contains(err.Error(), "already linked to this Use Case") {
+			err = nil
+		}
+	}
+
+	return
+}
+
 func updateUseCasesForEntity(
 	ctx context.Context,
 	service client.Service,
@@ -793,7 +809,7 @@ func updateUseCasesForEntity(
 
 		for _, useCaseID := range useCasesToAdd {
 			traceAPICall(fmt.Sprintf("Add%sToUseCase", strings.ToUpper(entityType)))
-			if err = service.AddEntityToUseCase(ctx, useCaseID, entityType, entityID); err != nil {
+			if err = addEntityToUseCase(ctx, service, useCaseID, entityType, entityID); err != nil {
 				return
 			}
 		}
@@ -814,6 +830,10 @@ func updateUseCasesForEntity(
 		for _, useCaseID := range useCasesToRemove {
 			traceAPICall(fmt.Sprintf("Remove%sFromUseCase", strings.ToUpper(entityType)))
 			if err = service.RemoveEntityFromUseCase(ctx, useCaseID, entityType, entityID); err != nil {
+				if _, ok := err.(*client.NotFoundError); ok {
+					err = nil
+					continue
+				}
 				return
 			}
 		}

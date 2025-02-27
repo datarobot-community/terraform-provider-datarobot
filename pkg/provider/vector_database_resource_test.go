@@ -13,6 +13,13 @@ import (
 func TestAccVectorDatabaseResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_vector_database.test"
+
+	name := "example_name"
+	newName := "new_example_name"
+
+	chunkSize := 500
+	newChunkSize := 510
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -21,19 +28,37 @@ func TestAccVectorDatabaseResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: vectorDatabaseResourceConfig("example_name"),
+				Config: vectorDatabaseResourceConfig(
+					name,
+					chunkSize),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkVectorDatabaseResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "chunking_parameters.chunk_size", "500"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
 			// Update name
 			{
-				Config: vectorDatabaseResourceConfig("new_example_name"),
+				Config: vectorDatabaseResourceConfig(
+					newName,
+					chunkSize),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkVectorDatabaseResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
+					resource.TestCheckResourceAttr(resourceName, "chunking_parameters.chunk_size", "500"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Update chunking parameters creates new version
+			{
+				Config: vectorDatabaseResourceConfig(
+					newName,
+					newChunkSize),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkVectorDatabaseResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
+					resource.TestCheckResourceAttr(resourceName, "chunking_parameters.chunk_size", "510"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -42,7 +67,10 @@ func TestAccVectorDatabaseResource(t *testing.T) {
 	})
 }
 
-func vectorDatabaseResourceConfig(name string) string {
+func vectorDatabaseResourceConfig(
+	name string,
+	chunkSize int,
+) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_vector_database" {
 	name = "test"
@@ -58,11 +86,11 @@ resource "datarobot_vector_database" "test" {
 	  dataset_id = "${datarobot_dataset_from_file.test_vector_database.id}"
 	  use_case_id = "${datarobot_use_case.test_vector_database.id}"
 	  chunking_parameters = {
-		chunk_size = 500
+		chunk_size = %d
 		separators = ["\n"]
 	  }
 }
-`, name)
+`, name, chunkSize)
 }
 
 func checkVectorDatabaseResourceExists(resourceName string) resource.TestCheckFunc {

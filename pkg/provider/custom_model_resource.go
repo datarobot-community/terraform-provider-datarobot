@@ -698,7 +698,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 	for _, useCaseID := range plan.UseCaseIDs {
 		traceAPICall("AddCustomModelVersionToUseCase")
-		if err = r.provider.service.AddEntityToUseCase(ctx, useCaseID.ValueString(), "customModelVersion", customModel.LatestVersion.ID); err != nil {
+		if err = addEntityToUseCase(
+			ctx,
+			r.provider.service,
+			useCaseID.ValueString(),
+			"customModelVersion",
+			customModel.LatestVersion.ID,
+		); err != nil {
 			resp.Diagnostics.AddError(fmt.Sprintf("Error adding Custom Model version to Use Case %s", useCaseID), err.Error())
 			return
 		}
