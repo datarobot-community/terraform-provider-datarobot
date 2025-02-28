@@ -175,7 +175,60 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
 				),
 			},
-			// Update version description
+			// udpate tar file contents triggers new version
+			{
+				PreConfig: func() {
+					os.Remove(tarFileName)
+
+					// update tar file
+					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("streamlit\nflask"), 0644); err != nil {
+						t.Fatal(err)
+					}
+
+					tarFile, err := os.Create(tarFileName)
+					if err != nil {
+						t.Fatalf("Failed to create tar file: %v", err)
+					}
+
+					tarWriter := tar.NewWriter(tarFile)
+					defer tarWriter.Close()
+
+					if err = createTarFile(tarWriter, dirName); err != nil {
+						t.Fatalf("Failed to create tar file: %v", err)
+					}
+
+					err = tarWriter.Close()
+					if err != nil {
+						t.Fatalf("Failed to close tar writer: %v", err)
+					}
+				},
+				Config: executionEnvironmentResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					"python",
+					"customApplication",
+					"version_description",
+					&tarFileName),
+				// nil),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customApplication"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "version_description"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
+			// Update version description triggers new version
 			{
 				Config: executionEnvironmentResourceConfig(
 					"new_example_name",
@@ -233,6 +286,44 @@ if __name__ == "__main__":
 			},
 			// Update docker context path to directory
 			{
+				Config: executionEnvironmentResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					"python",
+					"customModel",
+					"new_version_description",
+					&dirName),
+				// nil),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "new_version_description"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
+			// update directory contents triggers new version
+			{
+				PreConfig: func() {
+					// update requirements file
+					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("streamlit"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
 				Config: executionEnvironmentResourceConfig(
 					"new_example_name",
 					"new_example_description",

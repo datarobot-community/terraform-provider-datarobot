@@ -54,5 +54,6 @@ output "datarobot_execution_environment_version_id" {
 ### Read-Only
 
 - `build_status` (String) The status of the Execution Environment version build.
+- `docker_context_hash` (String) The hash of the docker context contents.
 - `id` (String) The ID of the Execution Environment.
 - `version_id` (String) The ID of the Execution Environment Version.

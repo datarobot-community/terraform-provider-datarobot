@@ -638,11 +638,7 @@ func computeFolderHash(folderPath types.String) (hash types.String, err error) {
 		}
 
 		// calculate hash of all file hashes
-		sha256 := sha256.New()
-		sha256.Write([]byte(hashValue))
-		hashValue = hex.EncodeToString(sha256.Sum(nil))
-
-		hash = types.StringValue(hashValue)
+		hash = types.StringValue(computeHash([]byte(hashValue)))
 	}
 
 	return
@@ -673,10 +669,7 @@ func computeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.
 	}
 
 	for _, file := range localFiles {
-		sha256 := sha256.New()
-		sha256.Write(file.Content)
-		hash := hex.EncodeToString(sha256.Sum(nil))
-		hashValues = append(hashValues, hash)
+		hashValues = append(hashValues, computeHash(file.Content))
 	}
 
 	// convert hashValues to types.List
@@ -686,6 +679,13 @@ func computeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.
 		return
 	}
 
+	return
+}
+
+func computeHash(value []byte) (hash string) {
+	sha256 := sha256.New()
+	sha256.Write(value)
+	hash = hex.EncodeToString(sha256.Sum(nil))
 	return
 }
 

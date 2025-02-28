@@ -1,3 +1,7 @@
+## 0.8.13
+
+- Trigger new Execution Environment version on Docker Context content changes
+
 ## 0.8.12
 
 - Vector Database versioning
