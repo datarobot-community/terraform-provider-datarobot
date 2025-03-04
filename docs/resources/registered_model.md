@@ -28,11 +28,6 @@ resource "datarobot_registered_model" "example" {
   description             = "Description for the example registered model"
 }
 
-resource "datarobot_prediction_environment" "example" {
-  name        = "Example Prediction Environment"
-  description = "Description for the example prediction environment"
-  platform    = "datarobotServerless"
-}
 output "datarobot_registered_model_id" {
   value       = datarobot_registered_model.example.id
   description = "The id for the example registered model"

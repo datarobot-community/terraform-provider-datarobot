@@ -255,10 +255,11 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 		return
 	}
 
+	var registeredModelVersion *client.RegisteredModelVersion
 	if r.shouldCreateNewVersion(state, plan) {
 		// create a new version of the same registered model
 		traceAPICall("CreateRegisteredModelVersionFromLeaderboard")
-		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromLeaderboard(ctx, &client.CreateRegisteredModelFromLeaderboardRequest{
+		registeredModelVersion, err = r.provider.service.CreateRegisteredModelFromLeaderboard(ctx, &client.CreateRegisteredModelFromLeaderboardRequest{
 			ModelID:                       plan.ModelID.ValueString(),
 			RegisteredModelID:             StringValuePointerOptional(plan.ID),
 			PredictionThreshold:           Float64ValuePointerOptional(plan.PredictionThreshold),
@@ -274,13 +275,14 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 
 	if IsKnown(plan.VersionName) {
 		traceAPICall("UpdateRegisteredModelVersion")
-		if _, err = r.provider.service.UpdateRegisteredModelVersion(ctx, plan.ID.ValueString(), plan.VersionID.ValueString(), &client.UpdateRegisteredModelVersionRequest{
+		if registeredModelVersion, err = r.provider.service.UpdateRegisteredModelVersion(ctx, plan.ID.ValueString(), plan.VersionID.ValueString(), &client.UpdateRegisteredModelVersionRequest{
 			Name: plan.VersionName.ValueString(),
 		}); err != nil {
 			resp.Diagnostics.AddError("Error updating Registered Model Version", err.Error())
 			return
 		}
 	}
+	plan.VersionName = types.StringValue(registeredModelVersion.Name)
 
 	err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, plan.ID.ValueString(), plan.VersionID.ValueString())
 	if err != nil {
