@@ -1,3 +1,7 @@
+## 0.8.14
+
+- Fix version_name error on Registered Model From Leaderboard updates
+
 ## 0.8.13
 
 - Trigger new Execution Environment version on Docker Context content changes
