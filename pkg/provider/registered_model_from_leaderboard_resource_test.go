@@ -164,7 +164,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					checkRegisteredModelFromLeaderboardResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-					resource.TestCheckNoResourceAttr(resourceName, "version_name"),
+					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", newPredictionThreshold),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
