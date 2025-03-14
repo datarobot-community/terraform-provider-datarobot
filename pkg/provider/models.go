@@ -257,6 +257,7 @@ type CustomModelLLMValidationResourceModel struct {
 	PredictionTimeout types.Int64  `tfsdk:"prediction_timeout"`
 	PromptColumnName  types.String `tfsdk:"prompt_column_name"`
 	TargetColumnName  types.String `tfsdk:"target_column_name"`
+	ChatModelID       types.String `tfsdk:"chat_model_id"`
 	UseCaseID         types.String `tfsdk:"use_case_id"`
 }
 

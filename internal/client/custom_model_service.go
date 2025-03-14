@@ -252,8 +252,9 @@ type CreateCustomModelLLMValidationRequest struct {
 	ModelID           *string `json:"modelId,omitempty"`
 	Name              *string `json:"name,omitempty"`
 	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
-	PromptColumnName  string  `json:"promptColumnName"`
-	TargetColumnName  string  `json:"targetColumnName"`
+	PromptColumnName  *string `json:"promptColumnName,omitempty"`
+	TargetColumnName  *string `json:"targetColumnName,omitempty"`
+	ChatModelID       *string `json:"chatModelId,omitempty"`
 	UseCaseID         *string `json:"useCaseId,omitempty"`
 }
 
@@ -264,6 +265,7 @@ type UpdateCustomModelLLMValidationRequest struct {
 	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
 	PromptColumnName  *string `json:"promptColumnName,omitempty"`
 	TargetColumnName  *string `json:"targetColumnName,omitempty"`
+	ChatModelID       *string `json:"chatModelId,omitempty"`
 }
 
 type CustomModelLLMValidation struct {
@@ -274,6 +276,7 @@ type CustomModelLLMValidation struct {
 	PredictionTimeout int64   `json:"predictionTimeout"`
 	PromptColumnName  string  `json:"promptColumnName"`
 	TargetColumnName  string  `json:"targetColumnName"`
+	ChatModelID       *string `json:"chatModelId,omitempty"`
 	UseCaseID         string  `json:"useCaseId"`
 	ValidationStatus  string  `json:"validationStatus"`
 	ErrorMessage      *string `json:"errorMessage,omitempty"`

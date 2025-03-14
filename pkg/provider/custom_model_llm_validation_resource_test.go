@@ -65,13 +65,15 @@ def score(data, model, **kwargs):
 				},
 				Config: customModelLLMValidationResourceConfig(
 					name,
-					promptColumnName,
-					targetColumnName,
+					nil,
+					&promptColumnName,
+					&targetColumnName,
 					predictionTimeout,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelLLMValidationResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckNoResourceAttr(resourceName, "chat_model_id"),
 					resource.TestCheckResourceAttr(resourceName, "prompt_column_name", promptColumnName),
 					resource.TestCheckResourceAttr(resourceName, "target_column_name", targetColumnName),
 					resource.TestCheckResourceAttr(resourceName, "prediction_timeout", "100"),
@@ -88,13 +90,15 @@ def score(data, model, **kwargs):
 				},
 				Config: customModelLLMValidationResourceConfig(
 					newName,
-					newPromptColumnName,
-					targetColumnName,
+					nil,
+					&newPromptColumnName,
+					&targetColumnName,
 					newPredictionTimeout,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelLLMValidationResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
+					resource.TestCheckNoResourceAttr(resourceName, "chat_model_id"),
 					resource.TestCheckResourceAttr(resourceName, "prompt_column_name", newPromptColumnName),
 					resource.TestCheckResourceAttr(resourceName, "target_column_name", targetColumnName),
 					resource.TestCheckResourceAttr(resourceName, "prediction_timeout", "200"),
@@ -107,11 +111,27 @@ def score(data, model, **kwargs):
 }
 
 func customModelLLMValidationResourceConfig(
-	name,
+	name string,
+	chatModelID,
 	promptColumnName,
-	targetColumnName string,
+	targetColumnName *string,
 	predictionTimeout int,
 ) string {
+	chatModelIDStr := ""
+	if chatModelID != nil {
+		chatModelIDStr = fmt.Sprintf(`chat_model_id = "%s"`, *chatModelID)
+	}
+
+	promptColumnNameStr := ""
+	if promptColumnName != nil {
+		promptColumnNameStr = fmt.Sprintf(`prompt_column_name = "%s"`, *promptColumnName)
+	}
+
+	targetColumnNameStr := ""
+	if targetColumnName != nil {
+		targetColumnNameStr = fmt.Sprintf(`target_column_name = "%s"`, *targetColumnName)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model_llm_validation" {
 	name = "test custom model llm validation"
@@ -147,8 +167,9 @@ resource "datarobot_deployment" "test_custom_model_llm_validation" {
 resource "datarobot_custom_model_llm_validation" "test" {
 	name = "%s"
 	deployment_id = datarobot_deployment.test_custom_model_llm_validation.id
-	prompt_column_name = "%s"
-	target_column_name = "%s"
+	%s
+	%s
+	%s
 	prediction_timeout = %d
 	use_case_id = datarobot_use_case.test_custom_model_llm_validation.id
 }
@@ -159,8 +180,9 @@ resource "datarobot_llm_blueprint" "test_custom_model_llm_validation" {
 }
 `, nameSalt,
 		name,
-		promptColumnName,
-		targetColumnName,
+		chatModelIDStr,
+		promptColumnNameStr,
+		targetColumnNameStr,
 		predictionTimeout)
 }
 
