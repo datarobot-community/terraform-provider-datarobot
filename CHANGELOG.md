@@ -1,3 +1,7 @@
+## 0.8.15
+
+- Update CustomModelLLMValidation resource attributes based on underlying API changes
+
 ## 0.8.14
 
 - Fix version_name error on Registered Model From Leaderboard updates

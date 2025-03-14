@@ -14,11 +14,12 @@ Custom Model LLM Validation
 
 ```terraform
 resource "datarobot_custom_model_llm_validation" "example" {
-  deployment_id      = datarobot_deployment.example.id
-  prompt_column_name = "promptText"
-  target_column_name = "resultText"
+  deployment_id = datarobot_deployment.example.id
 
   # Optional
+  prompt_column_name = "promptText"
+  target_column_name = "resultText"
+  chat_model_id      = "111111111111"
   prediction_timeout = 100
   use_case_id        = datarobot.use_case.example.id
 }
@@ -35,14 +36,15 @@ output "example_id" {
 ### Required
 
 - `deployment_id` (String) The ID of the custom model deployment.
-- `prompt_column_name` (String) The name of the column the custom model uses for prompt text input.
-- `target_column_name` (String) The name of the column the custom model uses for prediction output.
 
 ### Optional
 
+- `chat_model_id` (String) The ID of the chat model to use for the custom model LLM validation.
 - `model_id` (String) The ID of the model used in the deployment.
 - `name` (String) The name to use for the validated custom model.
 - `prediction_timeout` (Number) The timeout in seconds for the prediction when validating a custom model. Defaults to 300.
+- `prompt_column_name` (String) The name of the column the custom model uses for prompt text input.
+- `target_column_name` (String) The name of the column the custom model uses for prediction output.
 - `use_case_id` (String) The ID of the use case to associate with the validated custom model.
 
 ### Read-Only

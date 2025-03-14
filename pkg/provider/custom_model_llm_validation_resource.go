@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -68,12 +69,16 @@ func (r *CustomModelLLMValidationResource) Schema(ctx context.Context, req resou
 				MarkdownDescription: "The timeout in seconds for the prediction when validating a custom model. Defaults to 300.",
 			},
 			"prompt_column_name": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "The name of the column the custom model uses for prompt text input.",
 			},
 			"target_column_name": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "The name of the column the custom model uses for prediction output.",
+			},
+			"chat_model_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The ID of the chat model to use for the custom model LLM validation.",
 			},
 			"use_case_id": schema.StringAttribute{
 				Optional:            true,
@@ -115,8 +120,9 @@ func (r *CustomModelLLMValidationResource) Create(ctx context.Context, req resou
 		ModelID:           StringValuePointerOptional(data.ModelID),
 		Name:              StringValuePointerOptional(data.Name),
 		PredictionTimeout: Int64ValuePointerOptional(data.PredictionTimeout),
-		PromptColumnName:  data.PromptColumnName.ValueString(),
-		TargetColumnName:  data.TargetColumnName.ValueString(),
+		PromptColumnName:  StringValuePointerOptional(data.PromptColumnName),
+		TargetColumnName:  StringValuePointerOptional(data.TargetColumnName),
+		ChatModelID:       StringValuePointerOptional(data.ChatModelID),
 		UseCaseID:         StringValuePointerOptional(data.UseCaseID),
 	})
 	if err != nil {
@@ -178,6 +184,7 @@ func (r *CustomModelLLMValidationResource) Read(ctx context.Context, req resourc
 	data.ModelID = types.StringValue(customModelLlmValidation.ModelID)
 	data.PromptColumnName = types.StringValue(customModelLlmValidation.PromptColumnName)
 	data.TargetColumnName = types.StringValue(customModelLlmValidation.TargetColumnName)
+	data.ChatModelID = types.StringPointerValue(customModelLlmValidation.ChatModelID)
 	data.PredictionTimeout = types.Int64Value(customModelLlmValidation.PredictionTimeout)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -207,6 +214,7 @@ func (r *CustomModelLLMValidationResource) Update(ctx context.Context, req resou
 			ModelID:           StringValuePointerOptional(plan.ModelID),
 			PromptColumnName:  StringValuePointerOptional(plan.PromptColumnName),
 			TargetColumnName:  StringValuePointerOptional(plan.TargetColumnName),
+			ChatModelID:       StringValuePointerOptional(plan.ChatModelID),
 			PredictionTimeout: Int64ValuePointerOptional(plan.PredictionTimeout),
 		})
 	if err != nil {
@@ -251,4 +259,14 @@ func (r *CustomModelLLMValidationResource) Delete(ctx context.Context, req resou
 
 func (r *CustomModelLLMValidationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r CustomModelLLMValidationResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.AtLeastOneOf(
+			path.MatchRoot("chat_model_id"),
+			path.MatchRoot("prompt_column_name"),
+			path.MatchRoot("target_column_name"),
+		),
+	}
 }
