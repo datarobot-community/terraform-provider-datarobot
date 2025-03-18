@@ -50,11 +50,17 @@ func (r *CustomModelLLMValidationResource) Schema(ctx context.Context, req resou
 			"deployment_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The ID of the custom model deployment.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"model_id": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The ID of the model used in the deployment.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
@@ -71,14 +77,23 @@ func (r *CustomModelLLMValidationResource) Schema(ctx context.Context, req resou
 			"prompt_column_name": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The name of the column the custom model uses for prompt text input.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"target_column_name": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The name of the column the custom model uses for prediction output.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"chat_model_id": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The ID of the chat model to use for the custom model LLM validation.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"use_case_id": schema.StringAttribute{
 				Optional:            true,

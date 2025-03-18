@@ -1,3 +1,7 @@
+## 0.8.16
+
+- Add requiresReplace to CustomModelLLMValidation attributes 
+
 ## 0.8.15
 
 - Update CustomModelLLMValidation resource attributes based on underlying API changes
