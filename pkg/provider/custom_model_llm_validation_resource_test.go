@@ -19,6 +19,7 @@ func TestAccCustomModelLLMValidationResource(t *testing.T) {
 	resourceName := "datarobot_custom_model_llm_validation.test"
 
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	folderPath := "custom_model_llm_validation"
 	if err := os.Mkdir(folderPath, 0755); err != nil {
@@ -80,10 +81,39 @@ def score(data, model, **kwargs):
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
-			// Update name, promptColumnName, predictionTimeout
+			// Update name and prediction_timeout
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: customModelLLMValidationResourceConfig(
+					newName,
+					nil,
+					&promptColumnName,
+					&targetColumnName,
+					newPredictionTimeout,
+				),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelLLMValidationResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", newName),
+					resource.TestCheckNoResourceAttr(resourceName, "chat_model_id"),
+					resource.TestCheckResourceAttr(resourceName, "prompt_column_name", promptColumnName),
+					resource.TestCheckResourceAttr(resourceName, "target_column_name", targetColumnName),
+					resource.TestCheckResourceAttr(resourceName, "prediction_timeout", "200"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+			// Update prompt_column_name triggers replace
+			{
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
 						resourceName,
 						tfjsonpath.New("id"),
 					),
