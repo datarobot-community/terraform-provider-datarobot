@@ -60,6 +60,7 @@ func (r *CustomModelLLMValidationResource) Schema(ctx context.Context, req resou
 				MarkdownDescription: "The ID of the model used in the deployment.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
