@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 
 # Visit https://golangci-lint.run/ for usage documentation
 # and information on other useful linters
