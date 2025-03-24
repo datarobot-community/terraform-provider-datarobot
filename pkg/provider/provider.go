@@ -181,6 +181,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewBasicCredentialResource,
 		NewGoogleCloudCredentialResource,
 		NewAwsCredentialResource,
+		NewAzureCredentialResource,
 		NewExecutionEnvironmentResource,
 		NewBatchPredictionJobDefinitionResource,
 		NewNotificationChannelResource,

@@ -744,6 +744,13 @@ type AwsCredentialResourceModel struct {
 	ConfigID           types.String `tfsdk:"config_id"`
 }
 
+type AzureCredentialResourceModel struct {
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	Description           types.String `tfsdk:"description"`
+	AzureConnectionString types.String `tfsdk:"azure_connection_string"`
+}
+
 // ExecutionEnvironmentDataSourceModel describes the execution environment data source resource.
 type ExecutionEnvironmentDataSourceModel struct {
 	Name                types.String `tfsdk:"name"`

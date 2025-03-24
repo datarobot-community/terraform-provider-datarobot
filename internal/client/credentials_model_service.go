@@ -16,19 +16,20 @@ const (
 )
 
 type CredentialRequest struct {
-	Name               string  `json:"name"`
-	Description        string  `json:"description,omitempty"`
-	CredentialType     string  `json:"credentialType,omitempty"`
-	ApiToken           string  `json:"apiToken,omitempty"`
-	User               string  `json:"user,omitempty"`
-	Password           string  `json:"password,omitempty"`
-	Token              string  `json:"token,omitempty"`
-	RefreshToken       string  `json:"refreshToken,omitempty"`
-	GCPKey             *GCPKey `json:"gcpKey,omitempty"`
-	AWSAccessKeyID     string  `json:"awsAccessKeyId,omitempty"`
-	AWSSecretAccessKey string  `json:"awsSecretAccessKey,omitempty"`
-	AWSSessionToken    string  `json:"awsSessionToken,omitempty"`
-	ConfigID           string  `json:"configId,omitempty"`
+	Name                 string  `json:"name"`
+	Description          string  `json:"description,omitempty"`
+	CredentialType       string  `json:"credentialType,omitempty"`
+	ApiToken             string  `json:"apiToken,omitempty"`
+	User                 string  `json:"user,omitempty"`
+	Password             string  `json:"password,omitempty"`
+	Token                string  `json:"token,omitempty"`
+	RefreshToken         string  `json:"refreshToken,omitempty"`
+	GCPKey               *GCPKey `json:"gcpKey,omitempty"`
+	AWSAccessKeyID       string  `json:"awsAccessKeyId,omitempty"`
+	AWSSecretAccessKey   string  `json:"awsSecretAccessKey,omitempty"`
+	AWSSessionToken      string  `json:"awsSessionToken,omitempty"`
+	ConfigID             string  `json:"configId,omitempty"`
+	AzureConnectionString string  `json:"azureConnectionString,omitempty"`
 }
 
 type GCPKey struct {

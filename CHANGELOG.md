@@ -1,3 +1,7 @@
+## 0.8.17
+
+- Add AzureCredentialResource
+
 ## 0.8.16
 
 - Add requiresReplace to CustomModelLLMValidation attributes 
