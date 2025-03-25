@@ -432,9 +432,10 @@ func GetExternalConnectors() (
 	}
 
 	for _, connector := range externalConnectors {
-		if connector.ConnectorType == "s3" {
+		switch connector.ConnectorType {
+		case "s3":
 			s3ConnectorID = connector.ID
-		} else if connector.ConnectorType == "adls" {
+		case "adls":
 			adlsConnectorID = connector.ID
 		}
 	}

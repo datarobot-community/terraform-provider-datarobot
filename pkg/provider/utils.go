@@ -362,7 +362,7 @@ func formatRuntimeParameterValuesInternal(
 			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
 		}
 
-		var defaultValue any = param.DefaultValue
+		var defaultValue = param.DefaultValue
 		if param.DefaultValue == nil {
 			switch param.Type {
 			case "numeric":
