@@ -73,9 +73,9 @@ type UpdateApplicationSourceVersionRequest struct {
 }
 
 type ApplicationResources struct {
-	Replicas        int64  `json:"replicas"`
-	ResourceLabel   string `json:"resourceLabel"`
-	SessionAffinity bool   `json:"sessionAffinity"`
+	Replicas        *int64  `json:"replicas,omitempty"`
+	ResourceLabel   *string `json:"resourceLabel,omitempty"`
+	SessionAffinity *bool   `json:"sessionAffinity,omitempty"`
 }
 
 type CustomTemplate struct {

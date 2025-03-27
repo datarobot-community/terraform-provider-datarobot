@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -115,20 +114,16 @@ if __name__ == "__main__":
 						},
 					},
 					nil,
-					&ApplicationSourceResources{
-						Replicas:        types.Int64Value(1),
-						ResourceLabel:   types.StringValue(resourceLabel),
-						SessionAffinity: types.BoolValue(true),
-					},
+					nil,
 					slackbotTemplateID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
-					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "true"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -160,7 +155,7 @@ if __name__ == "__main__":
 					nil,
 					&ApplicationSourceResources{
 						Replicas:        types.Int64Value(2),
-						ResourceLabel:   types.StringValue(resourceLabel2),
+						ResourceLabel:   types.StringValue(resourceLabel),
 						SessionAffinity: types.BoolValue(false),
 					},
 					slackbotTemplateID),
@@ -169,7 +164,7 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
 					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -178,7 +173,7 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttr(resourceName, "template_id", slackbotTemplateID),
 				),
 			},
-			// Update file contents
+			// Update file contents and resources
 			{
 				PreConfig: func() {
 					if err := os.WriteFile(appCodeFileName, []byte("app code..."), 0644); err != nil {
@@ -205,7 +200,11 @@ if __name__ == "__main__":
 						},
 					},
 					nil,
-					nil,
+					&ApplicationSourceResources{
+						Replicas:        types.Int64Value(1),
+						ResourceLabel:   types.StringValue(resourceLabel2),
+						SessionAffinity: types.BoolValue(true),
+					},
 					slackbotTemplateID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
@@ -213,8 +212,8 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", "cpu.small"),
-					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -255,6 +254,9 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 					resource.TestCheckResourceAttr(resourceName, "template_id", slackbotTemplateID),
@@ -565,8 +567,7 @@ func checkApplicationSourceFromTemplateResourceExists() resource.TestCheckFunc {
 
 		if ApplicationSourceFromTemplate.Name == rs.Primary.Attributes["name"] &&
 			ApplicationSourceFromTemplate.LatestVersion.BaseEnvironmentID == rs.Primary.Attributes["base_environment_id"] &&
-			ApplicationSourceFromTemplate.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] &&
-			strconv.FormatInt(ApplicationSourceFromTemplateVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resources.replicas"] {
+			ApplicationSourceFromTemplate.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] {
 			if runtimeParamValue, ok := rs.Primary.Attributes["runtime_parameter_values.0.value"]; ok {
 				if runtimeParamValue != ApplicationSourceFromTemplateVersion.RuntimeParameters[0].OverrideValue {
 					return fmt.Errorf("Runtime parameter value does not match")
