@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -244,9 +243,9 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", "cpu.small"),
-					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -285,6 +284,9 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
@@ -321,6 +323,9 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
@@ -355,6 +360,9 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
@@ -483,8 +491,7 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 
 		if applicationSource.Name == rs.Primary.Attributes["name"] &&
 			applicationSource.LatestVersion.BaseEnvironmentID == rs.Primary.Attributes["base_environment_id"] &&
-			applicationSource.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] &&
-			strconv.FormatInt(applicationSourceVersion.Resources.Replicas, 10) == rs.Primary.Attributes["resources.replicas"] {
+			applicationSource.LatestVersion.BaseEnvironmentVersionID == rs.Primary.Attributes["base_environment_version_id"] {
 			if runtimeParamValue, ok := rs.Primary.Attributes["runtime_parameter_values.0.value"]; ok {
 				if runtimeParamValue != applicationSourceVersion.RuntimeParameters[0].OverrideValue {
 					return fmt.Errorf("Runtime parameter value does not match")

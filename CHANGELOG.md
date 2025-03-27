@@ -1,3 +1,7 @@
+## 0.8.18
+
+- Fix Application Source resource session affinity being set by default
+
 ## 0.8.17
 
 - Add AzureCredentialResource

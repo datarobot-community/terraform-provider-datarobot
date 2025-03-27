@@ -13,19 +13,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-)
-
-const (
-	defaultAppSourceSessionAffinity = false
-	defaultAppSourceReplicas        = 1
-	defaultAppSourceResourceLabel   = "cpu.small"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -98,38 +88,19 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				ElementType:         types.StringType,
 			},
 			"resources": schema.SingleNestedAttribute{
-				Computed:            true,
 				Optional:            true,
 				MarkdownDescription: "The resources for the Application Source.",
-				Default: objectdefault.StaticValue(types.ObjectValueMust(
-					map[string]attr.Type{
-						"replicas":         types.Int64Type,
-						"session_affinity": types.BoolType,
-						"resource_label":   types.StringType,
-					},
-					map[string]attr.Value{
-						"replicas":         types.Int64Value(defaultAppSourceReplicas),
-						"session_affinity": types.BoolValue(defaultAppSourceSessionAffinity),
-						"resource_label":   types.StringValue(defaultAppSourceResourceLabel),
-					},
-				)),
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
-						Computed:            true,
-						Default:             int64default.StaticInt64(defaultAppSourceReplicas),
 						MarkdownDescription: "The replicas for the Application Source.",
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
-						Computed:            true,
-						Default:             stringdefault.StaticString(defaultAppSourceResourceLabel),
 						MarkdownDescription: "The resource label for the Application Source.",
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
-						Computed:            true,
-						Default:             booldefault.StaticBool(defaultAppSourceSessionAffinity),
 						MarkdownDescription: "The session affinity for the Application Source.",
 					},
 				},
@@ -209,9 +180,9 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	createApplicationSourceVersionRequest := &client.CreateApplicationSourceVersionRequest{
 		Label: "v1",
 		Resources: &client.ApplicationResources{
-			Replicas:        data.Resources.Replicas.ValueInt64(),
-			SessionAffinity: data.Resources.SessionAffinity.ValueBool(),
-			ResourceLabel:   data.Resources.ResourceLabel.ValueString(),
+			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
 		},
 	}
 
@@ -334,11 +305,6 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	data.Name = types.StringValue(applicationSource.Name)
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
-	data.Resources = &ApplicationSourceResources{
-		Replicas:        types.Int64Value(applicationSource.LatestVersion.Resources.Replicas),
-		SessionAffinity: types.BoolValue(applicationSource.LatestVersion.Resources.SessionAffinity),
-		ResourceLabel:   types.StringValue(applicationSource.LatestVersion.Resources.ResourceLabel),
-	}
 
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -419,12 +385,13 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		}
 	}
 
-	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{
-		Resources: &client.ApplicationResources{
-			Replicas:        plan.Resources.Replicas.ValueInt64(),
-			SessionAffinity: plan.Resources.SessionAffinity.ValueBool(),
-			ResourceLabel:   plan.Resources.ResourceLabel.ValueString(),
-		},
+	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
+	if plan.Resources != nil {
+		updateVersionRequest.Resources = &client.ApplicationResources{
+			Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+		}
 	}
 
 	if IsKnown(plan.BaseEnvironmentVersionID) {
