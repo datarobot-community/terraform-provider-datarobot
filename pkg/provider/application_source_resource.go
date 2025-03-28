@@ -179,11 +179,13 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 
 	createApplicationSourceVersionRequest := &client.CreateApplicationSourceVersionRequest{
 		Label: "v1",
-		Resources: &client.ApplicationResources{
+	}
+	if data.Resources != nil {
+		createApplicationSourceVersionRequest.Resources = &client.ApplicationResources{
 			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
 			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
 			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
-		},
+		}
 	}
 
 	if IsKnown(data.BaseEnvironmentVersionID) {

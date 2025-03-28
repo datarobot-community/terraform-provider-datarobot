@@ -106,7 +106,6 @@ runtimeParameterDefinitions:
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	resourceLabel := "cpu.medium"
-	resourceLabel2 := "cpu.small"
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: isMock,
@@ -140,20 +139,16 @@ runtimeParameterDefinitions:
 						},
 					},
 					nil,
-					&ApplicationSourceResources{
-						Replicas:        types.Int64Value(1),
-						ResourceLabel:   types.StringValue(resourceLabel),
-						SessionAffinity: types.BoolValue(true),
-					}),
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
-					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "true"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -188,7 +183,7 @@ runtimeParameterDefinitions:
 					nil,
 					&ApplicationSourceResources{
 						Replicas:        types.Int64Value(2),
-						ResourceLabel:   types.StringValue(resourceLabel2),
+						ResourceLabel:   types.StringValue(resourceLabel),
 						SessionAffinity: types.BoolValue(false),
 					}),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -198,7 +193,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
-					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
 					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
