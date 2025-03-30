@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 )
 
 type Service interface {
@@ -220,12 +221,27 @@ type Service interface {
 	// User Info
 	GetUserInfo(ctx context.Context) (*UserInfo, error)
 
+	// API Gateway methods
+
+	// Notebook
+	ImportNotebookFromFile(ctx context.Context, fileName string, content []byte, useCaseID string) (*ImportNotebookResponse, error)
+	GetNotebook(ctx context.Context, id string) (*Notebook, error)
+	DeleteNotebook(ctx context.Context, id string) error
+
 	// Add your service methods here
 }
 
 // Service for the DataRobot API.
 type ServiceImpl struct {
-	client *Client
+	client      *Client
+	apiGWClient *Client
+}
+
+// Helper function to calculate APIGWEndpoint from Endpoint
+func calculateAPIGWEndpoint(endpoint string) string {
+	// Your logic to transform endpoint to APIGWEndpoint
+	// For example, if you're replacing "/api/v2" with "/api-gw":
+	return strings.Replace(endpoint, "/api/v2", "/api-gw", 1)
 }
 
 // NewService creates a new API service.
@@ -233,7 +249,15 @@ func NewService(c *Client) Service {
 	if c == nil {
 		panic("client is required")
 	}
-	return &ServiceImpl{client: c}
+	// Construct the API Gateway client from the client config
+	apiGWConfig := *c.cfg
+	apiGWConfig.Endpoint = calculateAPIGWEndpoint(apiGWConfig.Endpoint)
+	apiGWClient := NewClient(&apiGWConfig)
+
+	return &ServiceImpl{
+		client:      c,
+		apiGWClient: apiGWClient,
+	}
 }
 
 // Playground Service Implementation.
@@ -922,4 +946,23 @@ func (s *ServiceImpl) GetGenAITaskStatus(ctx context.Context, id string) (*TaskS
 
 func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
 	return Get[UserInfo](s.client, ctx, "/account/info/")
+}
+
+// API Gateway Service Implementations
+
+// Notebook Service Implementation.
+func (s *ServiceImpl) ImportNotebookFromFile(ctx context.Context, fileName string, content []byte, useCaseID string) (*ImportNotebookResponse, error) {
+	extraFields := map[string]string{}
+	if useCaseID != "" {
+		extraFields["useCaseId"] = useCaseID
+	}
+	return uploadFileFromBinary[ImportNotebookResponse](s.apiGWClient, ctx, "/nbx/notebookImport/fromFile/", http.MethodPost, fileName, content, extraFields)
+}
+
+func (s *ServiceImpl) GetNotebook(ctx context.Context, id string) (*Notebook, error) {
+	return Get[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+}
+
+func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {
+	return Delete(s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
 }

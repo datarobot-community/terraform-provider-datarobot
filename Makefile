@@ -16,6 +16,10 @@ build:
 generate:
 	go generate
 
+# Make mocks for the service
+mocks:
+	mockgen -source=internal/client/service.go -destination=mock/service.go -package=mock_client
+
 release:
 	GOOS=darwin GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_darwin_amd64
 	GOOS=freebsd GOARCH=386 go build -o ./bin/${BINARY}_${VERSION}_freebsd_386

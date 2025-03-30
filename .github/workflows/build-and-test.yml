@@ -96,8 +96,8 @@ jobs:
       - run: go mod download
       - env:
           TF_ACC: "1"
-          DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_KEY }}
+          DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
         run: echo "integration tests disabled until we get a non-trial account"
         # uncomment to run the actual tests
-        # run: go test -v -cover ./pkg/provider/ 
+        # run: go test -v -cover ./pkg/provider/
         timeout-minutes: 10

@@ -1,6 +1,8 @@
 package client
 
-import "net/http"
+import (
+	"net/http"
+)
 
 const DefaultEndpoint string = "https://app.datarobot.com/api/v2"
 

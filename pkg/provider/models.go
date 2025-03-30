@@ -14,6 +14,15 @@ const (
 	PromptRuntimeParameterName string = "PROMPT_COLUMN_NAME"
 )
 
+// NotebookResourceModel describes the notebook resource.
+type NotebookResourceModel struct {
+	ID        types.String `tfsdk:"id"`
+	FilePath  types.String `tfsdk:"file_path"`
+	Name      types.String `tfsdk:"name"`
+	FileHash  types.String `tfsdk:"file_hash"`
+	UseCaseID types.String `tfsdk:"use_case_id"`
+}
+
 // UseCaseResourceModel describes the resource data model.
 type UseCaseResourceModel struct {
 	ID          types.String `tfsdk:"id"`
