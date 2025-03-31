@@ -36,7 +36,7 @@ func (r *NotebookResource) Metadata(ctx context.Context, req resource.MetadataRe
 func (r *NotebookResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Notebook",
+		MarkdownDescription: "Notebook resource for importing and managing Jupyter notebooks in DataRobot",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -45,6 +45,10 @@ func (r *NotebookResource) Schema(ctx context.Context, req resource.SchemaReques
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"name": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The name of the Notebook.",
 			},
 			"file_path": schema.StringAttribute{
 				Required:            true,
@@ -60,10 +64,9 @@ func (r *NotebookResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"use_case_id": schema.ListAttribute{
+			"use_case_id": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The Use Case ID to add the Notebook to.",
-				ElementType:         types.StringType,
 			},
 		},
 	}
@@ -105,7 +108,11 @@ func (r *NotebookResource) Create(ctx context.Context, req resource.CreateReques
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
 
-	useCaseID := plan.UseCaseID.ValueString()
+	// Get use case ID if specified
+	var useCaseID string
+	if !plan.UseCaseID.IsNull() {
+		useCaseID = plan.UseCaseID.ValueString()
+	}
 
 	fileName := filepath.Base(filePath)
 
@@ -118,6 +125,7 @@ func (r *NotebookResource) Create(ctx context.Context, req resource.CreateReques
 
 	// Update model
 	plan.ID = types.StringValue(importResp.ID)
+	plan.Name = types.StringValue(importResp.Name)
 	plan.FileHash = types.StringValue(hashStr)
 
 	// Save model into Terraform state
@@ -144,8 +152,10 @@ func (r *NotebookResource) Read(ctx context.Context, req resource.ReadRequest, r
 	state.ID = types.StringValue(notebook.ID)
 	state.Name = types.StringValue(notebook.Name)
 
-	// Keep existing values for fields that can't be read from the API
-	// Use cases and file path/hash are not returned by the API
+	// Store the UseCaseID if available.
+	if notebook.UseCaseID != "" {
+		state.UseCaseID = types.StringValue(notebook.UseCaseID)
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -165,29 +175,36 @@ func (r *NotebookResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Compare use case IDs to determine changes
-	newUseCaseID := plan.UseCaseID.ValueString()
-	oldUseCaseID := state.UseCaseID.ValueString()
-	if newUseCaseID != oldUseCaseID {
-		traceAPICall("AddEntityToUseCase")
-		err := r.provider.service.AddEntityToUseCase(ctx, newUseCaseID, "notebook", state.ID.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddWarning(
-				"Error adding notebook to use case",
-				fmt.Sprintf("Error adding notebook to use case %s: %s", newUseCaseID, err.Error()),
-			)
+	// Check if use case ID has changed
+	if !plan.UseCaseID.Equal(state.UseCaseID) {
+		// Remove notebook from old use case if it exists
+		if !state.UseCaseID.IsNull() {
+			oldUseCaseID := state.UseCaseID.ValueString()
+			traceAPICall("RemoveEntityFromUseCase")
+			err := r.provider.service.RemoveEntityFromUseCase(ctx, oldUseCaseID, "notebook", state.ID.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddWarning(
+					"Error removing notebook from use case",
+					fmt.Sprintf("Error removing notebook from use case %s: %s", oldUseCaseID, err.Error()),
+				)
+			}
 		}
-		traceAPICall("RemoveEntityFromUseCase")
-		err = r.provider.service.RemoveEntityFromUseCase(ctx, oldUseCaseID, "notebook", state.ID.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddWarning(
-				"Error removing notebook from use case",
-				fmt.Sprintf("Error removing notebook from use case %s: %s", oldUseCaseID, err.Error()),
-			)
+
+		// Add notebook to new use case if specified
+		if !plan.UseCaseID.IsNull() {
+			newUseCaseID := plan.UseCaseID.ValueString()
+			traceAPICall("AddEntityToUseCase")
+			err := r.provider.service.AddEntityToUseCase(ctx, newUseCaseID, "notebook", state.ID.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddWarning(
+					"Error adding notebook to use case",
+					fmt.Sprintf("Error adding notebook to use case %s: %s", newUseCaseID, err.Error()),
+				)
+			}
 		}
 	}
 
-	// Copy all updated fields back
+	// Update the state with the plan
 	state.UseCaseID = plan.UseCaseID
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
