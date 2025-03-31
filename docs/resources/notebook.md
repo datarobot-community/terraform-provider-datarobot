@@ -3,12 +3,12 @@
 page_title: "datarobot_notebook Resource - datarobot"
 subcategory: ""
 description: |-
-  Notebook
+  Notebook resource for importing and managing Jupyter notebooks in DataRobot
 ---
 
 # datarobot_notebook (Resource)
 
-Notebook
+Notebook resource for importing and managing Jupyter notebooks in DataRobot
 
 ## Example Usage
 
@@ -33,9 +33,10 @@ resource "datarobot_notebook" "example" {
 
 ### Optional
 
-- `use_case_id` (List of String) The Use Case ID to add the Notebook to.
+- `use_case_id` (String) The Use Case ID to add the Notebook to.
 
 ### Read-Only
 
 - `file_hash` (String) The SHA-256 hash of the file contents.
 - `id` (String) The ID of the Notebook.
+- `name` (String) The name of the Notebook.
