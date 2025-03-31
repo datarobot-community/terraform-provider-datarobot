@@ -8,7 +8,7 @@ type ImportNotebookResponse struct {
 	Content string `json:"content"`
 }
 
-// Notebook represents a notebook in DataRobot
+// Notebook represents a notebook in DataRobot.
 type Notebook struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`

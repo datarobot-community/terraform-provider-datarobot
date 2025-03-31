@@ -237,7 +237,7 @@ type ServiceImpl struct {
 	apiGWClient *Client
 }
 
-// Helper function to calculate APIGWEndpoint from Endpoint
+// Helper function to calculate APIGWEndpoint from Endpoint.
 func calculateAPIGWEndpoint(endpoint string) string {
 	// Your logic to transform endpoint to APIGWEndpoint
 	// For example, if you're replacing "/api/v2" with "/api-gw":
