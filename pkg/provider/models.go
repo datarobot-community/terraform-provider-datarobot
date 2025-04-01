@@ -21,6 +21,7 @@ type NotebookResourceModel struct {
 	FilePath  types.String `tfsdk:"file_path"`
 	FileHash  types.String `tfsdk:"file_hash"`
 	UseCaseID types.String `tfsdk:"use_case_id"`
+	URL       types.String `tfsdk:"url"`
 }
 
 // UseCaseResourceModel describes the resource data model.

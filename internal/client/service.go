@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 )
 
 type Service interface {
@@ -238,13 +237,6 @@ type ServiceImpl struct {
 	apiGWClient *Client
 }
 
-// Helper function to calculate APIGWEndpoint from Endpoint.
-func calculateAPIGWEndpoint(endpoint string) string {
-	// Your logic to transform endpoint to APIGWEndpoint
-	// For example, if you're replacing "/api/v2" with "/api-gw":
-	return strings.Replace(endpoint, "/api/v2", "/api-gw", 1)
-}
-
 // NewService creates a new API service.
 func NewService(c *Client) Service {
 	if c == nil {
@@ -252,7 +244,7 @@ func NewService(c *Client) Service {
 	}
 	// Construct the API Gateway client from the client config
 	apiGWConfig := *c.cfg
-	apiGWConfig.Endpoint = calculateAPIGWEndpoint(apiGWConfig.Endpoint)
+	apiGWConfig.Endpoint = apiGWConfig.BaseURL() + "/api-gw"
 	apiGWClient := NewClient(&apiGWConfig)
 
 	return &ServiceImpl{
@@ -957,15 +949,31 @@ func (s *ServiceImpl) ImportNotebookFromFile(ctx context.Context, fileName strin
 	if useCaseID != "" {
 		extraFields["useCaseId"] = useCaseID
 	}
-	return uploadFileFromBinary[ImportNotebookResponse](s.apiGWClient, ctx, "/nbx/notebookImport/fromFile/", http.MethodPost, fileName, content, extraFields)
+	importNotebookResponse, err := uploadFileFromBinary[ImportNotebookResponse](s.apiGWClient, ctx, "/nbx/notebookImport/fromFile/", http.MethodPost, fileName, content, extraFields)
+	if err != nil {
+		return nil, err
+	}
+	importNotebookResponse.URL = URLForNotebook(importNotebookResponse.ID, useCaseID, s.apiGWClient.cfg.BaseURL())
+
+	return importNotebookResponse, nil
 }
 
 func (s *ServiceImpl) GetNotebook(ctx context.Context, id string) (*Notebook, error) {
-	return Get[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+	notebookResponse, err := Get[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+	if err != nil {
+		return nil, err
+	}
+	notebookResponse.URL = URLForNotebook(notebookResponse.ID, notebookResponse.UseCaseID, s.apiGWClient.cfg.BaseURL())
+	return notebookResponse, nil
 }
 
 func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error) {
-	return Patch[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/", map[string]string{"useCaseId": useCaseID})
+	notebookResponse, err := Patch[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/", map[string]string{"useCaseId": useCaseID})
+	if err != nil {
+		return nil, err
+	}
+	notebookResponse.URL = URLForNotebook(notebookResponse.ID, notebookResponse.UseCaseID, s.apiGWClient.cfg.BaseURL())
+	return notebookResponse, nil
 }
 
 func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {

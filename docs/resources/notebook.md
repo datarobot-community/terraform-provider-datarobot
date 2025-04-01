@@ -3,12 +3,20 @@
 page_title: "datarobot_notebook Resource - datarobot"
 subcategory: ""
 description: |-
-  Notebook resource for importing and managing Jupyter notebooks in DataRobot
+  Notebook resource for importing and managing Jupyter notebooks in DataRobot.
+  NOTE
+  The synchronization of the file hash is one way. The provider will track changes of the Notebook file on disk
+  and update only when that changes. If the remote Notebook changes, the provider will not update the local file.
 ---
 
 # datarobot_notebook (Resource)
 
-Notebook resource for importing and managing Jupyter notebooks in DataRobot
+Notebook resource for importing and managing Jupyter notebooks in DataRobot.
+
+**NOTE**
+
+The synchronization of the file hash is one way. The provider will track changes of the Notebook file on disk
+and update _only_ when that changes. If the remote Notebook changes, the provider will not update the local file.
 
 ## Example Usage
 
@@ -39,3 +47,4 @@ resource "datarobot_notebook" "example" {
 - `file_hash` (String) The SHA-256 hash of the file contents.
 - `id` (String) The ID of the Notebook.
 - `name` (String) The name of the Notebook.
+- `url` (String) The URL to the Notebook.
