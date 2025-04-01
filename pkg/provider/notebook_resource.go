@@ -42,13 +42,13 @@ func (r *NotebookResource) Schema(ctx context.Context, req resource.SchemaReques
 			"id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID of the Notebook.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The name of the Notebook.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"file_path": schema.StringAttribute{
 				Required:            true,
@@ -96,6 +96,12 @@ func (r *NotebookResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	// Get use case ID if specified
+	var useCaseID string
+	if !plan.UseCaseID.IsNull() {
+		useCaseID = plan.UseCaseID.ValueString()
+	}
+
 	// Read file
 	filePath := plan.FilePath.ValueString()
 	content, err := os.ReadFile(filePath)
@@ -107,12 +113,6 @@ func (r *NotebookResource) Create(ctx context.Context, req resource.CreateReques
 	// Calculate file hash
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
-
-	// Get use case ID if specified
-	var useCaseID string
-	if !plan.UseCaseID.IsNull() {
-		useCaseID = plan.UseCaseID.ValueString()
-	}
 
 	fileName := filepath.Base(filePath)
 
@@ -175,37 +175,51 @@ func (r *NotebookResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Check if use case ID has changed
-	if !plan.UseCaseID.Equal(state.UseCaseID) {
-		// Remove notebook from old use case if it exists
-		if !state.UseCaseID.IsNull() {
-			oldUseCaseID := state.UseCaseID.ValueString()
-			traceAPICall("RemoveEntityFromUseCase")
-			err := r.provider.service.RemoveEntityFromUseCase(ctx, oldUseCaseID, "notebook", state.ID.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddWarning(
-					"Error removing notebook from use case",
-					fmt.Sprintf("Error removing notebook from use case %s: %s", oldUseCaseID, err.Error()),
-				)
-			}
+	// Handle use case updates.
+	if !state.UseCaseID.IsNull() && plan.UseCaseID.IsNull() {
+		// Remove notebook from old use case if it exists and re-import as a classic notebook.
+		traceAPICall("DeleteNoteook")
+		err := r.provider.service.DeleteNotebook(ctx, state.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error deleting notebook", err.Error())
+			return
+		}
+		// Re-import the notebook.
+		filePath := plan.FilePath.ValueString()
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading file", fmt.Sprintf("Unable to read file at %s: %s", filePath, err))
+			return
 		}
 
-		// Add notebook to new use case if specified
-		if !plan.UseCaseID.IsNull() {
-			newUseCaseID := plan.UseCaseID.ValueString()
-			traceAPICall("AddEntityToUseCase")
-			err := r.provider.service.AddEntityToUseCase(ctx, newUseCaseID, "notebook", state.ID.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddWarning(
-					"Error adding notebook to use case",
-					fmt.Sprintf("Error adding notebook to use case %s: %s", newUseCaseID, err.Error()),
-				)
-			}
+		// Calculate file hash
+		hash := sha256.Sum256(content)
+		hashStr := hex.EncodeToString(hash[:])
+
+		fileName := filepath.Base(filePath)
+
+		traceAPICall("ImportNotebookFromFile")
+		importResp, err := r.provider.service.ImportNotebookFromFile(ctx, fileName, content, "")
+		if err != nil {
+			resp.Diagnostics.AddError("Error importing notebook", err.Error())
+			return
 		}
+		state.FileHash = types.StringValue(hashStr)
+		state.ID = types.StringValue(importResp.ID)
+		state.Name = types.StringValue(importResp.Name)
+		state.UseCaseID = types.StringNull()
+
+	} else if !plan.UseCaseID.Equal(state.UseCaseID) && !plan.UseCaseID.IsNull() {
+		// Update the use case with the new UseCaseID
+		traceAPICall("UpdateNotebook")
+		_, err := r.provider.service.UpdateNotebook(ctx, state.ID.ValueString(), plan.UseCaseID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating notebook", err.Error())
+			return
+		}
+		// Update the state with the plan
+		state.UseCaseID = plan.UseCaseID
 	}
-
-	// Update the state with the plan
-	state.UseCaseID = plan.UseCaseID
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -219,24 +233,14 @@ func (r *NotebookResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	// Remove notebook from all use cases first
-	useCaseID := state.UseCaseID.ValueString()
-	traceAPICall("RemoveEntityFromUseCase")
-	err := r.provider.service.RemoveEntityFromUseCase(ctx, useCaseID, "notebook", state.ID.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddWarning(
-			"Error removing notebook from use case",
-			fmt.Sprintf("Error removing notebook from use case %s: %s", useCaseID, err.Error()),
-		)
-	}
-
 	// Delete the notebook
 	traceAPICall("DeleteNotebook")
-	err = r.provider.service.DeleteNotebook(ctx, state.ID.ValueString())
+	err := r.provider.service.DeleteNotebook(ctx, state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting notebook", err.Error())
 		return
 	}
+
 }
 
 func (r *NotebookResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

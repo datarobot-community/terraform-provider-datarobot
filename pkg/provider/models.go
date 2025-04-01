@@ -16,12 +16,11 @@ const (
 
 // NotebookResourceModel describes the notebook resource.
 type NotebookResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	FilePath    types.String `tfsdk:"file_path"`
-	FileHash    types.String `tfsdk:"file_hash"`
-	Description types.String `tfsdk:"description"`
-	UseCaseID   types.String `tfsdk:"use_case_id"`
+	ID        types.String `tfsdk:"id"`
+	Name      types.String `tfsdk:"name"`
+	FilePath  types.String `tfsdk:"file_path"`
+	FileHash  types.String `tfsdk:"file_hash"`
+	UseCaseID types.String `tfsdk:"use_case_id"`
 }
 
 // UseCaseResourceModel describes the resource data model.

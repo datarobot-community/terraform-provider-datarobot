@@ -49,15 +49,20 @@ func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, bo
 }
 
 func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method, apiPath string, body any) (result *T, respHeader *http.Header, err error) {
-	// Marshal the body to JSON
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return result, nil, WrapGenericError("failed to marshal body", err)
+
+	url := c.cfg.Endpoint + apiPath
+	var bodyBytes bytes.Buffer
+	var jsonBody []byte
+	if body != nil {
+		jsonBody, err = json.Marshal(body)
+		if err != nil {
+			return result, nil, WrapGenericError("failed to marshal body", err)
+		}
+		bodyBytes = *bytes.NewBuffer(jsonBody)
 	}
 
 	// Create a new HTTP request
-	url := c.cfg.Endpoint + apiPath
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, method, url, &bodyBytes)
 	req = req.WithContext(ctx)
 	if err != nil {
 		return result, nil, WrapGenericError("failed to create request", err)
@@ -322,12 +327,12 @@ func uploadFilesFromBinaries[T any](
 		}
 	}
 
+	if c.cfg.Debug {
+		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errorMessage := fmt.Sprintf("%s request %s : response %s %s", req.Method, req.URL.String(), resp.Status, string(respBody))
 		return result, NewGenericError(errorMessage)
-	}
-	if c.cfg.Debug {
-		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
 
 	// Deserialize the response into the provided result type

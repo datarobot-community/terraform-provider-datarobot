@@ -226,6 +226,7 @@ type Service interface {
 	// Notebook
 	ImportNotebookFromFile(ctx context.Context, fileName string, content []byte, useCaseID string) (*ImportNotebookResponse, error)
 	GetNotebook(ctx context.Context, id string) (*Notebook, error)
+	UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error)
 	DeleteNotebook(ctx context.Context, id string) error
 
 	// Add your service methods here
@@ -961,6 +962,10 @@ func (s *ServiceImpl) ImportNotebookFromFile(ctx context.Context, fileName strin
 
 func (s *ServiceImpl) GetNotebook(ctx context.Context, id string) (*Notebook, error) {
 	return Get[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error) {
+	return Patch[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/", map[string]string{"useCaseId": useCaseID})
 }
 
 func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {

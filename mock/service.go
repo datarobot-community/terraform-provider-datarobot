@@ -2293,6 +2293,21 @@ func (mr *MockServiceMockRecorder) UpdateLLMBlueprint(ctx, id, req interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLLMBlueprint", reflect.TypeOf((*MockService)(nil).UpdateLLMBlueprint), ctx, id, req)
 }
 
+// UpdateNotebook mocks base method.
+func (m *MockService) UpdateNotebook(ctx context.Context, id, useCaseID string) (*client.Notebook, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotebook", ctx, id, useCaseID)
+	ret0, _ := ret[0].(*client.Notebook)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNotebook indicates an expected call of UpdateNotebook.
+func (mr *MockServiceMockRecorder) UpdateNotebook(ctx, id, useCaseID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotebook", reflect.TypeOf((*MockService)(nil).UpdateNotebook), ctx, id, useCaseID)
+}
+
 // UpdateNotificationChannel mocks base method.
 func (m *MockService) UpdateNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string, req *client.UpdateNotificationChannelRequest) (*client.NotificationChannel, error) {
 	m.ctrl.T.Helper()
