@@ -223,7 +223,7 @@ func (r *NotebookResource) Update(ctx context.Context, req resource.UpdateReques
 	// 1. If the file contents change, we need to re-import the notebook.
 	// 2. If we no longer have a use case, we need to re-import the notebook.
 	if (!state.UseCaseID.IsNull() && plan.UseCaseID.IsNull()) || !state.FileHash.Equal(plan.FileHash) {
-		// Delete old Notebook and re-import it.
+		// Delete old Notebook and re-import it. If no use-case, it becomes a "classic" notebook.
 		traceAPICall("DeleteNoteook")
 		err := r.provider.service.DeleteNotebook(ctx, state.ID.ValueString())
 		if err != nil {

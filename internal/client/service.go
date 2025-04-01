@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -959,7 +960,7 @@ func (s *ServiceImpl) ImportNotebookFromFile(ctx context.Context, fileName strin
 }
 
 func (s *ServiceImpl) GetNotebook(ctx context.Context, id string) (*Notebook, error) {
-	notebookResponse, err := Get[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+	notebookResponse, err := Get[Notebook](s.apiGWClient, ctx, fmt.Sprintf("/nbx/notebooks/%s/", id))
 	if err != nil {
 		return nil, err
 	}
@@ -968,7 +969,7 @@ func (s *ServiceImpl) GetNotebook(ctx context.Context, id string) (*Notebook, er
 }
 
 func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error) {
-	notebookResponse, err := Patch[Notebook](s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/", map[string]string{"useCaseId": useCaseID})
+	notebookResponse, err := Patch[Notebook](s.apiGWClient, ctx, fmt.Sprintf("/nbx/notebooks/%s/", id), map[string]string{"useCaseId": useCaseID})
 	if err != nil {
 		return nil, err
 	}
@@ -977,5 +978,5 @@ func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID s
 }
 
 func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {
-	return Delete(s.apiGWClient, ctx, "/nbx/notebooks/"+id+"/")
+	return Delete(s.apiGWClient, ctx, fmt.Sprintf("/nbx/notebooks/%s/", id))
 }
