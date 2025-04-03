@@ -1,6 +1,9 @@
 package client
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+)
 
 const DefaultEndpoint string = "https://app.datarobot.com/api/v2"
 
@@ -12,6 +15,19 @@ type Configuration struct {
 	TraceContext string
 	HTTPClient   *http.Client
 	token        string
+}
+
+// BaseURL returns the base URL (without the API path) derived from the Endpoint.
+func (c *Configuration) BaseURL() string {
+	parsedURL, err := url.Parse(c.Endpoint)
+	if err != nil {
+		return ""
+	}
+	u := &url.URL{
+		Scheme: parsedURL.Scheme,
+		Host:   parsedURL.Host,
+	}
+	return u.String()
 }
 
 // NewConfiguration returns a new Configuration object.

@@ -31,8 +31,8 @@ func TestAccAzureCredentialResource(t *testing.T) {
 			// Create and Read
 			{
 				Config: azureCredentialResourceConfig(
-					credentialName, 
-					"example_description", 
+					credentialName,
+					"example_description",
 					"example_azure_connection_string"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
@@ -52,8 +52,8 @@ func TestAccAzureCredentialResource(t *testing.T) {
 			// Update name and description
 			{
 				Config: azureCredentialResourceConfig(
-					credentialName+"_new", 
-					"new_example_description", 
+					credentialName+"_new",
+					"new_example_description",
 					"example_azure_connection_string"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
@@ -77,8 +77,8 @@ func TestAccAzureCredentialResource(t *testing.T) {
 			// Update connection string trigger replace
 			{
 				Config: azureCredentialResourceConfig(
-					credentialName+"_new", 
-					"new_example_description", 
+					credentialName+"_new",
+					"new_example_description",
 					"new_example_azure_connection_string"),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -101,8 +101,8 @@ func TestAccAzureCredentialResource(t *testing.T) {
 }
 
 func azureCredentialResourceConfig(
-	name, 
-	description, 
+	name,
+	description,
 	azureConnectionString string,
 ) string {
 	return fmt.Sprintf(`

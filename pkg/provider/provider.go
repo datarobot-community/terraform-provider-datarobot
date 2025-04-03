@@ -186,6 +186,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewBatchPredictionJobDefinitionResource,
 		NewNotificationChannelResource,
 		NewNotificationPolicyResource,
+		NewNotebookResource,
 	}
 }
 
