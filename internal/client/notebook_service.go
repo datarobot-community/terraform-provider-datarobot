@@ -22,7 +22,7 @@ func URLForNotebook(notebookID string, useCaseID string, baseUrl string) string 
 	// Sample without use case: notebooks/67eb6c379ba5bc616450b482
 	var useCasePath = ""
 	if useCaseID != "" {
-		useCasePath = fmt.Sprintf("/usecases/%s/", useCaseID)
+		useCasePath = fmt.Sprintf("/usecases/%s", useCaseID)
 	}
 
 	return fmt.Sprintf("%s%s/notebooks/%s", baseUrl, useCasePath, notebookID)
