@@ -863,6 +863,20 @@ func (mr *MockServiceMockRecorder) DeleteLLMBlueprint(ctx, id interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLLMBlueprint", reflect.TypeOf((*MockService)(nil).DeleteLLMBlueprint), ctx, id)
 }
 
+// DeleteNotebook mocks base method.
+func (m *MockService) DeleteNotebook(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNotebook", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteNotebook indicates an expected call of DeleteNotebook.
+func (mr *MockServiceMockRecorder) DeleteNotebook(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNotebook", reflect.TypeOf((*MockService)(nil).DeleteNotebook), ctx, id)
+}
+
 // DeleteNotificationChannel mocks base method.
 func (m *MockService) DeleteNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) error {
 	m.ctrl.T.Helper()
@@ -1394,6 +1408,21 @@ func (mr *MockServiceMockRecorder) GetLatestRegisteredModelVersion(ctx, id inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestRegisteredModelVersion", reflect.TypeOf((*MockService)(nil).GetLatestRegisteredModelVersion), ctx, id)
 }
 
+// GetNotebook mocks base method.
+func (m *MockService) GetNotebook(ctx context.Context, id string) (*client.Notebook, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNotebook", ctx, id)
+	ret0, _ := ret[0].(*client.Notebook)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNotebook indicates an expected call of GetNotebook.
+func (mr *MockServiceMockRecorder) GetNotebook(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNotebook", reflect.TypeOf((*MockService)(nil).GetNotebook), ctx, id)
+}
+
 // GetNotificationChannel mocks base method.
 func (m *MockService) GetNotificationChannel(ctx context.Context, relatedEntityType, relatedEntityID, id string) (*client.NotificationChannel, error) {
 	m.ctrl.T.Helper()
@@ -1587,6 +1616,21 @@ func (m *MockService) GetVectorDatabase(ctx context.Context, id string) (*client
 func (mr *MockServiceMockRecorder) GetVectorDatabase(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVectorDatabase", reflect.TypeOf((*MockService)(nil).GetVectorDatabase), ctx, id)
+}
+
+// ImportNotebookFromFile mocks base method.
+func (m *MockService) ImportNotebookFromFile(ctx context.Context, fileName string, content []byte, useCaseID string) (*client.ImportNotebookResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportNotebookFromFile", ctx, fileName, content, useCaseID)
+	ret0, _ := ret[0].(*client.ImportNotebookResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportNotebookFromFile indicates an expected call of ImportNotebookFromFile.
+func (mr *MockServiceMockRecorder) ImportNotebookFromFile(ctx, fileName, content, useCaseID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportNotebookFromFile", reflect.TypeOf((*MockService)(nil).ImportNotebookFromFile), ctx, fileName, content, useCaseID)
 }
 
 // IsCustomModelReady mocks base method.
@@ -2247,6 +2291,21 @@ func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *cl
 func (mr *MockServiceMockRecorder) UpdateLLMBlueprint(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLLMBlueprint", reflect.TypeOf((*MockService)(nil).UpdateLLMBlueprint), ctx, id, req)
+}
+
+// UpdateNotebook mocks base method.
+func (m *MockService) UpdateNotebook(ctx context.Context, id, useCaseID string) (*client.Notebook, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNotebook", ctx, id, useCaseID)
+	ret0, _ := ret[0].(*client.Notebook)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNotebook indicates an expected call of UpdateNotebook.
+func (mr *MockServiceMockRecorder) UpdateNotebook(ctx, id, useCaseID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotebook", reflect.TypeOf((*MockService)(nil).UpdateNotebook), ctx, id, useCaseID)
 }
 
 // UpdateNotificationChannel mocks base method.
