@@ -30,12 +30,16 @@ Since the provider has not been published to the Terraform Registry yet, you mus
 
 1. Run `make install` to build the provider locally. 
 
-Now you can continue with the Low Code RAG example:
+Now you can continue with the Low Code RAG example (or the notebooks example):
 
-1. Go to the `examples/workflows/low_code_rag` directory.
+1. Go to either the `examples/workflows/low_code_rag` or `examples/workflows/notebooks` directory.
 
     ~~~ shell
     cd examples/workflows/low_code_rag
+    ~~~
+
+    ~~~ shell
+    cd examples/workflows/notebooks
     ~~~
 
 1. The provider requires an API key set in an environment variable named `DATROBOT_API_TOKEN`. Copy the [API key](https://docs.datarobot.com/en/docs/get-started/acct-mgmt/acct-settings/api-key-mgmt.html#api-key-management) from the DataRobot console and create the `DATAROBOT_API_TOKEN` environment variable.
@@ -45,10 +49,12 @@ Now you can continue with the Low Code RAG example:
     ~~~
 
     Where `<your API key>` is the API key you copied from the DataRobot Console.
- 
- 1. The example requires Google Cloud service account credentials in order to call the Google Vertex AI API. Follow [this guide](https://cloud.google.com/iam/docs/keys-create-delete#creating) to create a service account key for your Google account.
 
- 1. In a text editor create a new file `terraform.tfvars` in `low_code_rag` with the following settings.
+    You can alternately set this API KEY in the `main.tf` file in the example's directory using the `apikey` value set in the `provider`.
+ 
+ 1. The RAG example requires Google Cloud service account credentials in order to call the Google Vertex AI API. Follow [this guide](https://cloud.google.com/iam/docs/keys-create-delete#creating) to create a service account key for your Google account.
+
+ 1. For the RAG example, in a text editor create a new file `terraform.tfvars` in `low_code_rag` with the following settings.
 
      ~~~
     use_case_name = "<use case name>"
@@ -81,7 +87,7 @@ Now you can continue with the Low Code RAG example:
 
     Enter `yes` when prompted to apply the plan and create the resources.
 
-1. Once the creation is complete, navigate to the `datarobot_qa_application_url` to view your Q&A application.
+1. Once the creation is complete, navigate to the `datarobot_qa_application_url` to view your Q&A application. Or if working with notebook example use the `datarobot_notebook_url` provided in the output.
 
     ~~~ shell
     Apply complete! Resources: 5 added, 0 changed, 0 destroyed.

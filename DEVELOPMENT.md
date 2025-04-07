@@ -30,7 +30,7 @@ export DATAROBOT_API_TOKEN=<YOUR_API_KEY>
 
 ## Regenerating Docs
 
-Documentations is generated based on the `Description` and `MarkdownDescription` fields in the schemas.
+Documentation is generated based on the `Description` and `MarkdownDescription` fields in the schemas.
 
 ~~~shell
 make generate
