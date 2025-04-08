@@ -1,3 +1,7 @@
+## 0.9.0
+
+- Added Notebook resource
+
 ## 0.8.19
 
 - Fix Application Source panic
