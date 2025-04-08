@@ -331,6 +331,22 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 					},
 				},
 			},
+			"retraining_user_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "ID of the retraining user.",
+			},
+			"credential_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "ID of the credential used to refresh retraining dataset.",
+			},
+			"dataset_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "	ID of the retraining dataset.",
+			},
+			"prediction_environment_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "ID of the prediction environment to associate with the challengers created by retraining policies.",
+			},
 		},
 	}
 }
@@ -410,28 +426,23 @@ func (r *DeploymentRetrainingPolicyResource) Read(ctx context.Context, req resou
 		}
 		return
 	}
+
+	// Populate retraining policy data
 	data.Name = types.StringValue(deploymentRetrainingPolicy.Name)
 	data.Description = types.StringValue(deploymentRetrainingPolicy.Description)
 	data.Action = types.StringValue(deploymentRetrainingPolicy.Action)
 	data.ModelSelectionStrategy = types.StringValue(deploymentRetrainingPolicy.ModelSelectionStrategy)
 	data.FeatureListStrategy = types.StringValue(deploymentRetrainingPolicy.FeatureListStrategy)
 	data.ProjectOptionsStrategy = types.StringValue(deploymentRetrainingPolicy.ProjectOptionsStrategy)
-	data.AutopilotOptions = &AutopilotOptions{
-		BlendBestModels:              types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.BlendBestModels),
-		Mode:                         types.StringPointerValue(deploymentRetrainingPolicy.AutopilotOptions.Mode),
-		RunLeakageRemovedFeatureList: types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.RunLeakageRemovedFeatureList),
-		ScoringCodeOnly:              types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.ScoringCodeOnly),
-		ShapOnlyMode:                 types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.ShapOnlyMode),
+
+	// Retrieve retraining settings
+	retrainingSettings, err := r.getRetrainingSettings(ctx, data.DeploymentID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Error retrieving Retraining Settings", err.Error())
+		return
 	}
-	if deploymentRetrainingPolicy.ProjectOptions != nil {
-		data.ProjectOptions = &ProjectOptions{
-			CVMethod:       types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.CvMethod),
-			HoldoutPct:     types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.HoldoutPct),
-			ValidationPct:  types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.ValidationPct),
-			Metric:         types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.Metric),
-			Reps:           types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.Reps),
-			ValidationType: types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.ValidationType),
-		}
+	if retrainingSettings != nil {
+		data.RetrainingUserID = types.StringValue(retrainingSettings.RetrainingUser.ID)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -461,6 +472,20 @@ func (r *DeploymentRetrainingPolicyResource) Update(ctx context.Context, req res
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Retraining Policy", err.Error())
 		return
+	}
+
+	// Update retraining settings
+	if !data.RetrainingUserID.IsNull() && !data.RetrainingUserID.IsUnknown() {
+		err = r.updateRetrainingSettings(ctx, data.DeploymentID.ValueString(), &client.UpdateRetrainingSettingsRequest{
+			CredentialID:            StringValuePointerOptional(data.CredentialID),
+			DatasetID:               StringValuePointerOptional(data.DatasetID),
+			PredictionEnvironmentID: StringValuePointerOptional(data.PredictionEnvironmentID),
+			RetrainingUserID:        StringValuePointerOptional(data.RetrainingUserID),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Retraining Settings", err.Error())
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -504,6 +529,23 @@ func (r *DeploymentRetrainingPolicyResource) checkDeploymentRetrainingSettings(c
 	}
 
 	return
+}
+
+func (r *DeploymentRetrainingPolicyResource) getRetrainingSettings(ctx context.Context, deploymentID string) (*client.RetrainingSettingsRetrieve, error) {
+	traceAPICall("GetRetrainingSettings")
+	return r.provider.service.GetDeploymentRetrainingSettings(ctx, deploymentID)
+}
+
+func (r *DeploymentRetrainingPolicyResource) updateRetrainingSettings(ctx context.Context, deploymentID string, settings *client.UpdateRetrainingSettingsRequest) error {
+	traceAPICall("UpdateRetrainingSettings")
+	request := &client.UpdateRetrainingSettingsRequest{
+			CredentialID:          settings.CredentialID,
+			DatasetID:             settings.DatasetID,
+			PredictionEnvironmentID: settings.PredictionEnvironmentID,
+			RetrainingUserID:      settings.RetrainingUserID,
+	}
+	_, err := r.provider.service.UpdateDeploymentRetrainingSettings(ctx, deploymentID, request)
+	return err
 }
 
 func buildRetrainingPolicyRequest(data DeploymentRetrainingPolicyResourceModel) (request *client.RetrainingPolicyRequest, err error) {

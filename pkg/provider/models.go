@@ -553,18 +553,22 @@ type FeatureCacheSettings struct {
 
 // DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
 type DeploymentRetrainingPolicyResourceModel struct {
-	ID                     types.String       `tfsdk:"id"`
-	DeploymentID           types.String       `tfsdk:"deployment_id"`
-	Name                   types.String       `tfsdk:"name"`
-	Description            types.String       `tfsdk:"description"`
-	Action                 types.String       `tfsdk:"action"`
-	FeatureListStrategy    types.String       `tfsdk:"feature_list_strategy"`
-	ModelSelectionStrategy types.String       `tfsdk:"model_selection_strategy"`
-	AutopilotOptions       *AutopilotOptions  `tfsdk:"autopilot_options"`
-	ProjectOptions         *ProjectOptions    `tfsdk:"project_options"`
-	ProjectOptionsStrategy types.String       `tfsdk:"project_options_strategy"`
-	TimeSeriesOptions      *TimeSeriesOptions `tfsdk:"time_series_options"`
-	Trigger                *Trigger           `tfsdk:"trigger"`
+	ID                      types.String       `tfsdk:"id"`
+	DeploymentID            types.String       `tfsdk:"deployment_id"`
+	Name                    types.String       `tfsdk:"name"`
+	Description             types.String       `tfsdk:"description"`
+	Action                  types.String       `tfsdk:"action"`
+	FeatureListStrategy     types.String       `tfsdk:"feature_list_strategy"`
+	ModelSelectionStrategy  types.String       `tfsdk:"model_selection_strategy"`
+	AutopilotOptions        *AutopilotOptions  `tfsdk:"autopilot_options"`
+	ProjectOptions          *ProjectOptions    `tfsdk:"project_options"`
+	ProjectOptionsStrategy  types.String       `tfsdk:"project_options_strategy"`
+	TimeSeriesOptions       *TimeSeriesOptions `tfsdk:"time_series_options"`
+	Trigger                 *Trigger           `tfsdk:"trigger"`
+	RetrainingUserID        types.String       `tfsdk:"retraining_user_id"`
+	CredentialID            types.String       `tfsdk:"credential_id"`
+	DatasetID               types.String       `tfsdk:"dataset_id"`
+	PredictionEnvironmentID types.String       `tfsdk:"prediction_environment_id"`
 }
 
 type AutopilotOptions struct {

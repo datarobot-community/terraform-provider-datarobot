@@ -34,6 +34,12 @@ func TestAccDeploymentRetrainingPolicyResource(t *testing.T) {
 	modelSelectionStrategy := "custom_job"
 	newModelSelectionStrategy := "autopilot_recommended"
 
+	predictionEnvironmentID := ""
+	newPredictionEnvironmentID := "670534afd57734c6d0248927"
+
+	retrainingUserID := "60c69ca752b15aff5a2fbc65"
+	newRetrainingUserID := "60c69ca752b15aff5a2fbc65"
+
 	folderPath := "retraining_policy"
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
@@ -97,14 +103,20 @@ runtimeParameterDefinitions:
 					description,
 					action,
 					modelSelectionStrategy,
+					predictionEnvironmentID,
+					retrainingUserID,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentRetrainingPolicyResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
-					resource.TestCheckResourceAttr(resourceName, "action", action),
 					resource.TestCheckResourceAttr(resourceName, "model_selection_strategy", modelSelectionStrategy),
+					resource.TestCheckResourceAttr(resourceName, "action", action),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					checkRetrainingSettings(
+						predictionEnvironmentID,
+						retrainingUserID,
+					),
 				),
 			},
 			// Update attributes
@@ -124,6 +136,8 @@ runtimeParameterDefinitions:
 					newDescription,
 					newAction,
 					newModelSelectionStrategy,
+					newPredictionEnvironmentID,
+					newRetrainingUserID,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentRetrainingPolicyResourceExists(),
@@ -132,6 +146,10 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "action", newAction),
 					resource.TestCheckResourceAttr(resourceName, "model_selection_strategy", newModelSelectionStrategy),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					checkRetrainingSettings(
+						newPredictionEnvironmentID,
+						newRetrainingUserID,
+					),
 				),
 			},
 			// Delete is tested automatically
@@ -163,7 +181,9 @@ func deploymentRetrainingPolicyResourceConfig(
 	name,
 	description,
 	action,
-	modelSelectionStrategy string,
+	modelSelectionStrategy,
+	predictionEnvironmentID,
+	retrainingUserID string,
 ) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_job" "deployment_retraining_policy" {
@@ -212,8 +232,10 @@ resource "datarobot_deployment_retraining_policy" "test" {
 			day_of_week 	= ["*"]
 		}
 	}
+	prediction_environment_id = "%s"
+	retraining_user_id = "%s"
 }
-`, name, name, name, name, description, action, modelSelectionStrategy)
+`, name, name, name, name, description, action, modelSelectionStrategy, predictionEnvironmentID, retrainingUserID)
 }
 
 func checkDeploymentRetrainingPolicyResourceExists() resource.TestCheckFunc {
@@ -247,6 +269,36 @@ func checkDeploymentRetrainingPolicyResourceExists() resource.TestCheckFunc {
 			return nil
 		}
 
-		return fmt.Errorf("Retraining Policy not found")
+		return fmt.Errorf("Retraining Policy not found or attributes mismatch")
+	}
+}
+
+func checkRetrainingSettings(expectedPredictionEnvironmentID, expectedRetrainingUserID string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources["datarobot_deployment_retraining_policy.test"]
+		if !ok {
+			return fmt.Errorf("Not found: %s", "datarobot_deployment_retraining_policy.test")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = NewService(cl)
+
+		traceAPICall("GetDeploymentRetrainingSettings")
+		settings, err := p.service.GetDeploymentRetrainingSettings(context.TODO(), rs.Primary.Attributes["deployment_id"])
+		if err != nil {
+			return err
+		}
+
+		if settings.PredictionEnvironment.ID != expectedPredictionEnvironmentID {
+			return fmt.Errorf("Expected PredictionEnvironmentID: %s, got: %s", expectedPredictionEnvironmentID, settings.PredictionEnvironment.ID)
+		}
+		if settings.RetrainingUser.ID != expectedRetrainingUserID {
+			return fmt.Errorf("Expected RetrainingUserID: %s, got: %s", expectedRetrainingUserID, settings.RetrainingUser.ID)
+		}
+
+		return nil
 	}
 }
