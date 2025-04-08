@@ -348,9 +348,26 @@ type RetrainingPolicy struct {
 }
 
 type RetrainingSettings struct{}
+
 type UpdateRetrainingSettingsRequest struct {
-	RetrainingUserID        *string `json:"retrainingUserId,omitempty"`
+	CredentialID            *string `json:"credentialId,omitempty"`
 	DatasetID               *string `json:"datasetId,omitempty"`
 	PredictionEnvironmentID *string `json:"predictionEnvironmentId,omitempty"`
-	CredentialID            *string `json:"credentialId,omitempty"`
+	RetrainingUserID        *string `json:"retrainingUserId,omitempty"`
+}
+
+type RetrainingSettingsItem struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type RetrainingUser struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
+type RetrainingSettingsRetrieve struct {
+	Dataset               RetrainingSettingsItem `json:"dataset"`
+	PredictionEnvironment RetrainingSettingsItem `json:"predictionEnvironment"`
+	RetrainingUser        RetrainingUser         `json:"retrainingUser"`
 }

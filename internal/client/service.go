@@ -144,6 +144,7 @@ type Service interface {
 	UpdateDeploymentHealthSettings(ctx context.Context, id string, req *DeploymentHealthSettings) (*DeploymentHealthSettings, error)
 	GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*DeploymentFeatureCacheSettings, error)
 	UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *DeploymentFeatureCacheSettings) (*DeploymentFeatureCacheSettings, error)
+	GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*RetrainingSettingsRetrieve, error)
 	UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error)
 
 	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
@@ -698,9 +699,14 @@ func (s *ServiceImpl) UpdateDeploymentFeatureCacheSettings(ctx context.Context, 
 	return Patch[DeploymentFeatureCacheSettings](s.client, ctx, "/deployments/"+id+"/featureCache/", req)
 }
 
+func (s *ServiceImpl) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*RetrainingSettingsRetrieve, error) {
+	return Get[RetrainingSettingsRetrieve](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/")
+}
+
 func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error) {
 	return Patch[RetrainingSettings](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/", req)
 }
+
 
 func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
 	return Post[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/", req)
