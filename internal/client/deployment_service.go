@@ -54,7 +54,6 @@ type DeploymentSettings struct {
 	PredictionWarning         *PredictionWarningSetting          `json:"predictionWarning,omitempty"`
 	SegmentAnalysis           *SegmentAnalysisSetting            `json:"segmentAnalysis,omitempty"`
 	TargetDrift               *BasicSetting                      `json:"targetDrift,omitempty"`
-	RetrainingSettings        *DeploymentRetrainingSettings      `json:"retrainingSettings,omitempty"`
 }
 
 type AssociationIDSetting struct {
