@@ -45,7 +45,7 @@ resource "datarobot_deployment" "example" {
       value = "val",
     },
   ]
-  retraining_settings                   = {}
+  retraining_settings = {}
 }
 
 output "datarobot_deployment_id" {

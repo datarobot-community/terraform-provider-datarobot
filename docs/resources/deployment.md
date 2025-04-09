@@ -60,6 +60,7 @@ resource "datarobot_deployment" "example" {
       value = "val",
     },
   ]
+  retraining_settings = {}
 }
 
 output "datarobot_deployment_id" {
@@ -93,6 +94,7 @@ output "datarobot_deployment_id" {
 - `predictions_by_forecast_date_settings` (Attributes) The predictions by forecase date settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_by_forecast_date_settings))
 - `predictions_data_collection_settings` (Attributes) The predictions data collection settings for the Deployment. (see [below for nested schema](#nestedatt--predictions_data_collection_settings))
 - `predictions_settings` (Attributes) Settings for the predictions. (see [below for nested schema](#nestedatt--predictions_settings))
+- `retraining_settings` (Attributes) The retraining settings for this Deployment. (see [below for nested schema](#nestedatt--retraining_settings))
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Deployment. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `segment_analysis_settings` (Attributes) The segment analysis settings for the Deployment. (see [below for nested schema](#nestedatt--segment_analysis_settings))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Deployment to.
@@ -357,6 +359,17 @@ Optional:
 - `max_computes` (Number) The maximum number of computes to use for predictions.
 - `min_computes` (Number) The minimum number of computes to use for predictions.
 - `resource_bundle_id` (String) The resource bundle ID to use for predictions.
+
+
+<a id="nestedatt--retraining_settings"></a>
+### Nested Schema for `retraining_settings`
+
+Optional:
+
+- `credential_id` (String) ID of the credential used to refresh retraining dataset.
+- `dataset_id` (String) ID of the retraining dataset.
+- `prediction_environment_id` (String) ID of the prediction environment to associate with the challengers created by retraining policies.
+- `retraining_user_id` (String) ID of the retraining user.
 
 
 <a id="nestedatt--runtime_parameter_values"></a>
