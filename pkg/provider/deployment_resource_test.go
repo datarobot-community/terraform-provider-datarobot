@@ -148,7 +148,6 @@ runtimeParameterDefinitions:
 						resourceName,
 						tfjsonpath.New("use_case_ids"),
 					),
-
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkDeploymentResourceExists(),
@@ -167,7 +166,6 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "health_settings.data_drift.batch_count", "5"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					checkRetrainingSettingsUpdate(),
-
 				),
 			},
 			// Remove settings and use case id
@@ -227,7 +225,7 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					"",nil),
+					"", nil),
 				ExpectError: regexp.MustCompile(`target_name cannot be changed if the model was deployed.`),
 			},
 			// Update custom model version (by updating the file contents) updates registered model version of deployment
@@ -510,7 +508,7 @@ func checkDeploymentResourceExists() resource.TestCheckFunc {
 	}
 }
 
-func checkRetrainingSettingsUpdate() resource.TestCheckFunc{
+func checkRetrainingSettingsUpdate() resource.TestCheckFunc {
 	resourceName := "datarobot_deployment.test"
 
 	return func(s *terraform.State) error {

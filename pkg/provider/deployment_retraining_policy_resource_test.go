@@ -132,7 +132,6 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "action", newAction),
 					resource.TestCheckResourceAttr(resourceName, "model_selection_strategy", newModelSelectionStrategy),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-
 				),
 			},
 			// Delete is tested automatically
@@ -251,4 +250,3 @@ func checkDeploymentRetrainingPolicyResourceExists() resource.TestCheckFunc {
 		return fmt.Errorf("Retraining Policy not found or attributes mismatch")
 	}
 }
-
