@@ -708,7 +708,6 @@ func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, de
 	return Patch[RetrainingSettings](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/", req)
 }
 
-
 func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
 	return Post[RetrainingPolicy](s.client, ctx, "/deployments/"+deploymentID+"/retrainingPolicies/", req)
 }
