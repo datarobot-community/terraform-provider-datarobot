@@ -531,6 +531,28 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					},
 				},
 			},
+			"retraining_settings": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The retraining settings for this Deployment.",
+				Attributes: map[string]schema.Attribute{
+					"retraining_user_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "ID of the retraining user.",
+					},
+					"credential_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "ID of the credential used to refresh retraining dataset.",
+					},
+					"dataset_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "ID of the retraining dataset.",
+					},
+					"prediction_environment_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "ID of the prediction environment to associate with the challengers created by retraining policies.",
+					},
+				},
+			},
 		},
 	}
 }
@@ -755,6 +777,14 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Deployment not ready after model replacement", err.Error())
+			return
+		}
+	}
+	// check if updating retgraining settings
+	if plan.RetrainingSettings != nil && !reflect.DeepEqual(plan.RetrainingSettings, state.RetrainingSettings) {
+		err = r.updateRetrainingSettings(ctx, id, plan.RetrainingSettings)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Deployment retraining settings", err.Error())
 			return
 		}
 	}
@@ -1071,7 +1101,6 @@ func (r *DeploymentResource) updateDeploymentSettings(
 			return
 		}
 	}
-
 	return
 }
 
@@ -1085,6 +1114,37 @@ func convertCustomMetricConditions(conditions []CustomMetricCondition) []client.
 		})
 	}
 	return customMetricConditions
+}
+
+func (r *DeploymentResource) updateRetrainingSettings(
+	ctx context.Context,
+	id string,
+	data *RetrainingSettings,
+) (err error) {
+	if data == nil {
+		return
+	}
+	// get retraining settings
+	retrainingSettings, err := r.provider.service.GetDeploymentRetrainingSettings(ctx, id)
+	if err != nil {
+		return
+	}
+	req := &client.DeploymentRetrainingSettings{
+		RetrainingUserID:        StringValuePointerOptional(data.RetrainingUserID),
+		CredentialID:            StringValuePointerOptional(data.CredentialID),
+		DatasetID:               StringValuePointerOptional(data.DatasetID),
+		PredictionEnvironmentID: StringValuePointerOptional(data.PredictionEnvironmentID),
+	}
+
+	// Compare with existing retraining settings and update only if there are changes
+	if !reflect.DeepEqual(req, retrainingSettings) {
+		traceAPICall("UpdateDeploymentRetrainingSettings")
+		_, err = r.provider.service.UpdateDeploymentRetrainingSettings(ctx, id, req)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 func (r *DeploymentResource) updateDeploymentRuntimeParameters(

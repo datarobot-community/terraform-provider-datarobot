@@ -54,6 +54,7 @@ type DeploymentSettings struct {
 	PredictionWarning         *PredictionWarningSetting          `json:"predictionWarning,omitempty"`
 	SegmentAnalysis           *SegmentAnalysisSetting            `json:"segmentAnalysis,omitempty"`
 	TargetDrift               *BasicSetting                      `json:"targetDrift,omitempty"`
+	RetrainingSettings        *DeploymentRetrainingSettings      `json:"retrainingSettings,omitempty"`
 }
 
 type AssociationIDSetting struct {
@@ -349,7 +350,7 @@ type RetrainingPolicy struct {
 
 type RetrainingSettings struct{}
 
-type UpdateRetrainingSettingsRequest struct {
+type DeploymentRetrainingSettings struct {
 	CredentialID            *string `json:"credentialId,omitempty"`
 	DatasetID               *string `json:"datasetId,omitempty"`
 	PredictionEnvironmentID *string `json:"predictionEnvironmentId,omitempty"`
