@@ -424,6 +424,7 @@ type DeploymentResourceModel struct {
 	HealthSettings                    *HealthSettings                    `tfsdk:"health_settings"`
 	PredictionsSettings               *PredictionsSettings               `tfsdk:"predictions_settings"`
 	FeatureCacheSettings              *FeatureCacheSettings              `tfsdk:"feature_cache_settings"`
+	RetrainingSettings							  *RetrainingSettings            		 `tfsdk:"retraining_settings"`
 }
 
 type BasicDeploymentSetting struct {
@@ -551,6 +552,13 @@ type FeatureCacheSettings struct {
 	Schedule *Schedule  `tfsdk:"schedule"`
 }
 
+type RetrainingSettings struct {
+		RetrainingUserID        types.String `tfsdk:"retraining_user_id"`
+		DatasetID               types.String `tfsdk:"dataset_id"`
+		CredentialID            types.String `tfsdk:"credential_id"`
+		PredictionEnvironmentID types.String `tfsdk:"prediction_environment_id"`
+}
+
 // DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.
 type DeploymentRetrainingPolicyResourceModel struct {
 	ID                      types.String       `tfsdk:"id"`
@@ -565,10 +573,6 @@ type DeploymentRetrainingPolicyResourceModel struct {
 	ProjectOptionsStrategy  types.String       `tfsdk:"project_options_strategy"`
 	TimeSeriesOptions       *TimeSeriesOptions `tfsdk:"time_series_options"`
 	Trigger                 *Trigger           `tfsdk:"trigger"`
-	RetrainingUserID        types.String       `tfsdk:"retraining_user_id"`
-	CredentialID            types.String       `tfsdk:"credential_id"`
-	DatasetID               types.String       `tfsdk:"dataset_id"`
-	PredictionEnvironmentID types.String       `tfsdk:"prediction_environment_id"`
 }
 
 type AutopilotOptions struct {

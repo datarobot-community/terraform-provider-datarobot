@@ -1,3 +1,7 @@
+## 0.8.20
+
+- Enable updating retraining settings in the Deployment resource
+
 ## 0.8.19
 
 - Fix Application Source panic
@@ -12,7 +16,7 @@
 
 ## 0.8.16
 
-- Add requiresReplace to CustomModelLLMValidation attributes 
+- Add requiresReplace to CustomModelLLMValidation attributes
 
 ## 0.8.15
 

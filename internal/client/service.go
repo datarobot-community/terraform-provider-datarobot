@@ -137,6 +137,7 @@ type Service interface {
 	ActivateDeployment(ctx context.Context, id string) (*Deployment, error)
 	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
 	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error)
+	// Deployment: Settings
 	UpdateDeploymentSettings(ctx context.Context, id string, req *DeploymentSettings) (*DeploymentSettings, error)
 	GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*DeploymentChallengerReplaySettings, error)
 	UpdateDeploymentChallengerReplaySettings(ctx context.Context, id string, req *DeploymentChallengerReplaySettings) (*DeploymentChallengerReplaySettings, error)
@@ -145,8 +146,8 @@ type Service interface {
 	GetDeploymentFeatureCacheSettings(ctx context.Context, id string) (*DeploymentFeatureCacheSettings, error)
 	UpdateDeploymentFeatureCacheSettings(ctx context.Context, id string, req *DeploymentFeatureCacheSettings) (*DeploymentFeatureCacheSettings, error)
 	GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*RetrainingSettingsRetrieve, error)
-	UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error)
-
+	UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *DeploymentRetrainingSettings) (*RetrainingSettings, error)
+	// Deployment: Retraining policy
 	CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
 	GetRetrainingPolicy(ctx context.Context, deploymentID, id string) (*RetrainingPolicy, error)
 	UpdateRetrainingPolicy(ctx context.Context, deploymentID, id string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error)
@@ -703,7 +704,7 @@ func (s *ServiceImpl) GetDeploymentRetrainingSettings(ctx context.Context, deplo
 	return Get[RetrainingSettingsRetrieve](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/")
 }
 
-func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *UpdateRetrainingSettingsRequest) (*RetrainingSettings, error) {
+func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *DeploymentRetrainingSettings) (*RetrainingSettings, error) {
 	return Patch[RetrainingSettings](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/", req)
 }
 

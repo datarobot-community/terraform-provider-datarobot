@@ -2204,7 +2204,7 @@ func (mr *MockServiceMockRecorder) UpdateDeploymentModel(ctx, id, req interface{
 }
 
 // UpdateDeploymentRetrainingSettings mocks base method.
-func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *client.UpdateRetrainingSettingsRequest) (*client.RetrainingSettings, error) {
+func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *client.DeploymentRetrainingSettings) (*client.RetrainingSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentRetrainingSettings", ctx, deploymentID, req)
 	ret0, _ := ret[0].(*client.RetrainingSettings)
