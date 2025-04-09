@@ -25,7 +25,7 @@ website/node_modules
 *.test
 *.iml
 terraform-provider-datarobot
-
+.env
 
 website/vendor
 
@@ -35,6 +35,3 @@ website/vendor
 
 # Keep windows files with windows line endings
 *.winfile eol=crlf
-
-retraining_policy
-retraining_policy_custom_job

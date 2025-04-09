@@ -1,6 +1,13 @@
-## 0.8.20
+## [v0.8.20] - 2023-10-20
 
-- Enable updating retraining settings in the Deployment resource
+### Added
+- Add `retraining_settings` to the Deployment resource.
+- Add functionality to dynamic creation/delete folders when testing some resources, to prevent silly errors.
+
+### Changed
+- Flow of how environment variables are set in the provider.
+- README.md updated with a contributing information and some tips.
+- Updated some resources to load environment variables from the provider instead of directly from the environment during resource initialization (applies only to tests, not the provider itself).
 
 ## 0.8.19
 

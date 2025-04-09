@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 
@@ -29,7 +28,7 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 		return mockService
 	})()
 
-	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
+	if globalTestCfg.ApiKey == "" {
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
