@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,7 +20,7 @@ func TestAccCustomApplicationFromEnvironmentResource(t *testing.T) {
 	// TODO: enable this test once Execution Environments don't take forever to create
 	t.Skip("Skipping registered model from leaderboard test for environment")
 
-	if !strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
+	if !strings.Contains(globalTestCfg.Endpoint, "staging") {
 		t.Skip("Skipping custom application from environment test")
 	}
 

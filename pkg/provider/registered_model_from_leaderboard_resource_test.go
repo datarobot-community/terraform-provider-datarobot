@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,10 +21,10 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 
 	modelID := "673b722dfd279fd86944d088"
 	modelID2 := "673b6fd8e060b90658aebe66"
-	if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
+	if strings.Contains(globalTestCfg.Endpoint, "staging") {
 		modelID = "673b75ec97f1021bbfb61d3b"
 		modelID2 = "673b75ec97f1021bbfb61d34"
-	} else if strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "dr-app-charts") {
+	} else if strings.Contains(globalTestCfg.Endpoint, "dr-app-charts") {
 		t.Skip("Skipping registered model from leaderboard test for environment")
 	}
 

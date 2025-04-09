@@ -16,16 +16,17 @@ import (
 func TestAccNotificationChannelResource(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
+	if !strings.Contains(globalTestCfg.Endpoint, "staging") {
 		t.Skip("Skipping custom application from environment test")
 	}
 
 	resourceName := "datarobot_notification_channel.test"
 
-	folderPath := "notification_channel"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
-		t.Fatal(err)
+	folderPath, err := prepareTestFolder("notification_channel")
+	if err != nil {
+		t.Fatalf("Failed to create test folder: %v", err)
 	}
+
 	defer os.RemoveAll(folderPath)
 
 	modelContentsTemplate := `from typing import Any, Dict
@@ -51,10 +52,10 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	channelType := "DataRobotUser"
 	newChannelType := "DataRobotGroup"
 
-	drEntityID := "66fd35e99a6fbe58dda86733"
+	drEntityID := globalTestCfg.UserID
 	newDrEntityID := "6036d237608973bf082aba1e"
 
-	drEntityName := "nolan.mccafferty@datarobot.com"
+	drEntityName := globalTestCfg.UserName
 	newDrEntityName := "test_group"
 
 	resource.Test(t, resource.TestCase{

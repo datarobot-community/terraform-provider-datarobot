@@ -5,6 +5,8 @@ import (
 )
 
 const (
+	DataRobotUserNameEnvVar     string = "DATAROBOT_USERNAME"
+	DatarobotUserIDEnvVar       string = "DATAROBOT_USER_ID"
 	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"

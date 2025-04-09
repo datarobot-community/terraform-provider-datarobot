@@ -16,14 +16,14 @@ import (
 func TestAccNotificationPolicyResource(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(os.Getenv(DataRobotEndpointEnvVar), "staging") {
+	if !strings.Contains(globalTestCfg.Endpoint, "staging") {
 		t.Skip("Skipping notification policy test")
 	}
 
 	resourceName := "datarobot_notification_policy.test"
 
-	folderPath := "notification_policy"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
+	folderPath, err := prepareTestFolder("notification_policy")
+	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)
@@ -150,8 +150,8 @@ resource "datarobot_notification_channel" "test_notification_policy" {
 	related_entity_id = datarobot_deployment.test_notification_policy.id
 	related_entity_type = "deployment"
 	dr_entities = [{
-		id = "66fd35e99a6fbe58dda86733"
-		name = "nolan.mccafferty@datarobot.com"
+		id = "%s"
+		name = "%s"
 	}]
 }
 resource "datarobot_notification_policy" "test" {
@@ -163,6 +163,8 @@ resource "datarobot_notification_policy" "test" {
 	event_group         = "%s"
 }
 `, nameSalt,
+		globalTestCfg.UserID,
+		globalTestCfg.UserName,
 		name,
 		eventGroup)
 }

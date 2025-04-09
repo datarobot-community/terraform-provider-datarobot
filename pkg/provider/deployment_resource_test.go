@@ -26,9 +26,9 @@ func TestAccDeploymentResource(t *testing.T) {
 	useCaseResourceName := "test_deployment"
 	useCaseResourceName2 := "test_new_deployment"
 
-	folderPath := "deployment"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
-		t.Fatal(err)
+	folderPath, err := prepareTestFolder("deployment")
+	if err != nil {
+		t.Fatalf("Failed to create test folder: %v", err)
 	}
 	defer os.RemoveAll(folderPath)
 
