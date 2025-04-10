@@ -54,7 +54,20 @@ func TestAccNotebookResource(t *testing.T) {
         "print(df)"
       ]
     }
-  ]
+  ],
+	"metadata": {
+		"kernelspec": {
+			"name": "python",
+			"language": "python",
+			"display_name": "Python 3.11"
+		},
+		"language_info": {
+			"name": "python",
+			"version": "3.11"
+		}
+	},
+	"nbformat": 4,
+	"nbformat_minor": 5
 }`)
 
 	err := os.WriteFile(notebookPath, notebookContent, 0644)
@@ -167,7 +180,7 @@ resource "datarobot_use_case" "test" {
 
 resource "datarobot_notebook" "test" {
   file_path = "%s"
-  use_case_id = [datarobot_use_case.test.id]
+  use_case_id = datarobot_use_case.test.id
 }
 `, useCaseName, filePath)
 }
@@ -181,7 +194,7 @@ resource "datarobot_use_case" "updated" {
 
 resource "datarobot_notebook" "test" {
   file_path = "%s"
-  use_case_id = [datarobot_use_case.updated.id]
+  use_case_id = datarobot_use_case.updated.id
 }
 `, useCaseName, filePath)
 }
