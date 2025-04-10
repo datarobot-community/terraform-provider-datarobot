@@ -9,6 +9,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -25,9 +26,9 @@ func TestAccDeploymentResource(t *testing.T) {
 	useCaseResourceName := "test_deployment"
 	useCaseResourceName2 := "test_new_deployment"
 
-	folderPath := "deployment"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
-		t.Fatal(err)
+	folderPath, err := prepareTestFolder("deployment")
+	if err != nil {
+		t.Fatalf("Failed to create test folder: %v", err)
 	}
 	defer os.RemoveAll(folderPath)
 
@@ -93,7 +94,7 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					"value"),
+					"value", nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -118,6 +119,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckNoResourceAttr(resourceName, "prediction_warning_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "prediction_intervals_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "health_settings"),
+					resource.TestCheckNoResourceAttr(resourceName, "retraining_settings"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -136,7 +138,11 @@ runtimeParameterDefinitions:
 					true,
 					&resourceBundleID,
 					true,
-					"newValue"),
+					"newValue",
+					&RetrainingSettings{
+						PredictionEnvironmentID: types.StringValue("${datarobot_prediction_environment.test_deployment.id}"),
+					},
+				),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -159,6 +165,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "health_settings.service.batch_count", "5"),
 					resource.TestCheckResourceAttr(resourceName, "health_settings.data_drift.batch_count", "5"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					checkRetrainingSettingsUpdate(),
 				),
 			},
 			// Remove settings and use case id
@@ -176,7 +183,8 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					""),
+					"",
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -217,7 +225,7 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					""),
+					"", nil),
 				ExpectError: regexp.MustCompile(`target_name cannot be changed if the model was deployed.`),
 			},
 			// Update custom model version (by updating the file contents) updates registered model version of deployment
@@ -241,7 +249,7 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					"value"),
+					"value", nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -295,6 +303,7 @@ func deploymentResourceConfig(
 	resourceBundleID *string,
 	isHealthSettingsEnabled bool,
 	runtimeParameterValue string,
+	retrainingSettings *RetrainingSettings,
 ) string {
 	useCaseIDsStr := ""
 	if useCaseResourceName != nil {
@@ -306,7 +315,7 @@ func deploymentResourceConfig(
 	if isPredictionsByForecastDateEnabled {
 		deploymentSettings = `
 	predictions_by_forecast_date_settings = {
-		enabled = true 
+		enabled = true
 		column_name = "column_name"
 		datetime_format = "%H:%M"
 	}`
@@ -385,6 +394,35 @@ func deploymentResourceConfig(
 			expected_frequency = "P30D"
 		}
 	}`
+	}
+	if retrainingSettings != nil {
+		retrainingSettingsStr := `
+		retraining_settings = {`
+
+		if retrainingSettings.PredictionEnvironmentID.ValueString() != "" {
+			retrainingSettingsStr += fmt.Sprintf(`
+			prediction_environment_id = "%s"`, retrainingSettings.PredictionEnvironmentID.ValueString())
+		}
+
+		if retrainingSettings.RetrainingUserID.ValueString() != "" {
+			retrainingSettingsStr += fmt.Sprintf(`
+			retraining_user_id = "%s"`, retrainingSettings.RetrainingUserID.ValueString())
+		}
+
+		if retrainingSettings.DatasetID.ValueString() != "" {
+			retrainingSettingsStr += fmt.Sprintf(`
+			dataset_id = "%s"`, retrainingSettings.DatasetID.ValueString())
+		}
+
+		if retrainingSettings.CredentialID.ValueString() != "" {
+			retrainingSettingsStr += fmt.Sprintf(`
+			credential_id = "%s"`, retrainingSettings.CredentialID.ValueString())
+		}
+
+		retrainingSettingsStr += `
+		}`
+
+		deploymentSettings += retrainingSettingsStr
 	}
 
 	runtimeParameterValuesStr := ""
@@ -467,5 +505,45 @@ func checkDeploymentResourceExists() resource.TestCheckFunc {
 		}
 
 		return fmt.Errorf("Deployment not found")
+	}
+}
+
+func checkRetrainingSettingsUpdate() resource.TestCheckFunc {
+	resourceName := "datarobot_deployment.test"
+
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No ID is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = client.NewService(cl)
+
+		traceAPICall("GetDeploymentRetrainingSettings")
+		retrainingSettings, err := p.service.GetDeploymentRetrainingSettings(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		if retrainingSettings == nil {
+			return fmt.Errorf("Retraining settings not found")
+		}
+
+		expectedPredictionEnvironmentID := rs.Primary.Attributes["retraining_settings.prediction_environment_id"]
+
+		if retrainingSettings.PredictionEnvironment.ID != expectedPredictionEnvironmentID {
+
+			return fmt.Errorf("Expected prediction environment ID %s, got %s", expectedPredictionEnvironmentID, retrainingSettings.PredictionEnvironment.ID)
+		}
+
+		return nil
 	}
 }

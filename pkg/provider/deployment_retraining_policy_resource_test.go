@@ -102,8 +102,8 @@ runtimeParameterDefinitions:
 					checkDeploymentRetrainingPolicyResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
-					resource.TestCheckResourceAttr(resourceName, "action", action),
 					resource.TestCheckResourceAttr(resourceName, "model_selection_strategy", modelSelectionStrategy),
+					resource.TestCheckResourceAttr(resourceName, "action", action),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -247,6 +247,6 @@ func checkDeploymentRetrainingPolicyResourceExists() resource.TestCheckFunc {
 			return nil
 		}
 
-		return fmt.Errorf("Retraining Policy not found")
+		return fmt.Errorf("Retraining Policy not found or attributes mismatch")
 	}
 }

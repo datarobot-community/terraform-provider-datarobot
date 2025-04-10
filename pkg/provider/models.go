@@ -5,6 +5,8 @@ import (
 )
 
 const (
+	DataRobotUserNameEnvVar     string = "DATAROBOT_USERNAME"
+	DatarobotUserIDEnvVar       string = "DATAROBOT_USER_ID"
 	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
@@ -424,6 +426,7 @@ type DeploymentResourceModel struct {
 	HealthSettings                    *HealthSettings                    `tfsdk:"health_settings"`
 	PredictionsSettings               *PredictionsSettings               `tfsdk:"predictions_settings"`
 	FeatureCacheSettings              *FeatureCacheSettings              `tfsdk:"feature_cache_settings"`
+	RetrainingSettings                *RetrainingSettings                `tfsdk:"retraining_settings"`
 }
 
 type BasicDeploymentSetting struct {
@@ -549,6 +552,13 @@ type FeatureCacheSettings struct {
 	Enabled  types.Bool `tfsdk:"enabled"`
 	Fetching types.Bool `tfsdk:"fetching"`
 	Schedule *Schedule  `tfsdk:"schedule"`
+}
+
+type RetrainingSettings struct {
+	RetrainingUserID        types.String `tfsdk:"retraining_user_id"`
+	DatasetID               types.String `tfsdk:"dataset_id"`
+	CredentialID            types.String `tfsdk:"credential_id"`
+	PredictionEnvironmentID types.String `tfsdk:"prediction_environment_id"`
 }
 
 // DeploymentRetrainingPolicyResourceModel describes the deployment retraining policy resource.

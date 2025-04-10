@@ -2204,13 +2204,23 @@ func (mr *MockServiceMockRecorder) UpdateDeploymentModel(ctx, id, req interface{
 }
 
 // UpdateDeploymentRetrainingSettings mocks base method.
-func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *client.UpdateRetrainingSettingsRequest) (*client.RetrainingSettings, error) {
+func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *client.DeploymentRetrainingSettings) (*client.RetrainingSettings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentRetrainingSettings", ctx, deploymentID, req)
 	ret0, _ := ret[0].(*client.RetrainingSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
+
+// GetDeploymentRetrainingSettings mocks base method.
+func (m *MockService) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*client.RetrainingSettingsRetrieve, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentRetrainingSettings", ctx, deploymentID)
+	ret0, _ := ret[0].(*client.RetrainingSettingsRetrieve)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
 
 // UpdateDeploymentRetrainingSettings indicates an expected call of UpdateDeploymentRetrainingSettings.
 func (mr *MockServiceMockRecorder) UpdateDeploymentRetrainingSettings(ctx, deploymentID, req interface{}) *gomock.Call {

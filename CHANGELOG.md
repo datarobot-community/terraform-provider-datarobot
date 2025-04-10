@@ -1,3 +1,14 @@
+## [v0.9.1] - 2023-10-20
+
+### Added
+- Add `retraining_settings` to the Deployment resource.
+- Add functionality to dynamic creation/delete folders when testing some resources, to prevent silly errors.
+
+### Changed
+- Flow of how environment variables are set in the provider.
+- README.md, and DEVELOPMENT.md updated with a contributing information and some tips.
+- Updated some resources to load environment variables from the provider instead of directly from the environment during resource initialization (applies only to tests, not the provider itself).
+
 ## 0.8.19
 
 - Fix Application Source panic
@@ -12,7 +23,7 @@
 
 ## 0.8.16
 
-- Add requiresReplace to CustomModelLLMValidation attributes 
+- Add requiresReplace to CustomModelLLMValidation attributes
 
 ## 0.8.15
 

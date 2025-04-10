@@ -1,5 +1,15 @@
 # Developing `terraform-provider-datarobot`
 
+### Developer Setup
+
+To contribute to the provider, ensure the following dependencies are installed:
+
+- [Go](https://go.dev/doc/install) >= 1.16
+- [Terraform CLI](https://learn.hashicorp.com/tutorials/terraform/install-cli) >= 1.0
+- [Make](https://www.gnu.org/software/make/) >= 4.0
+- [Git](https://git-scm.com/downloads) >= 2.0
+- [Docker](https://docs.docker.com/get-docker/) >= 20.10
+
 ## Installation
 
 1. In a terminal clone the `terraform-provider-datarobot` repository.
@@ -22,19 +32,53 @@
 
 ## Environment Variables
 
-To override the datarobot api token used by the terraform provider
+Define the required environment variables in your terminal or via a `.env` file in the root directory.
 
 ~~~shell
 export DATAROBOT_API_TOKEN=<YOUR_API_KEY>
 ~~~
 
-## Regenerating Docs
+
+## Updating Documentation and Examples
+
+### Update CHANGELOG.md
+
+1. Add a new entry in `CHANGELOG.md` to document the changes for the new version:
+  ```markdown
+  ## [vX.Y.Z] - YYYY-MM-DD
+  ### Added
+  - Added new example for Low-Code Monitored RAG in `/examples/workflows/low_code_rag`.
+
+  ### Changed
+  - Updated documentation to reflect the latest provider features.
+  ```
+
+### Update Examples
+
+1. Navigate to the `/examples` directory.
+2. Add or update the example files:
+  - For the Low-Code Monitored RAG example, ensure the `main.tf` file includes the latest configuration for the provider.
+  - Example `main.tf`:
+    ```hcl
+    provider "datarobot" {
+     api_token = var.datarobot_api_token
+    }
+
+    resource "datarobot_project" "example" {
+     name = var.use_case_name
+    }
+    ```
+3. For additional examples and detailed usage, refer to the [examples README](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/README.md).
+
+### Generate Documentation
 
 Documentation is generated based on the `Description` and `MarkdownDescription` fields in the schemas.
 
-~~~shell
-make generate
-~~~
+1. Run the following command to generate updated documentation:
+  ```bash
+  make generate
+  ```
+2. Verify that the generated documentation reflects the latest changes.
 
 # Contributor Guide
 

@@ -959,3 +959,21 @@ func convertScheduleExpression(expression []types.String) (any, error) {
 
 	return convertedExpression, nil
 }
+
+func prepareTestFolder(folderPath string) (string, error) {
+	// Check if the directory exists
+	if _, err := os.Stat(folderPath); err == nil {
+		// Remove the directory if it exists
+		if err := os.RemoveAll(folderPath); err != nil {
+			return "", err
+		}
+	}
+
+	// Create the directory
+	if err := os.Mkdir(folderPath, 0755); err != nil {
+		return "", err
+	}
+
+	// Return the path to the created directory
+	return filepath.Abs(folderPath)
+}

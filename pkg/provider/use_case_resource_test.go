@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -28,7 +27,7 @@ func TestIntegrationUseCaseResource(t *testing.T) {
 		return mockService
 	})()
 
-	if os.Getenv(DataRobotApiKeyEnvVar) == "" {
+	if globalTestCfg.ApiKey == "" {
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
