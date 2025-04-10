@@ -26,7 +26,7 @@ var globalTestCfg *struct {
 
 func init() {
 	// check if .env file exist and try to load it
-	// if not, log the warnign and continue load from environment variables
+	// if not, log the warningn and continue load from environment variables
 	// in case if tests run in the CI/CD pipeline
 	if _, err := os.Stat("../../.env"); os.IsNotExist(err) {
 		log.Println("Warning: .env file not found, defaulting to system environment variables")
