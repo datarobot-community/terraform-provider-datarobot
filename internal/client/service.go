@@ -701,11 +701,11 @@ func (s *ServiceImpl) UpdateDeploymentFeatureCacheSettings(ctx context.Context, 
 }
 
 func (s *ServiceImpl) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*RetrainingSettingsRetrieve, error) {
-	return Get[RetrainingSettingsRetrieve](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/")
+	return Get[RetrainingSettingsRetrieve](s.client, ctx, fmt.Sprintf("/deployments/%s/retrainingSettings/", deploymentID))
 }
 
 func (s *ServiceImpl) UpdateDeploymentRetrainingSettings(ctx context.Context, deploymentID string, req *DeploymentRetrainingSettings) (*RetrainingSettings, error) {
-	return Patch[RetrainingSettings](s.client, ctx, "/deployments/"+deploymentID+"/retrainingSettings/", req)
+	return Patch[RetrainingSettings](s.client, ctx, fmt.Sprintf("/deployments/%s/retrainingSettings/", deploymentID), req)
 }
 
 func (s *ServiceImpl) CreateRetrainingPolicy(ctx context.Context, deploymentID string, req *RetrainingPolicyRequest) (*RetrainingPolicy, error) {
