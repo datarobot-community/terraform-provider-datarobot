@@ -9,6 +9,9 @@
 - README.md, and DEVELOPMENT.md updated with a contributing information and some tips.
 - Updated some resources to load environment variables from the provider instead of directly from the environment during resource initialization (applies only to tests, not the provider itself).
 
+### Fixed
+- Fix `notebook_resource` tests
+
 ## 0.8.19
 
 - Fix Application Source panic
