@@ -410,28 +410,19 @@ func (r *DeploymentRetrainingPolicyResource) Read(ctx context.Context, req resou
 		}
 		return
 	}
+
+	// Populate retraining policy data
 	data.Name = types.StringValue(deploymentRetrainingPolicy.Name)
 	data.Description = types.StringValue(deploymentRetrainingPolicy.Description)
 	data.Action = types.StringValue(deploymentRetrainingPolicy.Action)
 	data.ModelSelectionStrategy = types.StringValue(deploymentRetrainingPolicy.ModelSelectionStrategy)
 	data.FeatureListStrategy = types.StringValue(deploymentRetrainingPolicy.FeatureListStrategy)
 	data.ProjectOptionsStrategy = types.StringValue(deploymentRetrainingPolicy.ProjectOptionsStrategy)
-	data.AutopilotOptions = &AutopilotOptions{
-		BlendBestModels:              types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.BlendBestModels),
-		Mode:                         types.StringPointerValue(deploymentRetrainingPolicy.AutopilotOptions.Mode),
-		RunLeakageRemovedFeatureList: types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.RunLeakageRemovedFeatureList),
-		ScoringCodeOnly:              types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.ScoringCodeOnly),
-		ShapOnlyMode:                 types.BoolPointerValue(deploymentRetrainingPolicy.AutopilotOptions.ShapOnlyMode),
-	}
-	if deploymentRetrainingPolicy.ProjectOptions != nil {
-		data.ProjectOptions = &ProjectOptions{
-			CVMethod:       types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.CvMethod),
-			HoldoutPct:     types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.HoldoutPct),
-			ValidationPct:  types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.ValidationPct),
-			Metric:         types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.Metric),
-			Reps:           types.Float64PointerValue(deploymentRetrainingPolicy.ProjectOptions.Reps),
-			ValidationType: types.StringPointerValue(deploymentRetrainingPolicy.ProjectOptions.ValidationType),
-		}
+
+	// Retrieve retraining settings
+	if err != nil {
+		resp.Diagnostics.AddError("Error retrieving Retraining Settings", err.Error())
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -496,7 +487,7 @@ func (r *DeploymentRetrainingPolicyResource) checkDeploymentRetrainingSettings(c
 			return
 		}
 
-		if _, err = r.provider.service.UpdateDeploymentRetrainingSettings(ctx, data.DeploymentID.ValueString(), &client.UpdateRetrainingSettingsRequest{
+		if _, err = r.provider.service.UpdateDeploymentRetrainingSettings(ctx, data.DeploymentID.ValueString(), &client.DeploymentRetrainingSettings{
 			RetrainingUserID: &userInfo.UID,
 		}); err != nil {
 			return
