@@ -1,6 +1,6 @@
 # Terraform provider for DataRobot (Preview)
 
-`terraform-provider-datarobot` is a [Terraform provider](https://developer.hashicorp.com/terraform/language/providers) for interacting with the [DataRobot API](https://docs.datarobot.com/en/docs/api/index.html).
+`terraform-provider-datarobot` is the [Terraform provider](https://developer.hashicorp.com/terraform/language/providers) for interacting with the [DataRobot API](https://docs.datarobot.com/en/docs/api/index.html).
 
 ## Resources
 
