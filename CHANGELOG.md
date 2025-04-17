@@ -1,4 +1,4 @@
-## [v0.9.1] - 2023-10-20
+## [v0.9.1] - 2025-04-17
 
 ### Added
 - Add `retraining_settings` to the Deployment resource.
