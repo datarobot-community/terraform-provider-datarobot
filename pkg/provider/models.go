@@ -792,6 +792,7 @@ type ExecutionEnvironmentResourceModel struct {
 	DockerContextPath   types.String   `tfsdk:"docker_context_path"`
 	DockerContextHash   types.String   `tfsdk:"docker_context_hash"`
 	DockerImage         types.String   `tfsdk:"docker_image"`
+	DockerImageHash     types.String   `tfsdk:"docker_image_hash"`
 	BuildStatus         types.String   `tfsdk:"build_status"`
 }
 

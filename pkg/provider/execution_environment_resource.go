@@ -97,6 +97,10 @@ func (r *ExecutionEnvironmentResource) Schema(ctx context.Context, req resource.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"docker_image_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the docker image file",
+			},
 			"build_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The status of the Execution Environment version build.",
@@ -140,7 +144,7 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 		}
 	}
 	if IsKnown(data.DockerImage) {
-		if fileContent, err = os.ReadFile(data.DockerImage.ValueString()); err != nil {
+		if dockerImageContents, err = os.ReadFile(data.DockerImage.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error getting Docker image", err.Error())
 			return
 		}
@@ -310,6 +314,7 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 	if plan.VersionDescription.ValueString() != state.VersionDescription.ValueString() ||
 		plan.DockerContextPath.ValueString() != state.DockerContextPath.ValueString() ||
 		plan.DockerContextHash.ValueString() != state.DockerContextHash.ValueString() ||
+		plan.DockerImageHash.ValueString() != state.DockerImageHash.ValueString() ||
 		plan.DockerImage.ValueString() != state.DockerImage.ValueString() {
 		traceAPICall("CreateExecutionEnvironmentVersion")
 		updateExecutionEnvironmentRequest := &client.CreateExecutionEnvironmentVersionRequest{
@@ -392,14 +397,27 @@ func (r ExecutionEnvironmentResource) ModifyPlan(ctx context.Context, req resour
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
+	var fileContent []byte = nil
 	// compute docker context hash
-	_, fileContent, err := getDockerContext(plan.DockerContextPath.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting Docker context", err.Error())
-		return
+	if IsKnown(plan.DockerContextPath) {
+		var err error = nil
+		_, fileContent, err = getDockerContext(plan.DockerContextPath.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting Docker context", err.Error())
+			return
+		}
 	}
 
+	var dockerImageContent []byte = nil
+	if IsKnown(plan.DockerImage) {
+		var err error = nil
+		if dockerImageContent, err = os.ReadFile(plan.DockerImage.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Error getting Docker image", err.Error())
+			return
+		}
+	}
+
+	plan.DockerImageHash = types.StringValue(computeHash(dockerImageContent))
 	plan.DockerContextHash = types.StringValue(computeHash(fileContent))
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 
@@ -415,7 +433,7 @@ func (r ExecutionEnvironmentResource) ModifyPlan(ctx context.Context, req resour
 		return
 	}
 
-	if plan.DockerContextHash != state.DockerContextHash {
+	if plan.DockerContextHash != state.DockerContextHash || plan.DockerImageHash != state.DockerImageHash {
 		plan.VersionID = types.StringUnknown()
 	}
 

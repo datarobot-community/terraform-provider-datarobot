@@ -34,6 +34,9 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 	}
 	defer os.RemoveAll(dirName)
 
+	dockerImageFileName := "../../test/golang_prebuilt_environment.tar.gz"
+	dockerImage2FileName := "../../test/golang_prebuilt_environment_updated.tar.gz"
+
 	dockerfileContents := `FROM python:3.9.5-slim-buster
 	WORKDIR /app/
 	COPY *.py /app/
@@ -123,8 +126,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"version_description",
-					&tarFileName),
-				// nil),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -151,8 +154,8 @@ if __name__ == "__main__":
 					"python",
 					"customApplication",
 					"version_description",
-					&tarFileName),
-				// nil),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
 						resourceName,
@@ -208,8 +211,8 @@ if __name__ == "__main__":
 					"python",
 					"customApplication",
 					"version_description",
-					&tarFileName),
-				// nil),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -236,8 +239,8 @@ if __name__ == "__main__":
 					"python",
 					"customApplication",
 					"new_version_description",
-					&tarFileName),
-				// nil),
+					&tarFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -264,8 +267,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"new_version_description",
-					&zipFileName),
-				// nil),
+					&zipFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -292,8 +295,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"new_version_description",
-					&dirName),
-				// nil),
+					&dirName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -330,8 +333,8 @@ if __name__ == "__main__":
 					"python",
 					"customModel",
 					"new_version_description",
-					&dirName),
-				// nil),
+					&dirName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -354,38 +357,70 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
 				),
 			},
-			// TODO: update Docker Image -- need to sync with DR team since as of now no images are working
-			// {
-			// 	Config: executionEnvironmentResourceConfig(
-			// 		"new_example_name",
-			// 		"new_example_description",
-			// 		"python",
-			// 		"customModel",
-			// 		"new_version_description",
-			// 		nil,
-			// 		&tarFileName),
-			// 	ConfigStateChecks: []statecheck.StateCheck{
-			// 		compareValuesDiffer.AddStateValue(
-			// 			resourceName,
-			// 			tfjsonpath.New("version_id"),
-			// 		),
-			// 		compareValuesDiffer.AddStateValue(
-			// 			resourceName,
-			// 			tfjsonpath.New("id"),
-			// 		),
-			// 	},
-			// 	Check: resource.ComposeAggregateTestCheckFunc(
-			// 		checkExecutionEnvironmentResourceExists(),
-			// 		resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
-			// 		resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-			// 		resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
-			// 		resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
-			// 		resource.TestCheckResourceAttr(resourceName, "version_description", "new_version_description"),
-			// 		resource.TestCheckResourceAttrSet(resourceName, "id"),
-			// 		resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-			// 		resource.TestCheckResourceAttrSet(resourceName, "build_status"),
-			// 	),
-			// },
+			// new the image - triggers replace
+			{
+				Config: executionEnvironmentResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					"other",
+					"customModel",
+					"new_version_description",
+					nil,
+					&dockerImageFileName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "other"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "new_version_description"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
+			// Update image (should be different hash) - triggers new version
+			{
+				Config: executionEnvironmentResourceConfig(
+					"new_example_name",
+					"new_example_description",
+					"other",
+					"customModel",
+					"new_version_description",
+					nil,
+					&dockerImage2FileName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "other"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "new_version_description"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
 			// Update language triggers replace
 			{
 				Config: executionEnvironmentResourceConfig(
@@ -394,8 +429,8 @@ if __name__ == "__main__":
 					"r",
 					"customModel",
 					"new_version_description",
-					&dirName),
-				// nil),
+					&dirName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -450,7 +485,7 @@ func executionEnvironmentResourceConfig(
 	useCase,
 	versionDescription string,
 	dockerContextPath *string,
-	// dockerImage *string,
+	dockerImage *string,
 ) string {
 	dockerContextPathStr := ""
 	if dockerContextPath != nil {
@@ -459,12 +494,12 @@ func executionEnvironmentResourceConfig(
 		`, *dockerContextPath)
 	}
 
-	// dockerImageStr := ""
-	// if dockerImage != nil {
-	// 	dockerImageStr = fmt.Sprintf(`
-	// docker_image = "%s"
-	// 		`, *dockerImage)
-	// }
+	dockerImageStr := ""
+	if dockerImage != nil {
+		dockerImageStr = fmt.Sprintf(`
+	docker_image = "%s"
+			`, *dockerImage)
+	}
 
 	return fmt.Sprintf(`
 resource "datarobot_execution_environment" "test" {
@@ -474,14 +509,15 @@ resource "datarobot_execution_environment" "test" {
 	use_cases = ["%s"]
 	version_description = "%s"
 	%s
+	%s
 }
 `, name,
 		description,
 		programmingLanguage,
 		useCase,
 		versionDescription,
-		dockerContextPathStr)
-	// dockerImageStr)
+		dockerContextPathStr,
+		dockerImageStr)
 }
 
 func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
