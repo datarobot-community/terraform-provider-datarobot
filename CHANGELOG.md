@@ -1,3 +1,7 @@
+## v0.9.2
+
+- Trigger new Execution Environment version on Docker Image changes
+
 ## [v0.9.1] - 2025-04-17
 
 ### Added
