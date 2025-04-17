@@ -400,7 +400,7 @@ func (r ExecutionEnvironmentResource) ModifyPlan(ctx context.Context, req resour
 	var fileContent []byte = nil
 	// compute docker context hash
 	if IsKnown(plan.DockerContextPath) {
-		var err error = nil
+		var err error
 		_, fileContent, err = getDockerContext(plan.DockerContextPath.ValueString())
 		if err != nil {
 			resp.Diagnostics.AddError("Error getting Docker context", err.Error())
@@ -410,7 +410,7 @@ func (r ExecutionEnvironmentResource) ModifyPlan(ctx context.Context, req resour
 
 	var dockerImageContent []byte = nil
 	if IsKnown(plan.DockerImage) {
-		var err error = nil
+		var err error
 		if dockerImageContent, err = os.ReadFile(plan.DockerImage.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Error getting Docker image", err.Error())
 			return
