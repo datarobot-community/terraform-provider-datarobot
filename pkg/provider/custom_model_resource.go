@@ -32,10 +32,8 @@ const (
 
 	defaultModerationTimeout       = 60
 	defaultModerationTimeoutAction = "score"
-
-	defaultMemoryMB      int64 = 2048
-	defaultReplicas            = 1
-	defaultNetworkAccess       = "PUBLIC"
+	defaultReplicas                = 1
+	defaultNetworkAccess           = "PUBLIC"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -387,7 +385,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The memory in MB for the Custom Model.",
-				Default:             int64default.StaticInt64(defaultMemoryMB),
+				Default:             nil,
 			},
 			"replicas": schema.Int64Attribute{
 				Optional:            true,
@@ -432,6 +430,7 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan CustomModelResourceModel
+	var memoryMB int64
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -649,25 +648,24 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	memoryMB := defaultMemoryMB
-	if IsKnown(plan.MemoryMB) {
-		memoryMB = plan.MemoryMB.ValueInt64()
-	}
-
-	traceAPICall("CreateCustomModelVersionCreateFromLatest")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+	payload := &client.CreateCustomModelVersionFromLatestRequest{
 		IsMajorUpdate:       "false",
 		BaseEnvironmentID:   baseEnvironmentID,
 		Replicas:            plan.Replicas.ValueInt64(),
 		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
-		MaximumMemory:       memoryMB * 1024 * 1024, // convert MB to bytes
-	}); err != nil {
+	}
+	if IsKnown(plan.MemoryMB) {
+		memoryMB = plan.MemoryMB.ValueInt64()
+		state.MemoryMB = types.Int64Value(memoryMB)
+		payload.MaximumMemory = memoryMB * 1024 * 1024
+	}
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, payload); err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 		return
 	}
 	state.Replicas = plan.Replicas
 	state.NetworkAccess = plan.NetworkAccess
-	state.MemoryMB = types.Int64Value(memoryMB)
 
 	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
@@ -1101,10 +1099,10 @@ func loadCustomModelToTerraformState(
 		state.TrainingDataPartitionColumn = types.StringPointerValue(customModel.LatestVersion.HoldoutData.PartitionColumn)
 	}
 
-	state.MemoryMB = types.Int64Value(defaultMemoryMB)
 	if customModel.LatestVersion.MaximumMemory != nil {
 		state.MemoryMB = types.Int64Value(*customModel.LatestVersion.MaximumMemory / (1024 * 1024))
 	}
+
 	state.Replicas = types.Int64Value(defaultReplicas)
 	if customModel.LatestVersion.Replicas != nil {
 		state.Replicas = types.Int64Value(*customModel.LatestVersion.Replicas)
@@ -1757,24 +1755,24 @@ func (r *CustomModelResource) updateResourceSettings(
 ) (
 	err error,
 ) {
-	memoryMB := defaultMemoryMB
-	if IsKnown(plan.MemoryMB) {
-		memoryMB = plan.MemoryMB.ValueInt64()
-	}
-
-	traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+	payload := &client.CreateCustomModelVersionFromLatestRequest{
 		IsMajorUpdate:       "false",
 		BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
 		Replicas:            plan.Replicas.ValueInt64(),
 		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
-		MaximumMemory:       memoryMB * 1024 * 1024, // convert MB to bytes
-	}); err != nil {
+	}
+	if IsKnown(plan.MemoryMB) {
+		maxMemory := plan.MemoryMB.ValueInt64() * 1024 * 1024
+		payload.MaximumMemory = maxMemory
+		state.MemoryMB = types.Int64Value(plan.MemoryMB.ValueInt64())
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload); err != nil {
 		return
 	}
 	state.Replicas = plan.Replicas
 	state.NetworkAccess = plan.NetworkAccess
-	state.MemoryMB = types.Int64Value(memoryMB)
 
 	return
 }
@@ -1832,9 +1830,12 @@ func (r *CustomModelResource) addResourceBundle(
 		}); err != nil {
 			return
 		}
+		state.MemoryMB = types.Int64Null() // reset memory if resource bundle is set
+
 	}
 
 	state.ResourceBundleID = plan.ResourceBundleID
+
 	return
 }
 
