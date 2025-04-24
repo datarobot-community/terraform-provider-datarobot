@@ -738,7 +738,7 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
-					resource.TestCheckResourceAttr(resourceName, "memory_mb", "2048"),
+					resource.TestCheckNoResourceAttr(resourceName, "memory_mb"),
 					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "network_access", "PUBLIC"),
 					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle),
@@ -757,7 +757,7 @@ func TestAccBinaryCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "negative_class_label", "no"),
 					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttr(resourceName, "prediction_threshold", "0.8"),
-					resource.TestCheckResourceAttr(resourceName, "memory_mb", "2048"),
+					resource.TestCheckNoResourceAttr(resourceName, "memory_mb"),
 					resource.TestCheckResourceAttr(resourceName, "replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "network_access", "PUBLIC"),
 					resource.TestCheckResourceAttr(resourceName, "resource_bundle_id", resourceBundle2),
@@ -1106,14 +1106,14 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
 	base_environment_id = "67ab469cecdca772287de644"
 	runtime_parameter_values = [
-	  { 
-		  key="OPENAI_API_BASE", 
-		  type="string", 
+	  {
+		  key="OPENAI_API_BASE",
+		  type="string",
 		  value="https://datarobot-genai-enablement.openai.azure.com/"
 	  },
-	  { 
-		  key="OPENAI_API_KEY", 
-		  type="credential", 
+	  {
+		  key="OPENAI_API_KEY",
+		  type="credential",
 		  value=datarobot_api_token_credential.test_custom_model.id
 	  }
 	]
@@ -1258,7 +1258,7 @@ resource "datarobot_api_token_credential" "%s" {
 	name = "open ai %s %s"
 	api_token = "test"
 }
-	
+
 resource "datarobot_custom_model" "%s" {
 	name        		  = "%s"
 	description 		  = "%s"

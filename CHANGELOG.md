@@ -1,3 +1,9 @@
+## [v0.9.3] - 2025-04-23
+
+### Fixed
+
+- Fixed memory size overwrite issue in the Custom Model resource. Added a check to ensure that the memory size attribute is not set when the `resource_bundle_id` is set to a non-empty value. This prevents the memory size from being unintentionally overwritten when using resource bundles.
+
 ## v0.9.2
 
 - Trigger new Execution Environment version on Docker Image changes
