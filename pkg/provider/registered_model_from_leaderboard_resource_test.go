@@ -32,8 +32,8 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "registered_model_from_leaderboard " + nameSalt
+	newName := "new_registered_model_from_leaderboard " + nameSalt
 
 	versionName := "version_name"
 	newVersionName := "new_version_name"

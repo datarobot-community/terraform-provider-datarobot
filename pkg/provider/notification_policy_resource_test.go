@@ -45,8 +45,8 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		t.Fatal(err)
 	}
 
-	name := "example_name"
-	newName := "new_example_name"
+	name := "notification_policy " + nameSalt
+	newName := "new_notification_policy " + nameSalt
 
 	eventGroup := "inference_endpoints.health"
 	newEventGroup := "batch_predictions.all"

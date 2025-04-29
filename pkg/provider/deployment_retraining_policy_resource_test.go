@@ -22,8 +22,8 @@ func TestAccDeploymentRetrainingPolicyResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "deployment_retraining_policy " + nameSalt
+	newName := "new_deployment_retraining_policy " + nameSalt
 
 	description := "test description"
 	newDescription := "new test description"

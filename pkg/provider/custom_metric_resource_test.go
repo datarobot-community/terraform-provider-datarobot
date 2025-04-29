@@ -45,8 +45,8 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		t.Fatal(err)
 	}
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "custom_metric " + nameSalt
+	newName := "new_custom_metric " + nameSalt
 
 	description := "example_description"
 	newDescription := "new_example_description"

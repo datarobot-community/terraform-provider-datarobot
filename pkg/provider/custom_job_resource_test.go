@@ -21,8 +21,8 @@ func TestAccCustomJobResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "custom_job " + nameSalt
+	newName := "new_custom_job " + nameSalt
 
 	description := "example_description"
 	newDescription := "new_example_description"
@@ -37,7 +37,7 @@ func TestAccCustomJobResource(t *testing.T) {
 	runScript := `#!/bin/bash
 
 	echo "Job Starting: ($0)"
-	
+
 	echo "===== Runtime Parameters ======"
 	echo "Model Package:     $MODEL_PACKAGE"
 	echo "Deployment:        $DEPLOYMENT"
@@ -50,14 +50,14 @@ func TestAccCustomJobResource(t *testing.T) {
 	echo "DATAROBOT_ENDPOINT:        $DATAROBOT_ENDPOINT"
 	echo "DATAROBOT_API_TOKEN:       Use the environment variable $DATAROBOT_API_TOKEN"
 	echo "==================================================="
-	
+
 	echo
 	echo "How to check how much memory your job has"
 	  memory_limit_bytes=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
 	  memory_limit_megabytes=$((memory_limit_bytes / 1024 / 1024))
 	echo "Memory Limit (in Megabytes): $memory_limit_megabytes"
 	echo
-	
+
 	# Uncomment the following if you want to check if the job has network access
 	## Define the IP address of an external server to ping (e.g., Google's DNS)
 	#external_server="8.8.8.8"
@@ -73,19 +73,19 @@ func TestAccCustomJobResource(t *testing.T) {
 	#fi
 	#echo
 	#echo
-	
+
 	# Run the code in job.py
 	dir_path=$(dirname $0)
 	echo "Entrypoint is at $dir_path - cd into it"
 	cd $dir_path
-	
+
 	if command -v python3 &>/dev/null; then
 		echo "python3 is installed and available."
 	else
 		echo "Error: python3 is not installed or not available."
 		exit 1
 	fi
-	
+
 	python_file="job.py"
 	if [ -f "$python_file" ]; then
 		echo "Found $python_file .. running it"
@@ -155,9 +155,9 @@ runtimeParameterDefinitions:
     defaultValue: null`
 
 	runtimeParameters := `[
-		{ 
-			key="OPENAI_API_BASE", 
-			type="string", 
+		{
+			key="OPENAI_API_BASE",
+			type="string",
 			value="https://datarobot-genai-enablement.openai.azure.com/"
 		},
 	  ]`
