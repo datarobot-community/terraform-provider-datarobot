@@ -73,8 +73,13 @@ type Service interface {
 	UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error)
 	UpdateCustomJobFiles(ctx context.Context, id string, files []FileInfo) (*CustomJob, error)
 	ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error)
-	ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error)
 	DeleteCustomJob(ctx context.Context, id string) error
+
+	// Custom Job Schedule
+	CreateCustomJobSchedule(ctx context.Context, id string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error)
+	ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobScheduleResponse, error)
+	UpdateCustomJobSchedule(ctx context.Context, id string, scheduleID string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error)
+	DeleteCustomJobSchedule(ctx context.Context, id string, scheduleID string) error
 
 	// Custom Metric Template
 	CreateHostedCustomMetricTemplate(ctx context.Context, customJobID string, req *HostedCustomMetricTemplateRequest) (*HostedCustomMetricTemplate, error)
@@ -463,9 +468,24 @@ func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]Cu
 	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
 }
 
-func (s *ServiceImpl) ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobSchedule, error) {
-	return GetAllPages[CustomJobSchedule](s.client, ctx, "/customJobs/"+id+"/schedules/", nil)
+// Custom Job Schedule
+func (s *ServiceImpl) CreateCustomJobSchedule(ctx context.Context, id string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error) {
+	return Post[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/", req)
 }
+
+func (s *ServiceImpl) ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobScheduleResponse, error) {
+	return GetAllPages[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/", nil)
+}
+
+func (s *ServiceImpl) DeleteCustomJobSchedule(ctx context.Context, id string, scheduleID string) error {
+	return Delete(s.client, ctx, "/customJobs/"+id+"/schedules/"+scheduleID+"/")
+}
+
+func (s *ServiceImpl) UpdateCustomJobSchedule(ctx context.Context, id string, scheduleID string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error) {
+	return Patch[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/"+scheduleID+"/", req)
+}
+
+//
 
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")

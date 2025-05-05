@@ -62,3 +62,17 @@ type CustomJobSchedule struct {
 	ID          string `json:"id"`
 	CustomJobID string `json:"customJobId"`
 }
+
+type CreateaCustomJobScheduleRequest struct {
+	Schedule           Schedule                        `json:"schedule"`
+	ParameterOverrides *[]RuntimeParameterValueRequest `json:"parameterOverrides,omitempty"`
+}
+
+type CustomJobScheduleResponse struct {
+	ID                 string                          `json:"id"`
+	CustomJobID        string                          `json:"customJobId"`
+	ScheduledJobID     string                          `json:"scheduledJobId"`
+	Schedule           Schedule                        `json:"schedule"`
+	ParameterOverrides *[]RuntimeParameterValueRequest `json:"parameterOverrides,omitempty"`
+	Deployment         Deployment                      `json:"deployment"`
+}

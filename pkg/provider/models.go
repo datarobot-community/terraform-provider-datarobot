@@ -885,3 +885,23 @@ type TimeseriesSettings struct {
 	PredictionsStartDate             types.String `tfsdk:"predictions_start_date"`
 	PredictionsEndDate               types.String `tfsdk:"predictions_end_date"`
 }
+
+type RuntimeParameterValueRequestModel struct {
+	FieldName types.String `tfsdk:"field_name"`
+	Type      types.String `tfsdk:"type"`
+	Value     types.String `tfsdk:"value"`
+}
+
+type RuntimeParameterValueRequestModelList []RuntimeParameterValueRequestModel
+
+type CustomJobScheduleModel struct {
+	ID                 types.String `tfsdk:"id"`
+	CustomJobID        types.String `tfsdk:"custom_job_id"`
+	Schedule           *Schedule    `tfsdk:"schedule"`
+	ParameterOverrides []RuntimeParameterValueRequestModel   `tfsdk:"parameter_overrides"`
+	ScheduledJobID     types.String `tfsdk:"scheduled_job_id"`
+}
+
+type CustomjobScheduleListModel struct {
+	Data []CustomJobScheduleModel `tfsdk:"data"`
+}
