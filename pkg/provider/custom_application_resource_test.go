@@ -24,7 +24,7 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
-	newName := "new_example_name " + nameSalt
+	newName := "new_custom_application " + nameSalt
 
 	useCaseResourceName := "test_custom_application"
 	useCaseResourceName2 := "test_new_custom_application"

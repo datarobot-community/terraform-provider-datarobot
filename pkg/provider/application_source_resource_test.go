@@ -43,7 +43,7 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
-	newName := "new_example_name " + nameSalt
+	newName := "application_source " + nameSalt
 
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
@@ -421,9 +421,9 @@ func applicationSourceResourceConfig(
 	if len(files) > 0 {
 		runtimeParamValueStr = `
 		runtime_parameter_values = [
-			{ 
-				key="STRING_PARAMETER", 
-				type="string", 
+			{
+				key="STRING_PARAMETER",
+				type="string",
 				value="val",
 			},
 		  ]`

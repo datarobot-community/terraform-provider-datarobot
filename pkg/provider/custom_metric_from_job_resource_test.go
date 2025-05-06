@@ -22,8 +22,8 @@ func TestAccCustomMetricFromJobResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "custom_metric_from_job " + nameSalt
+	newName := "new_custom_metric_from_job " + nameSalt
 
 	timeStampColumn := "timestamp"
 	newTimeStampColumn := "new_timestamp"
@@ -42,16 +42,16 @@ func TestAccCustomMetricFromJobResource(t *testing.T) {
 
 	parameterOverrides := `[
 		{
-			key="OPENAI_API_BASE", 
-			type="string", 
+			key="OPENAI_API_BASE",
+			type="string",
 			value="val"
 		}
 	]
 	`
 	newParameterOverrides := `[
 		{
-			key="OPENAI_API_BASE", 
-			type="string", 
+			key="OPENAI_API_BASE",
+			type="string",
 			value="newVal"
 		}
 	]
