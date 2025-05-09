@@ -288,6 +288,8 @@ type CustomJobResourceModel struct {
 	FilesHashes            types.List    `tfsdk:"files_hashes"`
 	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
 	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
+	Schedule               *Schedule     `tfsdk:"schedule"`
+	ScheduleID             types.String  `tfsdk:"schedule_id"`
 }
 
 type CustomMetricJobResourceModel struct {
@@ -895,11 +897,11 @@ type RuntimeParameterValueRequestModel struct {
 type RuntimeParameterValueRequestModelList []RuntimeParameterValueRequestModel
 
 type CustomJobScheduleModel struct {
-	ID                 types.String `tfsdk:"id"`
-	CustomJobID        types.String `tfsdk:"custom_job_id"`
-	Schedule           *Schedule    `tfsdk:"schedule"`
-	ParameterOverrides []RuntimeParameterValueRequestModel   `tfsdk:"parameter_overrides"`
-	ScheduledJobID     types.String `tfsdk:"scheduled_job_id"`
+	ID                 types.String                         `tfsdk:"id"`
+	CustomJobID        types.String                         `tfsdk:"custom_job_id"`
+	Schedule           Schedule                             `tfsdk:"schedule"`
+	ParameterOverrides *[]RuntimeParameterValueRequestModel `tfsdk:"parameter_overrides"`
+	ScheduledJobID     types.String                         `tfsdk:"scheduled_job_id"`
 }
 
 type CustomjobScheduleListModel struct {

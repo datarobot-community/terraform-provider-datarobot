@@ -74,5 +74,5 @@ type CustomJobScheduleResponse struct {
 	ScheduledJobID     string                          `json:"scheduledJobId"`
 	Schedule           Schedule                        `json:"schedule"`
 	ParameterOverrides *[]RuntimeParameterValueRequest `json:"parameterOverrides,omitempty"`
-	Deployment         Deployment                      `json:"deployment"`
+	Deployment         *Deployment                      `json:"deployment,omitempty"`
 }
