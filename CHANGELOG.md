@@ -1,3 +1,9 @@
+## [v0.9.4] - 2025-05-09
+
+### Fixed
+
+- Fixed batch file uploads and deletions to avoid API limits by processing them in groups of 100.
+
 ## [v0.9.3] - 2025-04-23
 
 ### Fixed
