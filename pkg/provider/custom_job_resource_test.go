@@ -373,7 +373,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "schedule_id"),
 				),
 			},
-						// Update job type to retraining
+			// Update job type to retraining
 			{
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(

@@ -467,25 +467,21 @@ func (s *ServiceImpl) UpdateCustomJobFiles(ctx context.Context, id string, files
 func (s *ServiceImpl) ListCustomJobMetrics(ctx context.Context, id string) ([]CustomJobMetric, error) {
 	return GetAllPages[CustomJobMetric](s.client, ctx, "/customJobs/"+id+"/customMetrics/", nil)
 }
-
-// Custom Job Schedule
 func (s *ServiceImpl) CreateCustomJobSchedule(ctx context.Context, id string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error) {
-	return Post[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/", req)
+	return Post[CustomJobScheduleResponse](s.client, ctx, fmt.Sprintf("/customJobs/%s/schedules/", id), req)
 }
 
 func (s *ServiceImpl) ListCustomJobSchedules(ctx context.Context, id string) ([]CustomJobScheduleResponse, error) {
-	return GetAllPages[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/", nil)
+	return GetAllPages[CustomJobScheduleResponse](s.client, ctx, fmt.Sprintf("/customJobs/%s/schedules/", id), nil)
 }
 
 func (s *ServiceImpl) DeleteCustomJobSchedule(ctx context.Context, id string, scheduleID string) error {
-	return Delete(s.client, ctx, "/customJobs/"+id+"/schedules/"+scheduleID+"/")
+	return Delete(s.client, ctx, fmt.Sprintf("/customJobs/%s/schedules/%s/", id, scheduleID))
 }
 
 func (s *ServiceImpl) UpdateCustomJobSchedule(ctx context.Context, id string, scheduleID string, req CreateaCustomJobScheduleRequest) (*CustomJobScheduleResponse, error) {
-	return Patch[CustomJobScheduleResponse](s.client, ctx, "/customJobs/"+id+"/schedules/"+scheduleID+"/", req)
+	return Patch[CustomJobScheduleResponse](s.client, ctx, fmt.Sprintf("/customJobs/%s/schedules/%s/", id, scheduleID), req)
 }
-
-//
 
 func (s *ServiceImpl) DeleteCustomJob(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/customJobs/"+id+"/")

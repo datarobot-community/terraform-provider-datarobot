@@ -171,7 +171,7 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 			},
 			"schedule_id": schema.StringAttribute{
 				Optional:            true,
-				Computed: 					true,
+				Computed:            true,
 				MarkdownDescription: "The ID of the schedule associated with the custom job.",
 			},
 		},
@@ -354,7 +354,6 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
-
 
 func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state CustomJobResourceModel
