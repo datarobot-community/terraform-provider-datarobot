@@ -29,6 +29,7 @@ resource "datarobot_deployment_retraining_policy" "example" {
   autopilot_options   = {}
   project_options     = {}
   time_series_options = {}
+  use_case_id         = datarobot_use_case.example.id
 }
 
 
@@ -57,6 +58,7 @@ output "datarobot_deployment_retraining_policy_id" {
 - `project_options_strategy` (String) The project option strategy used for modeling.
 - `time_series_options` (Attributes) Time Series project options used to build new models. (see [below for nested schema](#nestedatt--time_series_options))
 - `trigger` (Attributes) Retraining policy trigger. (see [below for nested schema](#nestedatt--trigger))
+- `use_case_id` (String) The ID of the use case to which the retraining policy belongs.
 
 ### Read-Only
 
