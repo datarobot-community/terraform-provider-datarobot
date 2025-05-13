@@ -202,7 +202,6 @@ resource "datarobot_deployment_retraining_policy" "test" {
 	feature_list_strategy = "informative_features"
 	project_options_strategy = "custom"
 	trigger = {
-		custom_job_id = datarobot_custom_job.deployment_retraining_policy.id
 		type = "schedule"
 		schedule = {
 			minute 			= ["10"]
@@ -212,6 +211,7 @@ resource "datarobot_deployment_retraining_policy" "test" {
 			day_of_week 	= ["*"]
 		}
 	}
+
 }
 `, name, name, name, name, description, action, modelSelectionStrategy)
 }

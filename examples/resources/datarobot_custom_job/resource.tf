@@ -18,6 +18,13 @@ resource "datarobot_custom_job" "example" {
   ]
   egress_network_policy = "none"
   resource_bundle_id    = "cpu.micro"
+  schedule = {
+    minute       = ["15", "45"]
+    hour         = ["*"]
+    month        = ["*"]
+    day_of_month = ["*"]
+    day_of_week  = ["*"]
+  }
 }
 
 output "example_id" {
