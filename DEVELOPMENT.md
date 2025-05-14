@@ -10,6 +10,51 @@ To contribute to the provider, ensure the following dependencies are installed:
 - [Git](https://git-scm.com/downloads) >= 2.0
 - [Docker](https://docs.docker.com/get-docker/) >= 20.10
 
+#### Required GPG Setup for Signing Commits
+To ensure the integrity of the codebase and to verify the authorship of commits, we require all contributors to sign their commits and tags with GPG. This is a security measure to prevent unauthorized changes to the codebase.
+Configure GPG for signing commits and tags. This is required for the release process and PR reviews.
+1. How to set up GPG:
+   - [GPG Setup](https://docs.github.com/en/authentication/managing-commit-signature-verification/setting-up-gpg-signature-verification)
+   - [GPG Key Generation](https://www.gnupg.org/documentation/manuals/gnupg/Generating-a-Keypair.html)
+2. Verify your GPG key is set up correctly:
+   ```bash
+   gpg --list-secret-keys --keyid-format LONG
+   ```
+3. Copy the GPG key ID (the long string after `sec`) and add it to your Git configuration:
+   ```bash
+   git config --global user.signingkey <YOUR_GPG_KEY_ID>
+   ```
+4. Enable commit signing:
+   ```bash
+   git config --global commit.gpgSign true
+   ```
+5. Verify  your GPG setup by signing a test message:
+   ```bash
+   echo "test" | gpg --clearsign
+   ```
+   you should see a message indicating that the signature is valid, like :
+   ```
+   -----BEGIN PGP SIGNED MESSAGE-----
+    Hash: SHA512
+    test
+    -----BEGIN PGP SIGNATURE-----
+
+>
+> ### !!! Nota bene
+> If you already committed and pushed a commit without signing, you can amend the commit with:
+> ```
+> git commit --amend --no-edit -S
+> ```
+> or rebase the commit with:
+> ```
+> git rebase -i <commit_hash_where_you_started>
+> ```
+> and change the commit message to `edit` or `reword`, then push force it with:
+> ```bash
+> git push --force-with-lease
+> ```
+
+
 ## Installation
 
 1. In a terminal clone the `terraform-provider-datarobot` repository.
