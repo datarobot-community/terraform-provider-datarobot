@@ -577,6 +577,7 @@ type DeploymentRetrainingPolicyResourceModel struct {
 	ProjectOptionsStrategy types.String       `tfsdk:"project_options_strategy"`
 	TimeSeriesOptions      *TimeSeriesOptions `tfsdk:"time_series_options"`
 	Trigger                *Trigger           `tfsdk:"trigger"`
+	UseCaseID              types.String       `tfsdk:"use_case_id"`
 }
 
 type AutopilotOptions struct {

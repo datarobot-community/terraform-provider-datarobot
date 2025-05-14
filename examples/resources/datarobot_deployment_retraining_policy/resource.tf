@@ -14,6 +14,7 @@ resource "datarobot_deployment_retraining_policy" "example" {
   autopilot_options   = {}
   project_options     = {}
   time_series_options = {}
+  use_case_id         = datarobot_use_case.example.id
 }
 
 

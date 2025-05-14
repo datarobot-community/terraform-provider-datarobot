@@ -291,6 +291,7 @@ type RetrainingPolicyRequest struct {
 	ProjectOptionsStrategy *string            `json:"projectOptionsStrategy,omitempty"`
 	TimeSeriesOptions      *TimeSeriesOptions `json:"timeSeriesOptions,omitempty"`
 	Trigger                *Trigger           `json:"trigger,omitempty"`
+	UseCaseID              *string            `json:"useCaseId,omitempty"`
 }
 
 type AutopilotOptions struct {
@@ -345,6 +346,7 @@ type RetrainingPolicy struct {
 	ProjectOptionsStrategy string             `json:"projectOptionsStrategy,omitempty"`
 	TimeSeriesOptions      *TimeSeriesOptions `json:"timeSeriesOptions,omitempty"`
 	Trigger                *Trigger           `json:"trigger,omitempty"`
+	UseCase                *UseCaseResponse   `json:"useCase,omitempty"`
 }
 
 type RetrainingSettings struct{}
