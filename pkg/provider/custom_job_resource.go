@@ -138,6 +138,42 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 				Optional:            true,
 				MarkdownDescription: "A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.",
 			},
+			"schedule": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The schedule configuration for the custom job.",
+				Attributes: map[string]schema.Attribute{
+					"minute": schema.ListAttribute{
+						Required:    true,
+						Description: "Minutes of the day when the job will run.",
+						ElementType: types.StringType,
+					},
+					"hour": schema.ListAttribute{
+						Required:    true,
+						Description: "Hours of the day when the job will run.",
+						ElementType: types.StringType,
+					},
+					"month": schema.ListAttribute{
+						Required:    true,
+						Description: "Months of the year when the job will run.",
+						ElementType: types.StringType,
+					},
+					"day_of_month": schema.ListAttribute{
+						Required:    true,
+						Description: "Days of the month when the job will run.",
+						ElementType: types.StringType,
+					},
+					"day_of_week": schema.ListAttribute{
+						Required:    true,
+						Description: "Days of the week when the job will run.",
+						ElementType: types.StringType,
+					},
+				},
+			},
+			"schedule_id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The ID of the schedule associated with the custom job.",
+			},
 		},
 	}
 }
@@ -183,6 +219,7 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 
 	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
 	if err != nil {
+		resp.Diagnostics.AddError("Error preparing local files", err.Error())
 		return
 	}
 
@@ -207,10 +244,33 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 	}
+
+	if data.Schedule != nil {
+		var schedule client.Schedule
+		if schedule, err = convertSchedule(*data.Schedule); err != nil {
+			resp.Diagnostics.AddError("Error converting schedule", err.Error())
+			return
+		}
+
+		scheduleRequest := client.CreateaCustomJobScheduleRequest{
+			Schedule: schedule,
+		}
+
+		scheduleResponse, err := r.provider.service.CreateCustomJobSchedule(ctx, customJob.ID, scheduleRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Job Schedule", err.Error())
+			return
+		}
+
+		data.ScheduleID = types.StringValue(scheduleResponse.ID)
+
+	} else {
+		data.ScheduleID = types.StringNull()
+	}
+
 	data.ID = types.StringValue(customJob.ID)
 	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
-
 	var diags diag.Diagnostics
 	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
 		ctx,
@@ -220,7 +280,6 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.Append(diags...)
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -258,6 +317,27 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 	data.Name = types.StringValue(customJob.Name)
 	if customJob.Description != "" {
 		data.Description = types.StringValue(customJob.Description)
+	}
+	// Fetch the schedule
+	schedules, err := r.provider.service.ListCustomJobSchedules(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Error reading Custom Job Schedules", err.Error())
+		return
+	}
+	if len(schedules) > 0 {
+		schedule := schedules[0] // Assuming one schedule per job, as it's not allowed to have multiple schedules
+		convertedSchedule, err := convertScheduleFromAPI(schedule.Schedule)
+		if err != nil {
+			resp.Diagnostics.AddError("Error converting schedule", err.Error())
+			return
+		}
+		data.Schedule = &convertedSchedule
+
+		if data.ScheduleID.IsNull() || data.ScheduleID.ValueString() != schedule.ID {
+			data.ScheduleID = types.StringValue(schedule.ID)
+		}
+	} else {
+		data.ScheduleID = types.StringNull()
 	}
 	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
@@ -326,6 +406,37 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	// Update or create the schedule if provided
+	if plan.Schedule != nil {
+		scheduleRequest := client.CreateaCustomJobScheduleRequest{
+			Schedule: client.Schedule{
+				Minute:     convertStringSlice(plan.Schedule.Minute),
+				Hour:       convertStringSlice(plan.Schedule.Hour),
+				Month:      convertStringSlice(plan.Schedule.Month),
+				DayOfMonth: convertStringSlice(plan.Schedule.DayOfMonth),
+				DayOfWeek:  convertStringSlice(plan.Schedule.DayOfWeek),
+			},
+		}
+
+		if state.ScheduleID.IsNull() || state.ScheduleID.ValueString() == "" {
+			// Create a new schedule if ScheduleID does not exist
+			scheduleResponse, err := r.provider.service.CreateCustomJobSchedule(ctx, plan.ID.ValueString(), scheduleRequest)
+			if err != nil {
+				resp.Diagnostics.AddError("Error creating Custom Job Schedule", err.Error())
+				return
+			}
+			plan.ScheduleID = types.StringValue(scheduleResponse.ID)
+		} else {
+			// Update the existing schedule
+			_, err := r.provider.service.UpdateCustomJobSchedule(ctx, plan.ID.ValueString(), state.ScheduleID.ValueString(), scheduleRequest)
+			if err != nil {
+				resp.Diagnostics.AddError("Error updating Custom Job Schedule", err.Error())
+				return
+			}
+		}
+	} else {
+		plan.ScheduleID = types.StringNull()
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -336,7 +447,14 @@ func (r *CustomJobResource) Delete(ctx context.Context, req resource.DeleteReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
+	// Delete the schedule
+	if data.Schedule != nil {
+		err := r.provider.service.DeleteCustomJobSchedule(ctx, data.ID.ValueString(), data.ScheduleID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error deleting Custom Job Schedule", err.Error())
+			return
+		}
+	}
 	traceAPICall("DeleteCustomJob")
 	err := r.provider.service.DeleteCustomJob(ctx, data.ID.ValueString())
 	if err != nil {
@@ -481,4 +599,12 @@ func CustomJobTypeValidators() []validator.String {
 			notificationJobType,
 		),
 	}
+}
+
+func convertStringSlice(input []types.String) []any {
+	var result []any
+	for _, v := range input {
+		result = append(result, v)
+	}
+	return result
 }

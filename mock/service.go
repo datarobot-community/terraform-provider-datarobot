@@ -1709,10 +1709,10 @@ func (mr *MockServiceMockRecorder) ListCustomJobMetrics(ctx, id interface{}) *go
 }
 
 // ListCustomJobSchedules mocks base method.
-func (m *MockService) ListCustomJobSchedules(ctx context.Context, id string) ([]client.CustomJobSchedule, error) {
+func (m *MockService) ListCustomJobSchedules(ctx context.Context, id string) ([]client.CustomJobScheduleResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListCustomJobSchedules", ctx, id)
-	ret0, _ := ret[0].([]client.CustomJobSchedule)
+	ret0, _ := ret[0].([]client.CustomJobScheduleResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1722,6 +1722,50 @@ func (mr *MockServiceMockRecorder) ListCustomJobSchedules(ctx, id interface{}) *
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomJobSchedules", reflect.TypeOf((*MockService)(nil).ListCustomJobSchedules), ctx, id)
 }
+// CreateCustomJobSchedule mocks base method.
+func (m *MockService) CreateCustomJobSchedule(ctx context.Context, id string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomJobSchedule", ctx, id, req)
+	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomJobSchedule indicates an expected call of CreateCustomJobSchedule.
+func (mr *MockServiceMockRecorder) CreateCustomJobSchedule(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).CreateCustomJobSchedule), ctx, id, req)
+}
+
+// DeleteCustomJobSchedule mocks base method.
+func (m *MockService) DeleteCustomJobSchedule(ctx context.Context, id string, scheduleID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCustomJobSchedule", ctx, id, scheduleID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCustomJobSchedule indicates an expected call of DeleteCustomJobSchedule.
+func (mr *MockServiceMockRecorder) DeleteCustomJobSchedule(ctx, id, scheduleID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJobSchedule", reflect.TypeOf((*MockService)(nil).DeleteCustomJobSchedule), ctx, id, scheduleID)
+}
+
+// UpdateCustomJobSchedule mocks base method.
+func (m *MockService) UpdateCustomJobSchedule(ctx context.Context, id string, scheduleID string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomJobSchedule", ctx, id, scheduleID, req)
+	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomJobSchedule indicates an expected call of UpdateCustomJobSchedule.
+func (mr *MockServiceMockRecorder) UpdateCustomJobSchedule(ctx, id, scheduleID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).UpdateCustomJobSchedule), ctx, id, scheduleID, req)
+}
+
 
 // ListCustomModelVersions mocks base method.
 func (m *MockService) ListCustomModelVersions(ctx context.Context, id string) ([]client.CustomModelVersion, error) {

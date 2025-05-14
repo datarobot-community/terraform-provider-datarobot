@@ -33,6 +33,13 @@ resource "datarobot_custom_job" "example" {
   ]
   egress_network_policy = "none"
   resource_bundle_id    = "cpu.micro"
+  schedule = {
+    minute       = ["15", "45"]
+    hour         = ["*"]
+    month        = ["*"]
+    day_of_month = ["*"]
+    day_of_week  = ["*"]
+  }
 }
 
 output "example_id" {
@@ -59,6 +66,8 @@ output "example_id" {
 - `job_type` (String) The type of the Custom Job.
 - `resource_bundle_id` (String) A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.
 - `runtime_parameter_values` (Attributes List) Additional parameters to be injected into a Job at runtime. (see [below for nested schema](#nestedatt--runtime_parameter_values))
+- `schedule` (Attributes) The schedule configuration for the custom job. (see [below for nested schema](#nestedatt--schedule))
+- `schedule_id` (String) The ID of the schedule associated with the custom job.
 
 ### Read-Only
 
@@ -74,3 +83,15 @@ Required:
 - `key` (String) The name of the runtime parameter.
 - `type` (String) The type of the runtime parameter.
 - `value` (String) The value of the runtime parameter (type conversion is handled internally).
+
+
+<a id="nestedatt--schedule"></a>
+### Nested Schema for `schedule`
+
+Required:
+
+- `day_of_month` (List of String) Days of the month when the job will run.
+- `day_of_week` (List of String) Days of the week when the job will run.
+- `hour` (List of String) Hours of the day when the job will run.
+- `minute` (List of String) Minutes of the day when the job will run.
+- `month` (List of String) Months of the year when the job will run.

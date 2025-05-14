@@ -959,6 +959,80 @@ func convertScheduleExpression(expression []types.String) (any, error) {
 
 	return convertedExpression, nil
 }
+func convertScheduleFromAPI(clientSchedule client.Schedule) (schedule Schedule, err error) {
+	schedule = Schedule{}
+
+	convertScheduleExpressionFromAPI := func(expression any) ([]types.String, error) {
+		if expression == nil {
+			return nil, nil
+		}
+
+		switch v := expression.(type) {
+		case []string:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				convertedExpression[i] = types.StringValue(val)
+			}
+			return convertedExpression, nil
+		case []int:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				convertedExpression[i] = types.StringValue(strconv.Itoa(val))
+			}
+			return convertedExpression, nil
+		case []interface{}:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				switch val := val.(type) {
+				case string:
+					convertedExpression[i] = types.StringValue(val)
+				case int:
+					convertedExpression[i] = types.StringValue(strconv.Itoa(val))
+				case float64:
+					convertedExpression[i] = types.StringValue(fmt.Sprintf("%.0f", val))
+				default:
+					return nil, fmt.Errorf("unsupported schedule expression type: %T", val)
+				}
+			}
+			return convertedExpression, nil
+		default:
+			return nil, fmt.Errorf("unsupported schedule expression type: %T", expression)
+		}
+	}
+
+	// Convert each schedule field
+	minute, err := convertScheduleExpressionFromAPI(clientSchedule.Minute)
+	if err != nil {
+		return
+	}
+	schedule.Minute = minute
+
+	hour, err := convertScheduleExpressionFromAPI(clientSchedule.Hour)
+	if err != nil {
+		return
+	}
+	schedule.Hour = hour
+
+	dayOfMonth, err := convertScheduleExpressionFromAPI(clientSchedule.DayOfMonth)
+	if err != nil {
+		return
+	}
+	schedule.DayOfMonth = dayOfMonth
+
+	month, err := convertScheduleExpressionFromAPI(clientSchedule.Month)
+	if err != nil {
+		return
+	}
+	schedule.Month = month
+
+	dayOfWeek, err := convertScheduleExpressionFromAPI(clientSchedule.DayOfWeek)
+	if err != nil {
+		return
+	}
+	schedule.DayOfWeek = dayOfWeek
+
+	return
+}
 
 func prepareTestFolder(folderPath string) (string, error) {
 	// Check if the directory exists
