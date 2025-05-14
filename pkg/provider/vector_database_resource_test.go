@@ -14,8 +14,8 @@ func TestAccVectorDatabaseResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_vector_database.test"
 
-	name := "example_name"
-	newName := "new_example_name"
+	name := "vector_database " + nameSalt
+	newName := "new_vector_database " + nameSalt
 
 	chunkSize := 500
 	newChunkSize := 510
@@ -76,7 +76,7 @@ resource "datarobot_use_case" "test_vector_database" {
 	name = "test"
 	description = "test"
 }
-  
+
 resource "datarobot_dataset_from_file" "test_vector_database" {
 	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
 	use_case_ids = ["${datarobot_use_case.test_vector_database.id}"]

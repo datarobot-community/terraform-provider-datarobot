@@ -46,8 +46,8 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		t.Fatal(err)
 	}
 
-	name := "example_name"
-	newName := "new_example_name"
+	name := "notification_channel " + nameSalt
+	newName := "new_notification_channel " + nameSalt
 
 	channelType := "DataRobotUser"
 	newChannelType := "DataRobotGroup"

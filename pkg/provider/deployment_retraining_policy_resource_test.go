@@ -22,8 +22,8 @@ func TestAccDeploymentRetrainingPolicyResource(t *testing.T) {
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "deployment_retraining_policy " + nameSalt
+	newName := "new_deployment_retraining_policy " + nameSalt
 
 	description := "test description"
 	newDescription := "new test description"
@@ -105,6 +105,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "model_selection_strategy", modelSelectionStrategy),
 					resource.TestCheckResourceAttr(resourceName, "action", action),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_id"),
 				),
 			},
 			// Update attributes
@@ -193,6 +194,10 @@ resource "datarobot_deployment" "deployment_retraining_policy" {
     prediction_environment_id = datarobot_prediction_environment.deployment_retraining_policy.id
     registered_model_version_id = datarobot_registered_model.deployment_retraining_policy.version_id
 }
+resource "datarobot_use_case" "deployment_retraining_policy" {
+	name = "sample salt use case"
+	description = "sample retraining policy use case"
+}
 resource "datarobot_deployment_retraining_policy" "test" {
 	name = "%s"
 	description = "%s"
@@ -202,7 +207,6 @@ resource "datarobot_deployment_retraining_policy" "test" {
 	feature_list_strategy = "informative_features"
 	project_options_strategy = "custom"
 	trigger = {
-		custom_job_id = datarobot_custom_job.deployment_retraining_policy.id
 		type = "schedule"
 		schedule = {
 			minute 			= ["10"]
@@ -212,6 +216,7 @@ resource "datarobot_deployment_retraining_policy" "test" {
 			day_of_week 	= ["*"]
 		}
 	}
+	use_case_id = datarobot_use_case.deployment_retraining_policy.id
 }
 `, name, name, name, name, description, action, modelSelectionStrategy)
 }

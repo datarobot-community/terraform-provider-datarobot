@@ -187,7 +187,7 @@ func batchPredictionJobDefinitionResourceConfig(
 resource "datarobot_basic_credential" "batch_prediction_job_definition" {
 	name = "%s"
 	user = "user"
-	password = "password"
+	password = "b@tch_prediction_Job"
 }
 resource "datarobot_custom_model" "batch_prediction_job_definition" {
 	name = "test batch prediction job"

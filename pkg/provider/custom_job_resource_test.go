@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -21,8 +23,8 @@ func TestAccCustomJobResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "custom_job " + nameSalt
+	newName := "new_custom_job " + nameSalt
 
 	description := "example_description"
 	newDescription := "new_example_description"
@@ -37,7 +39,7 @@ func TestAccCustomJobResource(t *testing.T) {
 	runScript := `#!/bin/bash
 
 	echo "Job Starting: ($0)"
-	
+
 	echo "===== Runtime Parameters ======"
 	echo "Model Package:     $MODEL_PACKAGE"
 	echo "Deployment:        $DEPLOYMENT"
@@ -50,14 +52,14 @@ func TestAccCustomJobResource(t *testing.T) {
 	echo "DATAROBOT_ENDPOINT:        $DATAROBOT_ENDPOINT"
 	echo "DATAROBOT_API_TOKEN:       Use the environment variable $DATAROBOT_API_TOKEN"
 	echo "==================================================="
-	
+
 	echo
 	echo "How to check how much memory your job has"
 	  memory_limit_bytes=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
 	  memory_limit_megabytes=$((memory_limit_bytes / 1024 / 1024))
 	echo "Memory Limit (in Megabytes): $memory_limit_megabytes"
 	echo
-	
+
 	# Uncomment the following if you want to check if the job has network access
 	## Define the IP address of an external server to ping (e.g., Google's DNS)
 	#external_server="8.8.8.8"
@@ -73,19 +75,19 @@ func TestAccCustomJobResource(t *testing.T) {
 	#fi
 	#echo
 	#echo
-	
+
 	# Run the code in job.py
 	dir_path=$(dirname $0)
 	echo "Entrypoint is at $dir_path - cd into it"
 	cd $dir_path
-	
+
 	if command -v python3 &>/dev/null; then
 		echo "python3 is installed and available."
 	else
 		echo "Error: python3 is not installed or not available."
 		exit 1
 	fi
-	
+
 	python_file="job.py"
 	if [ -f "$python_file" ]; then
 		echo "Found $python_file .. running it"
@@ -155,13 +157,19 @@ runtimeParameterDefinitions:
     defaultValue: null`
 
 	runtimeParameters := `[
-		{ 
-			key="OPENAI_API_BASE", 
-			type="string", 
+		{
+			key="OPENAI_API_BASE",
+			type="string",
 			value="https://datarobot-genai-enablement.openai.azure.com/"
 		},
 	  ]`
-
+	schedule := &map[string]string{ // Add schedule configuration
+		"minute":       "10 15",
+		"hour":         "*",
+		"day_of_week":  "*",
+		"month":        "*",
+		"day_of_month": "*",
+	}
 	err = os.WriteFile(folderPath+"/"+metadataFileName, []byte(metadataFileContents), 0644)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +199,9 @@ runtimeParameterDefinitions:
 					&folderPath,
 					nil,
 					nil,
-					noneEgressNetworkPolicy),
+					noneEgressNetworkPolicy,
+					nil,
+				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
@@ -225,7 +235,8 @@ runtimeParameterDefinitions:
 					&folderPath,
 					nil,
 					nil,
-					noneEgressNetworkPolicy),
+					noneEgressNetworkPolicy,
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
@@ -253,7 +264,8 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
 					nil,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy,
+					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
@@ -285,7 +297,7 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
 					&runtimeParameters,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
@@ -315,7 +327,7 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
 					&runtimeParameters,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
@@ -328,6 +340,37 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+
+			// Set schedule
+			{
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Config: customJobResourceConfig(
+					name,
+					description,
+					defaultJobType,
+					nil,
+					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					nil,
+					noneEgressNetworkPolicy,
+					schedule,
+				),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomJobResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "schedule.minute.0", "10"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.minute.1", "15"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.hour.0", "*"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_week.0", "*"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.month.0", "*"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_month.0", "*"),
+					resource.TestCheckResourceAttrSet(resourceName, "schedule_id"),
 				),
 			},
 			// Update job type to retraining
@@ -345,7 +388,7 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
 					&runtimeParameters,
-					publicEgressNetworkPolicy),
+					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
@@ -373,6 +416,7 @@ func customJobResourceConfig(
 	files []FileTuple,
 	runtimeParameters *string,
 	egressNetworkPolicy string,
+	schedule *map[string]string,
 ) string {
 	folderPathStr := ""
 	if folderPath != nil {
@@ -402,6 +446,25 @@ func customJobResourceConfig(
 	runtime_parameter_values = %s`, *runtimeParameters)
 	}
 
+	scheduleStr := ""
+	if schedule != nil {
+		scheduleStr = `
+		schedule = {`
+		for key, value := range *schedule {
+			values := strings.Fields(value)
+			scheduleStr += fmt.Sprintf(`
+			%s = [`, key)
+			for _, v := range values {
+				scheduleStr += fmt.Sprintf(`"%s", `, v)
+			}
+			scheduleStr = scheduleStr[:len(scheduleStr)-2] + `]`
+		}
+		scheduleStr += `
+		}`
+	}
+
+	log.Printf("Schedule: %s", scheduleStr)
+
 	return fmt.Sprintf(`
 resource "datarobot_custom_job" "test" {
 	name = "%s"
@@ -412,8 +475,9 @@ resource "datarobot_custom_job" "test" {
 	%s
 	%s
 	%s
+	%s
 }
-`, name, description, jobType, egressNetworkPolicy, folderPathStr, filesStr, runtimeParametersStr)
+`, name, description, jobType, egressNetworkPolicy, folderPathStr, filesStr, runtimeParametersStr, scheduleStr)
 }
 
 func checkCustomJobResourceExists() resource.TestCheckFunc {
@@ -453,6 +517,21 @@ func checkCustomJobResourceExists() resource.TestCheckFunc {
 				return fmt.Errorf("Runtime parameter value does not match")
 			}
 			return nil
+		}
+
+		// Validate schedule
+		schedules, err := p.service.ListCustomJobSchedules(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		if len(schedules) > 0 {
+			schedule := schedules[0]
+			if schedule.Schedule.Minute != rs.Primary.Attributes["schedule.minute.0"] ||
+				schedule.Schedule.Hour != rs.Primary.Attributes["schedule.hour.0"] ||
+				schedule.Schedule.DayOfWeek != rs.Primary.Attributes["schedule.day_of_week.0"] {
+				return fmt.Errorf("Schedule does not match")
+			}
 		}
 
 		return fmt.Errorf("Custom Job not found")

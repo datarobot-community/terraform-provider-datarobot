@@ -16,8 +16,8 @@ func TestAccQAApplicationResource(t *testing.T) {
 
 	resourceName := "datarobot_qa_application.test"
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "qa_application " + nameSalt
+	newName := "new_qa_application " + nameSalt
 
 	folderPath := "qa_application"
 	if err := os.Mkdir(folderPath, 0755); err != nil {

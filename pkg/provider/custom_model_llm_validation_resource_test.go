@@ -39,8 +39,8 @@ def score(data, model, **kwargs):
 		t.Fatal(err)
 	}
 
-	name := "example_name " + nameSalt
-	newName := "new_example_name " + nameSalt
+	name := "custom_model_llm_validation " + nameSalt
+	newName := "new_custom_model_llm_validation " + nameSalt
 
 	promptColumnName := "promptText"
 	newPromptColumnName := "newPromptText"

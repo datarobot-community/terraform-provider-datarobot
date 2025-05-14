@@ -331,6 +331,10 @@ func (r *DeploymentRetrainingPolicyResource) Schema(ctx context.Context, req res
 					},
 				},
 			},
+			"use_case_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The ID of the use case to which the retraining policy belongs.",
+			},
 		},
 	}
 }
@@ -418,7 +422,9 @@ func (r *DeploymentRetrainingPolicyResource) Read(ctx context.Context, req resou
 	data.ModelSelectionStrategy = types.StringValue(deploymentRetrainingPolicy.ModelSelectionStrategy)
 	data.FeatureListStrategy = types.StringValue(deploymentRetrainingPolicy.FeatureListStrategy)
 	data.ProjectOptionsStrategy = types.StringValue(deploymentRetrainingPolicy.ProjectOptionsStrategy)
-
+	if deploymentRetrainingPolicy.UseCase != nil {
+		data.UseCaseID = types.StringValue(deploymentRetrainingPolicy.UseCase.ID)
+	}
 	// Retrieve retraining settings
 	if err != nil {
 		resp.Diagnostics.AddError("Error retrieving Retraining Settings", err.Error())
