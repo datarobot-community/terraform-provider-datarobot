@@ -1,8 +1,15 @@
-## [v0.9.4] - 2025-05-09
+## [v0.9.4] - 2025-05-14
+
+### Added
+
+- Schedule support for the `CustomJob` resource.
+- DeploymentRetrainingPolicy now supports `use_case_id` attribute setting.
+- Password length validation in `basic_credential` resource.
 
 ### Fixed
 
 - Fixed batch file uploads and deletions to avoid API limits by processing them in groups of 100.
+- Fixed test naming convention to avoid conflicts with other test files.
 
 ## [v0.9.3] - 2025-04-23
 
