@@ -382,6 +382,11 @@ resource "datarobot_custom_metric_job" "test" {
 `, name, description, egressNetworkPolicy, hostedMetricType, directionality, units, isModelSpecific, folderPathStr, filesStr, runtimeParametersStr)
 }
 
+// checkCustomMetricJobResourceExists returns a TestCheckFunc that validates the existence and attributes
+// of a custom metric job resource. The resourceName parameter is kept to maintain consistency with
+// other resource check functions and allow for potential reuse with different resource names in future tests.
+//
+//nolint:unparam
 func checkCustomMetricJobResourceExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
