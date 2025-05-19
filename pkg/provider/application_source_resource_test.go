@@ -432,10 +432,15 @@ func applicationSourceResourceConfig(
 		for _, file := range files {
 			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.Source, file.Destination)
+				{
+					source = "%s",
+					destination = "%s"
+				},`, file.Source.ValueString(), file.Destination.ValueString())
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.Source)
+				{
+					source = "%s"
+				},`, file.Source.ValueString())
 			}
 		}
 

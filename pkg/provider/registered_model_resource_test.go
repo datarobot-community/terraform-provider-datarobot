@@ -173,7 +173,7 @@ runtimeParameterDefinitions:
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName+nameSuffix2, nil),
+					checkRegisteredModelResourceExists(resourceName+nameSuffix2, &prompt),
 					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "id"),
 					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "version_id"),
 				),
