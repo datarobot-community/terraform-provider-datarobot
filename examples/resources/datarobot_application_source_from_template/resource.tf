@@ -5,8 +5,14 @@ resource "datarobot_application_source_from_template" "example" {
   # Optional
   base_environment_id = "6542cd582a9d3d51bf4ac71e"
   files = [
-    ["start-app.sh"],
-    ["streamlit-app.py"],
+    {
+      source      = "start-app.sh"
+      destination = "start-app.sh"
+    },
+    {
+      source      = "streamlit-app.py"
+      destination = "streamlit-app.py"
+    },
   ]
   folder_path = "example-app"
   runtime_parameter_values = [
