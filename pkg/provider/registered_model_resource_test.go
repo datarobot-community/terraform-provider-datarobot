@@ -125,12 +125,18 @@ func TestAccTextGenerationRegisteredModelResource(t *testing.T) {
 
 	folderPath := "registered_model_text_generation"
 	fileName := "model-metadata.yaml"
-	fileContents := `name: runtime-params
+	fileContents := `name: text-generation-model
 
+type: inference
+targetType: TextGeneration
+inferenceModel:
+  targetName: target
 runtimeParameterDefinitions:
   - fieldName: PROMPT_COLUMN_NAME
     type: string
-    defaultValue: null`
+    description: The name of the column containing the prompts
+    defaultValue: null
+    required: true`
 
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
@@ -277,19 +283,19 @@ func textGenerationRegisteredModelResourceConfig(
 			promptParamStr = `
 	runtime_parameter_values = [
 		{
-			key="PROMPT_COLUMN_NAME",
-			type="string",
-			value="prompt"
-		},
+			key = "PROMPT_COLUMN_NAME"
+			type = "string"
+			value = "prompt"
+		}
 	]`
 		} else {
 			promptParamStr = fmt.Sprintf(`
 	runtime_parameter_values = [
 		{
-			key="PROMPT_COLUMN_NAME",
-			type="string",
-			value="%s"
-		},
+			key = "PROMPT_COLUMN_NAME"
+			type = "string"
+			value = "%s"
+		}
 	]`, *promptParameterValue)
 		}
 	}
@@ -309,6 +315,13 @@ resource "datarobot_custom_model" "%s" {
 resource "datarobot_registered_model" "%s" {
 	name                    = "test text generation registered model %s"
 	custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
+	runtime_parameter_values = [
+		{
+			key = "PROMPT_COLUMN_NAME"
+			type = "string"
+			value = "prompt"
+		}
+	]
 }
 `, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName)
 }

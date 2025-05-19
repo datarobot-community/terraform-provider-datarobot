@@ -314,6 +314,37 @@ func deploymentResourceConfig(
 		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
 	}
 
+	runtimeParameterValuesStr := ""
+	if runtimeParameterValue != "" {
+		runtimeParameterValuesStr = fmt.Sprintf(`
+	runtime_parameter_values = [
+		{
+			key = "STRING_PARAMETER"
+			type = "string"
+			value = "%s"
+		},
+		{
+			key = "BOOLEAN_PARAMETER"
+			type = "boolean"
+			value = "true"
+		}
+	]`, runtimeParameterValue)
+	} else {
+		runtimeParameterValuesStr = `
+	runtime_parameter_values = [
+		{
+			key = "STRING_PARAMETER"
+			type = "string"
+			value = "default"
+		},
+		{
+			key = "BOOLEAN_PARAMETER"
+			type = "boolean"
+			value = "true"
+		}
+	]`
+	}
+
 	deploymentSettings := ""
 
 	if isPredictionsByForecastDateEnabled {
@@ -427,37 +458,6 @@ func deploymentResourceConfig(
 		}`
 
 		deploymentSettings += retrainingSettingsStr
-	}
-
-	runtimeParameterValuesStr := ""
-	if runtimeParameterValue != "" {
-		runtimeParameterValuesStr = fmt.Sprintf(`
-	runtime_parameter_values = [
-		{
-			key = "STRING_PARAMETER"
-			type = "string"
-			value = "%s"
-		},
-		{
-			key = "BOOLEAN_PARAMETER"
-			type = "boolean"
-			value = "true"
-		}
-	]`, runtimeParameterValue)
-	} else {
-		runtimeParameterValuesStr = `
-	runtime_parameter_values = [
-		{
-			key = "STRING_PARAMETER"
-			type = "string"
-			value = "default"
-		},
-		{
-			key = "BOOLEAN_PARAMETER"
-			type = "boolean"
-			value = "true"
-		}
-	]`
 	}
 
 	return fmt.Sprintf(`

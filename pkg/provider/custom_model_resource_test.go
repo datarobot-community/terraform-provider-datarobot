@@ -115,7 +115,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					sourceRemoteRepositories,
 					&folderPath,
 					[]FileTuple{{
-						Source:      types.StringValue(fileName),
+						Source:      types.StringValue(folderPath + "/" + fileName),
 						Destination: types.StringValue(fileName),
 					}},
 					[]GuardConfiguration{
