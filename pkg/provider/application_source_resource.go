@@ -388,7 +388,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	applicationSourceVersion := *createApplicationSourceVersionResp
 
-	if !reflect.DeepEqual(plan.Files, state.Files) ||
+	if !filesListEqual(ctx, plan.Files, state.Files) ||
 		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPath != state.FolderPath ||
 		plan.FolderPathHash != state.FolderPathHash {
@@ -603,6 +603,36 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 			path.MatchRoot("base_environment_version_id"),
 		),
 	}
+}
+
+// filesListEqual compares two types.Lists of file objects (with source and destination fields) for equality by content.
+func filesListEqual(ctx context.Context, a, b types.List) bool {
+	if a.IsNull() && b.IsNull() {
+		return true
+	}
+	if a.IsNull() != b.IsNull() {
+		return false
+	}
+	type fileObj struct {
+		Source      string `json:"source"`
+		Destination string `json:"destination"`
+	}
+	var aFiles, bFiles []fileObj
+	if diags := a.ElementsAs(ctx, &aFiles, false); diags.HasError() {
+		return false
+	}
+	if diags := b.ElementsAs(ctx, &bFiles, false); diags.HasError() {
+		return false
+	}
+	if len(aFiles) != len(bFiles) {
+		return false
+	}
+	for i := range aFiles {
+		if aFiles[i] != bFiles[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
