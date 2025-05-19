@@ -100,9 +100,21 @@ func (r *CustomMetricJobResource) Schema(ctx context.Context, req resource.Schem
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Job. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in job).",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"source": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Local filesystem path.",
+						},
+						"destination": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Path in the job.",
+						},
+					},
+				},
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,

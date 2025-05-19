@@ -807,7 +807,7 @@ type BatchPredictionJobDefinitionResourceModel struct {
 	Enabled                     types.Bool          `tfsdk:"enabled"`
 	Schedule                    *Schedule           `tfsdk:"schedule"`
 	AbortOnError                types.Bool          `tfsdk:"abort_on_error"`
-	ChunkSize                   types.Dynamic       `tfsdk:"chunk_size"`
+	ChunkSize                   types.String        `tfsdk:"chunk_size"`
 	ColumnNamesRemapping        types.Map           `tfsdk:"column_names_remapping"`
 	CSVSettings                 *CSVSettings        `tfsdk:"csv_settings"`
 	ExplanationAlgorithm        types.String        `tfsdk:"explanation_algorithm"`

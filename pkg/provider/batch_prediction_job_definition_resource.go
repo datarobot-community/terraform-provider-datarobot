@@ -319,7 +319,7 @@ func (r *BatchPredictionJobDefinitionResource) Schema(ctx context.Context, req r
 				Optional:    true,
 				Description: "Number of concurrent chunks to score simultaneously. Defaults to the available number of cores of the deployment. Lower it to leave resources for real-time scoring.",
 			},
-			"chunk_size": schema.DynamicAttribute{
+			"chunk_size": schema.StringAttribute{
 				Optional:    true,
 				Description: "Which strategy should be used to determine the chunk size. Can be either a named strategy or a fixed size in bytes.",
 			},
@@ -639,7 +639,7 @@ func buildRequest(data BatchPredictionJobDefinitionResourceModel) (request *clie
 		Name:                        StringValuePointerOptional(data.Name),
 		DeploymentId:                data.DeploymentID.ValueString(),
 		AbortOnError:                BoolValuePointerOptional(data.AbortOnError),
-		ChunkSize:                   convertDynamicType(data.ChunkSize),
+		ChunkSize:                   StringValuePointerOptional(data.ChunkSize),
 		ColumnNamesRemapping:        convertTfStringMap(data.ColumnNamesRemapping),
 		ExplanationAlgorithm:        StringValuePointerOptional(data.ExplanationAlgorithm),
 		IncludePredictionStatus:     BoolValuePointerOptional(data.IncludePredictionStatus),
