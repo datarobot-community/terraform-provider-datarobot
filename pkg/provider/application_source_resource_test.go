@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -417,6 +418,19 @@ func applicationSourceResourceConfig(
 	}
 
 	filesStr := ""
+	if len(files) > 0 {
+		var fileLines []string
+		for _, file := range files {
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
+			} else {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
+			}
+		}
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
+	}
+
 	runtimeParamValueStr := ""
 	if len(files) > 0 {
 		runtimeParamValueStr = `
@@ -427,28 +441,11 @@ func applicationSourceResourceConfig(
 				value="val",
 			},
 		  ]`
-
-		filesStr = "files = ["
-		for _, file := range files {
-			if file.Destination != types.StringNull() {
-				filesStr += fmt.Sprintf(`
-				{
-					source = "%s",
-					destination = "%s"
-				},`, file.Source.ValueString(), file.Destination.ValueString())
-			} else {
-				filesStr += fmt.Sprintf(`
-				{
-					source = "%s"
-				},`, file.Source.ValueString())
-			}
-		}
-
-		filesStr += "]"
 	}
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
+	%s
 	%s
 	%s
 	%s
