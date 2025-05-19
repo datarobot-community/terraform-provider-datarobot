@@ -12,8 +12,14 @@ resource "datarobot_custom_model" "example" {
   name        = "Example from GitHub"
   description = "An example custom model from GitHub repository"
   files = [
-    "file1.py",
-    "file2.py",
+    {
+      source      = "file1.py"
+      destination = "file1.py"
+    },
+    {
+      source      = "file2.py"
+      destination = "file2.py"
+    },
   ]
   target_type         = "Binary"
   target_name         = "my_label"

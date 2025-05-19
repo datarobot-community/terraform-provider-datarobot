@@ -179,7 +179,7 @@ type CustomModelResourceModel struct {
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	FolderPath                     types.String                    `tfsdk:"folder_path"`
 	FolderPathHash                 types.String                    `tfsdk:"folder_path_hash"`
-	Files                          types.Dynamic                   `tfsdk:"files"`
+	Files                          types.List                      `tfsdk:"files"`
 	FilesHashes                    types.List                      `tfsdk:"files_hashes"`
 	TargetName                     types.String                    `tfsdk:"target_name"`
 	TargetType                     types.String                    `tfsdk:"target_type"`
@@ -275,41 +275,41 @@ type CustomModelLLMValidationResourceModel struct {
 
 // CustomJobResourceModel describes the custom job resource.
 type CustomJobResourceModel struct {
-	ID                     types.String  `tfsdk:"id"`
-	Name                   types.String  `tfsdk:"name"`
-	Description            types.String  `tfsdk:"description"`
-	JobType                types.String  `tfsdk:"job_type"`
-	EnvironmentID          types.String  `tfsdk:"environment_id"`
-	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
-	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
-	FolderPath             types.String  `tfsdk:"folder_path"`
-	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
-	Files                  types.Dynamic `tfsdk:"files"`
-	FilesHashes            types.List    `tfsdk:"files_hashes"`
-	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
-	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
-	Schedule               *Schedule     `tfsdk:"schedule"`
-	ScheduleID             types.String  `tfsdk:"schedule_id"`
+	ID                     types.String `tfsdk:"id"`
+	Name                   types.String `tfsdk:"name"`
+	Description            types.String `tfsdk:"description"`
+	JobType                types.String `tfsdk:"job_type"`
+	EnvironmentID          types.String `tfsdk:"environment_id"`
+	EnvironmentVersionID   types.String `tfsdk:"environment_version_id"`
+	RuntimeParameterValues types.List   `tfsdk:"runtime_parameter_values"`
+	FolderPath             types.String `tfsdk:"folder_path"`
+	FolderPathHash         types.String `tfsdk:"folder_path_hash"`
+	Files                  types.List   `tfsdk:"files"`
+	FilesHashes            types.List   `tfsdk:"files_hashes"`
+	EgressNetworkPolicy    types.String `tfsdk:"egress_network_policy"`
+	ResourceBundleID       types.String `tfsdk:"resource_bundle_id"`
+	Schedule               *Schedule    `tfsdk:"schedule"`
+	ScheduleID             types.String `tfsdk:"schedule_id"`
 }
 
 type CustomMetricJobResourceModel struct {
-	ID                     types.String  `tfsdk:"id"`
-	Name                   types.String  `tfsdk:"name"`
-	Description            types.String  `tfsdk:"description"`
-	EnvironmentID          types.String  `tfsdk:"environment_id"`
-	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
-	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
-	FolderPath             types.String  `tfsdk:"folder_path"`
-	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
-	Files                  types.Dynamic `tfsdk:"files"`
-	FilesHashes            types.List    `tfsdk:"files_hashes"`
-	EgressNetworkPolicy    types.String  `tfsdk:"egress_network_policy"`
-	ResourceBundleID       types.String  `tfsdk:"resource_bundle_id"`
-	Directionality         types.String  `tfsdk:"directionality"`
-	Units                  types.String  `tfsdk:"units"`
-	Type                   types.String  `tfsdk:"type"`
-	TimeStep               types.String  `tfsdk:"time_step"`
-	IsModelSpecific        types.Bool    `tfsdk:"is_model_specific"`
+	ID                     types.String `tfsdk:"id"`
+	Name                   types.String `tfsdk:"name"`
+	Description            types.String `tfsdk:"description"`
+	EnvironmentID          types.String `tfsdk:"environment_id"`
+	EnvironmentVersionID   types.String `tfsdk:"environment_version_id"`
+	RuntimeParameterValues types.List   `tfsdk:"runtime_parameter_values"`
+	FolderPath             types.String `tfsdk:"folder_path"`
+	FolderPathHash         types.String `tfsdk:"folder_path_hash"`
+	Files                  types.List   `tfsdk:"files"`
+	FilesHashes            types.List   `tfsdk:"files_hashes"`
+	EgressNetworkPolicy    types.String `tfsdk:"egress_network_policy"`
+	ResourceBundleID       types.String `tfsdk:"resource_bundle_id"`
+	Directionality         types.String `tfsdk:"directionality"`
+	Units                  types.String `tfsdk:"units"`
+	Type                   types.String `tfsdk:"type"`
+	TimeStep               types.String `tfsdk:"time_step"`
+	IsModelSpecific        types.Bool   `tfsdk:"is_model_specific"`
 }
 
 type CustomMetricFromJobResourceModel struct {
@@ -682,7 +682,7 @@ type ApplicationSourceResourceModel struct {
 	BaseEnvironmentVersionID types.String                `tfsdk:"base_environment_version_id"`
 	FolderPath               types.String                `tfsdk:"folder_path"`
 	FolderPathHash           types.String                `tfsdk:"folder_path_hash"`
-	Files                    types.Dynamic               `tfsdk:"files"`
+	Files                    types.List                  `tfsdk:"files"`
 	FilesHashes              types.List                  `tfsdk:"files_hashes"`
 	Resources                *ApplicationSourceResources `tfsdk:"resources"`
 	RuntimeParameterValues   types.List                  `tfsdk:"runtime_parameter_values"`
@@ -697,7 +697,7 @@ type ApplicationSourceFromTemplateResourceModel struct {
 	BaseEnvironmentVersionID types.String                `tfsdk:"base_environment_version_id"`
 	FolderPath               types.String                `tfsdk:"folder_path"`
 	FolderPathHash           types.String                `tfsdk:"folder_path_hash"`
-	Files                    types.Dynamic               `tfsdk:"files"`
+	Files                    types.List                  `tfsdk:"files"`
 	FilesHashes              types.List                  `tfsdk:"files_hashes"`
 	Resources                *ApplicationSourceResources `tfsdk:"resources"`
 	RuntimeParameterValues   types.List                  `tfsdk:"runtime_parameter_values"`
@@ -807,7 +807,7 @@ type BatchPredictionJobDefinitionResourceModel struct {
 	Enabled                     types.Bool          `tfsdk:"enabled"`
 	Schedule                    *Schedule           `tfsdk:"schedule"`
 	AbortOnError                types.Bool          `tfsdk:"abort_on_error"`
-	ChunkSize                   types.Dynamic       `tfsdk:"chunk_size"`
+	ChunkSize                   types.String        `tfsdk:"chunk_size"`
 	ColumnNamesRemapping        types.Map           `tfsdk:"column_names_remapping"`
 	CSVSettings                 *CSVSettings        `tfsdk:"csv_settings"`
 	ExplanationAlgorithm        types.String        `tfsdk:"explanation_algorithm"`

@@ -28,7 +28,7 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 
 	// create directory
 	dirName := "execution_environment_context"
-	err := os.Mkdir(dirName, 0755)
+	err := createOrCleanDirectory(dirName)
 	if err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}

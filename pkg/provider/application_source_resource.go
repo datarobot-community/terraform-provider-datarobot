@@ -78,9 +78,21 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in Application Source).",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"source": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Local filesystem path.",
+						},
+						"destination": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Path in the Application Source.",
+						},
+					},
+				},
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -376,7 +388,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	applicationSourceVersion := *createApplicationSourceVersionResp
 
-	if !reflect.DeepEqual(plan.Files, state.Files) ||
+	if !filesListEqual(ctx, plan.Files, state.Files) ||
 		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPath != state.FolderPath ||
 		plan.FolderPathHash != state.FolderPathHash {
@@ -593,12 +605,42 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 	}
 }
 
+// filesListEqual compares two types.Lists of file objects (with source and destination fields) for equality by content.
+func filesListEqual(ctx context.Context, a, b types.List) bool {
+	if a.IsNull() && b.IsNull() {
+		return true
+	}
+	if a.IsNull() != b.IsNull() {
+		return false
+	}
+	type fileObj struct {
+		Source      string `json:"source"`
+		Destination string `json:"destination"`
+	}
+	var aFiles, bFiles []fileObj
+	if diags := a.ElementsAs(ctx, &aFiles, false); diags.HasError() {
+		return false
+	}
+	if diags := b.ElementsAs(ctx, &bFiles, false); diags.HasError() {
+		return false
+	}
+	if len(aFiles) != len(bFiles) {
+		return false
+	}
+	for i := range aFiles {
+		if aFiles[i] != bFiles[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	ctx context.Context,
 	id string,
 	versionId string,
 	folderPath types.String,
-	files types.Dynamic,
+	files types.List,
 ) (
 	err error,
 ) {

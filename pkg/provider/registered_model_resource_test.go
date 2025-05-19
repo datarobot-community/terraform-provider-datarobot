@@ -132,7 +132,7 @@ runtimeParameterDefinitions:
     type: string
     defaultValue: null`
 
-	err := os.Mkdir(folderPath, 0755)
+	err := createOrCleanDirectory(folderPath)
 	if err != nil {
 		t.Fatal(err)
 	}

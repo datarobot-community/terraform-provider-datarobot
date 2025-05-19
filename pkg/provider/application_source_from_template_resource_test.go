@@ -70,7 +70,7 @@ if __name__ == "__main__":
 	defer os.Remove(appCodeFileName)
 
 	folderPath := "application_source_from_template"
-	if err = os.Mkdir(folderPath, 0755); err != nil {
+	if err = createOrCleanDirectory(folderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)
@@ -227,12 +227,16 @@ if __name__ == "__main__":
 					if err := os.WriteFile(folderPath+"/new"+appCodeFileName, []byte(appCode), 0644); err != nil {
 						t.Fatal(err)
 					}
+					// Create dummy.txt for the test step that references it
+					if err := os.WriteFile(folderPath+"/dummy.txt", []byte("dummy"), 0644); err != nil {
+						t.Fatal(err)
+					}
 				},
 				Config: applicationSourceFromTemplateResourceConfig(
 					newName,
 					&baseEnvironmentID,
 					nil,
-					[]FileTuple{},
+					[]FileTuple{{LocalPath: folderPath + "/dummy.txt"}},
 					&folderPath,
 					nil,
 					slackbotTemplateID),
@@ -248,8 +252,8 @@ if __name__ == "__main__":
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
-					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/dummy.txt"),
+					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -404,7 +408,7 @@ if __name__ == "__main__":
 					newName,
 					&baseEnvironmentID,
 					nil,
-					nil,
+					[]FileTuple{{LocalPath: folderPath + "/dummy.txt"}},
 					&folderPath,
 					nil,
 					flaskTemplateID),
@@ -500,13 +504,12 @@ func applicationSourceFromTemplateResourceConfig(
 		for _, file := range files {
 			if file.PathInModel != "" {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.PathInModel)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.LocalPath)
 			}
 		}
-
 		filesStr += "]"
 	}
 

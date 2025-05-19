@@ -73,7 +73,7 @@ output "example_id" {
 ### Optional
 
 - `abort_on_error` (Boolean) Default behavior is to abort the job if too many rows fail scoring. This will free up resources for other jobs that may score successfully. Set to false to unconditionally score every row no matter how many errors are encountered. Defaults to True.
-- `chunk_size` (Dynamic) Which strategy should be used to determine the chunk size. Can be either a named strategy or a fixed size in bytes.
+- `chunk_size` (String) Which strategy should be used to determine the chunk size. Can be either a named strategy or a fixed size in bytes.
 - `column_names_remapping` (Map of String) Mapping with column renaming for output table.
 - `csv_settings` (Attributes) CSV intake and output settings. (see [below for nested schema](#nestedatt--csv_settings))
 - `enabled` (Boolean) Whether or not the job definition should be active on a scheduled basis. If True, schedule is required.
