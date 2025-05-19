@@ -427,18 +427,15 @@ func customJobResourceConfig(
 
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = "files = ["
+		var fileLines []string
 		for _, file := range files {
 			if file.Destination != types.StringNull() {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.Source, file.Destination)
+				fileLines = append(fileLines, fmt.Sprintf(`["%s", "%s"]`, file.Source, file.Destination))
 			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.Source)
+				fileLines = append(fileLines, fmt.Sprintf(`["%s"]`, file.Source))
 			}
 		}
-
-		filesStr += "]"
+		filesStr = fmt.Sprintf("files = [%s]", strings.Join(fileLines, ", "))
 	}
 
 	runtimeParametersStr := ""

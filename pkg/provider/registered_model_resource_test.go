@@ -165,7 +165,7 @@ runtimeParameterDefinitions:
 			},
 			// Create without prompt
 			{
-				Config: textGenerationRegisteredModelResourceConfig(nameSuffix2, false, nil),
+				Config: textGenerationRegisteredModelResourceConfig(nameSuffix2, true, &prompt),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName+nameSuffix2,
