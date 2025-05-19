@@ -434,18 +434,17 @@ func applicationSourceResourceConfig(
 	runtimeParamValueStr := ""
 	if len(files) > 0 {
 		runtimeParamValueStr = `
-		runtime_parameter_values = [
-			{
-				key="STRING_PARAMETER",
-				type="string",
-				value="val",
-			},
-		  ]`
+runtime_parameter_values = [
+	{
+		key="STRING_PARAMETER",
+		type="string",
+		value="val",
+	},
+]`
 	}
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
-	%s
 	%s
 	%s
 	%s
