@@ -55,12 +55,12 @@ from datarobot.client import set_client
 
 
 def start_streamlit():
-    set_client(Client())
+	set_client(Client())
 
-    st.title("Example Custom Application Source from template.")
+	st.title("Example Custom Application Source from template.")
 
 if __name__ == "__main__":
-    start_streamlit()
+	start_streamlit()
 	`
 
 	err := os.WriteFile(appCodeFileName, []byte(appCode), 0644)
@@ -500,13 +500,12 @@ func applicationSourceFromTemplateResourceConfig(
 		for _, file := range files {
 			if file.PathInModel != "" {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.PathInModel)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.LocalPath)
 			}
 		}
-
 		filesStr += "]"
 	}
 

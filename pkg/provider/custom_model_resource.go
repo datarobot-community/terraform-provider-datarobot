@@ -1231,7 +1231,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
 	folderPath types.String,
-	files types.Dynamic,
+	files types.List,
 	customModelID string,
 	baseEnvironmentID string,
 ) (

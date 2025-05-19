@@ -610,7 +610,7 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	id string,
 	versionId string,
 	folderPath types.String,
-	files types.Dynamic,
+	files types.List,
 ) (
 	err error,
 ) {

@@ -63,12 +63,12 @@ from datarobot.client import set_client
 
 
 def start_streamlit():
-    set_client(Client())
+	set_client(Client())
 
-    st.title("Example Custom Application")
+	st.title("Example Custom Application")
 
 if __name__ == "__main__":
-    start_streamlit()
+	start_streamlit()
 	`
 
 	metadataFileName := "metadata.yaml"
@@ -76,8 +76,8 @@ if __name__ == "__main__":
 
 runtimeParameterDefinitions:
   - fieldName: STRING_PARAMETER
-    type: string
-    description: An example of a string parameter`
+	type: string
+	description: An example of a string parameter`
 
 	err := os.WriteFile(startAppFileName, []byte(startAppScript), 0644)
 	if err != nil {
@@ -432,13 +432,12 @@ func applicationSourceResourceConfig(
 		for _, file := range files {
 			if file.PathInModel != "" {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.PathInModel)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				{ source = "%s", destination = "%s" },`, file.LocalPath, file.LocalPath)
 			}
 		}
-
 		filesStr += "]"
 	}
 

@@ -612,7 +612,7 @@ func (r *ApplicationSourceFromTemplateResource) addLocalFilesToApplicationSource
 	versionId string,
 	templateID string,
 	folderPath types.String,
-	files types.Dynamic,
+	files types.List,
 	templateFilesToReset []string,
 ) (
 	err error,
