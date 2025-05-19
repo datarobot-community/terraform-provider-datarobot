@@ -15,8 +15,14 @@ Custom Application
 ```terraform
 resource "datarobot_application_source" "example" {
   files = [
-    ["start-app.sh"],
-    ["streamlit-app.py"]
+    {
+      source      = "start-app.sh"
+      destination = "start-app.sh"
+    },
+    {
+      source      = "streamlit-app.py"
+      destination = "streamlit-app.py"
+    },
   ]
 }
 

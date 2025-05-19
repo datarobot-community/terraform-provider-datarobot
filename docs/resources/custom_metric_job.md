@@ -16,8 +16,14 @@ Custom Job
 resource "datarobot_custom_metric_job" "example" {
   name = "Example Custom Metric Job"
   files = [
-    "file1.py",
-    "file2.py",
+    {
+      source      = "file1.py"
+      destination = "file1.py"
+    },
+    {
+      source      = "file2.py"
+      destination = "file2.py"
+    },
   ]
   environment_id = "65f9b27eab986d30d4c64268"
 
