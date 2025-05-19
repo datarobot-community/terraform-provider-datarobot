@@ -63,9 +63,9 @@ from datarobot.client import set_client
 
 
 def start_streamlit():
-	set_client(Client())
+    set_client(Client())
 
-	st.title("Example Custom Application")
+    st.title("Example Custom Application")
 
 if __name__ == "__main__":
     start_streamlit()
