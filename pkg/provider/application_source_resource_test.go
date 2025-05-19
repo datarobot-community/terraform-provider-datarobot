@@ -242,8 +242,10 @@ runtimeParameterDefinitions:
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),

@@ -309,8 +309,9 @@ resource "datarobot_custom_model" "%s" {
 resource "datarobot_registered_model" "%s" {
 	name                    = "test text generation registered model %s"
 	custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
+	%s
 }
-`, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName)
+`, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName, promptParamStr)
 }
 
 func checkRegisteredModelResourceExists(resourceName string, prompt *string) resource.TestCheckFunc {

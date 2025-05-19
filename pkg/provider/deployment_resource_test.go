@@ -435,7 +435,26 @@ func deploymentResourceConfig(
 			type="string",
 			value="%s"
 		},
+		{
+			key="BOOLEAN_PARAMETER",
+			type="boolean",
+			value="true"
+		},
 	]`, runtimeParameterValue)
+	} else {
+		runtimeParameterValuesStr = `
+	runtime_parameter_values = [
+		{
+			key="STRING_PARAMETER",
+			type="string",
+			value=""
+		},
+		{
+			key="BOOLEAN_PARAMETER",
+			type="boolean",
+			value="false"
+		},
+	]`
 	}
 
 	return fmt.Sprintf(`

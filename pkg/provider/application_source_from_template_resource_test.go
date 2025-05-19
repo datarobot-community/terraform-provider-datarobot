@@ -120,7 +120,8 @@ if __name__ == "__main__":
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
@@ -162,7 +163,8 @@ if __name__ == "__main__":
 					slackbotTemplateID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
 					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
@@ -210,7 +212,8 @@ if __name__ == "__main__":
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
@@ -249,7 +252,8 @@ if __name__ == "__main__":
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.destination"),
 					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),

@@ -189,7 +189,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -291,7 +292,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", "new_dir/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", "new_dir/"+fileName),
 				),
 			},
 			// Remove guards
@@ -403,7 +405,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", folderPath+"/"+fileName),
 				),
 			},
 			// Remove files, add folder path
@@ -431,7 +434,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.destination"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 				),
@@ -1312,6 +1316,12 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		target_name              = "target"
 		base_environment_id      = "65f9b27eab986d30d4c64268"
 		folder_path 			 = "custom_model_with_runtime_params"
+		files = [
+			{
+				source = "custom_model_with_runtime_params/model-metadata.yaml",
+				destination = "model-metadata.yaml"
+			}
+		]
 		runtime_parameter_values = [
 			{
 				key="STRING_PARAMETER",

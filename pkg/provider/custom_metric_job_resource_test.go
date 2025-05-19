@@ -191,7 +191,7 @@ runtimeParameterDefinitions:
 					"y",
 					true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(),
+					checkCustomMetricJobResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
@@ -232,7 +232,7 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(),
+					checkCustomMetricJobResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
@@ -270,11 +270,12 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(),
+					checkCustomMetricJobResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
-					checkFileWithState(resourceName, "0.0"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
 					resource.TestCheckResourceAttr(resourceName, "directionality", "lowerIsBetter"),
 					resource.TestCheckResourceAttr(resourceName, "units", "label"),
@@ -308,10 +309,11 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(),
+					checkCustomMetricJobResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
@@ -380,11 +382,11 @@ resource "datarobot_custom_metric_job" "test" {
 `, name, description, egressNetworkPolicy, hostedMetricType, directionality, units, isModelSpecific, folderPathStr, filesStr, runtimeParametersStr)
 }
 
-func checkCustomMetricJobResourceExists() resource.TestCheckFunc {
+func checkCustomMetricJobResourceExists(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources["datarobot_custom_metric_job.test"]
+		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
-			return fmt.Errorf("Not found: %s", "datarobot_custom_metric_job.test")
+			return fmt.Errorf("Not found: %s", resourceName)
 		}
 
 		if rs.Primary.ID == "" {
