@@ -1160,13 +1160,12 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		for _, file := range files {
 			if file.PathInModel != "" {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+							   { source = "%s", destination = "%s" },`, file.LocalPath, file.PathInModel)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+							   { source = "%s", destination = "%s" },`, file.LocalPath, file.LocalPath)
 			}
 		}
-
 		filesStr += "]"
 	}
 

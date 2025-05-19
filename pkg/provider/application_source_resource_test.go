@@ -68,16 +68,16 @@ def start_streamlit():
 	st.title("Example Custom Application")
 
 if __name__ == "__main__":
-	start_streamlit()
-	`
+    start_streamlit()
+    `
 
-	metadataFileName := "metadata.yaml"
-	metadata := `name: runtime-params
+    metadataFileName := "metadata.yaml"
+    metadata := `name: runtime-params
 
 runtimeParameterDefinitions:
   - fieldName: STRING_PARAMETER
-	type: string
-	description: An example of a string parameter`
+    type: string
+    description: An example of a string parameter`
 
 	err := os.WriteFile(startAppFileName, []byte(startAppScript), 0644)
 	if err != nil {

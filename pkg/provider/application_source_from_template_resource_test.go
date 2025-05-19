@@ -228,39 +228,39 @@ if __name__ == "__main__":
 						t.Fatal(err)
 					}
 				},
-				Config: applicationSourceFromTemplateResourceConfig(
-					newName,
-					&baseEnvironmentID,
-					nil,
-					[]FileTuple{},
-					&folderPath,
-					nil,
-					slackbotTemplateID),
-				ConfigStateChecks: []statecheck.StateCheck{
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("folder_path_hash"),
-					),
-					compareValuesDiffer.AddStateValue(
-						resourceName,
-						tfjsonpath.New("version_id"),
-					),
-				},
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
-					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
-					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
-					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
-					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
-					resource.TestCheckResourceAttr(resourceName, "template_id", slackbotTemplateID),
-				),
+			   Config: applicationSourceFromTemplateResourceConfig(
+				   newName,
+				   &baseEnvironmentID,
+				   nil,
+				   []FileTuple{{LocalPath: folderPath + "/dummy.txt"}},
+				   &folderPath,
+				   nil,
+				   slackbotTemplateID),
+			   ConfigStateChecks: []statecheck.StateCheck{
+				   compareValuesDiffer.AddStateValue(
+					   resourceName,
+					   tfjsonpath.New("folder_path_hash"),
+				   ),
+				   compareValuesDiffer.AddStateValue(
+					   resourceName,
+					   tfjsonpath.New("version_id"),
+				   ),
+			   },
+			   Check: resource.ComposeAggregateTestCheckFunc(
+				   checkApplicationSourceFromTemplateResourceExists(),
+				   resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/dummy.txt"),
+				   resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
+				   resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+				   resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+				   resource.TestCheckResourceAttrSet(resourceName, "id"),
+				   resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				   resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+				   resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
+				   resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
+				   resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+				   resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
+				   resource.TestCheckResourceAttr(resourceName, "template_id", slackbotTemplateID),
+			   ),
 			},
 			// Add new file to folder_path
 			{
