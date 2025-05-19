@@ -22,7 +22,9 @@ func TestAccCustomModelLLMValidationResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	folderPath := "custom_model_llm_validation"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
+
+	// Use the helper function to create or clean the directory
+	if err := createOrCleanDirectory(folderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)

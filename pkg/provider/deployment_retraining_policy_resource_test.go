@@ -35,7 +35,7 @@ func TestAccDeploymentRetrainingPolicyResource(t *testing.T) {
 	newModelSelectionStrategy := "autopilot_recommended"
 
 	folderPath := "retraining_policy"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
+	if err := createOrCleanDirectory(folderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)
@@ -58,7 +58,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	}
 
 	jobFolderPath := "retraining_policy_custom_job"
-	if err := os.Mkdir(jobFolderPath, 0755); err != nil {
+	if err := createOrCleanDirectory(jobFolderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(jobFolderPath)

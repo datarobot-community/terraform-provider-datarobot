@@ -43,7 +43,7 @@ func TestAccBatchPredictionJobDefinitionResource(t *testing.T) {
 	newPredictionThreshold := 0.6
 
 	folderPath := "batch_prediction_job_definition"
-	if err := os.Mkdir(folderPath, 0755); err != nil {
+	if err := createOrCleanDirectory(folderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)

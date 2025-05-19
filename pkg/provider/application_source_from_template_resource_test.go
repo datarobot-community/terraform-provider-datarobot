@@ -70,7 +70,7 @@ if __name__ == "__main__":
 	defer os.Remove(appCodeFileName)
 
 	folderPath := "application_source_from_template"
-	if err = os.Mkdir(folderPath, 0755); err != nil {
+	if err = createOrCleanDirectory(folderPath); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(folderPath)

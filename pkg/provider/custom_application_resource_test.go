@@ -30,7 +30,7 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	useCaseResourceName2 := "test_new_custom_application"
 
 	folderPath := "custom_application"
-	err := os.Mkdir(folderPath, 0755)
+	err := createOrCleanDirectory(folderPath)
 	if err != nil {
 		t.Fatal(err)
 	}

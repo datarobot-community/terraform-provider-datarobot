@@ -995,3 +995,22 @@ func prepareTestFolder(folderPath string) (string, error) {
 	// Return the path to the created directory
 	return filepath.Abs(folderPath)
 }
+
+// createOrCleanDirectory ensures a directory exists by creating it if not present,
+// or removing and recreating it if it already exists.
+func createOrCleanDirectory(dirPath string) error {
+	// Check if directory exists
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		// Directory doesn't exist, create it
+		return os.Mkdir(dirPath, 0755)
+	} else if err != nil {
+		// Error checking directory status
+		return err
+	} else {
+		// Directory exists, clean it up and recreate
+		if err := os.RemoveAll(dirPath); err != nil {
+			return err
+		}
+		return os.Mkdir(dirPath, 0755)
+	}
+}
