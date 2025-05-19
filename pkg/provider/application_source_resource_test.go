@@ -71,8 +71,8 @@ if __name__ == "__main__":
     start_streamlit()
     `
 
-    metadataFileName := "metadata.yaml"
-    metadata := `name: runtime-params
+	metadataFileName := "metadata.yaml"
+	metadata := `name: runtime-params
 
 runtimeParameterDefinitions:
   - fieldName: STRING_PARAMETER

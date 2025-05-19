@@ -163,6 +163,10 @@ runtimeParameterDefinitions:
 	noneEgressNetworkPolicy := "none"
 	publicEgressNetworkPolicy := "public"
 
+	// Ensure a dummy file always exists for file checks
+	dummyFile := folderPath + "/dummy.txt"
+	_ = os.WriteFile(dummyFile, []byte("dummy"), 0644)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -181,7 +185,7 @@ runtimeParameterDefinitions:
 					name,
 					description,
 					&folderPath,
-					nil,
+					[]FileTuple{{LocalPath: dummyFile}},
 					nil,
 					noneEgressNetworkPolicy,
 					"gauge",
@@ -222,7 +226,7 @@ runtimeParameterDefinitions:
 					name,
 					description,
 					&folderPath,
-					nil,
+					[]FileTuple{{LocalPath: dummyFile}},
 					nil,
 					noneEgressNetworkPolicy,
 					"sum",

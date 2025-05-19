@@ -227,6 +227,10 @@ if __name__ == "__main__":
 					if err := os.WriteFile(folderPath+"/new"+appCodeFileName, []byte(appCode), 0644); err != nil {
 						t.Fatal(err)
 					}
+					// Create dummy.txt for the test step that references it
+					if err := os.WriteFile(folderPath+"/dummy.txt", []byte("dummy"), 0644); err != nil {
+						t.Fatal(err)
+					}
 				},
 				Config: applicationSourceFromTemplateResourceConfig(
 					newName,
@@ -404,7 +408,7 @@ if __name__ == "__main__":
 					newName,
 					&baseEnvironmentID,
 					nil,
-					nil,
+					[]FileTuple{{LocalPath: folderPath + "/dummy.txt"}},
 					&folderPath,
 					nil,
 					flaskTemplateID),
