@@ -259,7 +259,10 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -294,7 +297,10 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -344,7 +350,7 @@ func customMetricJobResourceConfig(
 			if file.Destination != types.StringNull() {
 				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s" }`, file.Source.ValueString()))
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
 		filesStr = fmt.Sprintf(`

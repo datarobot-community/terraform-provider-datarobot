@@ -214,11 +214,11 @@ resource "datarobot_application_source" "test" {
 	folder_path = "custom_application"
 	files = [
 		{
-			source = "start-app.sh",
+			source = "custom_application/start-app.sh",
 			destination = "start-app.sh"
 		},
 		{
-			source = "streamlit-app.py",
+			source = "custom_application/streamlit-app.py",
 			destination = "streamlit-app.py"
 		}
 	]

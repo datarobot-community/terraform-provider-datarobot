@@ -233,21 +233,25 @@ runtimeParameterDefinitions:
 					name,
 					description,
 					defaultJobType,
-					&folderPath,
 					nil,
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					noneEgressNetworkPolicy,
-					nil),
+					schedule,
+				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", noneEgressNetworkPolicy),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
 			// Update name, description, and files
@@ -263,7 +267,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					publicEgressNetworkPolicy,
 					nil),
@@ -296,7 +303,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -326,7 +336,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					notificationJobType,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -357,7 +370,10 @@ runtimeParameterDefinitions:
 					description,
 					defaultJobType,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					noneEgressNetworkPolicy,
 					schedule,
@@ -387,7 +403,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					retrainingJobType,
 					nil,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -432,7 +451,7 @@ func customJobResourceConfig(
 			if file.Destination != types.StringNull() {
 				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s" }`, file.Source.ValueString()))
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
 		filesStr = fmt.Sprintf(`

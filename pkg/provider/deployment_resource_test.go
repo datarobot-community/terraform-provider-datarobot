@@ -94,7 +94,8 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					"value", nil),
+					"initial_value",
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -107,7 +108,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "label", "example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "MODERATE"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "value"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "initial_value"),
 					resource.TestCheckNoResourceAttr(resourceName, "predictions_by_forecast_date_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "challenger_models_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "segment_analysis_settings"),

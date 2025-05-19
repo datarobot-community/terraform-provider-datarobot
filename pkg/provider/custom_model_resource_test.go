@@ -114,7 +114,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID,
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(fileName)}},
+					[]FileTuple{{
+						Source:      types.StringValue(fileName),
+						Destination: types.StringValue(fileName),
+					}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -221,7 +224,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(fileName), Destination: types.StringValue("new_dir/" + fileName)}},
+					[]FileTuple{{
+						Source:      types.StringValue(fileName),
+						Destination: types.StringValue("new_dir/" + fileName),
+					}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -297,7 +303,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(fileName)}},
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -326,7 +334,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 						},
 					},
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(fileName)}},
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -352,7 +362,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID2,
 					nil,
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(fileName)}},
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -376,7 +388,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID,
 					nil,
 					&folderPath,
-					[]FileTuple{{Source: types.StringValue(folderPath + "/" + fileName)}},
+					[]FileTuple{{
+						Source: types.StringValue(folderPath + "/" + fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -1161,7 +1175,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 			if file.Destination != types.StringNull() {
 				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s" }`, file.Source.ValueString()))
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
 		filesStr = fmt.Sprintf(`

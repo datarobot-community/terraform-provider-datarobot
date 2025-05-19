@@ -275,42 +275,42 @@ func textGenerationRegisteredModelResourceConfig(
 	if includePrompt {
 		if promptParameterValue == nil {
 			promptParamStr = `
-		runtime_parameter_values = [
-			{
-				key="PROMPT_COLUMN_NAME",
-				type="string",
-				value=null
-			},
-		]`
+	runtime_parameter_values = [
+		{
+			key="PROMPT_COLUMN_NAME",
+			type="string",
+			value="prompt"
+		},
+	]`
 		} else {
 			promptParamStr = fmt.Sprintf(`
-			runtime_parameter_values = [
-				{
-					key="PROMPT_COLUMN_NAME",
-					type="string",
-					value="%s"
-				},
-			]`, *promptParameterValue)
+	runtime_parameter_values = [
+		{
+			key="PROMPT_COLUMN_NAME",
+			type="string",
+			value="%s"
+		},
+	]`, *promptParameterValue)
 		}
 	}
 
 	return fmt.Sprintf(`
-	resource "datarobot_custom_model" "%s" {
-		name        			 = "test text generation registered model %s"
-		target_type         	 = "TextGeneration"
-		target_name         	 = "target"
-		language 				 = "python"
-		base_environment_id 	 = "65f9b27eab986d30d4c64268"
-		is_proxy 				 = true
-		folder_path 			 = "registered_model_text_generation"
-		%s
-	}
+resource "datarobot_custom_model" "%s" {
+	name                    = "test text generation registered model %s"
+	target_type             = "TextGeneration"
+	target_name             = "target"
+	language                = "python"
+	base_environment_id     = "65f9b27eab986d30d4c64268"
+	is_proxy                = true
+	folder_path             = "registered_model_text_generation"
+	%s
+}
 
-	resource "datarobot_registered_model" "%s" {
-		name 					= "test text generation registered model %s"
-		custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
-	}
-	`, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName)
+resource "datarobot_registered_model" "%s" {
+	name                    = "test text generation registered model %s"
+	custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
+}
+`, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName)
 }
 
 func checkRegisteredModelResourceExists(resourceName string, prompt *string) resource.TestCheckFunc {
