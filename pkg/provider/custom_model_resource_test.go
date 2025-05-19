@@ -113,8 +113,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					baseEnvironmentID,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(fileName)}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -220,8 +220,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(fileName), Destination: types.StringValue("new_dir/" + fileName)}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -296,8 +296,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -325,8 +325,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -351,8 +351,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID2,
 					nil,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(fileName)}},
 					nil,
 					nil,
 					false),
@@ -375,8 +375,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID,
 					nil,
-					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
+					&folderPath,
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + fileName)}},
 					nil,
 					nil,
 					false),
@@ -1158,12 +1158,12 @@ func customModelWithoutLlmBlueprintResourceConfig(
 	if len(files) > 0 {
 		filesStr = "files = ["
 		for _, file := range files {
-			if file.PathInModel != "" {
+			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				["%s", "%s"],`, file.Source, file.Destination)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				["%s"],`, file.Source)
 			}
 		}
 

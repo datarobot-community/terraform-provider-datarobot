@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -262,7 +263,7 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					nil,
 					publicEgressNetworkPolicy,
 					nil),
@@ -295,7 +296,7 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -325,7 +326,7 @@ runtimeParameterDefinitions:
 					newDescription,
 					notificationJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -356,7 +357,7 @@ runtimeParameterDefinitions:
 					description,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					nil,
 					noneEgressNetworkPolicy,
 					schedule,
@@ -386,7 +387,7 @@ runtimeParameterDefinitions:
 					newDescription,
 					retrainingJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -428,12 +429,12 @@ func customJobResourceConfig(
 	if len(files) > 0 {
 		filesStr = "files = ["
 		for _, file := range files {
-			if file.PathInModel != "" {
+			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				["%s", "%s"],`, file.Source, file.Destination)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				["%s"],`, file.Source)
 			}
 		}
 

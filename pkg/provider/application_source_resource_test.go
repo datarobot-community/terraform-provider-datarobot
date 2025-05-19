@@ -132,10 +132,10 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: startAppFileName,
+							Source: types.StringValue(startAppFileName),
 						},
 					},
 					nil,
@@ -174,10 +174,10 @@ runtimeParameterDefinitions:
 					&baseEnvironmentVersionID,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -224,10 +224,10 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -430,12 +430,12 @@ func applicationSourceResourceConfig(
 
 		filesStr = "files = ["
 		for _, file := range files {
-			if file.PathInModel != "" {
+			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				["%s", "%s"],`, file.Source, file.Destination)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				["%s"],`, file.Source)
 			}
 		}
 

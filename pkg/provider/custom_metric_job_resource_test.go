@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -257,7 +258,7 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					nil,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -269,7 +270,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					checkFileWithState(resourceName, "0.0"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
 					resource.TestCheckResourceAttr(resourceName, "directionality", "lowerIsBetter"),
 					resource.TestCheckResourceAttr(resourceName, "units", "label"),
@@ -292,7 +293,7 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{Source: types.StringValue(folderPath + "/" + metadataFileName), Destination: types.StringNull()}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -339,12 +340,12 @@ func customMetricJobResourceConfig(
 	if len(files) > 0 {
 		filesStr = "files = ["
 		for _, file := range files {
-			if file.PathInModel != "" {
+			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				["%s", "%s"],`, file.Source, file.Destination)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				["%s"],`, file.Source)
 			}
 		}
 

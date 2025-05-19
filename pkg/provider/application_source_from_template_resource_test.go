@@ -110,7 +110,7 @@ if __name__ == "__main__":
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -149,7 +149,7 @@ if __name__ == "__main__":
 					&baseEnvironmentVersionID,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -196,7 +196,7 @@ if __name__ == "__main__":
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -498,12 +498,12 @@ func applicationSourceFromTemplateResourceConfig(
 
 		filesStr = "files = ["
 		for _, file := range files {
-			if file.PathInModel != "" {
+			if file.Destination != types.StringNull() {
 				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+				["%s", "%s"],`, file.Source, file.Destination)
 			} else {
 				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				["%s"],`, file.Source)
 			}
 		}
 
