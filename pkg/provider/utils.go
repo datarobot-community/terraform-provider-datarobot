@@ -713,17 +713,6 @@ func convertTfStringListToPtr(input []types.String) *[]string {
 	return &output
 }
 
-func convertDynamicType(tfType types.Dynamic) any {
-	switch t := tfType.UnderlyingValue().(type) {
-	case types.String:
-		return t.ValueString()
-	case types.Int64:
-		return t.ValueInt64()
-	default:
-		return nil
-	}
-}
-
 func addEntityToUseCase(
 	ctx context.Context,
 	service client.Service,
