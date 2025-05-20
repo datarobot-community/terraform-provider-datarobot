@@ -189,7 +189,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.source", fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+fileName),
 					resource.TestCheckResourceAttr(resourceName, "files.0.destination", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),

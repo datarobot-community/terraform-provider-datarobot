@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
@@ -571,9 +572,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 	err := r.createCustomModelVersionFromFiles(
 		ctx,
+		plan.FolderPath,
 		plan.Files,
 		customModelID,
-		baseEnvironmentID)
+		baseEnvironmentID,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
@@ -1241,6 +1244,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
+	folderPath types.String,
 	files []FileTuple,
 	customModelID string,
 	baseEnvironmentID string,
@@ -1250,6 +1254,42 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	localFiles, err := prepareLocalFiles(files)
 	if err != nil {
 		return
+	}
+
+	// Process files from folderPath if provided
+	if IsKnown(folderPath) {
+		folder := folderPath.ValueString()
+		err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+			if innerErr != nil {
+				return innerErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			// Read the file content
+			content, fileErr := os.ReadFile(path)
+			if fileErr != nil {
+				return fileErr
+			}
+
+			// Create a path relative to the folder
+			relPath, relErr := filepath.Rel(folder, path)
+			if relErr != nil {
+				return relErr
+			}
+
+			// Add file to the list
+			localFiles = append(localFiles, client.FileInfo{
+				Name:    filepath.Base(path),
+				Path:    relPath,
+				Content: content,
+			})
+			return nil
+		})
+		if err != nil {
+			return
+		}
 	}
 
 	// Batch file uploads in groups of 100 to avoid API limits
@@ -1694,6 +1734,7 @@ func (r *CustomModelResource) updateLocalFiles(
 
 		if err = r.createCustomModelVersionFromFiles(
 			ctx,
+			plan.FolderPath,
 			plan.Files,
 			customModel.ID,
 			customModel.LatestVersion.BaseEnvironmentID,

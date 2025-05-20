@@ -191,7 +191,7 @@ runtimeParameterDefinitions:
 					"y",
 					true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(resourceName),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
@@ -232,7 +232,7 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(resourceName),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
@@ -270,7 +270,7 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(resourceName),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
@@ -309,7 +309,7 @@ runtimeParameterDefinitions:
 					"label",
 					false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomMetricJobResourceExists(resourceName),
+					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
@@ -382,16 +382,11 @@ resource "datarobot_custom_metric_job" "test" {
 `, name, description, egressNetworkPolicy, hostedMetricType, directionality, units, isModelSpecific, folderPathStr, filesStr, runtimeParametersStr)
 }
 
-// checkCustomMetricJobResourceExists returns a TestCheckFunc that validates the existence and attributes
-// of a custom metric job resource. The resourceName parameter is kept to maintain consistency with
-// other resource check functions and allow for potential reuse with different resource names in future tests.
-//
-//nolint:unparam
-func checkCustomMetricJobResourceExists(resourceName string) resource.TestCheckFunc {
+func checkCustomMetricJobResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		rs, ok := s.RootModule().Resources["datarobot_custom_metric_job.test"]
 		if !ok {
-			return fmt.Errorf("Not found: %s", resourceName)
+			return fmt.Errorf("Not found: %s", "datarobot_custom_metric_job.test")
 		}
 
 		if rs.Primary.ID == "" {
