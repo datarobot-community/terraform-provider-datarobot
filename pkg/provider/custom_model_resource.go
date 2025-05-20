@@ -1256,6 +1256,12 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		return
 	}
 
+	// Track file paths to avoid duplicates
+	existingPaths := make(map[string]bool)
+	for _, file := range localFiles {
+		existingPaths[file.Path] = true
+	}
+
 	// Process files from folderPath if provided
 	if IsKnown(folderPath) {
 		folder := folderPath.ValueString()
@@ -1267,16 +1273,22 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 				return nil
 			}
 
-			// Read the file content
-			content, fileErr := os.ReadFile(path)
-			if fileErr != nil {
-				return fileErr
-			}
-
 			// Create a path relative to the folder
 			relPath, relErr := filepath.Rel(folder, path)
 			if relErr != nil {
 				return relErr
+			}
+
+			// Skip if this path already exists
+			if existingPaths[relPath] {
+				return nil
+			}
+			existingPaths[relPath] = true
+
+			// Read the file content
+			content, fileErr := os.ReadFile(path)
+			if fileErr != nil {
+				return fileErr
 			}
 
 			// Add file to the list

@@ -33,8 +33,9 @@ type RegisteredModel struct {
 }
 
 type UpdateRegisteredModelVersionRequest struct {
-	Name                string   `json:"name,omitempty"`
-	PredictionThreshold *float64 `json:"predictionThreshold,omitempty"`
+	Name                   string   `json:"name,omitempty"`
+	PredictionThreshold    *float64 `json:"predictionThreshold,omitempty"`
+	RuntimeParameterValues string   `json:"runtimeParameterValues,omitempty"`
 }
 
 type ListRegisteredModelsRequest struct {
@@ -63,6 +64,7 @@ type RegisteredModelVersion struct {
 	Target                 RegisteredModelVersionTarget  `json:"target"`
 	Tags                   []Tag                         `json:"tags"`
 	TextGeneration         RegisteredModelTextGeneration `json:"textGeneration"`
+	RuntimeParameters      []RuntimeParameter            `json:"runtimeParameters"`
 }
 
 type RegisteredModelTextGeneration struct {
