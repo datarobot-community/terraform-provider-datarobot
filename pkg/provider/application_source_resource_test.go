@@ -282,7 +282,7 @@ runtimeParameterDefinitions:
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
 					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),

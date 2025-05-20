@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -74,27 +73,6 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
 				ElementType:         types.StringType,
 			},
-			"runtime_parameter_values": schema.ListNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "The runtime parameter values for the Registered Model.",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"key": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The name of the runtime parameter.",
-						},
-						"type": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The type of the runtime parameter.",
-							Validators:          RuntimeParameterTypeValidators(),
-						},
-						"value": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
-						},
-					},
-				},
-			},
 		},
 	}
 }
@@ -158,28 +136,6 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 	data.ID = types.StringValue(registeredModelVersion.RegisteredModelID)
 	data.VersionID = types.StringValue(registeredModelVersion.ID)
 	data.VersionName = types.StringValue(registeredModelVersion.Name)
-
-	if IsKnown(data.RuntimeParameterValues) {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, data.RuntimeParameterValues)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
-			return
-		}
-
-		if len(runtimeParameterValues) > 0 {
-			traceAPICall("UpdateRegisteredModelVersionRuntimeParams")
-			_, err = r.provider.service.UpdateRegisteredModelVersion(ctx,
-				registeredModelVersion.RegisteredModelID,
-				registeredModelVersion.ID,
-				&client.UpdateRegisteredModelVersionRequest{
-					RuntimeParameterValues: runtimeParameterValues,
-				})
-			if err != nil {
-				resp.Diagnostics.AddError("Error updating Registered Model runtime parameters", err.Error())
-				return
-			}
-		}
-	}
 
 	if IsKnown(data.Description) {
 		traceAPICall("UpdateRegisteredModel")
@@ -266,14 +222,6 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
 
-	// Format runtime parameters
-	if len(latestRegisteredModelVersion.RuntimeParameters) > 0 {
-		data.RuntimeParameterValues, _ = formatRuntimeParameterValues(
-			ctx,
-			latestRegisteredModelVersion.RuntimeParameters,
-			data.RuntimeParameterValues)
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -355,36 +303,18 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 		plan.VersionID = types.StringValue(registeredModelVersion.ID)
 	}
 
-	// Update runtime parameters if they have changed
-	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
-			return
-		}
-
-		if len(runtimeParameterValues) > 0 {
-			traceAPICall("UpdateRegisteredModelVersionRuntimeParams")
-			_, err = r.provider.service.UpdateRegisteredModelVersion(ctx,
-				plan.ID.ValueString(),
-				plan.VersionID.ValueString(),
-				&client.UpdateRegisteredModelVersionRequest{
-					RuntimeParameterValues: runtimeParameterValues,
-				})
-			if err != nil {
-				resp.Diagnostics.AddError("Error updating Registered Model runtime parameters", err.Error())
-				return
-			}
-		}
+	// check if we created a new version
+	existingUseCaseIDs := state.UseCaseIDs
+	if state.VersionID.ValueString() != plan.VersionID.ValueString() {
+		existingUseCaseIDs = []types.String{}
 	}
 
-	// Update UseCases
 	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
 		"registeredModelVersion",
 		plan.VersionID.ValueString(),
-		state.UseCaseIDs,
+		existingUseCaseIDs,
 		plan.UseCaseIDs,
 	); err != nil {
 		resp.Diagnostics.AddError("Error updating Use Cases for Registered Model version", err.Error())

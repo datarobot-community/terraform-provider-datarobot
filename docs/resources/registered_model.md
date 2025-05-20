@@ -50,7 +50,6 @@ output "datarobot_registered_model_version_id" {
 ### Optional
 
 - `description` (String) The description of the Registered Model.
-- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Registered Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version.
 
@@ -58,12 +57,3 @@ output "datarobot_registered_model_version_id" {
 
 - `id` (String) The ID of the Registered Model.
 - `version_id` (String) The ID of the Registered Model Version.
-
-<a id="nestedatt--runtime_parameter_values"></a>
-### Nested Schema for `runtime_parameter_values`
-
-Required:
-
-- `key` (String) The name of the runtime parameter.
-- `type` (String) The type of the runtime parameter.
-- `value` (String) The value of the runtime parameter (type conversion is handled internally).
