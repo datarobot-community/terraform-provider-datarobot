@@ -93,6 +93,17 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = os.Mkdir("new_dir", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("new_dir")
+
+	err = os.WriteFile("new_dir/"+fileName, []byte(`langchain == 0.2.9`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
 			Ref:         basetypes.NewStringValue("master"),

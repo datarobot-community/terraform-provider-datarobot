@@ -125,18 +125,12 @@ func TestAccTextGenerationRegisteredModelResource(t *testing.T) {
 
 	folderPath := "registered_model_text_generation"
 	fileName := "model-metadata.yaml"
-	fileContents := `name: text-generation-model
+	fileContents := `name: runtime-params
 
-type: inference
-targetType: TextGeneration
-inferenceModel:
-  targetName: target
 runtimeParameterDefinitions:
   - fieldName: PROMPT_COLUMN_NAME
     type: string
-    description: The name of the column containing the prompts
-    defaultValue: null
-    required: true`
+    defaultValue: null`
 
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
@@ -171,7 +165,7 @@ runtimeParameterDefinitions:
 			},
 			// Create without prompt
 			{
-				Config: textGenerationRegisteredModelResourceConfig(nameSuffix2, true, &prompt),
+				Config: textGenerationRegisteredModelResourceConfig(nameSuffix2, false, nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName+nameSuffix2,
@@ -179,7 +173,7 @@ runtimeParameterDefinitions:
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName+nameSuffix2, &prompt),
+					checkRegisteredModelResourceExists(resourceName+nameSuffix2, nil),
 					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "id"),
 					resource.TestCheckResourceAttrSet(resourceName+nameSuffix2, "version_id"),
 				),

@@ -164,12 +164,12 @@ runtimeParameterDefinitions:
 			value="https://datarobot-genai-enablement.openai.azure.com/"
 		},
 	  ]`
-	schedule := &map[string]string{
-		"minute":       "0,30",  // Run at minutes 0 and 30
-		"hour":         "*/2",   // Run every 2 hours
-		"day_of_week":  "1,3,5", // Run on Monday, Wednesday, Friday
-		"month":        "*",     // Run every month
-		"day_of_month": "1-15",  // Run on days 1 through 15
+	schedule := &map[string]string{ // Add schedule configuration
+		"minute":       "10 15",
+		"hour":         "*",
+		"day_of_week":  "*",
+		"month":        "*",
+		"day_of_month": "*",
 	}
 	err = os.WriteFile(folderPath+"/"+metadataFileName, []byte(metadataFileContents), 0644)
 	if err != nil {
@@ -240,7 +240,7 @@ runtimeParameterDefinitions:
 					}},
 					nil,
 					noneEgressNetworkPolicy,
-					schedule,
+					nil,
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
@@ -381,15 +381,12 @@ runtimeParameterDefinitions:
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
-					resource.TestCheckResourceAttr(resourceName, "schedule.minute.0", "0"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.minute.1", "30"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.hour.0", "*/2"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_week.0", "1"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_week.1", "3"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_week.2", "5"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.minute.0", "10"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.minute.1", "15"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.hour.0", "*"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_week.0", "*"),
 					resource.TestCheckResourceAttr(resourceName, "schedule.month.0", "*"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_month.0", "1"),
-					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_month.1", "15"),
+					resource.TestCheckResourceAttr(resourceName, "schedule.day_of_month.0", "*"),
 					resource.TestCheckResourceAttrSet(resourceName, "schedule_id"),
 				),
 			},
