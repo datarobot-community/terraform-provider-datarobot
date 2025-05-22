@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -257,7 +259,10 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -269,7 +274,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
 					resource.TestCheckResourceAttr(resourceName, "directionality", "lowerIsBetter"),
 					resource.TestCheckResourceAttr(resourceName, "units", "label"),
@@ -292,7 +298,10 @@ runtimeParameterDefinitions:
 					newName,
 					newDescription,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy,
 					"sum",
@@ -303,7 +312,8 @@ runtimeParameterDefinitions:
 					checkCustomMetricJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
@@ -337,18 +347,16 @@ func customMetricJobResourceConfig(
 
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = "files = ["
+		var fileLines []string
 		for _, file := range files {
-			if file.PathInModel != "" {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
-
-		filesStr += "]"
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
 	}
 
 	runtimeParametersStr := ""

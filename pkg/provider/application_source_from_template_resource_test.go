@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -110,7 +111,7 @@ if __name__ == "__main__":
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -119,7 +120,8 @@ if __name__ == "__main__":
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
@@ -149,7 +151,7 @@ if __name__ == "__main__":
 					&baseEnvironmentVersionID,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -161,7 +163,8 @@ if __name__ == "__main__":
 					slackbotTemplateID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
 					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel),
@@ -196,7 +199,7 @@ if __name__ == "__main__":
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -209,7 +212,8 @@ if __name__ == "__main__":
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "1"),
 					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", resourceLabel2),
@@ -248,7 +252,8 @@ if __name__ == "__main__":
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceFromTemplateResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.destination"),
 					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
@@ -496,18 +501,16 @@ func applicationSourceFromTemplateResourceConfig(
 			},
 		  ]`
 
-		filesStr = "files = ["
+		var fileLines []string
 		for _, file := range files {
-			if file.PathInModel != "" {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
-
-		filesStr += "]"
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
 	}
 
 	return fmt.Sprintf(`

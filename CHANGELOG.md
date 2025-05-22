@@ -1,3 +1,10 @@
+## [v0.9.5] - 2025-05-20
+
+### Fixed
+
+- Fixed batch file uploads and deletions to avoid API limits by processing them in groups of 100.
+- Fixed the DynamicPseudoType error happening w/ the pulumi client.
+
 ## [v0.9.4] - 2025-05-14
 
 ### Added
