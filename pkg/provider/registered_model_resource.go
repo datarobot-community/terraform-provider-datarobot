@@ -73,6 +73,11 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
 				ElementType:         types.StringType,
 			},
+			"runtime_parameter_values": schema.ListAttribute{
+				Optional:            true,
+				MarkdownDescription: "Runtime parameter values to set on the registered model",
+				ElementType:         types.MapType{ElemType: types.StringType},
+			},
 		},
 	}
 }
