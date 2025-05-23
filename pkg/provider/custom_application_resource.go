@@ -92,6 +92,24 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
+			"resources": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The resources for the Custom Application.",
+				Attributes: map[string]schema.Attribute{
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						MarkdownDescription: "The replicas for the Custom Application.",
+					},
+					"resource_label": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The resource label for the Custom Application.",
+					},
+					"session_affinity": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "The session affinity for the Custom Application.",
+					},
+				},
+			},
 		},
 	}
 }
@@ -120,7 +138,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	traceAPICall("CreateCustomApplication")
-	application, err := r.provider.service.CreateCustomApplication(ctx, &client.CreateCustomApplicationeRequest{
+	application, err := r.provider.service.CreateCustomApplication(ctx, &client.CreateCustomApplicationRequest{
 		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
 	})
 	if err != nil {
@@ -130,7 +148,9 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
-	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
+	hasResources := data.Resources != nil && (!data.Resources.Replicas.IsNull() || !data.Resources.ResourceLabel.IsNull() || !data.Resources.SessionAffinity.IsNull())
+
+	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() || hasResources {
 		recipients := make([]string, len(data.ExternalAccessRecipients))
 		for i, recipient := range data.ExternalAccessRecipients {
 			recipients[i] = recipient.ValueString()
@@ -144,6 +164,14 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 		if IsKnown(data.Name) {
 			updateRequest.Name = data.Name.ValueString()
+		}
+
+		if hasResources {
+			updateRequest.Resources = &client.ApplicationResources{
+				Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
+				ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
+				SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
+			}
 		}
 
 		traceAPICall("UpdateCustomApplication")
@@ -253,6 +281,17 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	if state.SourceVersionID.ValueString() != plan.SourceVersionID.ValueString() {
 		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
 	}
+
+	// The API Currently does not support updating Resources
+	// if the resources are not set in the plan, we should not send them to the API
+	// hasResources := plan.Resources != nil && (!plan.Resources.Replicas.IsNull() || !plan.Resources.ResourceLabel.IsNull() || !plan.Resources.SessionAffinity.IsNull())
+	// if hasResources {
+	// 	updateRequest.Resources = &client.ApplicationResources{
+	// 		Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
+	// 		ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+	// 		SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
+	// 	}
+	// }
 
 	traceAPICall("UpdateCustomApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,

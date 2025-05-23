@@ -91,6 +91,24 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
+			"resources": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The resources for the Custom Application.",
+				Attributes: map[string]schema.Attribute{
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						MarkdownDescription: "The replicas for the Custom Application.",
+					},
+					"resource_label": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The resource label for the Custom Application.",
+					},
+					"session_affinity": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "The session affinity for the Custom Application.",
+					},
+				},
+			},
 		},
 	}
 }
@@ -119,9 +137,19 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	}
 
 	traceAPICall("CreateCustomApplication")
-	application, err := r.provider.service.CreateCustomApplication(ctx, &client.CreateCustomApplicationeRequest{
+	createRequest := &client.CreateCustomApplicationRequest{
 		EnvironmentID: data.EnvironmentID.ValueString(),
-	})
+	}
+
+	if data.Resources != nil {
+		createRequest.Resources = &client.ApplicationResources{
+			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
+		}
+	}
+
+	application, err := r.provider.service.CreateCustomApplication(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Application", err.Error())
 		return
@@ -247,6 +275,17 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		updateRequest.Name = plan.Name.ValueString()
 	}
+
+	// The API Currently does not support updating Resources
+	// if the resources are not set in the plan, we should not send them to the API
+	// hasResources := plan.Resources != nil && (!plan.Resources.Replicas.IsNull() || !plan.Resources.ResourceLabel.IsNull() || !plan.Resources.SessionAffinity.IsNull())
+	// if hasResources {
+	// 	updateRequest.Resources = &client.ApplicationResources{
+	// 		Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
+	// 		ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+	// 		SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
+	// 	}
+	// }
 
 	traceAPICall("UpdateCustomApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,

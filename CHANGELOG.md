@@ -1,3 +1,9 @@
+## [v0.10.0] - 2025-05-20
+
+### Added
+
+- Added support for resources on applications
+
 ## [v0.9.5] - 2025-05-20
 
 ### Fixed

@@ -1,3 +1,4 @@
+// Used for the resources block in custom_application and custom_application_from_environment
 package provider
 
 import (
@@ -711,27 +712,29 @@ type ApplicationSourceResources struct {
 }
 
 type CustomApplicationResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	SourceID                 types.String   `tfsdk:"source_id"`
-	SourceVersionID          types.String   `tfsdk:"source_version_id"`
-	Name                     types.String   `tfsdk:"name"`
-	ApplicationUrl           types.String   `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
-	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
+	ID                       types.String                `tfsdk:"id"`
+	SourceID                 types.String                `tfsdk:"source_id"`
+	SourceVersionID          types.String                `tfsdk:"source_version_id"`
+	Name                     types.String                `tfsdk:"name"`
+	ApplicationUrl           types.String                `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool                  `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String              `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool                  `tfsdk:"allow_auto_stopping"`
+	UseCaseIDs               []types.String              `tfsdk:"use_case_ids"`
+	Resources                *ApplicationSourceResources `tfsdk:"resources"`
 }
 
 type CustomApplicationFromEnvironmentResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	EnvironmentID            types.String   `tfsdk:"environment_id"`
-	EnvironmentVersionID     types.String   `tfsdk:"environment_version_id"`
-	Name                     types.String   `tfsdk:"name"`
-	ApplicationUrl           types.String   `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
-	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
+	ID                       types.String                `tfsdk:"id"`
+	EnvironmentID            types.String                `tfsdk:"environment_id"`
+	EnvironmentVersionID     types.String                `tfsdk:"environment_version_id"`
+	Name                     types.String                `tfsdk:"name"`
+	ApplicationUrl           types.String                `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool                  `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String              `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool                  `tfsdk:"allow_auto_stopping"`
+	UseCaseIDs               []types.String              `tfsdk:"use_case_ids"`
+	Resources                *ApplicationSourceResources `tfsdk:"resources"`
 }
 
 // CredentialResourceModel describes the credential resource.

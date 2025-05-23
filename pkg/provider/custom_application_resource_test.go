@@ -49,12 +49,12 @@ from datarobot.client import set_client
 
 
 def start_streamlit():
-    set_client(Client())
+	set_client(Client())
 
-    st.title("Example Custom Application")
+	st.title("Example Custom Application")
 
 if __name__ == "__main__":
-    start_streamlit()
+	start_streamlit()
 	`
 
 	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
@@ -201,41 +201,49 @@ func customApplicationResourceConfig(
 		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
 	}
 
+	// resourcesBlock is not used, remove it
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_application" {
-	name = "test custom application"
+       name = "test custom application"
 }
 resource "datarobot_use_case" "test_new_custom_application" {
-	name = "test new custom application"
+       name = "test new custom application"
 }
 
 resource "datarobot_application_source" "test" {
-	base_environment_id = "6542cd582a9d3d51bf4ac71e"
-	folder_path = "custom_application"
-	files = [
-		{
-			source = "custom_application/start-app.sh",
-			destination = "start-app.sh"
-		},
-		{
-			source = "custom_application/streamlit-app.py",
-			destination = "streamlit-app.py"
-		}
-	]
-	resources = {
-		replicas = %d
-	}
+       base_environment_id = "6542cd582a9d3d51bf4ac71e"
+       folder_path = "custom_application"
+       files = [
+               {
+                       source = "custom_application/start-app.sh",
+                       destination = "start-app.sh"
+               },
+               {
+                       source = "custom_application/streamlit-app.py",
+                       destination = "streamlit-app.py"
+               }
+       ]
+       resources = {
+               replicas = %d
+               resource_label = "test-label"
+               session_affinity = true
+       }
 }
 
 resource "datarobot_custom_application" "test" {
-	source_version_id = "${datarobot_application_source.test.version_id}"
-	external_access_enabled = %t
-	allow_auto_stopping = %t
-	%s
-	%s
-	%s
+       source_version_id = "${datarobot_application_source.test.version_id}"
+       external_access_enabled = %t
+       allow_auto_stopping = %t
+       resources = {
+           replicas = %d
+           resource_label = "test-label"
+           session_affinity = true
+       }
+       %s
+       %s
+       %s
 }
-`, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
+`, applicationSourceReplicas, externalAccess, allowAutoStopping, applicationSourceReplicas, recipients, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {
@@ -282,6 +290,18 @@ func checkCustomApplicationResourceExists() resource.TestCheckFunc {
 					}
 				}
 			}
+
+			// Check resources block
+			if rs.Primary.Attributes["resources.replicas"] != "1" {
+				return fmt.Errorf("resources.replicas is %s but should be 1", rs.Primary.Attributes["resources.replicas"])
+			}
+			if rs.Primary.Attributes["resources.resource_label"] != "test-label" {
+				return fmt.Errorf("resources.resource_label is %s but should be test-label", rs.Primary.Attributes["resources.resource_label"])
+			}
+			if rs.Primary.Attributes["resources.session_affinity"] != "true" {
+				return fmt.Errorf("resources.session_affinity is %s but should be true", rs.Primary.Attributes["resources.session_affinity"])
+			}
+
 			return nil
 		}
 
