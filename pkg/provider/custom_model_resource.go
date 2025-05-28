@@ -1265,7 +1265,7 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	// Process files from folderPath if provided
 	if IsKnown(folderPath) {
 		folder := folderPath.ValueString()
-		err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+		err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
 			if innerErr != nil {
 				return innerErr
 			}
