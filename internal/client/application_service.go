@@ -4,30 +4,33 @@ type CreateQAApplicationRequest struct {
 	DeploymentID string `json:"deploymentId"`
 }
 
-type CreateCustomApplicationeRequest struct {
-	ApplicationSourceVersionID string `json:"applicationSourceVersionId,omitempty"`
-	EnvironmentID              string `json:"environmentId,omitempty"`
+type CreateCustomApplicationRequest struct {
+	ApplicationSourceVersionID string                `json:"applicationSourceVersionId,omitempty"`
+	EnvironmentID              string                `json:"environmentId,omitempty"`
+	Resources                  *ApplicationResources `json:"resources,omitempty"`
 }
 
 type Application struct {
-	ID                               string   `json:"id"`
-	Name                             string   `json:"name"`
-	Status                           string   `json:"status"`
-	CustomApplicationSourceID        string   `json:"customApplicationSourceId"`
-	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId"`
-	EnvVersionID                     string   `json:"envVersionId"`
-	ApplicationUrl                   string   `json:"applicationUrl"`
-	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
-	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
-	AllowAutoStopping                bool     `json:"allowAutoStopping"`
+	ID                               string                `json:"id"`
+	Name                             string                `json:"name"`
+	Status                           string                `json:"status"`
+	CustomApplicationSourceID        string                `json:"customApplicationSourceId"`
+	CustomApplicationSourceVersionID string                `json:"customApplicationSourceVersionId"`
+	EnvVersionID                     string                `json:"envVersionId"`
+	ApplicationUrl                   string                `json:"applicationUrl"`
+	ExternalAccessEnabled            bool                  `json:"externalAccessEnabled"`
+	ExternalAccessRecipients         []string              `json:"externalAccessRecipients"`
+	AllowAutoStopping                bool                  `json:"allowAutoStopping"`
+	Resources                        *ApplicationResources `json:"resources,omitempty"`
 }
 
 type UpdateApplicationRequest struct {
-	Name                             string   `json:"name,omitempty"`
-	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId,omitempty"`
-	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
-	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
-	AllowAutoStopping                bool     `json:"allowAutoStopping"`
+	Name                             string                `json:"name,omitempty"`
+	CustomApplicationSourceVersionID string                `json:"customApplicationSourceVersionId,omitempty"`
+	ExternalAccessEnabled            bool                  `json:"externalAccessEnabled"`
+	ExternalAccessRecipients         []string              `json:"externalAccessRecipients"`
+	AllowAutoStopping                bool                  `json:"allowAutoStopping"`
+	Resources                        *ApplicationResources `json:"resources,omitempty"`
 }
 
 type CreateApplicationSourceFromTemplateRequest struct {

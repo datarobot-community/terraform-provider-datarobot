@@ -160,18 +160,23 @@ func customApplicationFromEnvironmentResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_application_from_environment" {
-	name = "test custom application from env"
+	   name = "test custom application from env"
 }
 resource "datarobot_use_case" "test_new_custom_application_from_environment" {
-	name = "test new custom application from env"
+	   name = "test new custom application from env"
 }
 
 resource "datarobot_custom_application_from_environment" "test" {
-	environment_id = "%s"
-	external_access_enabled = %t
-	%s
-	%s
-	%s
+	   environment_id = "%s"
+	   external_access_enabled = %t
+	   resources = {
+		   replicas = 2
+		   resource_label = "test-label-env"
+		   session_affinity = true
+	   }
+	   %s
+	   %s
+	   %s
 }
 `, environmentID, externalAccess, recipients, nameStr, useCaseIDsStr)
 }
@@ -208,12 +213,27 @@ func checkCustomApplicationFromEnvironmentResourceExists() resource.TestCheckFun
 					if len(application.ExternalAccessRecipients) > 0 {
 						if application.ExternalAccessRecipients[0] == rs.Primary.Attributes["external_access_recipients.0"] {
 							return nil
+							// pass
+						} else {
+							return fmt.Errorf("ExternalAccessRecipient is %s but should be %s", application.ExternalAccessRecipients[0], rs.Primary.Attributes["external_access_recipients.0"])
 						}
 					} else if rs.Primary.Attributes["external_access_recipients.0"] == "" {
 						return nil
 					}
 				}
 			}
+
+			// Check resources block
+			if rs.Primary.Attributes["resources.replicas"] != "2" {
+				return fmt.Errorf("resources.replicas is %s but should be 2", rs.Primary.Attributes["resources.replicas"])
+			}
+			if rs.Primary.Attributes["resources.resource_label"] != "test-label-env" {
+				return fmt.Errorf("resources.resource_label is %s but should be test-label-env", rs.Primary.Attributes["resources.resource_label"])
+			}
+			if rs.Primary.Attributes["resources.session_affinity"] != "true" {
+				return fmt.Errorf("resources.session_affinity is %s but should be true", rs.Primary.Attributes["resources.session_affinity"])
+			}
+
 			return nil
 		}
 

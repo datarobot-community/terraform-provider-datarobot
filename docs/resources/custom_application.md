@@ -66,6 +66,7 @@ output "datarobot_custom_application_url" {
 - `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
 - `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
 - `name` (String) The name of the Custom Application.
+- `resources` (Attributes) The resources for the Custom Application. (see [below for nested schema](#nestedatt--resources))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Application to.
 
 ### Read-Only
@@ -73,3 +74,12 @@ output "datarobot_custom_application_url" {
 - `application_url` (String) The URL of the Custom Application.
 - `id` (String) The ID of the Custom Application.
 - `source_id` (String) The ID of the Custom Application Source.
+
+<a id="nestedatt--resources"></a>
+### Nested Schema for `resources`
+
+Optional:
+
+- `replicas` (Number) The replicas for the Custom Application.
+- `resource_label` (String) The resource label for the Custom Application.
+- `session_affinity` (Boolean) The session affinity for the Custom Application.
