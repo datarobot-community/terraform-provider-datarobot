@@ -534,6 +534,7 @@ func CustomModelTargetTypeValidators() []validator.String {
 			"GeoPoint",
 			"Unstructured",
 			"VectorDatabase",
+			"AgenticWorkflow",
 		),
 	}
 }
