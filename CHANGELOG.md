@@ -1,8 +1,12 @@
 ## Unreleased
 
+## [0.10.1] - 2025-05-29
 
+### Fixed
 
-## [0.10.0] - 2025-05-29	
+- Windows build does not have inodes, dropped cycle detection for symlinks
+
+## [0.10.0] - 2025-05-29
 
 ### Added
 

@@ -3,14 +3,12 @@ package provider
 import (
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
 // WalkSymlinkSafe has the same interface as filepath.Walk.
 // It walks the file tree rooted at root, calling walkFn for each file or directory.
-// It follows symlinks but avoids infinite loops caused by symlink cycles.
+// To avoid complexity with platform specific builds, it does not detect cycles.
 func WalkSymlinkSafe(root string, walkFn filepath.WalkFunc) error {
-	visited := make(map[uint64]struct{})
 
 	var walk func(path string, info os.FileInfo, err error) error
 	walk = func(path string, info os.FileInfo, err error) error {
@@ -18,15 +16,6 @@ func WalkSymlinkSafe(root string, walkFn filepath.WalkFunc) error {
 			return walkFn(path, info, err)
 		}
 
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if ok {
-			key := (uint64(stat.Dev) << 32) | stat.Ino //nolint:unconvert
-			if _, seen := visited[key]; seen {
-				// Already visited this inode, avoid loop
-				return nil
-			}
-			visited[key] = struct{}{}
-		}
 		// If the path is a symlink, resolve it
 		// and call walkFn with the resolved path and info.
 		if info.Mode()&os.ModeSymlink != 0 {
