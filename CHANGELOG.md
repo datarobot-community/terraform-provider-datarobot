@@ -1,3 +1,10 @@
+## Unreleased
+
+### Added
+
+- Added support for following symlinks for folders in custom models
+
+
 ## [v0.9.5] - 2025-05-20
 
 ### Fixed

@@ -492,14 +492,13 @@ func computeFolderHash(folderPath types.String) (hash types.String, err error) {
 		hashValue := ""
 		filesInFolder := make([]string, 0)
 		folder := folderPath.ValueString()
-		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+		if err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
 			if innerErr != nil {
 				return innerErr
 			}
 			if info.IsDir() {
 				return nil
 			}
-
 			filesInFolder = append(filesInFolder, path)
 			return nil
 		}); err != nil {
