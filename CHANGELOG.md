@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- Added AgenticWorkflow custom model target type
+
 ## [0.10.1] - 2025-05-29
 
 ### Fixed
