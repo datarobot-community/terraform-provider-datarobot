@@ -1242,26 +1242,15 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		return
 	}
 
-	// Batch file uploads in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(localFiles); i += batchSize {
-		end := i + batchSize
-		if end > len(localFiles) {
-			end = len(localFiles)
-		}
-
-		batchToUpload := localFiles[i:end]
-		if len(batchToUpload) > 0 {
-			traceAPICall("CreateCustomModelVersionFromLocalFiles")
-			_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
-				BaseEnvironmentID: baseEnvironmentID,
-				Files:             batchToUpload,
-			})
-			if err != nil {
-				return
-			}
-		}
+	traceAPICall("CreateCustomModelVersionFromLocalFiles")
+	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
+		BaseEnvironmentID: baseEnvironmentID,
+		Files:             localFiles,
+	})
+	if err != nil {
+		return
 	}
+
 	return
 }
 

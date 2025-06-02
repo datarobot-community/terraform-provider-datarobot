@@ -663,27 +663,17 @@ func (r *ApplicationSourceFromTemplateResource) updateLocalFiles(
 		}
 	}
 
-	// Batch file deletions in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(filesToDelete); i += batchSize {
-		end := i + batchSize
-		if end > len(filesToDelete) {
-			end = len(filesToDelete)
-		}
-
-		batchToDelete := filesToDelete[i:end]
-		if len(batchToDelete) > 0 {
-			traceAPICall("UpdateApplicationSourceFromTemplateVersion")
-			_, err = r.provider.service.UpdateApplicationSourceVersion(
-				ctx,
-				state.ID.ValueString(),
-				applicationSourceFromTemplateVersion.ID,
-				&client.UpdateApplicationSourceVersionRequest{
-					FilesToDelete: batchToDelete,
-				})
-			if err != nil {
-				return
-			}
+	if len(filesToDelete) > 0 {
+		traceAPICall("UpdateApplicationSourceFromTemplateVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersion(
+			ctx,
+			state.ID.ValueString(),
+			applicationSourceFromTemplateVersion.ID,
+			&client.UpdateApplicationSourceVersionRequest{
+				FilesToDelete: filesToDelete,
+			})
+		if err != nil {
+			return
 		}
 	}
 
