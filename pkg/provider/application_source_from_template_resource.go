@@ -100,18 +100,22 @@ func (r *ApplicationSourceFromTemplateResource) Schema(ctx context.Context, req 
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The replicas for the Application Source.",
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The resource label for the Application Source.",
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The session affinity for the Application Source.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Whether to service web requests on the root path for the Application Source.",
 					},
 				},
@@ -279,6 +283,17 @@ func (r *ApplicationSourceFromTemplateResource) Create(ctx context.Context, req 
 		return
 	}
 
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		applicationSource.LatestVersion.RuntimeParameters,
@@ -323,19 +338,15 @@ func (r *ApplicationSourceFromTemplateResource) Read(ctx context.Context, req re
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
-	// Populate resources from API response
-	if applicationSource.LatestVersion.Resources.Replicas != nil ||
-		applicationSource.LatestVersion.Resources.ResourceLabel != nil ||
-		applicationSource.LatestVersion.Resources.SessionAffinity != nil ||
-		applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath != nil {
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
 		data.Resources = &ApplicationSourceResources{
 			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
 			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
 			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
 			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
 		}
-	} else {
-		data.Resources = nil
 	}
 
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
@@ -513,6 +524,17 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
+
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if plan.Resources != nil {
+		plan.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
 
 	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
