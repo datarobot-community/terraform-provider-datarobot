@@ -394,12 +394,21 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 
 	// always create a new version
 	currentVersionNum := int([]rune(applicationSource.LatestVersion.Label)[1] - '0') // v1 -> 1
+	createVersionRequest := &client.CreateApplicationSourceVersionRequest{
+		BaseVersion: applicationSource.LatestVersion.ID,
+		Label:       fmt.Sprintf("v%d", currentVersionNum+1),
+	}
+	if plan.Resources != nil {
+		createVersionRequest.Resources = &client.ApplicationResources{
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	traceAPICall("CreateApplicationSourceVersion")
-	createApplicationSourceFromTemplateVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(),
-		&client.CreateApplicationSourceVersionRequest{
-			BaseVersion: applicationSource.LatestVersion.ID,
-			Label:       fmt.Sprintf("v%d", currentVersionNum+1),
-		})
+	createApplicationSourceFromTemplateVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(), createVersionRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application Source version", err.Error())
 		return
