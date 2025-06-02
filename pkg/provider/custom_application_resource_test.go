@@ -212,16 +212,6 @@ resource "datarobot_use_case" "test_new_custom_application" {
 resource "datarobot_application_source" "test" {
 	base_environment_id = "6542cd582a9d3d51bf4ac71e"
 	folder_path = "custom_application"
-	files = [
-		{
-			source = "custom_application/start-app.sh",
-			destination = "start-app.sh"
-		},
-		{
-			source = "custom_application/streamlit-app.py",
-			destination = "streamlit-app.py"
-		}
-	]
 	resources = {
 		replicas = %d
 	}
