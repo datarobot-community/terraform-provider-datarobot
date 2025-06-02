@@ -556,7 +556,7 @@ func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
 }
 
 func createTarFile(tarWriter *tar.Writer, dirName string) (err error) {
-	err = filepath.Walk(dirName, func(file string, fi os.FileInfo, err error) error {
+	err = WalkSymlinkSafe(dirName, func(file string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

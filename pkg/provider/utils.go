@@ -469,7 +469,7 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 
 	if IsKnown(folderPath) {
 		folder := folderPath.ValueString()
-		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+		if err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
 			if innerErr != nil {
 				return innerErr
 			}
@@ -851,7 +851,7 @@ func zipDirectory(source, target string) (content []byte, err error) {
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	err = filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	err = WalkSymlinkSafe(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
