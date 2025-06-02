@@ -4,7 +4,7 @@ type CreateQAApplicationRequest struct {
 	DeploymentID string `json:"deploymentId"`
 }
 
-type CreateCustomApplicationeRequest struct {
+type CreateCustomApplicationRequest struct {
 	ApplicationSourceVersionID string                `json:"applicationSourceVersionId,omitempty"`
 	EnvironmentID              string                `json:"environmentId,omitempty"`
 	Resources                  *ApplicationResources `json:"resources,omitempty"`

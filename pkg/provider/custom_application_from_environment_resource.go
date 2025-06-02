@@ -141,7 +141,7 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	}
 
 	traceAPICall("CreateCustomApplication")
-	createRequest := &client.CreateCustomApplicationeRequest{
+	createRequest := &client.CreateCustomApplicationRequest{
 		EnvironmentID: data.EnvironmentID.ValueString(),
 	}
 
