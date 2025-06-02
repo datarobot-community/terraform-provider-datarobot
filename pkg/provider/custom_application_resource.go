@@ -142,7 +142,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	traceAPICall("CreateCustomApplication")
-	createRequest := &client.CreateCustomApplicationeRequest{
+	createRequest := &client.CreateCustomApplicationRequest{
 		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
 	}
 
