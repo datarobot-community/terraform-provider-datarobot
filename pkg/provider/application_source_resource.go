@@ -104,6 +104,10 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 						Optional:            true,
 						MarkdownDescription: "The session affinity for the Application Source.",
 					},
+					"service_web_requests_on_root_path": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to service web requests on the root path for the Application Source.",
+					},
 				},
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
@@ -183,9 +187,10 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	}
 	if data.Resources != nil {
 		createApplicationSourceVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
@@ -309,6 +314,21 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
+	// Populate resources from API response
+	if applicationSource.LatestVersion.Resources.Replicas != nil ||
+		applicationSource.LatestVersion.Resources.ResourceLabel != nil ||
+		applicationSource.LatestVersion.Resources.SessionAffinity != nil ||
+		applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	} else {
+		data.Resources = nil
+	}
+
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		applicationSource.LatestVersion.RuntimeParameters,
@@ -391,9 +411,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
 	if plan.Resources != nil {
 		updateVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
