@@ -689,7 +689,7 @@ func computeHash(value []byte) (hash string) {
 }
 
 func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -697,7 +697,7 @@ func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
 }
 
 func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -705,7 +705,7 @@ func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
 }
 
 func StringValuePointerOptional(value basetypes.StringValue) *string {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -713,7 +713,7 @@ func StringValuePointerOptional(value basetypes.StringValue) *string {
 }
 
 func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 

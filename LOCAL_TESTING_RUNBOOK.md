@@ -116,7 +116,7 @@ terraform apply
 
 ```bash
 # Set environment variables
-export DATAROBOT_ENDPOINT="https://staging.datarobot.com"
+export DATAROBOT_ENDPOINT="https://staging.datarobot.com/api/v2"
 export DATAROBOT_API_TOKEN="<your-token-here>"
 
 # Run specific tests
