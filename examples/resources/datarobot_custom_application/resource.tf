@@ -17,10 +17,10 @@ resource "datarobot_custom_application" "example" {
   allow_auto_stopping = false
 
   resources {
-    replicas                           = 2
-    resource_label                     = "cpu.medium"
-    session_affinity                   = true
-    service_web_requests_on_root_path  = false
+    replicas                          = 2
+    resource_label                    = "cpu.medium"
+    session_affinity                  = true
+    service_web_requests_on_root_path = false
   }
 }
 
