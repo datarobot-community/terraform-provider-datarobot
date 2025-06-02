@@ -58,7 +58,7 @@ output "example_id" {
 - `egress_network_policy` (String) The egress network policy for the Job.
 - `environment_id` (String) The ID of the environment to use with the Job.
 - `environment_version_id` (String) The ID of the environment version to use with the Job.
-- `files` (Attributes List) List of files to upload, each with a source (local path) and destination (path in job). (see [below for nested schema](#nestedatt--files))
+- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Job. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to be uploaded. Each file in the folder is uploaded under path relative to a folder path.
 - `is_model_specific` (Boolean) Determines whether the metric is related to the model or deployment.
 - `resource_bundle_id` (String) A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.
@@ -72,15 +72,6 @@ output "example_id" {
 - `files_hashes` (List of String) The hash of file contents for each file in files.
 - `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Custom Metric Job.
-
-<a id="nestedatt--files"></a>
-### Nested Schema for `files`
-
-Required:
-
-- `destination` (String) Path in the job.
-- `source` (String) Local filesystem path.
-
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`

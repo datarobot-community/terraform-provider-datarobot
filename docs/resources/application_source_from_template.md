@@ -60,7 +60,7 @@ output "datarobot_application_source_version_id" {
 
 - `base_environment_id` (String) The ID of the base environment for the Application Source.
 - `base_environment_version_id` (String) The ID of the base environment version for the Application Source.
-- `files` (Attributes List) List of files to upload, each with a source (local path) and destination (path in application source). (see [below for nested schema](#nestedatt--files))
+- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.
 - `name` (String) The name of the Application Source.
 - `resources` (Attributes) The resources for the Application Source. (see [below for nested schema](#nestedatt--resources))
@@ -72,15 +72,6 @@ output "datarobot_application_source_version_id" {
 - `folder_path_hash` (String) The hash of the folder path contents.
 - `id` (String) The ID of the Application Source.
 - `version_id` (String) The version ID of the Application Source.
-
-<a id="nestedatt--files"></a>
-### Nested Schema for `files`
-
-Required:
-
-- `destination` (String) Path in the application source.
-- `source` (String) Local filesystem path.
-
 
 <a id="nestedatt--resources"></a>
 ### Nested Schema for `resources`

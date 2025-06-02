@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
@@ -223,21 +222,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.ListNestedAttribute{
+			"files": schema.DynamicAttribute{
 				Optional:            true,
-				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in model).",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"source": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "Local filesystem path.",
-						},
-						"destination": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "Path in the model.",
-						},
-					},
-				},
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -575,8 +562,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		plan.FolderPath,
 		plan.Files,
 		customModelID,
-		baseEnvironmentID,
-	)
+		baseEnvironmentID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
@@ -1245,85 +1231,26 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
 	folderPath types.String,
-	files []FileTuple,
+	files types.Dynamic,
 	customModelID string,
 	baseEnvironmentID string,
 ) (
 	err error,
 ) {
-	localFiles, err := prepareLocalFiles(files)
+	localFiles, err := prepareLocalFiles(folderPath, files)
 	if err != nil {
 		return
 	}
 
-	// Track file paths to avoid duplicates
-	existingPaths := make(map[string]bool)
-	for _, file := range localFiles {
-		existingPaths[file.Path] = true
+	traceAPICall("CreateCustomModelVersionFromLocalFiles")
+	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
+		BaseEnvironmentID: baseEnvironmentID,
+		Files:             localFiles,
+	})
+	if err != nil {
+		return
 	}
 
-	// Process files from folderPath if provided
-	if IsKnown(folderPath) {
-		folder := folderPath.ValueString()
-		err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
-			if innerErr != nil {
-				return innerErr
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			// Create a path relative to the folder
-			relPath, relErr := filepath.Rel(folder, path)
-			if relErr != nil {
-				return relErr
-			}
-
-			// Skip if this path already exists
-			if existingPaths[relPath] {
-				return nil
-			}
-			existingPaths[relPath] = true
-
-			// Read the file content
-			content, fileErr := os.ReadFile(path)
-			if fileErr != nil {
-				return fileErr
-			}
-
-			// Add file to the list
-			localFiles = append(localFiles, client.FileInfo{
-				Name:    filepath.Base(path),
-				Path:    relPath,
-				Content: content,
-			})
-			return nil
-		})
-		if err != nil {
-			return
-		}
-	}
-
-	// Batch file uploads in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(localFiles); i += batchSize {
-		end := i + batchSize
-		if end > len(localFiles) {
-			end = len(localFiles)
-		}
-
-		batchToUpload := localFiles[i:end]
-		if len(batchToUpload) > 0 {
-			traceAPICall("CreateCustomModelVersionFromLocalFiles")
-			_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
-				BaseEnvironmentID: baseEnvironmentID,
-				Files:             batchToUpload,
-			})
-			if err != nil {
-				return
-			}
-		}
-	}
 	return
 }
 

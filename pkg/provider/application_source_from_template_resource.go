@@ -85,21 +85,9 @@ func (r *ApplicationSourceFromTemplateResource) Schema(ctx context.Context, req 
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.ListNestedAttribute{
+			"files": schema.DynamicAttribute{
 				Optional:            true,
-				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in application source).",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"source": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "Local filesystem path.",
-						},
-						"destination": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "Path in the application source.",
-						},
-					},
-				},
+				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -232,6 +220,7 @@ func (r *ApplicationSourceFromTemplateResource) Create(ctx context.Context, req 
 		createApplicationSourceFromTemplateResp.ID,
 		createApplicationSourceFromTemplateVersionResp.ID,
 		data.TemplateID.ValueString(),
+		data.FolderPath,
 		data.Files,
 		make([]string, 0))
 	if err != nil {
@@ -610,12 +599,13 @@ func (r *ApplicationSourceFromTemplateResource) addLocalFilesToApplicationSource
 	id string,
 	versionId string,
 	templateID string,
-	files []FileTuple,
+	folderPath types.String,
+	files types.Dynamic,
 	templateFilesToReset []string,
 ) (
 	err error,
 ) {
-	localFiles, err := prepareLocalFiles(files)
+	localFiles, err := prepareLocalFiles(folderPath, files)
 	if err != nil {
 		return
 	}
@@ -673,27 +663,17 @@ func (r *ApplicationSourceFromTemplateResource) updateLocalFiles(
 		}
 	}
 
-	// Batch file deletions in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(filesToDelete); i += batchSize {
-		end := i + batchSize
-		if end > len(filesToDelete) {
-			end = len(filesToDelete)
-		}
-
-		batchToDelete := filesToDelete[i:end]
-		if len(batchToDelete) > 0 {
-			traceAPICall("UpdateApplicationSourceFromTemplateVersion")
-			_, err = r.provider.service.UpdateApplicationSourceVersion(
-				ctx,
-				state.ID.ValueString(),
-				applicationSourceFromTemplateVersion.ID,
-				&client.UpdateApplicationSourceVersionRequest{
-					FilesToDelete: batchToDelete,
-				})
-			if err != nil {
-				return
-			}
+	if len(filesToDelete) > 0 {
+		traceAPICall("UpdateApplicationSourceFromTemplateVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersion(
+			ctx,
+			state.ID.ValueString(),
+			applicationSourceFromTemplateVersion.ID,
+			&client.UpdateApplicationSourceVersionRequest{
+				FilesToDelete: filesToDelete,
+			})
+		if err != nil {
+			return
 		}
 	}
 
@@ -702,6 +682,7 @@ func (r *ApplicationSourceFromTemplateResource) updateLocalFiles(
 		state.ID.ValueString(),
 		applicationSourceFromTemplateVersion.ID,
 		state.TemplateID.ValueString(),
+		plan.FolderPath,
 		plan.Files,
 		filesToReset,
 	)
