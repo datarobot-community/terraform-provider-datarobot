@@ -1,5 +1,11 @@
 ## Unreleased
 
+## [0.10.2] - 2025-06-02
+
+### Removed
+
+- Reverted a fix to allow uploading 100+ files due to issues with Pulumi bridge provider
+
 ## [0.10.1] - 2025-05-29
 
 ### Fixed
