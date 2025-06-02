@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -94,10 +97,29 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
 						MarkdownDescription: "The number of replicas for the Custom Application.",
+						Validators: []validator.Int64{
+							int64validator.AtLeast(1),
+						},
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "The resource label for the Custom Application.",
+						Validators: []validator.String{
+							stringvalidator.OneOf(
+								"cpu.nano",
+								"cpu.micro",
+								"cpu.small",
+								"cpu.medium",
+								"cpu.large",
+								"cpu.xlarge",
+								"cpu.2xlarge",
+								"cpu.3xlarge",
+								"cpu.4xlarge",
+								"cpu.5xlarge",
+								"cpu.6xlarge",
+								"cpu.7xlarge",
+							),
+						},
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
