@@ -10,10 +10,10 @@ resource "datarobot_custom_application_from_environment" "example" {
   allow_auto_stopping = false
 
   resources {
-    replicas                           = 1
-    resource_label                     = "cpu.small"
-    session_affinity                   = false
-    service_web_requests_on_root_path  = true
+    replicas                          = 1
+    resource_label                    = "cpu.small"
+    session_affinity                  = false
+    service_web_requests_on_root_path = true
   }
 }
 
