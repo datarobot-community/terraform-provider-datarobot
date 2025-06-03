@@ -466,6 +466,7 @@ func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues [
 
 func prepareLocalFiles(folderPath types.String, files []FileTuple) (localFiles []client.FileInfo, err error) {
 	localFiles = make([]client.FileInfo, 0)
+	pathMap := make(map[string]bool) // Track destination paths to avoid duplicates
 
 	if IsKnown(folderPath) {
 		folder := folderPath.ValueString()
@@ -479,11 +480,18 @@ func prepareLocalFiles(folderPath types.String, files []FileTuple) (localFiles [
 
 			pathInModel := strings.TrimPrefix(path, folder)
 			pathInModel = strings.TrimPrefix(pathInModel, string(filepath.Separator))
+
+			// Check for duplicate destination paths
+			if pathMap[pathInModel] {
+				return nil // Skip duplicate
+			}
+
 			fileInfo, innerErr := getFileInfo(path, pathInModel)
 			if innerErr != nil {
 				return innerErr
 			}
 			localFiles = append(localFiles, fileInfo)
+			pathMap[pathInModel] = true
 
 			return nil
 		}); err != nil {
@@ -493,13 +501,21 @@ func prepareLocalFiles(folderPath types.String, files []FileTuple) (localFiles [
 
 	if len(files) > 0 {
 		for _, file := range files {
+			destination := file.Destination.ValueString()
+
+			// Check for duplicate destination paths
+			if pathMap[destination] {
+				continue // Skip duplicate
+			}
+
 			var fileInfo client.FileInfo
-			fileInfo, err = getFileInfo(file.Source.ValueString(), file.Destination.ValueString())
+			fileInfo, err = getFileInfo(file.Source.ValueString(), destination)
 			if err != nil {
 				return
 			}
 
 			localFiles = append(localFiles, fileInfo)
+			pathMap[destination] = true
 		}
 	}
 
