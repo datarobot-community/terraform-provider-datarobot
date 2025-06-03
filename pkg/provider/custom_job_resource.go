@@ -10,6 +10,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -118,9 +119,21 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Job. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in job).",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"source": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Local filesystem path.",
+						},
+						"destination": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Path in the job.",
+						},
+					},
+				},
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -217,7 +230,19 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
+	// Convert Files slice to Dynamic value for prepareLocalFiles
+	filesValue, filesDiags := types.ListValueFrom(ctx, types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"source":      types.StringType,
+			"destination": types.StringType,
+		},
+	}, data.Files)
+	if filesDiags.HasError() {
+		resp.Diagnostics.Append(filesDiags...)
+		return
+	}
+
+	localFiles, err := prepareLocalFiles(data.FolderPath, types.DynamicValue(filesValue))
 	if err != nil {
 		resp.Diagnostics.AddError("Error preparing local files", err.Error())
 		return
@@ -370,7 +395,19 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
-		localFiles, err := prepareLocalFiles(plan.FolderPath, plan.Files)
+		// Convert Files slice to Dynamic value for prepareLocalFiles
+		filesValue, filesDiags := types.ListValueFrom(ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"source":      types.StringType,
+				"destination": types.StringType,
+			},
+		}, plan.Files)
+		if filesDiags.HasError() {
+			resp.Diagnostics.Append(filesDiags...)
+			return
+		}
+
+		localFiles, err := prepareLocalFiles(plan.FolderPath, types.DynamicValue(filesValue))
 		if err != nil {
 			return
 		}
@@ -547,7 +584,19 @@ func (r CustomJobResource) ValidateConfig(ctx context.Context, req resource.Vali
 }
 
 func verifyMetadataForRetrainingJob(data CustomJobResourceModel, resp *resource.ValidateConfigResponse) {
-	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
+	// Convert Files slice to Dynamic value for prepareLocalFiles
+	filesValue, filesDiags := types.ListValueFrom(context.Background(), types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"source":      types.StringType,
+			"destination": types.StringType,
+		},
+	}, data.Files)
+	if filesDiags.HasError() {
+		resp.Diagnostics.Append(filesDiags...)
+		return
+	}
+
+	localFiles, err := prepareLocalFiles(data.FolderPath, types.DynamicValue(filesValue))
 	if err != nil {
 		return
 	}

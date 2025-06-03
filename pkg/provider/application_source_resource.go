@@ -78,9 +78,21 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in application source).",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"source": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Local filesystem path.",
+						},
+						"destination": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Path in the application source.",
+						},
+					},
+				},
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -211,7 +223,6 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		ctx,
 		createApplicationSourceResp.ID,
 		createApplicationSourceVersionResp.ID,
-		data.FolderPath,
 		data.Files)
 	if err != nil {
 		resp.Diagnostics.AddError("Error adding files to Application Source", err.Error())
@@ -597,22 +608,28 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	ctx context.Context,
 	id string,
 	versionId string,
-	folderPath types.String,
-	files types.Dynamic,
+	files []FileTuple,
 ) (
 	err error,
 ) {
-	localFiles, err := prepareLocalFiles(folderPath, files)
+	// Convert files to dynamic value for prepareLocalFiles
+	filesValue, diag := types.ListValueFrom(ctx, types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"source":      types.StringType,
+			"destination": types.StringType,
+		},
+	}, files)
+	if diag.HasError() {
+		err = errors.New("Failed to convert files to dynamic value")
+		return
+	}
+
+	localFiles, err := prepareLocalFiles(types.StringNull(), types.DynamicValue(filesValue))
 	if err != nil {
 		return
 	}
 
-	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, localFiles)
-	if err != nil {
-		return
-	}
-
 	return
 }
 
@@ -631,17 +648,27 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 		}
 	}
 
-	if len(filesToDelete) > 0 {
-		traceAPICall("UpdateApplicationSourceVersion")
-		_, err = r.provider.service.UpdateApplicationSourceVersion(
-			ctx,
-			state.ID.ValueString(),
-			applicationSourceVersion.ID,
-			&client.UpdateApplicationSourceVersionRequest{
-				FilesToDelete: filesToDelete,
-			})
-		if err != nil {
-			return
+	// Batch file deletions in groups of 100 to avoid API limits
+	const batchSize = 100
+	for i := 0; i < len(filesToDelete); i += batchSize {
+		end := i + batchSize
+		if end > len(filesToDelete) {
+			end = len(filesToDelete)
+		}
+
+		batchToDelete := filesToDelete[i:end]
+		if len(batchToDelete) > 0 {
+			traceAPICall("UpdateApplicationSourceVersion")
+			_, err = r.provider.service.UpdateApplicationSourceVersion(
+				ctx,
+				state.ID.ValueString(),
+				applicationSourceVersion.ID,
+				&client.UpdateApplicationSourceVersionRequest{
+					FilesToDelete: batchToDelete,
+				})
+			if err != nil {
+				return
+			}
 		}
 	}
 
@@ -649,7 +676,6 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 		ctx,
 		state.ID.ValueString(),
 		applicationSourceVersion.ID,
-		plan.FolderPath,
 		plan.Files,
 	)
 

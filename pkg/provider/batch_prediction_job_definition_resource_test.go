@@ -51,12 +51,17 @@ func TestAccBatchPredictionJobDefinitionResource(t *testing.T) {
 	modelContents := `from typing import Any, Dict
 import pandas as pd
 
+class DummyModel:
+	def __init__(self, positive_class_label: str, negative_class_label: str):
+		self.positive_class_label = positive_class_label
+		self.negative_class_label = negative_class_label
+
 def load_model(code_dir: str) -> Any:
-	return "dummy"
+	return DummyModel("1", "0")
 
 def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
-	positive_label = kwargs["positive_class_label"]
-	negative_label = kwargs["negative_class_label"]
+	positive_label = model.positive_class_label
+	negative_label = model.negative_class_label
 	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
 	return preds
 `
