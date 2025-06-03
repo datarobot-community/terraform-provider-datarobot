@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
 
 	"github.com/cenkalti/backoff/v4"
@@ -1254,54 +1253,6 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	localFiles, err := prepareLocalFiles(folderPath, files)
 	if err != nil {
 		return
-	}
-
-	// Track file paths to avoid duplicates
-	existingPaths := make(map[string]bool)
-	for _, file := range localFiles {
-		existingPaths[file.Path] = true
-	}
-
-	// Process files from folderPath if provided
-	if IsKnown(folderPath) {
-		folder := folderPath.ValueString()
-		err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
-			if innerErr != nil {
-				return innerErr
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			// Create a path relative to the folder
-			relPath, relErr := filepath.Rel(folder, path)
-			if relErr != nil {
-				return relErr
-			}
-
-			// Skip if this path already exists
-			if existingPaths[relPath] {
-				return nil
-			}
-			existingPaths[relPath] = true
-
-			// Read the file content
-			content, fileErr := os.ReadFile(path)
-			if fileErr != nil {
-				return fileErr
-			}
-
-			// Add file to the list
-			localFiles = append(localFiles, client.FileInfo{
-				Name:    filepath.Base(path),
-				Path:    relPath,
-				Content: content,
-			})
-			return nil
-		})
-		if err != nil {
-			return
-		}
 	}
 
 	// Batch file uploads in groups of 100 to avoid API limits
