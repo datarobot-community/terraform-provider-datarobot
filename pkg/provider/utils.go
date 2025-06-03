@@ -1050,3 +1050,25 @@ func prepareTestFolder(folderPath string) (string, error) {
 	// Return the path to the created directory
 	return filepath.Abs(folderPath)
 }
+
+// Helper functions for converting pointer values back to Terraform types.
+func Int64PointerValue(ptr *int64) types.Int64 {
+	if ptr == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(*ptr)
+}
+
+func BoolPointerValue(ptr *bool) types.Bool {
+	if ptr == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*ptr)
+}
+
+func StringPointerValue(ptr *string) types.String {
+	if ptr == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(*ptr)
+}

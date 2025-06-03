@@ -6,7 +6,7 @@ resource "datarobot_application_source" "example" {
 }
 
 resource "datarobot_custom_application" "example" {
-  name              = "example custom application"
+  name              = "example-custom-application"
   source_version_id = datarobot_application_source.example.version_id
 
   # optional settings
@@ -15,6 +15,13 @@ resource "datarobot_custom_application" "example" {
     "recipient@example.com",
   ]
   allow_auto_stopping = false
+
+  resources {
+    replicas                           = 2
+    resource_label                     = "cpu.medium"
+    session_affinity                   = true
+    service_web_requests_on_root_path  = false
+  }
 }
 
 output "datarobot_custom_application_id" {
