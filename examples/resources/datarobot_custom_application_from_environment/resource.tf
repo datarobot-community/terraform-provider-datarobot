@@ -1,6 +1,6 @@
 resource "datarobot_custom_application_from_environment" "example" {
-  name           = "example custom application from environment"
-  environment_id = "6542cd582a9d3d51bf4ac71e"
+  name           = "example-custom-app-from-environment"
+  environment_id = datarobot_execution_environment.example.id
 
   # optional settings
   external_access_enabled = true
@@ -8,6 +8,13 @@ resource "datarobot_custom_application_from_environment" "example" {
     "recipient@example.com",
   ]
   allow_auto_stopping = false
+
+  resources {
+    replicas                           = 1
+    resource_label                     = "cpu.small"
+    session_affinity                   = false
+    service_web_requests_on_root_path  = true
+  }
 }
 
 output "datarobot_custom_application_id" {
