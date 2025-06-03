@@ -174,6 +174,20 @@ Tests should generally cover all of a resource's CRUD operations, plus `import`.
 
 There are currently no permanent fixtures for acceptance tests to use. Each test needs to create the resources it depends on.
 
+## Releasing
+
+To create a new release simply make a Release in GitHub. The [Release
+Action](https://github.com/datarobot-community/terraform-provider-datarobot/actions/workflows/release.yml)
+will pick it up and run go-releaser. After 5 minutes or so, Hashicorp
+will pick up the release on the [primary provider
+site](https://registry.terraform.io/providers/datarobot-community/datarobot/latest)
+side with the latest version, and it is ready to go and get released
+to Pulumi via our [Pulumi
+Bridge](https://github.com/datarobot-community/pulumi-datarobot). You
+can see the instructions for testing and releasing the Pulumi provider
+in that repo's documentation.
+
+
 ## Questions?
 
 If you're an external contributor, first of all, thank you! The best way to contact us is with a GitHub issue. Any and all feedback is welcome.

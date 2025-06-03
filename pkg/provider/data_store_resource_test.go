@@ -7,6 +7,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -27,9 +28,9 @@ func TestAccDatastoreResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list external connectors: %v", err)
 	}
-
-	name := "example_datastore"
-	newName := "new_example_datastore"
+	rSuffix := acctest.RandStringFromCharSet(5, acctest.CharSetAlphaNum)
+	name := fmt.Sprintf("example_datastore_%s", rSuffix)
+	newName := fmt.Sprintf("new_example_datastore_%s", rSuffix)
 
 	connectorDatastoreType := "dr-connector-v1"
 	s3ConnectorFields := `[

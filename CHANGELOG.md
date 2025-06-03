@@ -1,5 +1,11 @@
 ## Unreleased
 
+## [0.10.3] - 2025-06-02
+
+### Removed
+
+- Added back symlink support from revert
+
 ## [0.10.2] - 2025-06-02
 
 ### Removed
