@@ -14,7 +14,6 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -1252,19 +1251,7 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 ) (
 	err error,
 ) {
-	// Convert files to dynamic value for prepareLocalFiles
-	filesValue, diag := types.ListValueFrom(ctx, types.ObjectType{
-		AttrTypes: map[string]attr.Type{
-			"source":      types.StringType,
-			"destination": types.StringType,
-		},
-	}, files)
-	if diag.HasError() {
-		err = errors.New("failed to convert files to dynamic value")
-		return
-	}
-
-	localFiles, err := prepareLocalFiles(folderPath, types.DynamicValue(filesValue))
+	localFiles, err := prepareLocalFiles(folderPath, files)
 	if err != nil {
 		return
 	}

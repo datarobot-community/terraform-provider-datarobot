@@ -612,19 +612,7 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 ) (
 	err error,
 ) {
-	// Convert files to dynamic value for prepareLocalFiles
-	filesValue, diag := types.ListValueFrom(ctx, types.ObjectType{
-		AttrTypes: map[string]attr.Type{
-			"source":      types.StringType,
-			"destination": types.StringType,
-		},
-	}, files)
-	if diag.HasError() {
-		err = errors.New("failed to convert files to dynamic value")
-		return
-	}
-
-	localFiles, err := prepareLocalFiles(types.StringNull(), types.DynamicValue(filesValue))
+	localFiles, err := prepareLocalFiles(types.StringNull(), files)
 	if err != nil {
 		return
 	}

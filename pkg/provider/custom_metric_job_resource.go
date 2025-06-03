@@ -8,7 +8,6 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -208,19 +207,7 @@ func (r *CustomMetricJobResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	// Convert Files slice to Dynamic value for prepareLocalFiles
-	filesValue, filesDiags := types.ListValueFrom(ctx, types.ObjectType{
-		AttrTypes: map[string]attr.Type{
-			"source":      types.StringType,
-			"destination": types.StringType,
-		},
-	}, data.Files)
-	if filesDiags.HasError() {
-		resp.Diagnostics.Append(filesDiags...)
-		return
-	}
-
-	localFiles, err := prepareLocalFiles(data.FolderPath, types.DynamicValue(filesValue))
+	localFiles, err := prepareLocalFiles(data.FolderPath, data.Files)
 	if err != nil {
 		return
 	}
@@ -353,19 +340,7 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
-		// Convert Files slice to Dynamic value for prepareLocalFiles
-		filesValue, filesDiags := types.ListValueFrom(ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"source":      types.StringType,
-				"destination": types.StringType,
-			},
-		}, plan.Files)
-		if filesDiags.HasError() {
-			resp.Diagnostics.Append(filesDiags...)
-			return
-		}
-
-		localFiles, err := prepareLocalFiles(plan.FolderPath, types.DynamicValue(filesValue))
+		localFiles, err := prepareLocalFiles(plan.FolderPath, plan.Files)
 		if err != nil {
 			return
 		}
