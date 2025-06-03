@@ -19,7 +19,7 @@ func TestPrepareLocalFilesDeduplication(t *testing.T) {
 	// Create test files
 	testFile1 := filepath.Join(tmpDir, "test1.txt")
 	testFile2 := filepath.Join(tmpDir, "test2.txt")
-	
+
 	if err := os.WriteFile(testFile1, []byte("content1"), 0644); err != nil {
 		t.Fatalf("Failed to create test file 1: %v", err)
 	}
