@@ -14,8 +14,8 @@ Custom Application created from an Execution Environment.
 
 ```terraform
 resource "datarobot_custom_application_from_environment" "example" {
-  name           = "example custom application from environment"
-  environment_id = "6542cd582a9d3d51bf4ac71e"
+  name           = "example-custom-app-from-environment"
+  environment_id = datarobot_execution_environment.example.id
 
   # optional settings
   external_access_enabled = true
@@ -23,6 +23,13 @@ resource "datarobot_custom_application_from_environment" "example" {
     "recipient@example.com",
   ]
   allow_auto_stopping = false
+
+  resources {
+    replicas                          = 1
+    resource_label                    = "cpu.small"
+    session_affinity                  = false
+    service_web_requests_on_root_path = true
+  }
 }
 
 output "datarobot_custom_application_id" {
@@ -49,6 +56,7 @@ output "datarobot_custom_application_url" {
 - `allow_auto_stopping` (Boolean) Whether auto stopping is allowed for the Custom Application.
 - `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
 - `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
+- `resources` (Attributes) The resources for the Custom Application. (see [below for nested schema](#nestedatt--resources))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Application to.
 
 ### Read-Only
@@ -56,3 +64,13 @@ output "datarobot_custom_application_url" {
 - `application_url` (String) The URL of the Custom Application.
 - `environment_version_id` (String) The version ID of the Execution Environment used to create the Custom Application.
 - `id` (String) The ID of the Custom Application.
+
+<a id="nestedatt--resources"></a>
+### Nested Schema for `resources`
+
+Optional:
+
+- `replicas` (Number) The number of replicas for the Custom Application.
+- `resource_label` (String) The resource label for the Custom Application.
+- `service_web_requests_on_root_path` (Boolean) Whether to service web requests on the root path for the Custom Application.
+- `session_affinity` (Boolean) Whether session affinity is enabled for the Custom Application.
