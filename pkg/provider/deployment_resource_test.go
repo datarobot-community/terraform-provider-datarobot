@@ -94,7 +94,8 @@ runtimeParameterDefinitions:
 					false,
 					nil,
 					false,
-					"value", nil),
+					"initial_value",
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -107,7 +108,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "label", "example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "MODERATE"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "value"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "initial_value"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.1.value", "true"),
 					resource.TestCheckNoResourceAttr(resourceName, "predictions_by_forecast_date_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "challenger_models_settings"),
 					resource.TestCheckNoResourceAttr(resourceName, "segment_analysis_settings"),
@@ -156,6 +158,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "newValue"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.1.value", "true"),
 					resource.TestCheckResourceAttr(resourceName, "predictions_by_forecast_date_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
 					resource.TestCheckResourceAttr(resourceName, "segment_analysis_settings.enabled", "true"),
@@ -261,6 +264,7 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "label", "new_example_label"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "LOW"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "value"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.1.value", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
@@ -308,6 +312,37 @@ func deploymentResourceConfig(
 	useCaseIDsStr := ""
 	if useCaseResourceName != nil {
 		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
+	runtimeParameterValuesStr := ""
+	if runtimeParameterValue != "" {
+		runtimeParameterValuesStr = fmt.Sprintf(`
+	runtime_parameter_values = [
+		{
+			key = "STRING_PARAMETER"
+			type = "string"
+			value = "%s"
+		},
+		{
+			key = "BOOLEAN_PARAMETER"
+			type = "boolean"
+			value = "true"
+		}
+	]`, runtimeParameterValue)
+	} else {
+		runtimeParameterValuesStr = `
+	runtime_parameter_values = [
+		{
+			key = "STRING_PARAMETER"
+			type = "string"
+			value = "default"
+		},
+		{
+			key = "BOOLEAN_PARAMETER"
+			type = "boolean"
+			value = "true"
+		}
+	]`
 	}
 
 	deploymentSettings := ""
@@ -423,18 +458,6 @@ func deploymentResourceConfig(
 		}`
 
 		deploymentSettings += retrainingSettingsStr
-	}
-
-	runtimeParameterValuesStr := ""
-	if runtimeParameterValue != "" {
-		runtimeParameterValuesStr = fmt.Sprintf(`
-	runtime_parameter_values = [
-		{
-			key="STRING_PARAMETER",
-			type="string",
-			value="%s"
-		},
-	]`, runtimeParameterValue)
 	}
 
 	return fmt.Sprintf(`

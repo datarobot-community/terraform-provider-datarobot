@@ -500,7 +500,7 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 
 		for _, file := range fileTuples {
 			var fileInfo client.FileInfo
-			fileInfo, err = getFileInfo(file.LocalPath, file.PathInModel)
+			fileInfo, err = getFileInfo(file.Source.ValueString(), file.Destination.ValueString())
 			if err != nil {
 				return
 			}
@@ -546,8 +546,8 @@ func handleFilesAsListOrTuple(values []attr.Value) ([]FileTuple, error) {
 		case types.String:
 			filePath := v.ValueString()
 			fileTuples = append(fileTuples, FileTuple{
-				LocalPath:   filePath,
-				PathInModel: filepath.Base(filePath),
+				Source:      types.StringValue(filePath),
+				Destination: types.StringValue(filepath.Base(filePath)),
 			})
 		default:
 			return nil, errors.New("files must be a tuple of strings or lists/tuples")
@@ -576,8 +576,8 @@ func handleFileAsListOrTuple(values []attr.Value, fileTuples []FileTuple, i int)
 	}
 
 	fileTuples = append(fileTuples, FileTuple{
-		LocalPath:   localPath.ValueString(),
-		PathInModel: pathInModel,
+		Source:      localPath,
+		Destination: types.StringValue(pathInModel),
 	})
 
 	return fileTuples, nil
@@ -660,15 +660,16 @@ func computeFileHash(file string) (hash string, err error) {
 	return
 }
 
-func computeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.List, err error) {
+func computeFilesHashes(ctx context.Context, files []FileTuple) (hashes types.List, err error) {
 	hashValues := make([]string, 0)
-	localFiles, err := prepareLocalFiles(types.StringUnknown(), files)
-	if err != nil {
-		return
-	}
 
-	for _, file := range localFiles {
-		hashValues = append(hashValues, computeHash(file.Content))
+	for _, file := range files {
+		var hash string
+		hash, err = computeFileHash(file.Source.ValueString())
+		if err != nil {
+			return
+		}
+		hashValues = append(hashValues, hash)
 	}
 
 	// convert hashValues to types.List

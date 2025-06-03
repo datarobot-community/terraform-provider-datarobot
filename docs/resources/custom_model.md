@@ -88,7 +88,7 @@ output "example_id" {
 - `class_labels` (List of String) Class labels for multiclass classification. Cannot be used with class_labels_file.
 - `class_labels_file` (String) Path to file containing newline separated class labels for multiclass classification. Cannot be used with class_labels.
 - `description` (String) The description of the Custom Model.
-- `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.
+- `files` (Attributes List) List of files to upload, each with a source (local path) and destination (path in model). (see [below for nested schema](#nestedatt--files))
 - `folder_path` (String) The path to a folder containing files to build the Custom Model. Each file in the folder is uploaded under path relative to a folder path.
 - `guard_configurations` (Attributes List) The guard configurations for the Custom Model. (see [below for nested schema](#nestedatt--guard_configurations))
 - `is_proxy` (Boolean) Flag indicating if the Custom Model is a proxy model.
@@ -119,6 +119,15 @@ output "example_id" {
 - `training_dataset_name` (String) The name of the training dataset assigned to the Custom Model.
 - `training_dataset_version_id` (String) The version ID of the training dataset assigned to the Custom Model.
 - `version_id` (String) The ID of the latest Custom Model version.
+
+<a id="nestedatt--files"></a>
+### Nested Schema for `files`
+
+Required:
+
+- `destination` (String) Path in the model.
+- `source` (String) Local filesystem path.
+
 
 <a id="nestedatt--guard_configurations"></a>
 ### Nested Schema for `guard_configurations`

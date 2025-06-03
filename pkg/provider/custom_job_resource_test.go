@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -232,21 +233,25 @@ runtimeParameterDefinitions:
 					name,
 					description,
 					defaultJobType,
-					&folderPath,
 					nil,
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					noneEgressNetworkPolicy,
-					nil),
+					nil,
+				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomJobResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "description", description),
 					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
-					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", noneEgressNetworkPolicy),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
 				),
 			},
 			// Update name, description, and files
@@ -262,7 +267,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					publicEgressNetworkPolicy,
 					nil),
@@ -272,7 +280,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
 					resource.TestCheckNoResourceAttr(resourceName, "folder_path"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "environment_version_id"),
@@ -295,7 +304,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -303,7 +315,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckResourceAttr(resourceName, "job_type", defaultJobType),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
@@ -325,7 +338,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					notificationJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -333,7 +349,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckResourceAttr(resourceName, "job_type", notificationJobType),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
@@ -356,7 +373,10 @@ runtimeParameterDefinitions:
 					description,
 					defaultJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					nil,
 					noneEgressNetworkPolicy,
 					schedule,
@@ -386,7 +406,10 @@ runtimeParameterDefinitions:
 					newDescription,
 					retrainingJobType,
 					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + metadataFileName, PathInModel: metadataFileName}},
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + metadataFileName),
+						Destination: types.StringValue(metadataFileName),
+					}},
 					&runtimeParameters,
 					publicEgressNetworkPolicy, nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -394,7 +417,8 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", newDescription),
 					resource.TestCheckResourceAttr(resourceName, "job_type", retrainingJobType),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "OPENAI_API_BASE"),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
 					resource.TestCheckResourceAttr(resourceName, "egress_network_policy", publicEgressNetworkPolicy),
@@ -426,18 +450,16 @@ func customJobResourceConfig(
 
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = "files = ["
+		var fileLines []string
 		for _, file := range files {
-			if file.PathInModel != "" {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
-
-		filesStr += "]"
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
 	}
 
 	runtimeParametersStr := ""
