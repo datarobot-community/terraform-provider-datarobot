@@ -464,7 +464,7 @@ func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues [
 		}, runtimeParameterValues)
 }
 
-func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles []client.FileInfo, err error) {
+func prepareLocalFiles(folderPath types.String, files []FileTuple) (localFiles []client.FileInfo, err error) {
 	localFiles = make([]client.FileInfo, 0)
 
 	if IsKnown(folderPath) {
@@ -491,14 +491,8 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 		}
 	}
 
-	if IsKnown(files) && files.UnderlyingValue() != nil && IsKnown(files.UnderlyingValue()) {
-		var fileTuples []FileTuple
-		fileTuples, err = formatFiles(files)
-		if err != nil {
-			return
-		}
-
-		for _, file := range fileTuples {
+	if len(files) > 0 {
+		for _, file := range files {
 			var fileInfo client.FileInfo
 			fileInfo, err = getFileInfo(file.Source.ValueString(), file.Destination.ValueString())
 			if err != nil {
@@ -510,77 +504,6 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 	}
 
 	return
-}
-
-func formatFiles(files types.Dynamic) ([]FileTuple, error) {
-	switch value := files.UnderlyingValue().(type) {
-	case types.List:
-		return handleFilesAsListOrTuple(value.Elements())
-	case types.Tuple:
-		return handleFilesAsListOrTuple(value.Elements())
-	default:
-		return nil, errors.New("files must be a list/tuple")
-	}
-}
-
-func handleFilesAsListOrTuple(values []attr.Value) ([]FileTuple, error) {
-	fileTuples := make([]FileTuple, 0)
-	if len(values) == 0 {
-		return fileTuples, nil
-	}
-
-	for i, item := range values {
-		switch v := item.(type) {
-		case types.List:
-			var err error
-			fileTuples, err = handleFileAsListOrTuple(v.Elements(), fileTuples, i)
-			if err != nil {
-				return nil, err
-			}
-		case types.Tuple:
-			var err error
-			fileTuples, err = handleFileAsListOrTuple(v.Elements(), fileTuples, i)
-			if err != nil {
-				return nil, err
-			}
-		case types.String:
-			filePath := v.ValueString()
-			fileTuples = append(fileTuples, FileTuple{
-				Source:      types.StringValue(filePath),
-				Destination: types.StringValue(filepath.Base(filePath)),
-			})
-		default:
-			return nil, errors.New("files must be a tuple of strings or lists/tuples")
-		}
-	}
-
-	return fileTuples, nil
-}
-
-func handleFileAsListOrTuple(values []attr.Value, fileTuples []FileTuple, i int) ([]FileTuple, error) {
-	if len(values) < 1 || len(values) > 2 {
-		return nil, fmt.Errorf("files[%d] must have 1 or 2 elements", i)
-	}
-
-	localPath, ok := values[0].(types.String)
-	if !ok {
-		return nil, fmt.Errorf("files[%d] has element that is not a string", i)
-	}
-	pathInModel := filepath.Base(localPath.ValueString())
-	if len(values) == 2 {
-		modelPath, ok := values[1].(types.String)
-		if !ok {
-			return nil, fmt.Errorf("files[%d] has element that is not a string", i)
-		}
-		pathInModel = modelPath.ValueString()
-	}
-
-	fileTuples = append(fileTuples, FileTuple{
-		Source:      localPath,
-		Destination: types.StringValue(pathInModel),
-	})
-
-	return fileTuples, nil
 }
 
 func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err error) {
