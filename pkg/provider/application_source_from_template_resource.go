@@ -623,7 +623,7 @@ func (r *ApplicationSourceFromTemplateResource) addLocalFilesToApplicationSource
 		},
 	}, files)
 	if diag.HasError() {
-		err = errors.New("Failed to convert files to dynamic value")
+		err = errors.New("failed to convert files to dynamic value")
 		return
 	}
 
