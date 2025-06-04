@@ -1597,3 +1597,140 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 		return fmt.Errorf("Custom Model not found")
 	}
 }
+
+// TestAccCustomModelWithManyFilesResource tests the batching functionality when uploading
+// more than 100 files (the API limit per batch). This ensures that prepareLocalFiles
+// correctly handles large numbers of files by batching them into groups of 100.
+func TestAccCustomModelWithManyFilesResource(t *testing.T) {
+	t.Parallel()
+
+	resourceType := "datarobot_custom_model"
+	resourceTestName := "test_many_files"
+	resourceName := resourceType + "." + resourceTestName
+
+	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+
+	// Create a temporary directory for our test files
+	testDir := "test_many_files_dir"
+	err := os.Mkdir(testDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create 150 small test files to exceed the 100-file batch limit
+	totalFiles := 150
+	files := make([]FileTuple, totalFiles)
+
+	for i := 0; i < totalFiles; i++ {
+		fileName := fmt.Sprintf("test_file_%03d.txt", i)
+		filePath := testDir + "/" + fileName
+		content := fmt.Sprintf("Test file content %d\nLine 2", i)
+
+		err = os.WriteFile(filePath, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		files[i] = FileTuple{
+			Source:      types.StringValue(filePath),
+			Destination: types.StringValue(fileName),
+		}
+	}
+
+	// Also create a main requirements file for the custom model
+	requirementsFile := testDir + "/requirements.txt"
+	err = os.WriteFile(requirementsFile, []byte("langchain == 0.2.8"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add requirements.txt to the files list
+	files = append(files, FileTuple{
+		Source:      types.StringValue(requirementsFile),
+		Destination: types.StringValue("requirements.txt"),
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read with many files
+			{
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
+					"many_files_model",
+					"Custom model with many files to test batching",
+					baseEnvironmentID,
+					nil,
+					nil,
+					files,
+					nil,
+					nil,
+					false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "many_files_model"),
+					resource.TestCheckResourceAttr(resourceName, "description", "Custom model with many files to test batching"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "document"),
+					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
+					// Check that we have the expected number of files (150 + requirements.txt = 151)
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles), requirementsFile),
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles), "requirements.txt"),
+					// Check a few specific files to ensure they were uploaded correctly
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", testDir+"/test_file_000.txt"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", "test_file_000.txt"),
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles-1), fmt.Sprintf("%s/test_file_%03d.txt", testDir, totalFiles-1)),
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles-1), fmt.Sprintf("test_file_%03d.txt", totalFiles-1)),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update files (add a few more to test update batching)
+			{
+				PreConfig: func() {
+					// Add a few more files to test update batching
+					for i := totalFiles; i < totalFiles+10; i++ {
+						fileName := fmt.Sprintf("new_test_file_%03d.txt", i)
+						filePath := testDir + "/" + fileName
+						content := fmt.Sprintf("New test file content %d\nAdded in update", i)
+
+						err := os.WriteFile(filePath, []byte(content), 0644)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						files = append(files, FileTuple{
+							Source:      types.StringValue(filePath),
+							Destination: types.StringValue(fileName),
+						})
+					}
+				},
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
+					"many_files_model_updated",
+					"Custom model with many files to test batching - updated",
+					baseEnvironmentID,
+					nil,
+					nil,
+					files,
+					nil,
+					nil,
+					false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "many_files_model_updated"),
+					resource.TestCheckResourceAttr(resourceName, "description", "Custom model with many files to test batching - updated"),
+					// Check that new files were added
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles+5), testDir+"/new_test_file_155.txt"),
+					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles+5), "new_test_file_155.txt"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
