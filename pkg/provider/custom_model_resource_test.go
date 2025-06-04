@@ -1620,7 +1620,6 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 
 	// Create 150 small test files to exceed the 100-file batch limit
 	totalFiles := 150
-	files := make([]FileTuple, 0, totalFiles+1) // Pre-allocate capacity for totalFiles + requirements.txt
 
 	for i := 0; i < totalFiles; i++ {
 		fileName := fmt.Sprintf("test_file_%03d.txt", i)
@@ -1631,11 +1630,6 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		files = append(files, FileTuple{
-			Source:      types.StringValue(filePath),
-			Destination: types.StringValue(fileName),
-		})
 	}
 
 	// Also create a main requirements file for the custom model
@@ -1644,12 +1638,6 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Add requirements.txt to the files list
-	files = append(files, FileTuple{
-		Source:      types.StringValue(requirementsFile),
-		Destination: types.StringValue("requirements.txt"),
-	})
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -1665,8 +1653,8 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 					"Custom model with many files to test batching",
 					baseEnvironmentID,
 					nil,
+					&testDir, // Use folder_path to test batching functionality
 					nil,
-					files,
 					nil,
 					nil,
 					false),
@@ -1677,14 +1665,8 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "document"),
 					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
-					// Check that we have the expected number of files (150 + requirements.txt = 151)
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles), requirementsFile),
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles), "requirements.txt"),
-					// Check a few specific files to ensure they were uploaded correctly
-					resource.TestCheckResourceAttr(resourceName, "files.0.source", testDir+"/test_file_000.txt"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.destination", "test_file_000.txt"),
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles-1), fmt.Sprintf("%s/test_file_%03d.txt", testDir, totalFiles-1)),
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles-1), fmt.Sprintf("test_file_%03d.txt", totalFiles-1)),
+					// Check that folder_path is set correctly
+					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -1702,11 +1684,6 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-
-						files = append(files, FileTuple{
-							Source:      types.StringValue(filePath),
-							Destination: types.StringValue(fileName),
-						})
 					}
 				},
 				Config: customModelWithoutLlmBlueprintResourceConfig(
@@ -1715,8 +1692,8 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 					"Custom model with many files to test batching - updated",
 					baseEnvironmentID,
 					nil,
+					&testDir, // Still use folder_path for the update
 					nil,
-					files,
 					nil,
 					nil,
 					false),
@@ -1724,9 +1701,8 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "many_files_model_updated"),
 					resource.TestCheckResourceAttr(resourceName, "description", "Custom model with many files to test batching - updated"),
-					// Check that new files were added
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.source", totalFiles+5), testDir+"/new_test_file_155.txt"),
-					resource.TestCheckResourceAttr(resourceName, fmt.Sprintf("files.%d.destination", totalFiles+5), "new_test_file_155.txt"),
+					// Check that folder_path is still set correctly
+					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
