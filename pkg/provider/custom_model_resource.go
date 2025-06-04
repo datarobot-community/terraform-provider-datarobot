@@ -25,6 +25,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -569,16 +570,24 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModelID,
-		baseEnvironmentID,
-	)
-	if err != nil {
-		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
-		return
+	// Only create version from files if there are files to upload
+	if IsKnown(plan.FolderPath) || len(plan.Files) > 0 {
+		tflog.Debug(ctx, "Creating Custom Model version from files",
+			map[string]interface{}{
+				"folder_path": plan.FolderPath,
+				"files":       plan.Files,
+			})
+		err := r.createCustomModelVersionFromFiles(
+			ctx,
+			plan.FolderPath,
+			plan.Files,
+			customModelID,
+			baseEnvironmentID,
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
+			return
+		}
 	}
 
 	traceAPICall("WaitForCustomModelToBeReady")
@@ -1695,14 +1704,17 @@ func (r *CustomModelResource) updateLocalFiles(
 			}
 		}
 
-		if err = r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.FolderPath,
-			plan.Files,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		); err != nil {
-			return
+		// Only create version from files if there are files to upload
+		if IsKnown(plan.FolderPath) || len(plan.Files) > 0 {
+			if err = r.createCustomModelVersionFromFiles(
+				ctx,
+				plan.FolderPath,
+				plan.Files,
+				customModel.ID,
+				customModel.LatestVersion.BaseEnvironmentID,
+			); err != nil {
+				return
+			}
 		}
 
 		state.Files = plan.Files
