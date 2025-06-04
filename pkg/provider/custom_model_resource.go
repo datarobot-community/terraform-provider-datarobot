@@ -1255,26 +1255,26 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		return
 	}
 
-	// Batch file uploads in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(localFiles); i += batchSize {
-		end := i + batchSize
-		if end > len(localFiles) {
-			end = len(localFiles)
-		}
-
-		batchToUpload := localFiles[i:end]
-		if len(batchToUpload) > 0 {
-			traceAPICall("CreateCustomModelVersionFromLocalFiles")
-			_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
-				BaseEnvironmentID: baseEnvironmentID,
-				Files:             batchToUpload,
-			})
-			if err != nil {
-				return
-			}
-		}
+	// DataRobot API has a hard limit of 100 files per custom model version
+	// For applications with >100 files, use application sources instead
+	const maxFiles = 100
+	if len(localFiles) > maxFiles {
+		return fmt.Errorf("exceeded file limit: %d files provided, maximum allowed is %d. For applications with more than 100 files, use application sources instead of custom models", len(localFiles), maxFiles)
 	}
+
+	if len(localFiles) == 0 {
+		return fmt.Errorf("no files found to upload")
+	}
+
+	traceAPICall("CreateCustomModelVersionFromFiles")
+	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
+		BaseEnvironmentID: baseEnvironmentID,
+		Files:             localFiles,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create custom model version: %w", err)
+	}
+
 	return
 }
 

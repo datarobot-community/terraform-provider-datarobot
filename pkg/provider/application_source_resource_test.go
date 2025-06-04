@@ -508,3 +508,77 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 		return fmt.Errorf("Application Source not found")
 	}
 }
+
+// TestAccApplicationSourceWithManyFilesResource tests that application sources can handle >100 files
+// by using batching to upload files in groups of 100.
+func TestAccApplicationSourceWithManyFilesResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_application_source.test"
+
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e" // Common base environment ID
+
+	// Create a temporary directory for our test files
+	testDir := "test_many_files_application_source"
+	err := os.Mkdir(testDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create 150 files to test batching (exceeds 100 file limit)
+	totalFiles := 150
+
+	for i := 0; i < totalFiles; i++ {
+		fileName := fmt.Sprintf("test_file_%03d.txt", i)
+		filePath := testDir + "/" + fileName
+		content := fmt.Sprintf("Application source test file content %d\nLine 2", i)
+
+		err = os.WriteFile(filePath, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create required metadata.yaml file
+	metadataFile := testDir + "/metadata.yaml"
+	metadata := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: An example of a string parameter`
+
+	err = os.WriteFile(metadataFile, []byte(metadata), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create application source with >100 files - should succeed with batching
+			{
+				Config: applicationSourceResourceConfig(
+					"application_source_with_many_files",
+					&baseEnvironmentID,
+					nil,
+					nil,
+					&testDir, // Use folder_path with >100 files
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "application_source_with_many_files"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+				),
+			},
+		},
+	})
+}
