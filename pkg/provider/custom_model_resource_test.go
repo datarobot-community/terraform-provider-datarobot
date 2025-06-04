@@ -1620,7 +1620,7 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 
 	// Create 150 small test files to exceed the 100-file batch limit
 	totalFiles := 150
-	files := make([]FileTuple, totalFiles)
+	files := make([]FileTuple, 0, totalFiles+1) // Pre-allocate capacity for totalFiles + requirements.txt
 
 	for i := 0; i < totalFiles; i++ {
 		fileName := fmt.Sprintf("test_file_%03d.txt", i)
@@ -1632,10 +1632,10 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		files[i] = FileTuple{
+		files = append(files, FileTuple{
 			Source:      types.StringValue(filePath),
 			Destination: types.StringValue(fileName),
-		}
+		})
 	}
 
 	// Also create a main requirements file for the custom model
