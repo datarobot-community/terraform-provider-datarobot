@@ -1656,7 +1656,7 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 					nil,
 					nil,
 					false),
-				ExpectError: regexp.MustCompile("exceeded file limit: \\d+ files provided, maximum allowed is 100\\. For\\s+applications with more than 100 files, use application sources instead\\s+of\\s+custom models"),
+				ExpectError: regexp.MustCompile(`exceeded file limit: \d+ files provided, maximum allowed is 100\. For\s+applications with more than 100 files, use application sources instead\s+of\s+custom models`),
 			},
 		},
 	})
