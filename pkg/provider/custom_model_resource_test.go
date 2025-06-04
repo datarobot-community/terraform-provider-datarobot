@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1598,15 +1599,12 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 	}
 }
 
-// TestAccCustomModelWithManyFilesResource tests the batching functionality when uploading
-// more than 100 files (the API limit per batch). This ensures that prepareLocalFiles
-// correctly handles large numbers of files by batching them into groups of 100.
+// TestAccCustomModelWithManyFilesResource tests that custom models properly error
+// when more than 100 files are provided, directing users to use application sources instead.
 func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 	t.Parallel()
 
-	resourceType := "datarobot_custom_model"
 	resourceTestName := "test_many_files"
-	resourceName := resourceType + "." + resourceTestName
 
 	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
 
@@ -1618,8 +1616,8 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 	}
 	defer os.RemoveAll(testDir)
 
-	// Create 150 small test files to exceed the 100-file batch limit
-	totalFiles := 150
+	// Create 101 files + requirements.txt = 102 total to exceed the 100 file limit
+	totalFiles := 101
 
 	for i := 0; i < totalFiles; i++ {
 		fileName := fmt.Sprintf("test_file_%03d.txt", i)
@@ -1645,68 +1643,21 @@ func TestAccCustomModelWithManyFilesResource(t *testing.T) {
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Create and Read with many files
+			// Attempt to create custom model with >100 files should fail
 			{
 				Config: customModelWithoutLlmBlueprintResourceConfig(
 					resourceTestName,
 					"many_files_model",
-					"Custom model with many files to test batching",
+					"Custom model with many files should fail",
 					baseEnvironmentID,
 					nil,
-					&testDir, // Use folder_path to test batching functionality
+					&testDir, // Use folder_path with >100 files
 					nil,
 					nil,
 					nil,
 					false),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "many_files_model"),
-					resource.TestCheckResourceAttr(resourceName, "description", "Custom model with many files to test batching"),
-					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
-					resource.TestCheckResourceAttr(resourceName, "target_name", "document"),
-					resource.TestCheckResourceAttr(resourceName, "language", "Python"),
-					// Check that folder_path is set correctly
-					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-				),
+				ExpectError: regexp.MustCompile("exceeded file limit: \\d+ files provided, maximum allowed is 100\\. For\\s+applications with more than 100 files, use application sources instead\\s+of\\s+custom models"),
 			},
-			// Update files (add a few more to test update batching)
-			{
-				PreConfig: func() {
-					// Add a few more files to test update batching
-					for i := totalFiles; i < totalFiles+10; i++ {
-						fileName := fmt.Sprintf("new_test_file_%03d.txt", i)
-						filePath := testDir + "/" + fileName
-						content := fmt.Sprintf("New test file content %d\nAdded in update", i)
-
-						err := os.WriteFile(filePath, []byte(content), 0644)
-						if err != nil {
-							t.Fatal(err)
-						}
-					}
-				},
-				Config: customModelWithoutLlmBlueprintResourceConfig(
-					resourceTestName,
-					"many_files_model_updated",
-					"Custom model with many files to test batching - updated",
-					baseEnvironmentID,
-					nil,
-					&testDir, // Still use folder_path for the update
-					nil,
-					nil,
-					nil,
-					false),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckResourceAttr(resourceName, "name", "many_files_model_updated"),
-					resource.TestCheckResourceAttr(resourceName, "description", "Custom model with many files to test batching - updated"),
-					// Check that folder_path is still set correctly
-					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
-					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-				),
-			},
-			// Delete is tested automatically
 		},
 	})
 }

@@ -617,7 +617,23 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 		return
 	}
 
-	_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, localFiles)
+	// Batch file uploads in groups of 100 to avoid API limits
+	const batchSize = 100
+	for i := 0; i < len(localFiles); i += batchSize {
+		end := i + batchSize
+		if end > len(localFiles) {
+			end = len(localFiles)
+		}
+
+		batch := localFiles[i:end]
+		if len(batch) > 0 {
+			_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, batch)
+			if err != nil {
+				return
+			}
+		}
+	}
+
 	return
 }
 
