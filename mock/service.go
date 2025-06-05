@@ -64,6 +64,21 @@ func (mr *MockServiceMockRecorder) AddEntityToUseCase(ctx, useCaseID, entityType
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddEntityToUseCase", reflect.TypeOf((*MockService)(nil).AddEntityToUseCase), ctx, useCaseID, entityType, entityID)
 }
 
+// CreateAppOAuthProvider mocks base method.
+func (m *MockService) CreateAppOAuthProvider(ctx context.Context, req *client.CreateAppOAuthProviderRequest) (*client.AppOAuthProviderResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateAppOAuthProvider", ctx, req)
+	ret0, _ := ret[0].(*client.AppOAuthProviderResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateAppOAuthProvider indicates an expected call of CreateAppOAuthProvider.
+func (mr *MockServiceMockRecorder) CreateAppOAuthProvider(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppOAuthProvider", reflect.TypeOf((*MockService)(nil).CreateAppOAuthProvider), ctx, req)
+}
+
 // CreateApplicationSource mocks base method.
 func (m *MockService) CreateApplicationSource(ctx context.Context) (*client.ApplicationSource, error) {
 	m.ctrl.T.Helper()
@@ -167,6 +182,21 @@ func (m *MockService) CreateCustomJob(ctx context.Context, req *client.CreateCus
 func (mr *MockServiceMockRecorder) CreateCustomJob(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJob", reflect.TypeOf((*MockService)(nil).CreateCustomJob), ctx, req)
+}
+
+// CreateCustomJobSchedule mocks base method.
+func (m *MockService) CreateCustomJobSchedule(ctx context.Context, id string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomJobSchedule", ctx, id, req)
+	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCustomJobSchedule indicates an expected call of CreateCustomJobSchedule.
+func (mr *MockServiceMockRecorder) CreateCustomJobSchedule(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).CreateCustomJobSchedule), ctx, id, req)
 }
 
 // CreateCustomMetric mocks base method.
@@ -667,6 +697,20 @@ func (mr *MockServiceMockRecorder) DeactivateDeployment(ctx, id interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateDeployment", reflect.TypeOf((*MockService)(nil).DeactivateDeployment), ctx, id)
 }
 
+// DeleteAppOAuthProvider mocks base method.
+func (m *MockService) DeleteAppOAuthProvider(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteAppOAuthProvider", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAppOAuthProvider indicates an expected call of DeleteAppOAuthProvider.
+func (mr *MockServiceMockRecorder) DeleteAppOAuthProvider(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAppOAuthProvider", reflect.TypeOf((*MockService)(nil).DeleteAppOAuthProvider), ctx, id)
+}
+
 // DeleteApplication mocks base method.
 func (m *MockService) DeleteApplication(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -735,6 +779,20 @@ func (m *MockService) DeleteCustomJob(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteCustomJob(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJob", reflect.TypeOf((*MockService)(nil).DeleteCustomJob), ctx, id)
+}
+
+// DeleteCustomJobSchedule mocks base method.
+func (m *MockService) DeleteCustomJobSchedule(ctx context.Context, id, scheduleID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCustomJobSchedule", ctx, id, scheduleID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteCustomJobSchedule indicates an expected call of DeleteCustomJobSchedule.
+func (mr *MockServiceMockRecorder) DeleteCustomJobSchedule(ctx, id, scheduleID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJobSchedule", reflect.TypeOf((*MockService)(nil).DeleteCustomJobSchedule), ctx, id, scheduleID)
 }
 
 // DeleteCustomMetric mocks base method.
@@ -1001,6 +1059,21 @@ func (m *MockService) DeleteVectorDatabase(ctx context.Context, id string) error
 func (mr *MockServiceMockRecorder) DeleteVectorDatabase(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVectorDatabase", reflect.TypeOf((*MockService)(nil).DeleteVectorDatabase), ctx, id)
+}
+
+// GetAppOAuthProvider mocks base method.
+func (m *MockService) GetAppOAuthProvider(ctx context.Context, id string) (*client.AppOAuthProviderResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAppOAuthProvider", ctx, id)
+	ret0, _ := ret[0].(*client.AppOAuthProviderResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAppOAuthProvider indicates an expected call of GetAppOAuthProvider.
+func (mr *MockServiceMockRecorder) GetAppOAuthProvider(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAppOAuthProvider", reflect.TypeOf((*MockService)(nil).GetAppOAuthProvider), ctx, id)
 }
 
 // GetApplication mocks base method.
@@ -1286,6 +1359,21 @@ func (m *MockService) GetDeploymentHealthSettings(ctx context.Context, id string
 func (mr *MockServiceMockRecorder) GetDeploymentHealthSettings(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentHealthSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentHealthSettings), ctx, id)
+}
+
+// GetDeploymentRetrainingSettings mocks base method.
+func (m *MockService) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*client.RetrainingSettingsRetrieve, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentRetrainingSettings", ctx, deploymentID)
+	ret0, _ := ret[0].(*client.RetrainingSettingsRetrieve)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentRetrainingSettings indicates an expected call of GetDeploymentRetrainingSettings.
+func (mr *MockServiceMockRecorder) GetDeploymentRetrainingSettings(ctx, deploymentID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentRetrainingSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentRetrainingSettings), ctx, deploymentID)
 }
 
 // GetDeploymentSettings mocks base method.
@@ -1723,50 +1811,6 @@ func (mr *MockServiceMockRecorder) ListCustomJobSchedules(ctx, id interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomJobSchedules", reflect.TypeOf((*MockService)(nil).ListCustomJobSchedules), ctx, id)
 }
 
-// CreateCustomJobSchedule mocks base method.
-func (m *MockService) CreateCustomJobSchedule(ctx context.Context, id string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateCustomJobSchedule", ctx, id, req)
-	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateCustomJobSchedule indicates an expected call of CreateCustomJobSchedule.
-func (mr *MockServiceMockRecorder) CreateCustomJobSchedule(ctx, id, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).CreateCustomJobSchedule), ctx, id, req)
-}
-
-// DeleteCustomJobSchedule mocks base method.
-func (m *MockService) DeleteCustomJobSchedule(ctx context.Context, id string, scheduleID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteCustomJobSchedule", ctx, id, scheduleID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteCustomJobSchedule indicates an expected call of DeleteCustomJobSchedule.
-func (mr *MockServiceMockRecorder) DeleteCustomJobSchedule(ctx, id, scheduleID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCustomJobSchedule", reflect.TypeOf((*MockService)(nil).DeleteCustomJobSchedule), ctx, id, scheduleID)
-}
-
-// UpdateCustomJobSchedule mocks base method.
-func (m *MockService) UpdateCustomJobSchedule(ctx context.Context, id string, scheduleID string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateCustomJobSchedule", ctx, id, scheduleID, req)
-	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateCustomJobSchedule indicates an expected call of UpdateCustomJobSchedule.
-func (mr *MockServiceMockRecorder) UpdateCustomJobSchedule(ctx, id, scheduleID, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).UpdateCustomJobSchedule), ctx, id, scheduleID, req)
-}
-
 // ListCustomModelVersions mocks base method.
 func (m *MockService) ListCustomModelVersions(ctx context.Context, id string) ([]client.CustomModelVersion, error) {
 	m.ctrl.T.Helper()
@@ -1961,6 +2005,21 @@ func (mr *MockServiceMockRecorder) TestDataStoreConnection(ctx, id, req interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestDataStoreConnection", reflect.TypeOf((*MockService)(nil).TestDataStoreConnection), ctx, id, req)
 }
 
+// UpdateAppOAuthProvider mocks base method.
+func (m *MockService) UpdateAppOAuthProvider(ctx context.Context, id string, req *client.UpdateAppOAuthProviderRequest) (*client.AppOAuthProviderResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateAppOAuthProvider", ctx, id, req)
+	ret0, _ := ret[0].(*client.AppOAuthProviderResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateAppOAuthProvider indicates an expected call of UpdateAppOAuthProvider.
+func (mr *MockServiceMockRecorder) UpdateAppOAuthProvider(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAppOAuthProvider", reflect.TypeOf((*MockService)(nil).UpdateAppOAuthProvider), ctx, id, req)
+}
+
 // UpdateApplication mocks base method.
 func (m *MockService) UpdateApplication(ctx context.Context, id string, req *client.UpdateApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
@@ -2079,6 +2138,21 @@ func (m *MockService) UpdateCustomJobFiles(ctx context.Context, id string, files
 func (mr *MockServiceMockRecorder) UpdateCustomJobFiles(ctx, id, files interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobFiles", reflect.TypeOf((*MockService)(nil).UpdateCustomJobFiles), ctx, id, files)
+}
+
+// UpdateCustomJobSchedule mocks base method.
+func (m *MockService) UpdateCustomJobSchedule(ctx context.Context, id, scheduleID string, req client.CreateaCustomJobScheduleRequest) (*client.CustomJobScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCustomJobSchedule", ctx, id, scheduleID, req)
+	ret0, _ := ret[0].(*client.CustomJobScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCustomJobSchedule indicates an expected call of UpdateCustomJobSchedule.
+func (mr *MockServiceMockRecorder) UpdateCustomJobSchedule(ctx, id, scheduleID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCustomJobSchedule", reflect.TypeOf((*MockService)(nil).UpdateCustomJobSchedule), ctx, id, scheduleID, req)
 }
 
 // UpdateCustomMetric mocks base method.
@@ -2252,15 +2326,6 @@ func (m *MockService) UpdateDeploymentRetrainingSettings(ctx context.Context, de
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateDeploymentRetrainingSettings", ctx, deploymentID, req)
 	ret0, _ := ret[0].(*client.RetrainingSettings)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDeploymentRetrainingSettings mocks base method.
-func (m *MockService) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*client.RetrainingSettingsRetrieve, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDeploymentRetrainingSettings", ctx, deploymentID)
-	ret0, _ := ret[0].(*client.RetrainingSettingsRetrieve)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
