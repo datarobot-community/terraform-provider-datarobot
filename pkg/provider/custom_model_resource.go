@@ -25,6 +25,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -222,9 +223,21 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The hash of the folder path contents.",
 			},
-			"files": schema.DynamicAttribute{
+			"files": schema.ListNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Custom Model. If list is of strings, then basenames will be used for tuples.",
+				MarkdownDescription: "List of files to upload, each with a source (local path) and destination (path in model).",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"source": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Local filesystem path.",
+						},
+						"destination": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Path in the model.",
+						},
+					},
+				},
 			},
 			"files_hashes": schema.ListAttribute{
 				Computed:            true,
@@ -557,15 +570,24 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModelID,
-		baseEnvironmentID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
-		return
+	// Only create version from files if there are files to upload
+	if IsKnown(plan.FolderPath) || len(plan.Files) > 0 {
+		tflog.Debug(ctx, "Creating Custom Model version from files",
+			map[string]interface{}{
+				"folder_path": plan.FolderPath,
+				"files":       plan.Files,
+			})
+		err := r.createCustomModelVersionFromFiles(
+			ctx,
+			plan.FolderPath,
+			plan.Files,
+			customModelID,
+			baseEnvironmentID,
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
+			return
+		}
 	}
 
 	traceAPICall("WaitForCustomModelToBeReady")
@@ -1231,7 +1253,7 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 func (r *CustomModelResource) createCustomModelVersionFromFiles(
 	ctx context.Context,
 	folderPath types.String,
-	files types.Dynamic,
+	files []FileTuple,
 	customModelID string,
 	baseEnvironmentID string,
 ) (
@@ -1242,13 +1264,24 @@ func (r *CustomModelResource) createCustomModelVersionFromFiles(
 		return
 	}
 
-	traceAPICall("CreateCustomModelVersionFromLocalFiles")
+	// DataRobot API has a hard limit of 100 files per custom model version
+	// For applications with >100 files, use application sources instead
+	const maxFiles = 100
+	if len(localFiles) > maxFiles {
+		return fmt.Errorf("exceeded file limit: %d files provided, maximum allowed is %d. For applications with more than 100 files, use application sources instead of custom models", len(localFiles), maxFiles)
+	}
+
+	if len(localFiles) == 0 {
+		return fmt.Errorf("no files found to upload")
+	}
+
+	traceAPICall("CreateCustomModelVersionFromFiles")
 	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
 		BaseEnvironmentID: baseEnvironmentID,
 		Files:             localFiles,
 	})
 	if err != nil {
-		return
+		return fmt.Errorf("failed to create custom model version: %w", err)
 	}
 
 	return
@@ -1671,14 +1704,17 @@ func (r *CustomModelResource) updateLocalFiles(
 			}
 		}
 
-		if err = r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.FolderPath,
-			plan.Files,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		); err != nil {
-			return
+		// Only create version from files if there are files to upload
+		if IsKnown(plan.FolderPath) || len(plan.Files) > 0 {
+			if err = r.createCustomModelVersionFromFiles(
+				ctx,
+				plan.FolderPath,
+				plan.Files,
+				customModel.ID,
+				customModel.LatestVersion.BaseEnvironmentID,
+			); err != nil {
+				return
+			}
 		}
 
 		state.Files = plan.Files

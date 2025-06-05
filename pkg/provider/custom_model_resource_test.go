@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -93,6 +94,17 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = os.Mkdir("new_dir", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("new_dir")
+
+	err = os.WriteFile("new_dir/"+fileName, []byte(`langchain == 0.2.9`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
 			Ref:         basetypes.NewStringValue("master"),
@@ -113,8 +125,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					baseEnvironmentID,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source:      types.StringValue(folderPath + "/" + fileName),
+						Destination: types.StringValue(fileName),
+					}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -186,7 +201,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "source_remote_repositories.0.id"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.ref", "master"),
 					resource.TestCheckResourceAttr(resourceName, "source_remote_repositories.0.source_paths.0", "custom_inference/python/gan_mnist/custom.py"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", fileName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Rouge 1"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Rouge 1 response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -220,8 +236,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"example_description",
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source:      types.StringValue("new_dir/" + fileName),
+						Destination: types.StringValue("new_dir/" + fileName),
+					}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -285,7 +304,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", "new_dir/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", "new_dir/"+fileName),
 				),
 			},
 			// Remove guards
@@ -296,8 +316,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -325,8 +347,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							SourcePaths: []basetypes.StringValue{basetypes.NewStringValue("custom_inference/python/gan_mnist/gan_weights.h5")},
 						},
 					},
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -351,8 +375,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID2,
 					nil,
-					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source: types.StringValue(fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -375,8 +401,10 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					"new_example_description",
 					baseEnvironmentID,
 					nil,
-					nil,
-					[]FileTuple{{LocalPath: folderPath + "/" + fileName}},
+					&folderPath,
+					[]FileTuple{{
+						Source: types.StringValue(folderPath + "/" + fileName),
+					}},
 					nil,
 					nil,
 					false),
@@ -389,7 +417,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", folderPath+"/"+fileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", folderPath+"/"+fileName),
 				),
 			},
 			// Remove files, add folder path
@@ -417,7 +446,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.destination"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 				),
@@ -1156,18 +1186,16 @@ func customModelWithoutLlmBlueprintResourceConfig(
 
 	filesStr := ""
 	if len(files) > 0 {
-		filesStr = "files = ["
+		var fileLines []string
 		for _, file := range files {
-			if file.PathInModel != "" {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
 			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
 			}
 		}
-
-		filesStr += "]"
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
 	}
 
 	guardsStr := ""
@@ -1300,6 +1328,12 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		target_name              = "target"
 		base_environment_id      = "65f9b27eab986d30d4c64268"
 		folder_path 			 = "custom_model_with_runtime_params"
+		files = [
+			{
+				source = "custom_model_with_runtime_params/model-metadata.yaml",
+				destination = "model-metadata.yaml"
+			}
+		]
 		runtime_parameter_values = [
 			{
 				key="STRING_PARAMETER",
@@ -1563,4 +1597,67 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 
 		return fmt.Errorf("Custom Model not found")
 	}
+}
+
+// TestAccCustomModelWithManyFilesResource tests that custom models properly error
+// when more than 100 files are provided, directing users to use application sources instead.
+func TestAccCustomModelWithManyFilesResource(t *testing.T) {
+	t.Parallel()
+
+	resourceTestName := "test_many_files"
+
+	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+
+	// Create a temporary directory for our test files
+	testDir := "test_many_files_dir"
+	err := os.Mkdir(testDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create 101 files + requirements.txt = 102 total to exceed the 100 file limit
+	totalFiles := 101
+
+	for i := 0; i < totalFiles; i++ {
+		fileName := fmt.Sprintf("test_file_%03d.txt", i)
+		filePath := testDir + "/" + fileName
+		content := fmt.Sprintf("Test file content %d\nLine 2", i)
+
+		err = os.WriteFile(filePath, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Also create a main requirements file for the custom model
+	requirementsFile := testDir + "/requirements.txt"
+	err = os.WriteFile(requirementsFile, []byte("langchain == 0.2.8"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Attempt to create custom model with >100 files should fail
+			{
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
+					"many_files_model",
+					"Custom model with many files should fail",
+					baseEnvironmentID,
+					nil,
+					&testDir, // Use folder_path with >100 files
+					nil,
+					nil,
+					nil,
+					false),
+				ExpectError: regexp.MustCompile(`exceeded file limit: \d+ files provided, maximum allowed is 100\. For\s+applications with more than 100 files, use application sources instead\s+of\s+custom models`),
+			},
+		},
+	})
 }

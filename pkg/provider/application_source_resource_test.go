@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -132,10 +133,10 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: startAppFileName,
+							Source: types.StringValue(startAppFileName),
 						},
 					},
 					nil,
@@ -143,8 +144,11 @@ runtimeParameterDefinitions:
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttrSet(resourceName, "name"),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.#", "2"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.source", startAppFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.destination", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
@@ -174,10 +178,10 @@ runtimeParameterDefinitions:
 					&baseEnvironmentVersionID,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -188,8 +192,11 @@ runtimeParameterDefinitions:
 					}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.#", "2"),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.destination", appCodeFileName),
 					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "val"),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
@@ -224,10 +231,10 @@ runtimeParameterDefinitions:
 					nil,
 					[]FileTuple{
 						{
-							LocalPath: metadataFileName,
+							Source: types.StringValue(metadataFileName),
 						},
 						{
-							LocalPath: appCodeFileName,
+							Source: types.StringValue(appCodeFileName),
 						},
 					},
 					nil,
@@ -235,8 +242,10 @@ runtimeParameterDefinitions:
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
-					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.source", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.0.destination", metadataFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.source", appCodeFileName),
+					resource.TestCheckResourceAttr(resourceName, "files.1.destination", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
 					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
@@ -273,7 +282,7 @@ runtimeParameterDefinitions:
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
-					resource.TestCheckNoResourceAttr(resourceName, "files.0.0"),
+					resource.TestCheckNoResourceAttr(resourceName, "files.0.source"),
 					resource.TestCheckNoResourceAttr(resourceName, "files_hashes.0"),
 					resource.TestCheckResourceAttr(resourceName, "folder_path", folderPath),
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
@@ -417,29 +426,29 @@ func applicationSourceResourceConfig(
 	}
 
 	filesStr := ""
+	if len(files) > 0 {
+		var fileLines []string
+		for _, file := range files {
+			if file.Destination != types.StringNull() {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Destination.ValueString()))
+			} else {
+				fileLines = append(fileLines, fmt.Sprintf(`{ source = "%s", destination = "%s" }`, file.Source.ValueString(), file.Source.ValueString()))
+			}
+		}
+		filesStr = fmt.Sprintf(`
+	files = [%s]`, strings.Join(fileLines, ", "))
+	}
+
 	runtimeParamValueStr := ""
 	if len(files) > 0 {
 		runtimeParamValueStr = `
-		runtime_parameter_values = [
-			{
-				key="STRING_PARAMETER",
-				type="string",
-				value="val",
-			},
-		  ]`
-
-		filesStr = "files = ["
-		for _, file := range files {
-			if file.PathInModel != "" {
-				filesStr += fmt.Sprintf(`
-				["%s", "%s"],`, file.LocalPath, file.PathInModel)
-			} else {
-				filesStr += fmt.Sprintf(`
-				["%s"],`, file.LocalPath)
-			}
-		}
-
-		filesStr += "]"
+runtime_parameter_values = [
+	{
+		key="STRING_PARAMETER",
+		type="string",
+		value="val",
+	},
+]`
 	}
 
 	return fmt.Sprintf(`
@@ -498,4 +507,78 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 
 		return fmt.Errorf("Application Source not found")
 	}
+}
+
+// TestAccApplicationSourceWithManyFilesResource tests that application sources can handle >100 files
+// by using batching to upload files in groups of 100.
+func TestAccApplicationSourceWithManyFilesResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_application_source.test"
+
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e" // Common base environment ID
+
+	// Create a temporary directory for our test files
+	testDir := "test_many_files_application_source"
+	err := os.Mkdir(testDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create 150 files to test batching (exceeds 100 file limit)
+	totalFiles := 150
+
+	for i := 0; i < totalFiles; i++ {
+		fileName := fmt.Sprintf("test_file_%03d.txt", i)
+		filePath := testDir + "/" + fileName
+		content := fmt.Sprintf("Application source test file content %d\nLine 2", i)
+
+		err = os.WriteFile(filePath, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create required metadata.yaml file
+	metadataFile := testDir + "/metadata.yaml"
+	metadata := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: An example of a string parameter`
+
+	err = os.WriteFile(metadataFile, []byte(metadata), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create application source with >100 files - should succeed with batching
+			{
+				Config: applicationSourceResourceConfig(
+					"application_source_with_many_files",
+					&baseEnvironmentID,
+					nil,
+					nil,
+					&testDir, // Use folder_path with >100 files
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "application_source_with_many_files"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(resourceName, "folder_path", testDir),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
+				),
+			},
+		},
+	})
 }
