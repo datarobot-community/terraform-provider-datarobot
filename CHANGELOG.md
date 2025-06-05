@@ -1,8 +1,9 @@
-## Unreleased
+## [0.10.4] - 2025-06-03
 
 ### Added
 
 - Added AgenticWorkflow custom model target type
+- Added new resource for managing OAuth providers in DataRobot. This resource allows you to create, read, update, and delete OAuth provider configurations.
 
 ## [0.10.3] - 2025-06-02
 
