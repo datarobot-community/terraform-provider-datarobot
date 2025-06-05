@@ -1,4 +1,10 @@
-## [0.10.4] - 2025-06-06
+## [0.10.5] - 2025-06-10
+
+### Added
+
+- Added new resource for managing OAuth providers in DataRobot. This resource allows you to create, read, update, and delete OAuth provider configurations.
+
+## [0.10.4] - 2025-06-03
 
 ### Added
 
