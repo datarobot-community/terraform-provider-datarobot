@@ -908,3 +908,14 @@ type CustomJobScheduleModel struct {
 type CustomjobScheduleListModel struct {
 	Data []CustomJobScheduleModel `tfsdk:"data"`
 }
+
+type AppOAuthResourceModel struct {
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	OrgID          types.String `tfsdk:"org_id"`
+	Type           types.String `tfsdk:"type"`
+	ClientID       types.String `tfsdk:"client_id"`
+	ClientSecret   types.String `tfsdk:"client_secret"`
+	SecureConfigID types.String `tfsdk:"secure_config_id"`
+	Status         types.String `tfsdk:"status"`
+}
