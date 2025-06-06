@@ -22,8 +22,8 @@ func TestAccAppOAuthResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	authProviderType := "box"
-	clientID := "client-id"
-	clientSecret := "client-secret"
+	clientID := fmt.Sprintf("client-id-%s", oauthName)
+	clientSecret := fmt.Sprintf("client-secret-%s", oauthName)
 	newClientSecret := "new-client-secret"
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
