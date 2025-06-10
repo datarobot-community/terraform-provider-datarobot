@@ -236,6 +236,11 @@ type Service interface {
 	UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error)
 	DeleteNotebook(ctx context.Context, id string) error
 
+	// DR OAuth
+	CreateAppOAuthProvider(ctx context.Context, req *CreateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
+	GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error)
+	UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
+	DeleteAppOAuthProvider(ctx context.Context, id string) error
 	// Add your service methods here
 }
 
@@ -243,6 +248,7 @@ type Service interface {
 type ServiceImpl struct {
 	client      *Client
 	apiGWClient *Client
+	baseClient  *Client
 }
 
 // NewService creates a new API service.
@@ -255,9 +261,14 @@ func NewService(c *Client) Service {
 	apiGWConfig.Endpoint = apiGWConfig.BaseURL() + "/api-gw"
 	apiGWClient := NewClient(&apiGWConfig)
 
+	baseClientConfig := *c.cfg
+	baseClientConfig.Endpoint = baseClientConfig.BaseURL()
+	baseClient := NewClient(&baseClientConfig)
+
 	return &ServiceImpl{
 		client:      c,
 		apiGWClient: apiGWClient,
+		baseClient:  baseClient,
 	}
 }
 
@@ -1001,4 +1012,21 @@ func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID s
 
 func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {
 	return Delete(s.apiGWClient, ctx, fmt.Sprintf("/nbx/notebooks/%s/", id))
+}
+
+// OAUTH Provider Service Implementation.
+func (s *ServiceImpl) CreateAppOAuthProvider(ctx context.Context, req *CreateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error) {
+	return Post[AppOAuthProviderResponse](s.baseClient, ctx, "/externalOAuth/providers/", req)
+}
+
+func (s *ServiceImpl) GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error) {
+	return Get[AppOAuthProviderResponse](s.baseClient, ctx, "/externalOAuth/providers/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error) {
+	return Patch[AppOAuthProviderResponse](s.baseClient, ctx, "/externalOAuth/providers/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteAppOAuthProvider(ctx context.Context, id string) error {
+	return Delete(s.baseClient, ctx, "/externalOAuth/providers/"+id+"/")
 }
