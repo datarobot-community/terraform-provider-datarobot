@@ -1,3 +1,10 @@
+## [0.11.0] - 2025-06-11
+
+### Added
+
+- Added support for more than 100 files in Application Sources
+
+
 ## [0.10.5] - 2025-06-10
 
 ### Added
