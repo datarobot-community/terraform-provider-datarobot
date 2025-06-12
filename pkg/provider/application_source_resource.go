@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -607,10 +608,31 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 		return
 	}
 
-	traceAPICall("UpdateApplicationSourceVersion")
-	_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, localFiles)
-	if err != nil {
-		return
+	tflog.Debug(ctx, "Uploading files in batches", map[string]interface{}{
+		"total_files": len(localFiles),
+		"batch_size":  100,
+	})
+
+	// Upload files in batches of 100 to avoid API limits
+	batchSize := 100
+	for i := 0; i < len(localFiles); i += batchSize {
+		end := i + batchSize
+		if end > len(localFiles) {
+			end = len(localFiles)
+		}
+		batch := localFiles[i:end]
+
+		tflog.Debug(ctx, "Uploading file batch", map[string]interface{}{
+			"batch_start": i + 1,
+			"batch_end":   end,
+			"batch_count": len(batch),
+		})
+
+		traceAPICall("UpdateApplicationSourceVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, batch)
+		if err != nil {
+			return fmt.Errorf("failed to upload file batch %d-%d: %w", i+1, end, err)
+		}
 	}
 
 	return
@@ -632,16 +654,37 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 	}
 
 	if len(filesToDelete) > 0 {
-		traceAPICall("UpdateApplicationSourceVersion")
-		_, err = r.provider.service.UpdateApplicationSourceVersion(
-			ctx,
-			state.ID.ValueString(),
-			applicationSourceVersion.ID,
-			&client.UpdateApplicationSourceVersionRequest{
-				FilesToDelete: filesToDelete,
+		tflog.Debug(ctx, "Deleting files in batches", map[string]interface{}{
+			"total_files": len(filesToDelete),
+			"batch_size":  100,
+		})
+
+		// Delete files in batches of 100 to avoid API limits
+		batchSize := 100
+		for i := 0; i < len(filesToDelete); i += batchSize {
+			end := i + batchSize
+			if end > len(filesToDelete) {
+				end = len(filesToDelete)
+			}
+			batchToDelete := filesToDelete[i:end]
+
+			tflog.Debug(ctx, "Deleting file batch", map[string]interface{}{
+				"batch_start": i + 1,
+				"batch_end":   end,
+				"batch_count": len(batchToDelete),
 			})
-		if err != nil {
-			return
+
+			traceAPICall("UpdateApplicationSourceVersion")
+			_, err = r.provider.service.UpdateApplicationSourceVersion(
+				ctx,
+				state.ID.ValueString(),
+				applicationSourceVersion.ID,
+				&client.UpdateApplicationSourceVersionRequest{
+					FilesToDelete: batchToDelete,
+				})
+			if err != nil {
+				return fmt.Errorf("failed to delete file batch %d-%d: %w", i+1, end, err)
+			}
 		}
 	}
 
