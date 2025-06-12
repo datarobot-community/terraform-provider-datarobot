@@ -449,10 +449,14 @@ runtimeParameterDefinitions:
 							return fmt.Errorf("resource not found: %s", resourceName)
 						}
 
-						// Count file hashes
+						// Count file hashes (excluding metadata key)
 						hashCount := 0
 						for key := range rs.Primary.Attributes {
 							if len(key) > 12 && key[:12] == "files_hashes" && key[12:13] == "." {
+								// Skip the metadata key that contains the count
+								if key == "files_hashes.#" {
+									continue
+								}
 								hashCount++
 							}
 						}
