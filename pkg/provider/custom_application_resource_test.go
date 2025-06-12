@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -635,24 +636,25 @@ func generateRealisticDataFile(index int) string {
 	dataset := datasets[index%len(datasets)]
 
 	content := fmt.Sprintf("# Dataset: %s_%03d\n", dataset, index)
-	content += fmt.Sprintf("# Generated: 2025-06-12\n")
+	content += fmt.Sprintf("# Generated: %s\n", time.Now().Format("2006-01-02"))
 	content += fmt.Sprintf("# Record Count: %d\n", (index+1)*100)
 	content += fmt.Sprintf("# File Index: %d\n\n", index)
 
 	// Add sample data rows
-	if dataset == "customers" {
+	switch dataset {
+	case "customers":
 		content += "customer_id,name,email,segment\n"
 		for i := 0; i < 10; i++ {
 			content += fmt.Sprintf("%d,Customer_%d_%d,customer%d@example.com,Segment_%c\n",
 				index*100+i, index, i, i, 'A'+rune(i%3))
 		}
-	} else if dataset == "transactions" {
+	case "transactions":
 		content += "transaction_id,customer_id,amount,date\n"
 		for i := 0; i < 10; i++ {
 			content += fmt.Sprintf("TXN_%d_%d,%d,%.2f,2025-06-%02d\n",
 				index, i, index*10+i, float64(index+i)*10.5, (i%28)+1)
 		}
-	} else {
+	default:
 		content += "id,name,value,category\n"
 		for i := 0; i < 10; i++ {
 			content += fmt.Sprintf("%d,%s_item_%d_%d,%.2f,cat_%d\n",
