@@ -1,3 +1,9 @@
+[0.10.7] - 2025-06-13
+
+### Added
+
+Added resources field when creating a Custom Application from Custom Application
+
 ## [0.10.6] - 2025-06-12
 
 ### Added
@@ -15,12 +21,6 @@
 ### Added
 
 - Added AgenticWorkflow custom model target type
-
-## [0.10.4] - 2025-06-03
-
-### Added
-
-- Added `resources` field when creating a Custom Application from Custom Application 
 
 ## [0.10.3] - 2025-06-02
 
