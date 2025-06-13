@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -277,4 +278,419 @@ func checkCustomApplicationResourceExists() resource.TestCheckFunc {
 
 		return fmt.Errorf("Custom Application not found")
 	}
+}
+
+func TestAccCustomApplicationWithBatchFiles(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_application.batch_test"
+	sourceResourceName := "datarobot_application_source.batch_test"
+
+	// Create a temporary directory for test files
+	testDir := "test_batch_app_files"
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create essential app files first
+	startAppScript := `#!/usr/bin/env bash
+echo "Starting Batch Test App"
+streamlit run streamlit-app.py
+`
+
+	appCode := `import streamlit as st
+from datarobot import Client
+from datarobot.client import set_client
+
+def start_streamlit():
+    set_client(Client())
+    st.title("Batch Files Custom Application Test")
+    st.write("This app was created with 100+ files to test batch processing!")
+
+if __name__ == "__main__":
+    start_streamlit()
+`
+
+	metadata := `name: batch-test-app
+runtimeParameterDefinitions:
+  - fieldName: TEST_PARAM
+    type: string
+    description: A test parameter for batch processing
+`
+
+	requirements := `streamlit==1.28.0
+datarobot
+pandas
+numpy
+`
+
+	// Write essential files
+	if err := os.WriteFile(testDir+"/start-app.sh", []byte(startAppScript), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/streamlit-app.py", []byte(appCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/metadata.yaml", []byte(metadata), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/requirements.txt", []byte(requirements), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create 120 additional files to test batching (more than the 100 file limit)
+	numAdditionalFiles := 120
+	for i := 0; i < numAdditionalFiles; i++ {
+		fileName := fmt.Sprintf("%s/data_file_%03d.txt", testDir, i)
+		content := fmt.Sprintf("This is data file number %d\nCreated for batch processing test\nContent: %s", i, generateTestContent(i))
+
+		if err := os.WriteFile(fileName, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create Application Source with 100+ files and Custom Application
+			{
+				Config: customApplicationWithBatchFilesConfig(testDir, baseEnvironmentID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Check Application Source
+					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
+					resource.TestCheckResourceAttrSet(sourceResourceName, "version_id"),
+					resource.TestCheckResourceAttr(sourceResourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(sourceResourceName, "name", "Batch Files Test Application Source "+nameSalt),
+
+					// Check Custom Application
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "name", "Batch Files Test Custom Application "+nameSalt),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
+
+					// Custom check to verify application is working
+					func(s *terraform.State) error {
+						// Get the application source resource
+						sourceRS, ok := s.RootModule().Resources[sourceResourceName]
+						if !ok {
+							return fmt.Errorf("application source resource not found: %s", sourceResourceName)
+						}
+
+						// Get the custom application resource
+						appRS, ok := s.RootModule().Resources[resourceName]
+						if !ok {
+							return fmt.Errorf("custom application resource not found: %s", resourceName)
+						}
+
+						// Verify the custom application references the correct source
+						if appRS.Primary.Attributes["source_id"] != sourceRS.Primary.Attributes["id"] {
+							return fmt.Errorf("custom application source_id doesn't match application source id")
+						}
+
+						// When using folder_path, verify the folder_path_hash is set
+						// instead of counting individual file hashes
+						if folderPathHash, ok := sourceRS.Primary.Attributes["folder_path_hash"]; !ok || folderPathHash == "" {
+							return fmt.Errorf("folder_path_hash not set or empty")
+						}
+
+						// Also verify folder_path is set correctly
+						if folderPath := sourceRS.Primary.Attributes["folder_path"]; folderPath != testDir {
+							return fmt.Errorf("folder_path mismatch: expected %s, got %s", testDir, folderPath)
+						}
+
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+func generateTestContent(index int) string {
+	// Generate some varied content to ensure files are different
+	content := fmt.Sprintf("File index: %d\n", index)
+	content += fmt.Sprintf("Timestamp: batch-test-%d\n", index*1000)
+	content += fmt.Sprintf("Data: %s\n", string(rune('A'+index%26)))
+	for i := 0; i < index%10; i++ {
+		content += fmt.Sprintf("Line %d: Additional content for file %d\n", i, index)
+	}
+	return content
+}
+
+func customApplicationWithBatchFilesConfig(folderPath, baseEnvironmentID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "batch_test" {
+	name = "Batch Files Test Application Source %s"
+	base_environment_id = "%s"
+	folder_path = "%s"
+	runtime_parameter_values = [
+		{
+			key = "TEST_PARAM"
+			type = "string"
+			value = "batch_test_value"
+		}
+	]
+}
+
+resource "datarobot_custom_application" "batch_test" {
+	name = "Batch Files Test Custom Application %s"
+	source_version_id = datarobot_application_source.batch_test.version_id
+	external_access_enabled = false
+	allow_auto_stopping = true
+}
+`, nameSalt, baseEnvironmentID, folderPath, nameSalt)
+}
+
+func TestAccCustomApplicationRealWorldBatchFiles(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_application.real_batch_test"
+	sourceResourceName := "datarobot_application_source.real_batch_test"
+
+	// Create a temporary directory for test files
+	testDir := "real_batch_app_files"
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// Create a realistic Streamlit application that processes the batch files
+	startAppScript := `#!/usr/bin/env bash
+echo "Starting Real-World Batch Files App"
+streamlit run app.py --server.port 8080 --server.address 0.0.0.0
+`
+
+	appCode := `import streamlit as st
+import os
+import glob
+from datarobot import Client
+from datarobot.client import set_client
+
+def start_streamlit():
+    set_client(Client())
+
+    st.title("🚀 Real-World Batch Files Custom Application")
+    st.write("This application demonstrates batch file processing with 100+ files!")
+
+    # Count and display files
+    data_files = glob.glob("data_*.txt")
+    st.success(f"✅ Successfully loaded {len(data_files)} data files")
+
+    if data_files:
+        st.subheader("📊 File Processing Results")
+
+        # Process a sample of files
+        sample_files = data_files[:10]  # Show first 10 files
+
+        for i, file_path in enumerate(sample_files):
+            with st.expander(f"📄 File {i+1}: {os.path.basename(file_path)}"):
+                try:
+                    with open(file_path, 'r') as f:
+                        content = f.read()
+                    st.text(content[:200] + "..." if len(content) > 200 else content)
+                except Exception as e:
+                    st.error(f"Error reading file: {e}")
+
+        if len(data_files) > 10:
+            st.info(f"📂 Plus {len(data_files) - 10} more files available")
+
+    st.subheader("🔧 Application Info")
+    st.write(f"- **Total files**: {len(data_files)}")
+    st.write(f"- **Directory**: {os.getcwd()}")
+    st.write(f"- **Runtime**: Streamlit with DataRobot integration")
+
+    # Display environment info
+    st.subheader("🌍 Environment")
+    env_vars = [key for key in os.environ.keys() if 'DATAROBOT' in key or 'TEST' in key]
+    if env_vars:
+        for var in env_vars[:5]:  # Show first 5 relevant env vars
+            st.text(f"{var}: {os.environ.get(var, 'Not set')}")
+
+if __name__ == "__main__":
+    start_streamlit()
+`
+
+	metadata := `name: real-batch-app
+runtimeParameterDefinitions:
+  - fieldName: BATCH_SIZE
+    type: string
+    description: Number of files to process in each batch
+  - fieldName: PROCESSING_MODE
+    type: string
+    description: Mode for processing the batch files
+`
+
+	requirements := `streamlit==1.28.0
+datarobot
+pandas
+numpy
+`
+
+	// Write essential application files
+	if err := os.WriteFile(testDir+"/start-app.sh", []byte(startAppScript), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/app.py", []byte(appCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/metadata.yaml", []byte(metadata), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testDir+"/requirements.txt", []byte(requirements), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create 150 realistic data files to test batching
+	numDataFiles := 150
+	for i := 0; i < numDataFiles; i++ {
+		fileName := fmt.Sprintf("%s/data_%03d.txt", testDir, i)
+		content := generateRealisticDataFile(i)
+
+		if err := os.WriteFile(fileName, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create Application Source with 150+ files and Custom Application
+			{
+				Config: realWorldBatchFilesConfig(testDir, baseEnvironmentID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Check Application Source
+					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
+					resource.TestCheckResourceAttrSet(sourceResourceName, "version_id"),
+					resource.TestCheckResourceAttr(sourceResourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckResourceAttr(sourceResourceName, "name", "Real-World Batch Files App "+nameSalt),
+
+					// Verify folder_path_hash is set (indicating files were processed)
+					resource.TestCheckResourceAttrSet(sourceResourceName, "folder_path_hash"),
+
+					// Check Custom Application
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+					resource.TestCheckResourceAttr(resourceName, "name", "Real-World Batch Files Custom App "+nameSalt),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
+
+					// Custom validation to ensure the application was created successfully
+					func(s *terraform.State) error {
+						// Get the application source resource
+						sourceRS, ok := s.RootModule().Resources[sourceResourceName]
+						if !ok {
+							return fmt.Errorf("application source resource not found: %s", sourceResourceName)
+						}
+
+						// Get the custom application resource
+						appRS, ok := s.RootModule().Resources[resourceName]
+						if !ok {
+							return fmt.Errorf("custom application resource not found: %s", resourceName)
+						}
+
+						// Verify the custom application references the correct source
+						if appRS.Primary.Attributes["source_id"] != sourceRS.Primary.Attributes["id"] {
+							return fmt.Errorf("custom application source_id doesn't match application source id")
+						}
+
+						// Verify application URL is accessible
+						appURL := appRS.Primary.Attributes["application_url"]
+						if appURL == "" {
+							return fmt.Errorf("application_url is empty")
+						}
+
+						// Log success message
+						fmt.Printf("\n🎉 SUCCESS: Real-world Custom Application created!\n")
+						fmt.Printf("📱 Application URL: %s\n", appURL)
+						fmt.Printf("📁 Total files processed: %d (150 data files + 4 app files)\n", numDataFiles+4)
+						fmt.Printf("🔧 Application ID: %s\n", appRS.Primary.Attributes["id"])
+						fmt.Printf("📦 Source ID: %s\n", sourceRS.Primary.Attributes["id"])
+
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+func generateRealisticDataFile(index int) string {
+	// Generate realistic data that might be used in a data science application
+	datasets := []string{"customers", "transactions", "products", "sales", "inventory", "users", "orders", "reviews"}
+	dataset := datasets[index%len(datasets)]
+
+	content := fmt.Sprintf("# Dataset: %s_%03d\n", dataset, index)
+	content += fmt.Sprintf("# Generated: %s\n", time.Now().Format("2006-01-02"))
+	content += fmt.Sprintf("# Record Count: %d\n", (index+1)*100)
+	content += fmt.Sprintf("# File Index: %d\n\n", index)
+
+	// Add sample data rows
+	switch dataset {
+	case "customers":
+		content += "customer_id,name,email,segment\n"
+		for i := 0; i < 10; i++ {
+			content += fmt.Sprintf("%d,Customer_%d_%d,customer%d@example.com,Segment_%c\n",
+				index*100+i, index, i, i, 'A'+rune(i%3))
+		}
+	case "transactions":
+		content += "transaction_id,customer_id,amount,date\n"
+		for i := 0; i < 10; i++ {
+			content += fmt.Sprintf("TXN_%d_%d,%d,%.2f,2025-06-%02d\n",
+				index, i, index*10+i, float64(index+i)*10.5, (i%28)+1)
+		}
+	default:
+		content += "id,name,value,category\n"
+		for i := 0; i < 10; i++ {
+			content += fmt.Sprintf("%d,%s_item_%d_%d,%.2f,cat_%d\n",
+				index*100+i, dataset, index, i, float64(index+i)*1.5, i%5)
+		}
+	}
+
+	content += fmt.Sprintf("\n# End of file %d\n", index)
+	return content
+}
+
+func realWorldBatchFilesConfig(folderPath, baseEnvironmentID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "real_batch_test" {
+	name = "Real-World Batch Files App %s"
+	base_environment_id = "%s"
+	folder_path = "%s"
+	runtime_parameter_values = [
+		{
+			key = "BATCH_SIZE"
+			type = "string"
+			value = "100"
+		},
+		{
+			key = "PROCESSING_MODE"
+			type = "string"
+			value = "parallel"
+		}
+	]
+}
+
+resource "datarobot_custom_application" "real_batch_test" {
+	name = "Real-World Batch Files Custom App %s"
+	source_version_id = datarobot_application_source.real_batch_test.version_id
+	external_access_enabled = false
+	allow_auto_stopping = true
+}
+`, nameSalt, baseEnvironmentID, folderPath, nameSalt)
 }

@@ -1,3 +1,9 @@
+## [0.10.6] - 2025-06-12
+
+### Added
+
+- Added ability to create Custom Applications consisting of 100+ files.
+
 ## [0.10.5] - 2025-06-10
 
 ### Added

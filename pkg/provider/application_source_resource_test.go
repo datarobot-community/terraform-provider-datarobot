@@ -367,6 +367,113 @@ runtimeParameterDefinitions:
 	})
 }
 
+func TestAccApplicationSourceResourceBatchFiles(t *testing.T) {
+	t.Parallel()
+	testApplicationSourceResourceBatchFiles(t, false)
+}
+
+func testApplicationSourceResourceBatchFiles(t *testing.T, isMock bool) {
+	resourceName := "datarobot_application_source.test"
+
+	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+
+	// Create a temporary directory for test files
+	testDir := "test_batch_files"
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+	// Create 150 test files to test batching (more than the 100 file limit)
+	numFiles := 150
+	fileTuples := make([]FileTuple, numFiles+1) // +1 for metadata.yaml
+
+	// First, create metadata.yaml to define runtime parameters
+	metadataContent := `name: batch-test
+runtimeParameterDefinitions:
+  - fieldName: STRING_PARAMETER
+    type: string
+    description: A test string parameter
+`
+	metadataFile := fmt.Sprintf("%s/metadata.yaml", testDir)
+	err := os.WriteFile(metadataFile, []byte(metadataContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fileTuples[0] = FileTuple{
+		LocalPath:   metadataFile,
+		PathInModel: "metadata.yaml",
+	}
+
+	for i := 0; i < numFiles; i++ {
+		fileName := fmt.Sprintf("%s/file_%03d.txt", testDir, i)
+		content := fmt.Sprintf("This is test file number %d\nGenerated for batch upload testing.", i)
+
+		err := os.WriteFile(fileName, []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fileTuples[i+1] = FileTuple{
+			LocalPath:   fileName,
+			PathInModel: fmt.Sprintf("file_%03d.txt", i),
+		}
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest: isMock,
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read with batch files
+			{
+				Config: applicationSourceResourceConfig(
+					"batch test application source "+nameSalt,
+					&baseEnvironmentID,
+					nil,
+					fileTuples,
+					nil,
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkApplicationSourceResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "name"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					// Check that we have the expected number of file hashes
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources[resourceName]
+						if rs == nil {
+							return fmt.Errorf("resource not found: %s", resourceName)
+						}
+
+						// Count file hashes (excluding metadata key)
+						hashCount := 0
+						for key := range rs.Primary.Attributes {
+							if len(key) > 12 && key[:12] == "files_hashes" && key[12:13] == "." {
+								// Skip the metadata key that contains the count
+								if key == "files_hashes.#" {
+									continue
+								}
+								hashCount++
+							}
+						}
+
+						expectedFiles := numFiles + 1 // test files + metadata.yaml
+						if hashCount != expectedFiles {
+							return fmt.Errorf("expected %d file hashes, got %d", expectedFiles, hashCount)
+						}
+
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func applicationSourceResourceConfig(
 	name string,
 	baseEnvironmentID *string,
