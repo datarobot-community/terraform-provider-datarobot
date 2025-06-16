@@ -183,6 +183,71 @@ runtimeParameterDefinitions:
 	})
 }
 
+func TestAccTextGenerationRegisteredModelUpdateResource(t *testing.T) {
+	t.Parallel()
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	nameSuffix := "test_registered_model_update"
+	resourceName := "datarobot_registered_model." + nameSuffix
+
+	prompt := "test_prompt_column"
+	newPrompt := "updated_prompt_column"
+
+	folderPath := "registered_model_text_generation_update"
+	fileName := "model-metadata.yaml"
+	fileContents := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: PROMPT_COLUMN_NAME
+    type: string
+    defaultValue: null`
+
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	if err = os.WriteFile(folderPath+"/"+fileName, []byte(fileContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with initial prompt
+			{
+				Config: textGenerationRegisteredModelUpdateResourceConfig(nameSuffix, &prompt, "1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName, &prompt),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update to new custom model version with different prompt - should preserve new prompt
+			{
+				Config: textGenerationRegisteredModelUpdateResourceConfig(nameSuffix, &newPrompt, "2"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName, &newPrompt),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
 func TestRegisteredModelResourceSchema(t *testing.T) {
 	t.Parallel()
 
@@ -202,6 +267,7 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
 	}
 }
+
 
 func registeredModelResourceConfig(name, description string, versionName, useCaseResourceName *string, guardName string) string {
 	versionNameStr := ""
@@ -311,6 +377,42 @@ func textGenerationRegisteredModelResourceConfig(
 		custom_model_version_id = "${datarobot_custom_model.%s.version_id}"
 	}
 	`, resourceName, nameSalt, promptParamStr, resourceName, nameSalt, resourceName)
+}
+
+func textGenerationRegisteredModelUpdateResourceConfig(
+	resourceName string,
+	promptParameterValue *string,
+	version string,
+) string {
+	promptParamStr := ""
+	if promptParameterValue != nil {
+		promptParamStr = fmt.Sprintf(`
+			runtime_parameter_values = [
+				{
+					key="PROMPT_COLUMN_NAME",
+					type="string",
+					value="%s"
+				},
+			]`, *promptParameterValue)
+	}
+
+	return fmt.Sprintf(`
+	resource "datarobot_custom_model" "%s_v%s" {
+		name        			 = "test text generation registered model update %s v%s"
+		target_type         	 = "TextGeneration"
+		target_name         	 = "target"
+		language 				 = "python"
+		base_environment_id 	 = "65f9b27eab986d30d4c64268"
+		is_proxy 				 = true
+		folder_path 			 = "registered_model_text_generation_update"
+		%s
+	}
+
+	resource "datarobot_registered_model" "%s" {
+		name 					= "test text generation registered model update %s"
+		custom_model_version_id = "${datarobot_custom_model.%s_v%s.version_id}"
+	}
+	`, resourceName, version, nameSalt, version, promptParamStr, resourceName, nameSalt, resourceName, version)
 }
 
 func checkRegisteredModelResourceExists(resourceName string, prompt *string) resource.TestCheckFunc {
