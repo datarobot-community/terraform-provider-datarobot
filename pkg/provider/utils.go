@@ -689,7 +689,7 @@ func computeHash(value []byte) (hash string) {
 }
 
 func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -697,7 +697,7 @@ func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
 }
 
 func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -705,7 +705,7 @@ func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
 }
 
 func StringValuePointerOptional(value basetypes.StringValue) *string {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -713,7 +713,7 @@ func StringValuePointerOptional(value basetypes.StringValue) *string {
 }
 
 func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -1049,4 +1049,26 @@ func prepareTestFolder(folderPath string) (string, error) {
 
 	// Return the path to the created directory
 	return filepath.Abs(folderPath)
+}
+
+// Helper functions for converting pointer values back to Terraform types.
+func Int64PointerValue(ptr *int64) types.Int64 {
+	if ptr == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(*ptr)
+}
+
+func BoolPointerValue(ptr *bool) types.Bool {
+	if ptr == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*ptr)
+}
+
+func StringPointerValue(ptr *string) types.String {
+	if ptr == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(*ptr)
 }

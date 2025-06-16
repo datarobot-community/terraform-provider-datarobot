@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -86,6 +89,47 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 				Default:             booldefault.StaticBool(true),
 				MarkdownDescription: "Whether auto stopping is allowed for the Custom Application.",
 			},
+			"resources": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The resources for the Custom Application.",
+				Attributes: map[string]schema.Attribute{
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						MarkdownDescription: "The number of replicas for the Custom Application.",
+						Validators: []validator.Int64{
+							int64validator.AtLeast(1),
+						},
+					},
+					"resource_label": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The resource label for the Custom Application.",
+						Validators: []validator.String{
+							stringvalidator.OneOf(
+								"cpu.nano",
+								"cpu.micro",
+								"cpu.small",
+								"cpu.medium",
+								"cpu.large",
+								"cpu.xlarge",
+								"cpu.2xlarge",
+								"cpu.3xlarge",
+								"cpu.4xlarge",
+								"cpu.5xlarge",
+								"cpu.6xlarge",
+								"cpu.7xlarge",
+							),
+						},
+					},
+					"session_affinity": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether session affinity is enabled for the Custom Application.",
+					},
+					"service_web_requests_on_root_path": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application.",
+					},
+				},
+			},
 			"use_case_ids": schema.ListAttribute{
 				Optional:            true,
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
@@ -119,9 +163,21 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	}
 
 	traceAPICall("CreateCustomApplication")
-	application, err := r.provider.service.CreateCustomApplication(ctx, &client.CreateCustomApplicationeRequest{
+	createRequest := &client.CreateCustomApplicationRequest{
 		EnvironmentID: data.EnvironmentID.ValueString(),
-	})
+	}
+
+	// Add resources if provided
+	if data.Resources != nil {
+		createRequest.Resources = &client.ApplicationResources{
+			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
+	application, err := r.provider.service.CreateCustomApplication(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Application", err.Error())
 		return
@@ -214,6 +270,18 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
+
+	// Populate resources from API response
+	if application.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(application.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(application.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(application.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(application.Resources.ServiceWebRequestsOnRootPath),
+		}
+	} else {
+		data.Resources = nil
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

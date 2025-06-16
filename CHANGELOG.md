@@ -1,3 +1,9 @@
+[0.10.7] - 2025-06-13
+
+### Added
+
+Added resources field when creating a Custom Application from Custom Application
+
 ## [0.10.6] - 2025-06-12
 
 ### Added

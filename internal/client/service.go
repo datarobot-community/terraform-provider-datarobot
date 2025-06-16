@@ -199,7 +199,7 @@ type Service interface {
 	GetCustomTemplateFile(ctx context.Context, customTemplateID, fileID string) (*CustomTemplateFile, error)
 
 	// Application
-	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error)
+	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationRequest) (*Application, error)
 	CreateQAApplication(ctx context.Context, req *CreateQAApplicationRequest) (*Application, error)
 	GetApplication(ctx context.Context, id string) (*Application, error)
 	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error)
@@ -893,7 +893,7 @@ func (s *ServiceImpl) GetCustomTemplateFile(ctx context.Context, customTemplateI
 	return Get[CustomTemplateFile](s.client, ctx, "/customTemplates/"+customTemplateID+"/files/"+fileID+"/")
 }
 
-func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error) {
+func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationRequest) (*Application, error) {
 	return Post[Application](s.client, ctx, "/customApplications/", req)
 }
 

@@ -80,6 +80,7 @@ Optional:
 
 - `replicas` (Number) The replicas for the Application Source.
 - `resource_label` (String) The resource label for the Application Source.
+- `service_web_requests_on_root_path` (Boolean) Whether to service web requests on the root path for the Application Source.
 - `session_affinity` (Boolean) The session affinity for the Application Source.
 
 

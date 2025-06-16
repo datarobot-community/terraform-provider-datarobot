@@ -155,7 +155,7 @@ func (mr *MockServiceMockRecorder) CreateCredential(ctx, req interface{}) *gomoc
 }
 
 // CreateCustomApplication mocks base method.
-func (m *MockService) CreateCustomApplication(ctx context.Context, req *client.CreateCustomApplicationeRequest) (*client.Application, error) {
+func (m *MockService) CreateCustomApplication(ctx context.Context, req *client.CreateCustomApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCustomApplication", ctx, req)
 	ret0, _ := ret[0].(*client.Application)
