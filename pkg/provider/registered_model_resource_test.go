@@ -268,7 +268,6 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 	}
 }
 
-
 func registeredModelResourceConfig(name, description string, versionName, useCaseResourceName *string, guardName string) string {
 	versionNameStr := ""
 	if versionName != nil {
