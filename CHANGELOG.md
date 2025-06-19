@@ -1,12 +1,14 @@
-## [0.10.7] - 2025-06-19
-
-### Added
-
-- Added support for specifying the `resources` field when creating a Custom Application from another Custom Application.
+## [0.10.8] - 2025-06-19
 
 ### Fixed
 
 - Ensure PROMPT_COLUMN_NAME is correctly propagated to newly created Registered Model Versions
+
+## [0.10.7] - 2025-06-16
+
+### Added
+
+- Added support for specifying the `resources` field when creating a Custom Application from another Custom Application.
 
 ## [0.10.6] - 2025-06-12
 
