@@ -106,24 +106,9 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		RegisteredModelName:  data.Name.ValueString(),
 	}
 
-	customModel, err := r.findCustomModel(ctx, data.CustomModelVersionId.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error finding Custom Model", err.Error())
+	if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, data.CustomModelVersionId.ValueString()); err != nil {
+		resp.Diagnostics.AddError("Error populating prompt from Custom Model", err.Error())
 		return
-	}
-
-	if customModel.TargetType == "TextGeneration" {
-		for _, runtimeParameter := range customModel.LatestVersion.RuntimeParameters {
-			if runtimeParameter.FieldName == PromptRuntimeParameterName && runtimeParameter.CurrentValue != nil {
-				prompt, ok := runtimeParameter.CurrentValue.(string)
-				if !ok {
-					resp.Diagnostics.AddError(
-						"Error getting prompt from Custom Model",
-						fmt.Sprintf("%s value is not a string", PromptRuntimeParameterName))
-				}
-				createRegisteredModelRequest.Prompt = prompt
-			}
-		}
 	}
 
 	traceAPICall("CreateRegisteredModel")
@@ -284,12 +269,19 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 
-		traceAPICall("CreateRegisteredModelVersion")
-		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
+		createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
 			RegisteredModelID:    registeredModel.ID,
 			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
 			Name:                 versionName,
-		})
+		}
+
+		if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, plan.CustomModelVersionId.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Error populating prompt from Custom Model", err.Error())
+			return
+		}
+
+		traceAPICall("CreateRegisteredModelVersion")
+		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, createRegisteredModelRequest)
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Registered Model Version", err.Error())
 			return
@@ -381,4 +373,25 @@ func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customMod
 
 	err = fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
 	return
+}
+
+func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Context, request *client.CreateRegisteredModelFromCustomModelRequest, customModelVersionID string) error {
+	customModel, err := r.findCustomModel(ctx, customModelVersionID)
+	if err != nil {
+		return fmt.Errorf("error finding Custom Model: %w", err)
+	}
+
+	if customModel.TargetType == "TextGeneration" {
+		for _, runtimeParameter := range customModel.LatestVersion.RuntimeParameters {
+			if runtimeParameter.FieldName == PromptRuntimeParameterName && runtimeParameter.CurrentValue != nil {
+				prompt, ok := runtimeParameter.CurrentValue.(string)
+				if !ok {
+					return fmt.Errorf("%s value is not a string", PromptRuntimeParameterName)
+				}
+				request.Prompt = prompt
+				return nil
+			}
+		}
+	}
+	return nil
 }
