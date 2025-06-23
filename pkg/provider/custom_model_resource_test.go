@@ -37,7 +37,7 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customModelFromLlmBlueprintResourceConfig("example_name", "example_description"),
+				Config: customModelFromLlmBlueprintResourceConfig("example_name", "example_description", nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -48,7 +48,7 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 			},
 			// Update name, description
 			{
-				Config: customModelFromLlmBlueprintResourceConfig("new_example_name", "new_example_description"),
+				Config: customModelFromLlmBlueprintResourceConfig("new_example_name", "new_example_description", nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -1068,7 +1068,7 @@ func TestCustomModelResourceSchema(t *testing.T) {
 	}
 }
 
-func customModelFromLlmBlueprintResourceConfig(name, description string) string {
+func customModelFromLlmBlueprintResourceConfig(name, description, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model" {
 	name = "test custom model"
