@@ -360,7 +360,7 @@ numpy
 		Steps: []resource.TestStep{
 			// Create Application Source with 100+ files and Custom Application
 			{
-				Config: customApplicationWithBatchFilesConfig(testDir, baseEnvironmentID),
+				Config: customApplicationWithBatchFilesConfig(testDir, baseEnvironmentID, nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					// Check Application Source
 					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
@@ -426,7 +426,7 @@ func generateTestContent(index int) string {
 	return content
 }
 
-func customApplicationWithBatchFilesConfig(folderPath, baseEnvironmentID string) string {
+func customApplicationWithBatchFilesConfig(folderPath, baseEnvironmentID, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "batch_test" {
 	name = "Batch Files Test Application Source %s"
@@ -570,7 +570,7 @@ numpy
 		Steps: []resource.TestStep{
 			// Create Application Source with 150+ files and Custom Application
 			{
-				Config: realWorldBatchFilesConfig(testDir, baseEnvironmentID),
+				Config: realWorldBatchFilesConfig(testDir, baseEnvironmentID, nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					// Check Application Source
 					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
@@ -666,7 +666,7 @@ func generateRealisticDataFile(index int) string {
 	return content
 }
 
-func realWorldBatchFilesConfig(folderPath, baseEnvironmentID string) string {
+func realWorldBatchFilesConfig(folderPath, baseEnvironmentID, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "real_batch_test" {
 	name = "Real-World Batch Files App %s"

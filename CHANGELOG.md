@@ -1,3 +1,9 @@
+## [0.10.9] - 2025-06-23
+
+### Fixed
+
+- Fixed test name conflicts in batch file tests and LLM blueprint tests that could cause CI failures due to duplicate resource names
+
 ## [0.10.8] - 2025-06-19
 
 ### Fixed
