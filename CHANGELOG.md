@@ -1,3 +1,9 @@
+## [0.10.10] - 2025-07-01
+
+### Fixed
+
+- Fixed OAuth resource such that if a Client ID changes, the resource should be replaced
+
 ## [0.10.9] - 2025-06-23
 
 ### Fixed
