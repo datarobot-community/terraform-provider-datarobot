@@ -344,6 +344,38 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 								},
 							},
 						},
+						"additional_guard_config": schema.SingleNestedAttribute{
+							Optional:            true,
+							MarkdownDescription: "Additional guard configuration",
+							Attributes: map[string]schema.Attribute{
+								"cost": schema.SingleNestedAttribute{
+									Optional:            true,
+									MarkdownDescription: "Cost metric configuration",
+									Attributes: map[string]schema.Attribute{
+										"currency": schema.StringAttribute{
+											Optional:            false,
+											MarkdownDescription: "Currency for cost calculation (USD)",
+										},
+										"input_price": schema.Float64Attribute{
+											Optional:            false,
+											MarkdownDescription: "LLM Price for input_unit tokens",
+										},
+										"input_unit": schema.Int64Attribute{
+											Optional:            false,
+											MarkdownDescription: "No of input tokens for given price",
+										},
+										"output_price": schema.Float64Attribute{
+											Optional:            false,
+											MarkdownDescription: "LLM Price for output_unit tokens",
+										},
+										"output_unit": schema.Int64Attribute{
+											Optional:            false,
+											MarkdownDescription: "No of output tokens for given price",
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
