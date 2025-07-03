@@ -222,18 +222,19 @@ type SourceRemoteRepository struct {
 }
 
 type GuardConfiguration struct {
-	TemplateName       types.String      `tfsdk:"template_name"`
-	Name               types.String      `tfsdk:"name"`
-	Stages             []types.String    `tfsdk:"stages"`
-	Intervention       GuardIntervention `tfsdk:"intervention"`
-	DeploymentID       types.String      `tfsdk:"deployment_id"`
-	InputColumnName    types.String      `tfsdk:"input_column_name"`
-	OutputColumnName   types.String      `tfsdk:"output_column_name"`
-	OpenAICredential   types.String      `tfsdk:"openai_credential"`
-	OpenAIApiBase      types.String      `tfsdk:"openai_api_base"`
-	OpenAIDeploymentID types.String      `tfsdk:"openai_deployment_id"`
-	LlmType            types.String      `tfsdk:"llm_type"`
-	NemoInfo           *NemoInfo         `tfsdk:"nemo_info"`
+	TemplateName          types.String          `tfsdk:"template_name"`
+	Name                  types.String          `tfsdk:"name"`
+	Stages                []types.String        `tfsdk:"stages"`
+	Intervention          GuardIntervention     `tfsdk:"intervention"`
+	DeploymentID          types.String          `tfsdk:"deployment_id"`
+	InputColumnName       types.String          `tfsdk:"input_column_name"`
+	OutputColumnName      types.String          `tfsdk:"output_column_name"`
+	OpenAICredential      types.String          `tfsdk:"openai_credential"`
+	OpenAIApiBase         types.String          `tfsdk:"openai_api_base"`
+	OpenAIDeploymentID    types.String          `tfsdk:"openai_deployment_id"`
+	LlmType               types.String          `tfsdk:"llm_type"`
+	NemoInfo              *NemoInfo             `tfsdk:"nemo_info"`
+	AdditionalGuardConfig AdditionalGuardConfig `tfsd:"additional_guard_config"`
 }
 
 type GuardIntervention struct {
@@ -258,6 +259,18 @@ type NemoInfo struct {
 type OverallModerationConfiguration struct {
 	TimeoutSec    types.Int64  `tfsdk:"timeout_sec"`
 	TimeoutAction types.String `tfsdk:"timeout_action"`
+}
+
+type AdditionalGuardConfig struct {
+	Cost GuardCostInfo `tfsdk:"guard_cost_info"`
+}
+
+type GuardCostInfo struct {
+	Currency    types.String  `tfsdk:"currency"`
+	InputPrice  types.Float64 `tfsdk:"input_price"`
+	InputUnit   types.Int64   `tfsdk:"input_unit"`
+	OutputPrice types.Float64 `tfsdk:"output_price"`
+	OutputUnit  types.Int64   `tfsdk:"output_unit"`
 }
 
 // CustomModelLLMValidationResourceModel describes the custom model LLM validation resource.
