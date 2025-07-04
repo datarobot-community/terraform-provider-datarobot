@@ -90,6 +90,7 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The resources for the Application Source.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
