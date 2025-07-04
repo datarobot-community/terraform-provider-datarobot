@@ -222,19 +222,19 @@ type SourceRemoteRepository struct {
 }
 
 type GuardConfiguration struct {
-	TemplateName          types.String          `tfsdk:"template_name"`
-	Name                  types.String          `tfsdk:"name"`
-	Stages                []types.String        `tfsdk:"stages"`
-	Intervention          GuardIntervention     `tfsdk:"intervention"`
-	DeploymentID          types.String          `tfsdk:"deployment_id"`
-	InputColumnName       types.String          `tfsdk:"input_column_name"`
-	OutputColumnName      types.String          `tfsdk:"output_column_name"`
-	OpenAICredential      types.String          `tfsdk:"openai_credential"`
-	OpenAIApiBase         types.String          `tfsdk:"openai_api_base"`
-	OpenAIDeploymentID    types.String          `tfsdk:"openai_deployment_id"`
-	LlmType               types.String          `tfsdk:"llm_type"`
-	NemoInfo              *NemoInfo             `tfsdk:"nemo_info"`
-	AdditionalGuardConfig AdditionalGuardConfig `tfsdk:"additional_guard_config"`
+	TemplateName          types.String           `tfsdk:"template_name"`
+	Name                  types.String           `tfsdk:"name"`
+	Stages                []types.String         `tfsdk:"stages"`
+	Intervention          GuardIntervention      `tfsdk:"intervention"`
+	DeploymentID          types.String           `tfsdk:"deployment_id"`
+	InputColumnName       types.String           `tfsdk:"input_column_name"`
+	OutputColumnName      types.String           `tfsdk:"output_column_name"`
+	OpenAICredential      types.String           `tfsdk:"openai_credential"`
+	OpenAIApiBase         types.String           `tfsdk:"openai_api_base"`
+	OpenAIDeploymentID    types.String           `tfsdk:"openai_deployment_id"`
+	LlmType               types.String           `tfsdk:"llm_type"`
+	NemoInfo              *NemoInfo              `tfsdk:"nemo_info"`
+	AdditionalGuardConfig *AdditionalGuardConfig `tfsdk:"additional_guard_config"`
 }
 
 type GuardIntervention struct {

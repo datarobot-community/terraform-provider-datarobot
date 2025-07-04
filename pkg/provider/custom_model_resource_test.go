@@ -303,7 +303,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Cost"),
 							Name:         basetypes.NewStringValue("Cost Response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							AdditionalGuardConfig: AdditionalGuardConfig{Cost: GuardCostInfo{
+							AdditionalGuardConfig: &AdditionalGuardConfig{Cost: GuardCostInfo{
 								Currency:    basetypes.NewStringValue("USD"),
 								InputPrice:  basetypes.NewFloat64Value(0.001),
 								InputUnit:   basetypes.NewInt64Value(1000),
