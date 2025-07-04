@@ -234,7 +234,7 @@ type GuardConfiguration struct {
 	OpenAIDeploymentID    types.String          `tfsdk:"openai_deployment_id"`
 	LlmType               types.String          `tfsdk:"llm_type"`
 	NemoInfo              *NemoInfo             `tfsdk:"nemo_info"`
-	AdditionalGuardConfig AdditionalGuardConfig `tfsd:"additional_guard_config"`
+	AdditionalGuardConfig AdditionalGuardConfig `tfsdk:"additional_guard_config"`
 }
 
 type GuardIntervention struct {

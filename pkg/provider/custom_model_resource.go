@@ -353,23 +353,23 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 									MarkdownDescription: "Cost metric configuration",
 									Attributes: map[string]schema.Attribute{
 										"currency": schema.StringAttribute{
-											Optional:            false,
+											Required:            true,
 											MarkdownDescription: "Currency for cost calculation (USD)",
 										},
 										"input_price": schema.Float64Attribute{
-											Optional:            false,
+											Required: 					true,
 											MarkdownDescription: "LLM Price for input_unit tokens",
 										},
 										"input_unit": schema.Int64Attribute{
-											Optional:            false,
+											Required: 					true,
 											MarkdownDescription: "No of input tokens for given price",
 										},
 										"output_price": schema.Float64Attribute{
-											Optional:            false,
+											Required: 					true,
 											MarkdownDescription: "LLM Price for output_unit tokens",
 										},
 										"output_unit": schema.Int64Attribute{
-											Optional:            false,
+											Required: 					true,
 											MarkdownDescription: "No of output tokens for given price",
 										},
 									},
