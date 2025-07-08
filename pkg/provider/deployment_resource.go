@@ -814,7 +814,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
-		err = r.updateDeploymentSettings(ctx, id, plan)
+	err = r.updateDeploymentSettings(ctx, id, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
 		return
