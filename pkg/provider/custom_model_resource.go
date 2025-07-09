@@ -1296,6 +1296,8 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 ) (
 	err error,
 ) {
+	fmt.Printf("add: %v\n", guardConfigsToAdd)
+	fmt.Printf("remove: %v\n", guardConfigsToRemove)
 	getGuardConfigsResp, err := r.provider.service.GetGuardConfigurationsForCustomModelVersion(ctx, customModelVersion)
 	if err != nil {
 		return
@@ -1373,16 +1375,10 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:        guardConfigToAdd.Name.ValueString(),
-			Description: guardTemplate.Description,
-			Type:        guardTemplate.Type,
-			Stages:      stages,
-			Intervention: client.GuardIntervention{
-				Action:         guardConfigToAdd.Intervention.Action.ValueString(),
-				AllowedActions: guardTemplate.Intervention.AllowedActions,
-				Message:        guardConfigToAdd.Intervention.Message.ValueString(),
-				Conditions:     []client.GuardCondition{condition},
-			},
+			Name:         guardConfigToAdd.Name.ValueString(),
+			Description:  guardTemplate.Description,
+			Type:         guardTemplate.Type,
+			Stages:       stages,
 			ModelInfo:    guardTemplate.ModelInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
 
@@ -1396,6 +1392,14 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
+		if guardConfigToAdd.Intervention != nil {
+			newGuardConfig.Intervention = &client.GuardIntervention{
+				Action:         guardConfigToAdd.Intervention.Action.ValueString(),
+				AllowedActions: guardTemplate.Intervention.AllowedActions,
+				Message:        guardConfigToAdd.Intervention.Message.ValueString(),
+				Conditions:     []client.GuardCondition{condition},
+			}
+		}
 		if guardTemplate.OOTBType != "" {
 			newGuardConfig.OOTBType = guardTemplate.OOTBType
 		}
@@ -1423,6 +1427,17 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			setStringValueIfKnown(&newGuardConfig.NemoInfo.RailsConfig, guardConfigToAdd.NemoInfo.RailsConfig)
 		}
 
+		if guardConfigToAdd.AdditionalGuardConfig != nil {
+			newGuardConfig.AdditionalGuardConfig = client.AdditionalGuardConfig{
+				Cost: &client.GuardCostInfo{
+					Currency:    guardConfigToAdd.AdditionalGuardConfig.Cost.Currency.ValueString(),
+					InputPrice:  guardConfigToAdd.AdditionalGuardConfig.Cost.InputPrice.ValueFloat64(),
+					InputUnit:   guardConfigToAdd.AdditionalGuardConfig.Cost.InputUnit.ValueInt64(),
+					OutputPrice: guardConfigToAdd.AdditionalGuardConfig.Cost.OutputPrice.ValueFloat64(),
+					OutputUnit:  guardConfigToAdd.AdditionalGuardConfig.Cost.OutputUnit.ValueInt64(),
+				},
+			}
+		}
 		newGuardConfigs = append(newGuardConfigs, newGuardConfig)
 	}
 
