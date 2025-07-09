@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 type Service interface {
@@ -553,7 +554,12 @@ func (s *ServiceImpl) ListCustomModelVersions(ctx context.Context, id string) ([
 }
 
 func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error) {
-	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", nil)
+	type queryParams struct {
+		IncludeAgentic bool `json:"includeAgentic"`
+	}
+	//req := queryParams{IncludeAgentic: true}
+	params := url.Values{"includeAgentic": []string{"true"}}
+	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", params)
 }
 
 func (s *ServiceImpl) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error) {

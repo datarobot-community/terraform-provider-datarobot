@@ -181,9 +181,9 @@ type NemoInfo struct {
 }
 
 type GuardIntervention struct {
-	Action           string           `json:"action,omitempty"`
-	AllowedActions   []string         `json:"allowedActions,omitempty"`
-	Conditions       []GuardCondition `json:"conditions,omitempty"`
+	Action           string           `json:"action"`
+	AllowedActions   []string         `json:"allowedActions"`
+	Conditions       []GuardCondition `json:"conditions"`
 	ConditionLogic   string           `json:"conditionLogic,omitempty"`
 	ModifyMessage    string           `json:"modifyMessage,omitempty"`
 	Message          string           `json:"message,omitempty"`
@@ -218,7 +218,7 @@ type GuardConfiguration struct {
 	Stages                []string              `json:"stages"`
 	Type                  string                `json:"type"`
 	OOTBType              string                `json:"ootbType,omitempty"`
-	Intervention          *GuardIntervention    `json:"intervention"`
+	Intervention          GuardIntervention     `json:"intervention"`
 	ErrorMessage          string                `json:"errorMessage,omitempty"`
 	IsValid               bool                  `json:"isValid,omitempty"`
 	LlmType               string                `json:"llmType,omitempty"`

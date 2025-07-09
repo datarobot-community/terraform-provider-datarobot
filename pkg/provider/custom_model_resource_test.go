@@ -121,7 +121,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
 							Name:         basetypes.NewStringValue("Rouge 1 response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("report"),
 								Message:   basetypes.NewStringValue("you have been blocked by Rouge 1"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.2, "comparator": "lessThan"}`),
@@ -131,7 +131,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
@@ -145,7 +145,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Emotions Classifier"),
 							Name:         basetypes.NewStringValue("Emotions Classifier response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Emotions Classifier"),
 								Condition: basetypes.NewStringValue(`{"comparand": ["anger", "amusement"], "comparator": "matches"}`),
@@ -155,7 +155,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for inputs"),
 							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Nemo"),
 								Condition: basetypes.NewStringValue(`{"comparand": "TRUE", "comparator": "equals"}`),
@@ -228,7 +228,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
@@ -240,7 +240,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Prompt Tokens"),
 							Name:         basetypes.NewStringValue("prompt tokens"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by prompt token count"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -250,7 +250,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for inputs"),
 							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -260,7 +260,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for output"),
 							Name:         basetypes.NewStringValue("Stay on topic for output"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -304,6 +304,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Cost"),
 							Name:         basetypes.NewStringValue("Cost Response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("report"),
+								Message:   basetypes.NewStringValue(""),
+								Condition: basetypes.NewStringValue("{}"),
+							},
 							AdditionalGuardConfig: &AdditionalGuardConfig{Cost: GuardCostInfo{
 								Currency:    basetypes.NewStringValue("USD"),
 								InputPrice:  basetypes.NewFloat64Value(0.001),
@@ -316,7 +321,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Agent Goal Accuracy"),
 							Name:         basetypes.NewStringValue("Agent Goal Accuracy response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Agent Goal Accuracy"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
@@ -328,7 +333,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Task Adherence"),
 							Name:         basetypes.NewStringValue("Task Adherence response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: &GuardIntervention{
+							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Task Adherence"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
@@ -348,13 +353,16 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Cost"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Cost response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Cost Response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.currency", "USD"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.input_price", "0.001"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.input_unit", "1000"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.output_price", "0.01"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.output_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.currency", "USD"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.input_price", "0.001"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.input_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_price", "0.01"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "report"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", ""),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", "{}"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Agent Goal Accuracy"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.name", "Agent Goal Accuracy response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.stages.0", "response"),
@@ -1300,25 +1308,16 @@ func customModelWithoutLlmBlueprintResourceConfig(
 					guard.AdditionalGuardConfig.Cost.OutputUnit,
 				)
 			}
-			guardInterventionStr := ""
-			if guard.Intervention != nil {
-				guardInterventionStr = fmt.Sprintf(`
-					intervention = {
-						action  = %s
-						message = %s
-						condition = jsonencode(%s)
-					}`,
-					guard.Intervention.Action,
-					guard.Intervention.Message,
-					guard.Intervention.Condition.ValueString(),
-				)
-			}
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
 				name          = %s
 				stages        = %v
-				%s
+				intervention = {
+					action  = %s
+					message = %s
+					condition = jsonencode(%s)
+				}
 				%s
 				%s
 				%s
@@ -1326,7 +1325,9 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.TemplateName,
 				guard.Name,
 				guard.Stages,
-				guardInterventionStr,
+				guard.Intervention.Action,
+				guard.Intervention.Message,
+				guard.Intervention.Condition.ValueString(),
 				guardCredentialStr,
 				nemoInfoStr,
 				additionalGuardConfigStr)
