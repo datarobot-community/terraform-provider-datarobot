@@ -225,7 +225,7 @@ type GuardConfiguration struct {
 	TemplateName          types.String           `tfsdk:"template_name"`
 	Name                  types.String           `tfsdk:"name"`
 	Stages                []types.String         `tfsdk:"stages"`
-	Intervention          GuardIntervention      `tfsdk:"intervention"`
+	Intervention          *GuardIntervention     `tfsdk:"intervention"`
 	DeploymentID          types.String           `tfsdk:"deployment_id"`
 	InputColumnName       types.String           `tfsdk:"input_column_name"`
 	OutputColumnName      types.String           `tfsdk:"output_column_name"`

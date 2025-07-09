@@ -181,9 +181,9 @@ type NemoInfo struct {
 }
 
 type GuardIntervention struct {
-	Action           string           `json:"action"`
-	AllowedActions   []string         `json:"allowedActions"`
-	Conditions       []GuardCondition `json:"conditions"`
+	Action           string           `json:"action,omitempty"`
+	AllowedActions   []string         `json:"allowedActions,omitempty"`
+	Conditions       []GuardCondition `json:"conditions,omitempty"`
 	ConditionLogic   string           `json:"conditionLogic,omitempty"`
 	ModifyMessage    string           `json:"modifyMessage,omitempty"`
 	Message          string           `json:"message,omitempty"`
@@ -200,15 +200,15 @@ type GuardConfigurationResponse struct {
 }
 
 type GuardCostInfo struct {
-	Currency    string  `json:"currency"`
-	InputPrice  float64 `json:"inputPrice"`
-	InputUnit   int64   `json:"inputUnit"`
-	OutputPrice float64 `json:"outputPrice"`
-	OutputUnit  int64   `json:"outputUnit"`
+	Currency    string  `json:"currency,omitempty"`
+	InputPrice  float64 `json:"inputPrice,omitempty"`
+	InputUnit   int64   `json:"inputUnit,omitempty"`
+	OutputPrice float64 `json:"outputPrice,omitempty"`
+	OutputUnit  int64   `json:"outputUnit,omitempty"`
 }
 
 type AdditionalGuardConfig struct {
-	Cost GuardCostInfo `json:"cost,omitempty"`
+	Cost *GuardCostInfo `json:"cost,omitempty,omitzero"`
 }
 
 type GuardConfiguration struct {
@@ -218,7 +218,7 @@ type GuardConfiguration struct {
 	Stages                []string              `json:"stages"`
 	Type                  string                `json:"type"`
 	OOTBType              string                `json:"ootbType,omitempty"`
-	Intervention          GuardIntervention     `json:"intervention"`
+	Intervention          *GuardIntervention    `json:"intervention"`
 	ErrorMessage          string                `json:"errorMessage,omitempty"`
 	IsValid               bool                  `json:"isValid,omitempty"`
 	LlmType               string                `json:"llmType,omitempty"`
