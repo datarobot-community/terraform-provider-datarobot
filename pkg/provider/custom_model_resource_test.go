@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -120,7 +121,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
 							Name:         basetypes.NewStringValue("Rouge 1 response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("report"),
 								Message:   basetypes.NewStringValue("you have been blocked by Rouge 1"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.2, "comparator": "lessThan"}`),
@@ -130,7 +131,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
@@ -144,7 +145,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Emotions Classifier"),
 							Name:         basetypes.NewStringValue("Emotions Classifier response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Emotions Classifier"),
 								Condition: basetypes.NewStringValue(`{"comparand": ["anger", "amusement"], "comparator": "matches"}`),
@@ -154,7 +155,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for inputs"),
 							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Nemo"),
 								Condition: basetypes.NewStringValue(`{"comparand": "TRUE", "comparator": "equals"}`),
@@ -227,7 +228,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
 							Name:         basetypes.NewStringValue("Faithfulness response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Faithfulness"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0, "comparator": "equals"}`),
@@ -239,7 +240,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Prompt Tokens"),
 							Name:         basetypes.NewStringValue("prompt tokens"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by prompt token count"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -249,7 +250,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for inputs"),
 							Name:         basetypes.NewStringValue("Stay on topic for inputs"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("prompt")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -259,7 +260,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Stay on topic for output"),
 							Name:         basetypes.NewStringValue("Stay on topic for output"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Stay on topic"),
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
@@ -315,7 +316,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Agent Goal Accuracy"),
 							Name:         basetypes.NewStringValue("Agent Goal Accuracy response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Agent Goal Accuracy"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
@@ -327,7 +328,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							TemplateName: basetypes.NewStringValue("Task Adherence"),
 							Name:         basetypes.NewStringValue("Task Adherence response"),
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
-							Intervention: GuardIntervention{
+							Intervention: &GuardIntervention{
 								Action:    basetypes.NewStringValue("block"),
 								Message:   basetypes.NewStringValue("you have been blocked by Task Adherence"),
 								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
@@ -1280,27 +1281,55 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}`, guard.NemoInfo.BlockedTerms)
 			}
 
+			additionalGuardConfigStr := ""
+			if guard.AdditionalGuardConfig != nil {
+				additionalGuardConfigStr = fmt.Sprintf(`
+				additional_guard_config = {
+					cost = {
+						currency = %s
+						input_price = %s
+						input_unit = %s
+						output_price = %s
+						output_unit = %s
+					}
+				}`,
+					guard.AdditionalGuardConfig.Cost.Currency,
+					guard.AdditionalGuardConfig.Cost.InputPrice,
+					guard.AdditionalGuardConfig.Cost.InputUnit,
+					guard.AdditionalGuardConfig.Cost.OutputPrice,
+					guard.AdditionalGuardConfig.Cost.OutputUnit,
+				)
+			}
+			guardInterventionStr := ""
+			if guard.Intervention != nil {
+				guardInterventionStr = fmt.Sprintf(`
+					intervention = {
+						action  = %s
+						message = %s
+						condition = jsonencode(%s)
+					}`,
+					guard.Intervention.Action,
+					guard.Intervention.Message,
+					guard.Intervention.Condition.ValueString(),
+				)
+			}
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
 				name          = %s
 				stages        = %v
-				intervention = {
-					action  = %s
-					message = %s
-					condition = jsonencode(%s)
-				}
+				%s
+				%s
 				%s
 				%s
 			},`,
 				guard.TemplateName,
 				guard.Name,
 				guard.Stages,
-				guard.Intervention.Action,
-				guard.Intervention.Message,
-				guard.Intervention.Condition.ValueString(),
+				guardInterventionStr,
 				guardCredentialStr,
-				nemoInfoStr)
+				nemoInfoStr,
+				additionalGuardConfigStr)
 		}
 		guardsStr += "]"
 	}
@@ -1321,7 +1350,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		`, resourceName)
 	}
 
-	return fmt.Sprintf(`
+	s := fmt.Sprintf(`
 resource "datarobot_use_case" "%s" {
 	name = "test custom model without llm blueprint"
 }
@@ -1374,6 +1403,11 @@ resource "datarobot_custom_model" "%s" {
 		guardsStr,
 		resourceSettingsStr,
 		trainingDatasetStr)
+	_, err := io.WriteString(os.Stdout, s)
+	if err != nil {
+		return ""
+	}
+	return s
 }
 
 func customModelWithRuntimeParamsConfig(value string) string {
