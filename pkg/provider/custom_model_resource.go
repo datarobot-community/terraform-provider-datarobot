@@ -1296,8 +1296,10 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 ) (
 	err error,
 ) {
-	fmt.Printf("add: %v\n", guardConfigsToAdd)
-	fmt.Printf("remove: %v\n", guardConfigsToRemove)
+	fmt.Printf("--------------------------------------")
+	fmt.Printf("Guards to add: %v\n", guardConfigsToAdd)
+	fmt.Printf("Guards to remove: %v\n", guardConfigsToRemove)
+	fmt.Printf("--------------------------------------")
 	getGuardConfigsResp, err := r.provider.service.GetGuardConfigurationsForCustomModelVersion(ctx, customModelVersion)
 	if err != nil {
 		return
@@ -1324,18 +1326,19 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:               existingGuardConfig.Name,
-			Description:        existingGuardConfig.Description,
-			Type:               existingGuardConfig.Type,
-			Stages:             existingGuardConfig.Stages,
-			Intervention:       intervention,
-			DeploymentID:       existingGuardConfig.DeploymentID,
-			NemoInfo:           existingGuardConfig.NemoInfo,
-			ModelInfo:          existingGuardConfig.ModelInfo,
-			OpenAICredential:   existingGuardConfig.OpenAICredential,
-			OpenAIApiBase:      existingGuardConfig.OpenAIApiBase,
-			OpenAIDeploymentID: existingGuardConfig.OpenAIDeploymentID,
-			LlmType:            existingGuardConfig.LlmType,
+			Name:                  existingGuardConfig.Name,
+			Description:           existingGuardConfig.Description,
+			Type:                  existingGuardConfig.Type,
+			Stages:                existingGuardConfig.Stages,
+			Intervention:          intervention,
+			DeploymentID:          existingGuardConfig.DeploymentID,
+			NemoInfo:              existingGuardConfig.NemoInfo,
+			ModelInfo:             existingGuardConfig.ModelInfo,
+			OpenAICredential:      existingGuardConfig.OpenAICredential,
+			OpenAIApiBase:         existingGuardConfig.OpenAIApiBase,
+			OpenAIDeploymentID:    existingGuardConfig.OpenAIDeploymentID,
+			LlmType:               existingGuardConfig.LlmType,
+			AdditionalGuardConfig: existingGuardConfig.AdditionalGuardConfig,
 		}
 
 		if existingGuardConfig.OOTBType != "" {
@@ -1347,20 +1350,24 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 	guardTemplates, err := r.provider.service.ListGuardTemplates(ctx)
 	if err != nil {
+		fmt.Printf("Error listing guard templates: %v\n", err)
 		return
 	}
 
 	for _, guardConfigToAdd := range guardConfigsToAdd {
+		fmt.Printf("searching template for %v\n", guardConfigToAdd)
 		var guardTemplate *client.GuardTemplate
 		for index := range guardTemplates {
 			template := guardTemplates[index]
 			if template.Name == guardConfigToAdd.TemplateName.ValueString() {
 				guardTemplate = &template
+				fmt.Printf("found guard template %v\n", guardTemplate)
 				break
 			}
 		}
 
 		if guardTemplate == nil {
+			fmt.Printf("guard template %v does not exist\n", guardConfigToAdd)
 			return
 		}
 
@@ -1375,10 +1382,16 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:         guardConfigToAdd.Name.ValueString(),
-			Description:  guardTemplate.Description,
-			Type:         guardTemplate.Type,
-			Stages:       stages,
+			Name:        guardConfigToAdd.Name.ValueString(),
+			Description: guardTemplate.Description,
+			Type:        guardTemplate.Type,
+			Stages:      stages,
+			Intervention: client.GuardIntervention{
+				Action:         guardConfigToAdd.Intervention.Action.ValueString(),
+				AllowedActions: guardTemplate.Intervention.AllowedActions,
+				Message:        guardConfigToAdd.Intervention.Message.ValueString(),
+				Conditions:     []client.GuardCondition{condition},
+			},
 			ModelInfo:    guardTemplate.ModelInfo,
 			DeploymentID: guardConfigToAdd.DeploymentID.ValueString(),
 
@@ -1392,14 +1405,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
-		if guardConfigToAdd.Intervention != nil {
-			newGuardConfig.Intervention = &client.GuardIntervention{
-				Action:         guardConfigToAdd.Intervention.Action.ValueString(),
-				AllowedActions: guardTemplate.Intervention.AllowedActions,
-				Message:        guardConfigToAdd.Intervention.Message.ValueString(),
-				Conditions:     []client.GuardCondition{condition},
-			}
-		}
 		if guardTemplate.OOTBType != "" {
 			newGuardConfig.OOTBType = guardTemplate.OOTBType
 		}
@@ -1438,6 +1443,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 				},
 			}
 		}
+		fmt.Printf("New guard config is %v\n", newGuardConfig)
 		newGuardConfigs = append(newGuardConfigs, newGuardConfig)
 	}
 
@@ -1451,12 +1457,14 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		overallModerationConfig.TimeoutAction = plan.OverallModerationConfiguration.TimeoutAction.ValueString()
 	}
 
+	fmt.Printf("New moderation config is %v\n", newGuardConfigs)
 	traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
 	if _, err = r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
 		CustomModelID: customModelID,
 		Data:          newGuardConfigs,
 		OverallConfig: overallModerationConfig,
 	}); err != nil {
+		fmt.Printf("Error creating custom model version %v\n", err)
 		return
 	}
 
