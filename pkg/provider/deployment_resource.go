@@ -801,10 +801,10 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 			deactivatedDeployment = true
 		}
 	}
-
-	err = r.updateDeploymentSettings(ctx, id, plan)
+	// deactivate Deployment if Resource Bundle is being updated
+	err = r.updateDeploymentSettingsInNotActiveState(ctx, id, plan)
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
+		resp.Diagnostics.AddError("Error updating Deployment settings in not active state", err.Error())
 		return
 	}
 
@@ -812,6 +812,12 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		if err = r.activateDeployment(ctx, id); err != nil {
 			return
 		}
+	}
+
+	err = r.updateDeploymentSettings(ctx, id, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
+		return
 	}
 
 	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
@@ -987,14 +993,6 @@ func (r *DeploymentResource) updateDeploymentSettings(
 		}
 	}
 
-	if data.PredictionsSettings != nil {
-		req.PredictionsSettings = &client.PredictionsSettings{
-			MinComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MinComputes),
-			MaxComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MaxComputes),
-			ResourceBundleID: StringValuePointerOptional(data.PredictionsSettings.ResourceBundleID),
-		}
-	}
-
 	traceAPICall("UpdateDeploymentSettings")
 	_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
 	if err != nil {
@@ -1102,6 +1100,30 @@ func (r *DeploymentResource) updateDeploymentSettings(
 			return
 		}
 	}
+	return
+}
+
+func (r *DeploymentResource) updateDeploymentSettingsInNotActiveState(
+	ctx context.Context,
+	id string,
+	data DeploymentResourceModel,
+) (err error) {
+	req := &client.DeploymentSettings{}
+
+	if data.PredictionsSettings != nil {
+		req.PredictionsSettings = &client.PredictionsSettings{
+			MinComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MinComputes),
+			MaxComputes:      Int64ValuePointerOptional(data.PredictionsSettings.MaxComputes),
+			ResourceBundleID: StringValuePointerOptional(data.PredictionsSettings.ResourceBundleID),
+		}
+
+		traceAPICall("UpdateDeploymentSettings")
+		_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
+		if err != nil {
+			return
+		}
+	}
+
 	return
 }
 
