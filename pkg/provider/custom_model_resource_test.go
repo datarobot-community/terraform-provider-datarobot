@@ -306,8 +306,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("report"),
-								Message:   basetypes.NewStringValue(""),
-								Condition: basetypes.NewStringValue("{}"),
+								Message:   basetypes.NewStringValue("Unused"),
+								Condition: basetypes.NewStringValue(`{"comparand": "ignore", "comparator": "is"}`),
 							},
 							AdditionalGuardConfig: &AdditionalGuardConfig{Cost: GuardCostInfo{
 								Currency:    basetypes.NewStringValue("USD"),
