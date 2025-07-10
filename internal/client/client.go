@@ -143,9 +143,7 @@ func Get[T any](c *Client, ctx context.Context, path string) (*T, error) {
 
 func GetAllPages[T any](c *Client, ctx context.Context, path string, queryReq any) ([]T, error) {
 	var results []T
-	fmt.Printf("Query req: %v\n", queryReq)
 	pathValues, _ := query.Values(queryReq)
-	fmt.Printf("Path Values: %v\n", pathValues)
 	nextURL := path + "?" + pathValues.Encode()
 
 	// Fetch all pages.

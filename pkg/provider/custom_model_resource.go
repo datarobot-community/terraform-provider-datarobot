@@ -1296,10 +1296,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 ) (
 	err error,
 ) {
-	fmt.Printf("--------------------------------------")
-	fmt.Printf("Guards to add: %v\n", guardConfigsToAdd)
-	fmt.Printf("Guards to remove: %v\n", guardConfigsToRemove)
-	fmt.Printf("--------------------------------------")
 	getGuardConfigsResp, err := r.provider.service.GetGuardConfigurationsForCustomModelVersion(ctx, customModelVersion)
 	if err != nil {
 		return
@@ -1355,13 +1351,11 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	}
 
 	for _, guardConfigToAdd := range guardConfigsToAdd {
-		fmt.Printf("searching template for %v\n", guardConfigToAdd)
 		var guardTemplate *client.GuardTemplate
 		for index := range guardTemplates {
 			template := guardTemplates[index]
 			if template.Name == guardConfigToAdd.TemplateName.ValueString() {
 				guardTemplate = &template
-				fmt.Printf("found guard template %v\n", guardTemplate)
 				break
 			}
 		}
@@ -1405,6 +1399,9 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
+		if guardTemplate.Intervention.AllowedActions == nil {
+			newGuardConfig.Intervention.AllowedActions = []string{}
+		}
 		if guardTemplate.OOTBType != "" {
 			newGuardConfig.OOTBType = guardTemplate.OOTBType
 		}
@@ -1443,7 +1440,7 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 				},
 			}
 		}
-		fmt.Printf("New guard config is %v\n", newGuardConfig)
+
 		newGuardConfigs = append(newGuardConfigs, newGuardConfig)
 	}
 
@@ -1457,7 +1454,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		overallModerationConfig.TimeoutAction = plan.OverallModerationConfiguration.TimeoutAction.ValueString()
 	}
 
-	fmt.Printf("New moderation config is %v\n", newGuardConfigs)
 	traceAPICall("CreateCustomModelVersionFromGuardConfigurations")
 	if _, err = r.provider.service.CreateCustomModelVersionFromGuardConfigurations(ctx, customModelVersion, &client.CreateCustomModelVersionFromGuardsConfigurationRequest{
 		CustomModelID: customModelID,
