@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -286,6 +287,98 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
 					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
+				),
+			},
+			// Agentic Guards
+			{
+				Config: customModelWithoutLlmBlueprintResourceConfig(
+					resourceTestName,
+					"example_name",
+					"example_description",
+					baseEnvironmentID2,
+					sourceRemoteRepositories,
+					nil,
+					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
+					[]GuardConfiguration{
+						{
+							TemplateName: basetypes.NewStringValue("Cost"),
+							Name:         basetypes.NewStringValue("Cost Response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("report"),
+								Message:   basetypes.NewStringValue("Unused"),
+								Condition: basetypes.NewStringValue(`{"comparand": "ignore", "comparator": "is"}`),
+							},
+							AdditionalGuardConfig: &AdditionalGuardConfig{Cost: GuardCostInfo{
+								Currency:    basetypes.NewStringValue("USD"),
+								InputPrice:  basetypes.NewFloat64Value(0.001),
+								InputUnit:   basetypes.NewInt64Value(1000),
+								OutputPrice: basetypes.NewFloat64Value(0.01),
+								OutputUnit:  basetypes.NewInt64Value(1000),
+							}},
+						},
+						{
+							TemplateName: basetypes.NewStringValue("Agent Goal Accuracy"),
+							Name:         basetypes.NewStringValue("Agent Goal Accuracy response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Agent Goal Accuracy"),
+								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
+							},
+							OpenAICredential: basetypes.NewStringValue("test"),
+							LlmType:          basetypes.NewStringValue("openAi"),
+						},
+						{
+							TemplateName: basetypes.NewStringValue("Task Adherence"),
+							Name:         basetypes.NewStringValue("Task Adherence response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("block"),
+								Message:   basetypes.NewStringValue("you have been blocked by Task Adherence"),
+								Condition: basetypes.NewStringValue(`{"comparand": 0.5, "comparator": "lessThan"}`),
+							},
+							OpenAICredential: basetypes.NewStringValue("test"),
+							LlmType:          basetypes.NewStringValue("openAi"),
+						},
+					},
+					nil,
+					false),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Cost"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Cost Response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.currency", "USD"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.input_price", "0.001"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.input_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_price", "0.01"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "report"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", ""),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", "{}"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Agent Goal Accuracy"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.name", "Agent Goal Accuracy response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.stages.0", "response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.intervention.action", "block"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.intervention.message", "you have been blocked by Agent Goal Accuracy"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.intervention.condition", `{"comparand":0.5,"comparator":"lessThan"}`),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.1.openai_credential"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.llm_type", "openAi"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.template_name", "Task Adherence"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.name", "Task Adherence response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.stages.0", "response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.action", "block"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.message", "you have been blocked by Task Adherence"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.intervention.condition", `{"comparand":0.5,"comparator":"lessThan"}`),
+					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.2.openai_credential"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.2.llm_type", "openAi"),
 				),
 			},
 			// Remove guards
@@ -1196,6 +1289,25 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}`, guard.NemoInfo.BlockedTerms)
 			}
 
+			additionalGuardConfigStr := ""
+			if guard.AdditionalGuardConfig != nil {
+				additionalGuardConfigStr = fmt.Sprintf(`
+				additional_guard_config = {
+					cost = {
+						currency = %s
+						input_price = %s
+						input_unit = %s
+						output_price = %s
+						output_unit = %s
+					}
+				}`,
+					guard.AdditionalGuardConfig.Cost.Currency,
+					guard.AdditionalGuardConfig.Cost.InputPrice,
+					guard.AdditionalGuardConfig.Cost.InputUnit,
+					guard.AdditionalGuardConfig.Cost.OutputPrice,
+					guard.AdditionalGuardConfig.Cost.OutputUnit,
+				)
+			}
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
@@ -1208,6 +1320,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}
 				%s
 				%s
+				%s
 			},`,
 				guard.TemplateName,
 				guard.Name,
@@ -1216,7 +1329,8 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.Intervention.Message,
 				guard.Intervention.Condition.ValueString(),
 				guardCredentialStr,
-				nemoInfoStr)
+				nemoInfoStr,
+				additionalGuardConfigStr)
 		}
 		guardsStr += "]"
 	}
@@ -1237,7 +1351,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		`, resourceName)
 	}
 
-	return fmt.Sprintf(`
+	s := fmt.Sprintf(`
 resource "datarobot_use_case" "%s" {
 	name = "test custom model without llm blueprint"
 }
@@ -1290,6 +1404,11 @@ resource "datarobot_custom_model" "%s" {
 		guardsStr,
 		resourceSettingsStr,
 		trainingDatasetStr)
+	_, err := io.WriteString(os.Stdout, s)
+	if err != nil {
+		return ""
+	}
+	return s
 }
 
 func customModelWithRuntimeParamsConfig(value string) string {
