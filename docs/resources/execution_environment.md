@@ -49,6 +49,7 @@ output "datarobot_execution_environment_version_id" {
 - `description` (String) The description of the Execution Environment.
 - `docker_context_path` (String) The path to a docker context archive or folder
 - `docker_image` (String) A prebuilt environment image saved as a tarball using the Docker save command.
+- `docker_image_uri` (String) The URI of a pre-built environment image (e.g., in a remote Docker registry).
 - `version_description` (String) The description of the Execution Environment version.
 
 ### Read-Only

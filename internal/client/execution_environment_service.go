@@ -8,8 +8,9 @@ type CreateExecutionEnvironmentRequest struct {
 }
 
 type CreateExecutionEnvironmentVersionRequest struct {
-	Description string     `json:"description,omitempty"`
-	Files       []FileInfo `json:"files"`
+	Description    string     `json:"description,omitempty"`
+	DockerImageUri string     `json:"dockerImageUri,omitempty"`
+	Files          []FileInfo `json:"files"`
 }
 
 type UpdateExecutionEnvironmentRequest struct {
@@ -29,10 +30,11 @@ type ExecutionEnvironment struct {
 }
 
 type ExecutionEnvironmentVersion struct {
-	ID            string `json:"id"`
-	Label         string `json:"label"`
-	EnvironmentID string `json:"environmentId"`
-	ImageID       string `json:"imageId"`
-	Description   string `json:"description"`
-	BuildStatus   string `json:"buildStatus"`
+	ID             string `json:"id"`
+	Label          string `json:"label"`
+	EnvironmentID  string `json:"environmentId"`
+	ImageID        string `json:"imageId"`
+	Description    string `json:"description"`
+	BuildStatus    string `json:"buildStatus"`
+	DockerImageUri string `json:"sourceDockerImageUri"`
 }
