@@ -1,3 +1,14 @@
+## Unreleased
+
+
+
+## [0.10.11] - 2025-07-15
+
+### Fixed
+
+- Moved OAuth provider resources to `api/v2`
+
+
 ## [0.10.10] - 2025-07-01
 
 ### Fixed
