@@ -19,8 +19,8 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_llm_blueprint.test"
-	llmID := "azure-openai-gpt-3.5-turbo"
-	newLLMID := "amazon-titan"
+	llmID := "azure-openai-gpt-4-o-mini"
+	newLLMID := "amazon-nova-micro"
 	deployedLLMID := "custom-model"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
