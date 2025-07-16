@@ -1093,7 +1093,7 @@ resource "datarobot_llm_blueprint" "test_custom_model" {
 	description = "test"
 	vector_database_id = "${datarobot_vector_database.test_custom_model.id}"
 	playground_id = "${datarobot_playground.test_custom_model.id}"
-	llm_id = "azure-openai-gpt-3.5-turbo"
+	llm_id = "azure-openai-gpt-4-o-mini"
 }
 resource "datarobot_api_token_credential" "test_custom_model" {
 	name = "test custom model %s"

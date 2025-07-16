@@ -12,7 +12,7 @@ resource "datarobot_llm_blueprint" "example" {
   name          = "An example LLM blueprint"
   description   = "Description for the example LLM blueprint"
   playground_id = datarobot_playground.example.id
-  llm_id        = "azure-openai-gpt-3.5-turbo"
+  llm_id        = "azure-openai-gpt-4-o-mini"
   prompt_type   = "ONE_TIME_PROMPT"
 
   # Optional
