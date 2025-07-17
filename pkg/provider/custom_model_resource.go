@@ -1346,7 +1346,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 
 	guardTemplates, err := r.provider.service.ListGuardTemplates(ctx)
 	if err != nil {
-		fmt.Printf("Error listing guard templates: %v\n", err)
 		return
 	}
 
@@ -1361,7 +1360,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		if guardTemplate == nil {
-			fmt.Printf("guard template %v does not exist\n", guardConfigToAdd)
 			return
 		}
 
@@ -1460,7 +1458,6 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		Data:          newGuardConfigs,
 		OverallConfig: overallModerationConfig,
 	}); err != nil {
-		fmt.Printf("Error creating custom model version %v\n", err)
 		return
 	}
 
