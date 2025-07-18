@@ -306,8 +306,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
 							Intervention: GuardIntervention{
 								Action:    basetypes.NewStringValue("report"),
-								Message:   basetypes.NewStringValue(""),
-								Condition: basetypes.NewStringValue("{}"),
+								Message:   basetypes.NewStringValue("Unused"),
+								Condition: basetypes.NewStringValue(`{"comparand": "ignore", "comparator": "is"}`),
 							},
 							AdditionalGuardConfig: &AdditionalGuardConfig{Cost: GuardCostInfo{
 								Currency:    basetypes.NewStringValue("USD"),
@@ -361,8 +361,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_price", "0.01"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_unit", "1000"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "report"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", ""),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", "{}"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "Unused"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand": "ignore", "comparator": "is"}`),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Agent Goal Accuracy"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.name", "Agent Goal Accuracy response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.stages.0", "response"),
