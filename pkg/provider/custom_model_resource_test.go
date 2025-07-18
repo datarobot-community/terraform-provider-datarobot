@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -1349,7 +1348,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 		`, resourceName)
 	}
 
-	s := fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "datarobot_use_case" "%s" {
 	name = "test custom model without llm blueprint"
 }
@@ -1402,11 +1401,6 @@ resource "datarobot_custom_model" "%s" {
 		guardsStr,
 		resourceSettingsStr,
 		trainingDatasetStr)
-	_, err := io.WriteString(os.Stdout, s)
-	if err != nil {
-		return ""
-	}
-	return s
 }
 
 func customModelWithRuntimeParamsConfig(value string) string {
