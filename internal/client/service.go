@@ -950,7 +950,22 @@ func (s *ServiceImpl) ListExecutionEnvironments(ctx context.Context) ([]Executio
 }
 
 func (s *ServiceImpl) CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error) {
-	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/", http.MethodPost, req.Files, map[string]string{"description": req.Description})
+	params := map[string]string{
+		"description": req.Description,
+	}
+
+	if req.DockerImageUri != "" {
+		params["dockerImageUri"] = req.DockerImageUri
+	}
+
+	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](
+		s.client,
+		ctx,
+		"/executionEnvironments/"+id+"/versions/",
+		http.MethodPost,
+		req.Files,
+		params,
+	)
 }
 
 func (s *ServiceImpl) GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error) {

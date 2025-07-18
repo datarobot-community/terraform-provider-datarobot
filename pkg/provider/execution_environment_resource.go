@@ -86,6 +86,13 @@ func (r *ExecutionEnvironmentResource) Schema(ctx context.Context, req resource.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"docker_image_uri": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The URI of a pre-built environment image (e.g., in a remote Docker registry).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"docker_context_hash": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The hash of the docker context contents.",
@@ -186,6 +193,9 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 			FormFieldName: "docker_image",
 		})
 	}
+	if IsKnown(data.DockerImageUri) {
+		createExecutionEnvironmentVersionRequest.DockerImageUri = data.DockerImageUri.ValueString()
+	}
 
 	traceAPICall("CreateExecutionEnvironmentVersion")
 	if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest); err != nil {
@@ -246,6 +256,9 @@ func (r *ExecutionEnvironmentResource) Read(ctx context.Context, req resource.Re
 	data.VersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
 	if executionEnvironment.LatestVersion.Description != "" {
 		data.VersionDescription = types.StringValue(executionEnvironment.LatestVersion.Description)
+	}
+	if executionEnvironment.LatestVersion.DockerImageUri != "" {
+		data.DockerImageUri = types.StringValue(executionEnvironment.LatestVersion.DockerImageUri)
 	}
 	data.BuildStatus = types.StringValue(executionEnvironment.LatestVersion.BuildStatus)
 
@@ -315,7 +328,8 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 		plan.DockerContextPath.ValueString() != state.DockerContextPath.ValueString() ||
 		plan.DockerContextHash.ValueString() != state.DockerContextHash.ValueString() ||
 		plan.DockerImageHash.ValueString() != state.DockerImageHash.ValueString() ||
-		plan.DockerImage.ValueString() != state.DockerImage.ValueString() {
+		plan.DockerImage.ValueString() != state.DockerImage.ValueString() ||
+		plan.DockerImageUri.ValueString() != state.DockerImageUri.ValueString() {
 		traceAPICall("CreateExecutionEnvironmentVersion")
 		updateExecutionEnvironmentRequest := &client.CreateExecutionEnvironmentVersionRequest{
 			Description: plan.VersionDescription.ValueString(),
@@ -335,6 +349,10 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 				Content:       dockerImageContent,
 				FormFieldName: "docker_image",
 			})
+		}
+
+		if IsKnown(plan.DockerImageUri) {
+			updateExecutionEnvironmentRequest.DockerImageUri = plan.DockerImageUri.ValueString()
 		}
 
 		if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest); err != nil {
@@ -381,6 +399,12 @@ func (r ExecutionEnvironmentResource) ConfigValidators(ctx context.Context) []re
 		resourcevalidator.AtLeastOneOf(
 			path.MatchRoot("docker_context_path"),
 			path.MatchRoot("docker_image"),
+			path.MatchRoot("docker_image_uri"),
+		),
+
+		resourcevalidator.Conflicting(
+			path.MatchRoot("docker_image"),
+			path.MatchRoot("docker_image_uri"),
 		),
 	}
 }
