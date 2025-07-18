@@ -435,7 +435,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 
 	overallModerationConfiguration.TimeoutSec = 120
 
-	guardTemplates, err := s.ListGuardTemplates(ctx, &client.GetAllTempatesRequest{IncludeAgentic: true})
+	guardTemplates, err := s.ListGuardTemplates(ctx)
 	require.NoError(err)
 	require.NotEmpty(guardTemplates)
 
