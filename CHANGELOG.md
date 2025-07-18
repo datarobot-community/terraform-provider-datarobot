@@ -1,13 +1,16 @@
 ## Unreleased
 
+## [0.10.12] - 2025-07-18
 
+### Added
+
+- Added a parameter `docker_image_uri` for ExecutionEnvironmentResource to allow environment version creation from image URI
 
 ## [0.10.11] - 2025-07-15
 
 ### Fixed
 
 - Moved OAuth provider resources to `api/v2`
-
 
 ## [0.10.10] - 2025-07-01
 
