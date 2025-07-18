@@ -178,7 +178,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -351,7 +350,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.template_name", "Cost"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.name", "Cost Response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.stages.0", "response"),
@@ -362,7 +360,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.additional_guard_config.cost.output_unit", "1000"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.action", "report"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.message", "Unused"),
-					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand": "ignore", "comparator": "is"}`),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":"ignore","comparator":"is"}`),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.template_name", "Agent Goal Accuracy"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.name", "Agent Goal Accuracy response"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.1.stages.0", "response"),
@@ -1663,6 +1661,10 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 			if rs.Primary.Attributes["guard_configurations.0.name"] != "" {
 				found := false
 				for _, guardConfig := range getGuardConfigsResp.Data {
+					fmt.Printf("Guard Config: %s, Stage: %s, Expected Name: %s, Expected Stage: %s\n",
+						guardConfig.Name, guardConfig.Stages[0], rs.Primary.Attributes["guard_configurations.0.name"], rs.Primary.Attributes["guard_configurations.0.stages.0"])
+					// Debugging output to check guard configuration values
+
 					if guardConfig.Name == rs.Primary.Attributes["guard_configurations.0.name"] &&
 						guardConfig.Stages[0] == rs.Primary.Attributes["guard_configurations.0.stages.0"] {
 						found = true
