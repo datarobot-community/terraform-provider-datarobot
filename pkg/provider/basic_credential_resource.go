@@ -69,8 +69,11 @@ func (r *BasicCredentialResource) Schema(ctx context.Context, req resource.Schem
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				// NOTE: We are leaving the validator in to enforce the existence of a password
+				// (as a password is required by DataRobot)
+				// but we are not enforcing any particular length.
 				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(14),
+					stringvalidator.LengthAtLeast(1),
 				},
 			},
 		},
