@@ -1,5 +1,11 @@
 ## Unreleased
 
+## [0.10.13] - 2025-07-24
+
+### Fixed
+
+- Relaxes basic auth password length to 1 character
+
 ## [0.10.12] - 2025-07-18
 
 ### Added
