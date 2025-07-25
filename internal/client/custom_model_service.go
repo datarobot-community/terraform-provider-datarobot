@@ -199,23 +199,36 @@ type GuardConfigurationResponse struct {
 	Data []GuardConfiguration `json:"data"`
 }
 
+type GuardCostInfo struct {
+	Currency    string  `json:"currency,omitempty"`
+	InputPrice  float64 `json:"inputPrice,omitempty"`
+	InputUnit   int64   `json:"inputUnit,omitempty"`
+	OutputPrice float64 `json:"outputPrice,omitempty"`
+	OutputUnit  int64   `json:"outputUnit,omitempty"`
+}
+
+type AdditionalGuardConfig struct {
+	Cost *GuardCostInfo `json:"cost,omitempty,omitzero"`
+}
+
 type GuardConfiguration struct {
-	ID                 string            `json:"id,omitempty"`
-	Name               string            `json:"name"`
-	Description        string            `json:"description"`
-	Stages             []string          `json:"stages"`
-	Type               string            `json:"type"`
-	OOTBType           string            `json:"ootbType,omitempty"`
-	Intervention       GuardIntervention `json:"intervention"`
-	ErrorMessage       string            `json:"errorMessage,omitempty"`
-	IsValid            bool              `json:"isValid,omitempty"`
-	LlmType            string            `json:"llmType,omitempty"`
-	DeploymentID       string            `json:"deploymentId,omitempty"`
-	NemoInfo           NemoInfo          `json:"nemoInfo,omitempty"`
-	ModelInfo          GuardModelInfo    `json:"modelInfo,omitempty"`
-	OpenAICredential   string            `json:"openaiCredential,omitempty"`
-	OpenAIApiBase      string            `json:"openaiApiBase,omitempty"`
-	OpenAIDeploymentID string            `json:"openaiDeploymentId,omitempty"`
+	ID                    string                `json:"id,omitempty"`
+	Name                  string                `json:"name"`
+	Description           string                `json:"description"`
+	Stages                []string              `json:"stages"`
+	Type                  string                `json:"type"`
+	OOTBType              string                `json:"ootbType,omitempty"`
+	Intervention          GuardIntervention     `json:"intervention"`
+	ErrorMessage          string                `json:"errorMessage,omitempty"`
+	IsValid               bool                  `json:"isValid,omitempty"`
+	LlmType               string                `json:"llmType,omitempty"`
+	DeploymentID          string                `json:"deploymentId,omitempty"`
+	NemoInfo              NemoInfo              `json:"nemoInfo,omitempty"`
+	ModelInfo             GuardModelInfo        `json:"modelInfo,omitempty"`
+	OpenAICredential      string                `json:"openaiCredential,omitempty"`
+	OpenAIApiBase         string                `json:"openaiApiBase,omitempty"`
+	OpenAIDeploymentID    string                `json:"openaiDeploymentId,omitempty"`
+	AdditionalGuardConfig AdditionalGuardConfig `json:"additionalGuardConfig,omitempty"`
 }
 
 type GuardModelInfo struct {

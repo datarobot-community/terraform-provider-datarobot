@@ -344,6 +344,38 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 								},
 							},
 						},
+						"additional_guard_config": schema.SingleNestedAttribute{
+							Optional:            true,
+							MarkdownDescription: "Additional guard configuration",
+							Attributes: map[string]schema.Attribute{
+								"cost": schema.SingleNestedAttribute{
+									Optional:            true,
+									MarkdownDescription: "Cost metric configuration",
+									Attributes: map[string]schema.Attribute{
+										"currency": schema.StringAttribute{
+											Required:            true,
+											MarkdownDescription: "Currency for cost calculation (USD)",
+										},
+										"input_price": schema.Float64Attribute{
+											Required:            true,
+											MarkdownDescription: "LLM Price for input_unit tokens",
+										},
+										"input_unit": schema.Int64Attribute{
+											Required:            true,
+											MarkdownDescription: "No of input tokens for given price",
+										},
+										"output_price": schema.Float64Attribute{
+											Required:            true,
+											MarkdownDescription: "LLM Price for output_unit tokens",
+										},
+										"output_unit": schema.Int64Attribute{
+											Required:            true,
+											MarkdownDescription: "No of output tokens for given price",
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1290,18 +1322,19 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 		}
 
 		newGuardConfig := client.GuardConfiguration{
-			Name:               existingGuardConfig.Name,
-			Description:        existingGuardConfig.Description,
-			Type:               existingGuardConfig.Type,
-			Stages:             existingGuardConfig.Stages,
-			Intervention:       intervention,
-			DeploymentID:       existingGuardConfig.DeploymentID,
-			NemoInfo:           existingGuardConfig.NemoInfo,
-			ModelInfo:          existingGuardConfig.ModelInfo,
-			OpenAICredential:   existingGuardConfig.OpenAICredential,
-			OpenAIApiBase:      existingGuardConfig.OpenAIApiBase,
-			OpenAIDeploymentID: existingGuardConfig.OpenAIDeploymentID,
-			LlmType:            existingGuardConfig.LlmType,
+			Name:                  existingGuardConfig.Name,
+			Description:           existingGuardConfig.Description,
+			Type:                  existingGuardConfig.Type,
+			Stages:                existingGuardConfig.Stages,
+			Intervention:          intervention,
+			DeploymentID:          existingGuardConfig.DeploymentID,
+			NemoInfo:              existingGuardConfig.NemoInfo,
+			ModelInfo:             existingGuardConfig.ModelInfo,
+			OpenAICredential:      existingGuardConfig.OpenAICredential,
+			OpenAIApiBase:         existingGuardConfig.OpenAIApiBase,
+			OpenAIDeploymentID:    existingGuardConfig.OpenAIDeploymentID,
+			LlmType:               existingGuardConfig.LlmType,
+			AdditionalGuardConfig: existingGuardConfig.AdditionalGuardConfig,
 		}
 
 		if existingGuardConfig.OOTBType != "" {
@@ -1364,6 +1397,9 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			LlmType:            guardConfigToAdd.LlmType.ValueString(),
 		}
 
+		if guardTemplate.Intervention.AllowedActions == nil {
+			newGuardConfig.Intervention.AllowedActions = []string{}
+		}
 		if guardTemplate.OOTBType != "" {
 			newGuardConfig.OOTBType = guardTemplate.OOTBType
 		}
@@ -1389,6 +1425,18 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 			setStringValueIfKnown(&newGuardConfig.NemoInfo.LlmPrompts, guardConfigToAdd.NemoInfo.LlmPrompts)
 			setStringValueIfKnown(&newGuardConfig.NemoInfo.MainConfig, guardConfigToAdd.NemoInfo.MainConfig)
 			setStringValueIfKnown(&newGuardConfig.NemoInfo.RailsConfig, guardConfigToAdd.NemoInfo.RailsConfig)
+		}
+
+		if guardConfigToAdd.AdditionalGuardConfig != nil {
+			newGuardConfig.AdditionalGuardConfig = client.AdditionalGuardConfig{
+				Cost: &client.GuardCostInfo{
+					Currency:    guardConfigToAdd.AdditionalGuardConfig.Cost.Currency.ValueString(),
+					InputPrice:  guardConfigToAdd.AdditionalGuardConfig.Cost.InputPrice.ValueFloat64(),
+					InputUnit:   guardConfigToAdd.AdditionalGuardConfig.Cost.InputUnit.ValueInt64(),
+					OutputPrice: guardConfigToAdd.AdditionalGuardConfig.Cost.OutputPrice.ValueFloat64(),
+					OutputUnit:  guardConfigToAdd.AdditionalGuardConfig.Cost.OutputUnit.ValueInt64(),
+				},
+			}
 		}
 
 		newGuardConfigs = append(newGuardConfigs, newGuardConfig)
