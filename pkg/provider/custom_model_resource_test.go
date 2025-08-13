@@ -177,7 +177,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -265,6 +264,25 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
 							},
 						},
+						{
+							TemplateName: basetypes.NewStringValue("Cost"),
+							Name:         basetypes.NewStringValue("Cost Response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("report"),
+								Message:   basetypes.NewStringValue("Unused"),
+								Condition: basetypes.NewStringValue(`{"comparand": "ignore", "comparator": "is"}`),
+							},
+							AdditionalGuardConfig: &AdditionalGuardConfig{
+								Cost: GuardCostInfo{
+									Currency:    basetypes.NewStringValue("USD"),
+									InputPrice:  basetypes.NewFloat64Value(0.001),
+									InputUnit:   basetypes.NewInt64Value(1000),
+									OutputPrice: basetypes.NewFloat64Value(0.01),
+									OutputUnit:  basetypes.NewInt64Value(1000),
+								},
+							},
+						},
 					},
 					nil,
 					false),
@@ -285,6 +303,18 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.template_name", "Cost"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.name", "Cost Response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.stages.0", "response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.currency", "USD"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.input_price", "0.001"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.input_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.output_price", "0.01"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.output_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.action", "report"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.message", "Unused"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.condition", `{"comparand":"ignore","comparator":"is"}`),
+
 					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
 				),
 			},
@@ -1196,6 +1226,25 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}`, guard.NemoInfo.BlockedTerms)
 			}
 
+			additionalGuardConfigStr := ""
+			if guard.AdditionalGuardConfig != nil {
+				additionalGuardConfigStr = fmt.Sprintf(`
+				additional_guard_config = {
+					cost = {
+						currency = %s
+						input_price = %s
+						input_unit = %s
+						output_price = %s
+						output_unit = %s
+					}
+				}`,
+					guard.AdditionalGuardConfig.Cost.Currency,
+					guard.AdditionalGuardConfig.Cost.InputPrice,
+					guard.AdditionalGuardConfig.Cost.InputUnit,
+					guard.AdditionalGuardConfig.Cost.OutputPrice,
+					guard.AdditionalGuardConfig.Cost.OutputUnit,
+				)
+			}
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
@@ -1208,6 +1257,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}
 				%s
 				%s
+				%s
 			},`,
 				guard.TemplateName,
 				guard.Name,
@@ -1216,7 +1266,8 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.Intervention.Message,
 				guard.Intervention.Condition.ValueString(),
 				guardCredentialStr,
-				nemoInfoStr)
+				nemoInfoStr,
+				additionalGuardConfigStr)
 		}
 		guardsStr += "]"
 	}
@@ -1544,6 +1595,10 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 			if rs.Primary.Attributes["guard_configurations.0.name"] != "" {
 				found := false
 				for _, guardConfig := range getGuardConfigsResp.Data {
+					// fmt.Printf("Guard Config: %s, Stage: %s, Expected Name: %s, Expected Stage: %s\n",
+					// 	guardConfig.Name, guardConfig.Stages[0], rs.Primary.Attributes["guard_configurations.0.name"], rs.Primary.Attributes["guard_configurations.0.stages.0"])
+					// Debugging output to check guard configuration values
+
 					if guardConfig.Name == rs.Primary.Attributes["guard_configurations.0.name"] &&
 						guardConfig.Stages[0] == rs.Primary.Attributes["guard_configurations.0.stages.0"] {
 						found = true

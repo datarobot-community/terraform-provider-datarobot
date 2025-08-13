@@ -553,7 +553,11 @@ func (s *ServiceImpl) ListCustomModelVersions(ctx context.Context, id string) ([
 }
 
 func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error) {
-	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", nil)
+	type template_params struct {
+		IncludeAgentic bool `url:"includeAgentic"`
+	}
+	param := template_params{true}
+	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", &param)
 }
 
 func (s *ServiceImpl) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error) {
