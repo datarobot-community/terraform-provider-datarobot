@@ -1,4 +1,8 @@
 ## Unreleased
+## [0.10.14] - 2025-08-13
+
+### Added
+- Added a new `additional_guard_config` field for GuardConfiguration structure.
 
 ## [0.10.13] - 2025-07-24
 
