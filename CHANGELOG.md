@@ -1,4 +1,12 @@
 ## Unreleased
+
+
+
+## [0.10.15] - 2025-08-26
+
+### Changed
+- Dropped validators for model names on LLM Blueprints
+
 ## [0.10.14] - 2025-08-13
 
 ### Added
