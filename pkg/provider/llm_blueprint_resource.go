@@ -79,7 +79,6 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 			"llm_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the LLM for the LLM Blueprint. If custom_model_llm_settings is set, this value must be 'custom-model'.",
 				Optional:            true,
-				Validators:          LlmIDValidators(),
 				PlanModifiers: []planmodifier.String{
 					// in order to generate an update to the custom model resource, we need to force a replace
 					stringplanmodifier.RequiresReplace(),
