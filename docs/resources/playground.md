@@ -18,8 +18,9 @@ resource "datarobot_use_case" "example" {
 }
 
 resource "datarobot_playground" "example" {
-  name        = "An example playground"
-  use_case_id = datarobot_use_case.example.id
+  name            = "An example playground"
+  use_case_id     = datarobot_use_case.example.id
+  playground_type = "agentic"
 }
 
 output "example_id" {

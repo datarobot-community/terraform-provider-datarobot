@@ -128,10 +128,11 @@ type ChunkingParametersModel struct {
 
 // PlaygroundResourceModel describes the playground associated to a use case.
 type PlaygroundResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	Description types.String `tfsdk:"description"`
-	UseCaseID   types.String `tfsdk:"use_case_id"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	Description    types.String `tfsdk:"description"`
+	UseCaseID      types.String `tfsdk:"use_case_id"`
+	PlaygroundType types.String `tfsdk:"playground_type"`
 }
 
 // LLMBlueprintResourceModel describes the LLM blueprint resource.

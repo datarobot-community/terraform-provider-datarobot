@@ -954,3 +954,12 @@ func BatchPredictionJobExplanationAlgorithmValidators() []validator.String {
 		),
 	}
 }
+
+func PlaygroundTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			"rag",
+			"agentic",
+		),
+	}
+}
