@@ -18,9 +18,8 @@ resource "datarobot_use_case" "example" {
 }
 
 resource "datarobot_playground" "example" {
-  name            = "An example playground"
-  use_case_id     = datarobot_use_case.example.id
-  playground_type = "agentic"
+  name        = "An example playground"
+  use_case_id = datarobot_use_case.example.id
 }
 
 output "example_id" {
@@ -40,6 +39,7 @@ output "example_id" {
 ### Optional
 
 - `description` (String) The description of the Playground.
+- `playground_type` (String) The type of the Playground, either 'rag' (default) or 'agentic'.
 
 ### Read-Only
 

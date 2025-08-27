@@ -61,7 +61,7 @@ func (r *PlaygroundResource) Schema(ctx context.Context, req resource.SchemaRequ
 				},
 			},
 			"playground_type": schema.StringAttribute{
-				MarkdownDescription: "The type of the Playground.",
+				MarkdownDescription: "The type of the Playground, either 'rag' or 'agentic'.",
 				Computed:            true,
 				Optional:            true,
 				Default:             stringdefault.StaticString("rag"),
