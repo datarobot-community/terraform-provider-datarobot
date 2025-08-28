@@ -9,21 +9,17 @@ ARCH := $(if $(GOARCH),$(GOARCH),$(shell go env GOARCH))
 
 default: lint install
 
-.PHONY: build
 build:
 	go build -o ${BINARY}
 
-.PHONY: generate
 # Generate Terraform Provider docs.
 generate:
 	go generate
 
-.PHONY: mocks
 # Make mocks for the service
 mocks:
 	mockgen -source=internal/client/service.go -destination=mock/service.go -package=mock_client
 
-.PHONY: release
 release:
 	GOOS=darwin GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_darwin_amd64
 	GOOS=freebsd GOARCH=386 go build -o ./bin/${BINARY}_${VERSION}_freebsd_386
@@ -38,20 +34,16 @@ release:
 	GOOS=windows GOARCH=386 go build -o ./bin/${BINARY}_${VERSION}_windows_386
 	GOOS=windows GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_windows_amd64
 
-.PHONY: install
 install: build
 	mkdir -p ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/$(OS)_$(ARCH)
 	mv ${BINARY} ~/.terraform.d/plugins/${HOSTNAME}/${NAMESPACE}/${NAME}/${VERSION}/$(OS)_$(ARCH)
 
-.PHONY: test
 test:
 	go test ./... -v $(TESTARGS) -timeout 5m
 
-.PHONY: testacc
 testacc:
 	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -paralleldot0
 
-.PHONY: lint
 lint:
 	echo "Running checks for service"
 	golangci-lint run ./...
