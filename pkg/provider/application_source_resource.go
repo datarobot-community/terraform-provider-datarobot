@@ -90,6 +90,7 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The resources for the Application Source.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
@@ -274,9 +275,12 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	// Only populate resources if the user originally configured them
-	// This preserves the user's intent - if they didn't configure resources, keep them as null
-	if data.Resources != nil {
+	// Always populate resources if the API returns resource data
+	// This ensures that resource values are available as outputs even if not explicitly configured
+	if applicationSource.LatestVersion.Resources.Replicas != nil ||
+		applicationSource.LatestVersion.Resources.SessionAffinity != nil ||
+		applicationSource.LatestVersion.Resources.ResourceLabel != nil ||
+		applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath != nil {
 		data.Resources = &ApplicationSourceResources{
 			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
 			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
@@ -329,9 +333,12 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
-	// Only populate resources if the user originally configured them
-	// This preserves the user's intent - if they didn't configure resources, keep them as null
-	if data.Resources != nil {
+	// Always populate resources if the API returns resource data
+	// This ensures that resource values are available as outputs even if not explicitly configured
+	if applicationSource.LatestVersion.Resources.Replicas != nil ||
+		applicationSource.LatestVersion.Resources.SessionAffinity != nil ||
+		applicationSource.LatestVersion.Resources.ResourceLabel != nil ||
+		applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath != nil {
 		data.Resources = &ApplicationSourceResources{
 			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
 			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
@@ -516,9 +523,12 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
-	// Only populate resources if the user originally configured them
-	// This preserves the user's intent - if they didn't configure resources, keep them as null
-	if plan.Resources != nil {
+	// Always populate resources if the API returns resource data
+	// This ensures that resource values are available as outputs even if not explicitly configured
+	if applicationSource.LatestVersion.Resources.Replicas != nil ||
+		applicationSource.LatestVersion.Resources.SessionAffinity != nil ||
+		applicationSource.LatestVersion.Resources.ResourceLabel != nil ||
+		applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath != nil {
 		plan.Resources = &ApplicationSourceResources{
 			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
 			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
