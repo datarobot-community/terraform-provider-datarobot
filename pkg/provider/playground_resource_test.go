@@ -21,7 +21,7 @@ func TestAccPlaygroundResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read with default playground_type (should be "rag")
 			{
-				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", ""),
+				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", "test_acc_playground_resource", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPlaygroundResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -33,7 +33,7 @@ func TestAccPlaygroundResource(t *testing.T) {
 			},
 			// Update name, description
 			{
-				Config: playgroundResourceConfig("new_example_name", "new_example_description", "test_use_case", ""),
+				Config: playgroundResourceConfig("new_example_name", "new_example_description", "test_use_case", "test_acc_playground_resource", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPlaygroundResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -45,7 +45,7 @@ func TestAccPlaygroundResource(t *testing.T) {
 			},
 			// Update use case
 			{
-				Config: playgroundResourceConfig("new_example_name", "new_example_description", "new_test_use_case", ""),
+				Config: playgroundResourceConfig("new_example_name", "new_example_description", "new_test_use_case", "test_acc_playground_resource", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPlaygroundResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -70,7 +70,7 @@ func TestAccPlaygroundResourceWithExplicitType(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read with explicit playground_type "agentic"
 			{
-				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", "agentic"),
+				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", "test_acc_playground_resource_with_explicit_type", "agentic"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPlaygroundResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -82,7 +82,7 @@ func TestAccPlaygroundResourceWithExplicitType(t *testing.T) {
 			},
 			// Update to explicit playground_type "rag"
 			{
-				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", "rag"),
+				Config: playgroundResourceConfig("example_name", "example_description", "test_use_case", "test_acc_playground_resource_with_explicit_type", "rag"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPlaygroundResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -96,7 +96,7 @@ func TestAccPlaygroundResourceWithExplicitType(t *testing.T) {
 	})
 }
 
-func playgroundResourceConfig(name, description, use_case_resource_name, playground_type string) string {
+func playgroundResourceConfig(name, description, use_case_resource_name, playground_resource_name, playground_type string) string {
 	playgroundTypeConfig := ""
 	if playground_type != "" {
 		playgroundTypeConfig = fmt.Sprintf(`  playground_type = "%s"`, playground_type)
@@ -108,13 +108,13 @@ resource "datarobot_use_case" "%s" {
 	description = "%s"
 }
 
-resource "datarobot_playground" "test" {
+resource "datarobot_playground" "%s" {
 	  name = "%s"
 	  description = "%s"
 	  use_case_id = "${datarobot_use_case.%s.id}"
 %s
 }
-`, use_case_resource_name, name, description, name, description, use_case_resource_name, playgroundTypeConfig)
+`, use_case_resource_name, name, description, playground_resource_name, name, description, use_case_resource_name, playgroundTypeConfig)
 }
 
 func checkPlaygroundResourceExists(resourceName string) resource.TestCheckFunc {
