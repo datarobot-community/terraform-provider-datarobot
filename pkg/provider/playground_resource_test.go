@@ -12,7 +12,7 @@ import (
 
 func TestAccPlaygroundResource(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_playground.test"
+	resourceName := "datarobot_playground.test_acc_playground_resource"
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -61,7 +61,7 @@ func TestAccPlaygroundResource(t *testing.T) {
 
 func TestAccPlaygroundResourceWithExplicitType(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_playground.test"
+	resourceName := "datarobot_playground.test_acc_playground_resource_with_explicit_type"
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
