@@ -2,6 +2,7 @@
 
 ## [0.10.16] - 2025-08-27
 - Added a new `playground_type` key to `datarobot_playground` resource
+- Added documentation for the DATAROBOT_TIMEOUT_MINUTES environment variable for deployments and other long-running operations
 
 ## [0.10.15] - 2025-08-26
 
