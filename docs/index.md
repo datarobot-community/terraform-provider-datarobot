@@ -29,6 +29,11 @@ provider "datarobot" {
   #
   # (Optional) The DataRobot trace context can be configured using the environment variable
   # export DATAROBOT_TRACE_CONTEXT="the trace context value here"
+  #
+  # (Optional) The timeout for long-running operations can be configured using the environment variable
+  # export DATAROBOT_TIMEOUT_MINUTES="60"
+  # If not specified the default timeout is 30 minutes. Increase this for operations that may take longer,
+  # such as deployments requiring GPU provisioning which can take several hours.
 }
 ```
 
