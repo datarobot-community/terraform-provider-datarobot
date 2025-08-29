@@ -39,6 +39,7 @@ output "example_id" {
 ### Optional
 
 - `description` (String) The description of the Playground.
+- `playground_type` (String) The type of the Playground, either 'rag' (default) or 'agentic'.
 
 ### Read-Only
 

@@ -840,6 +840,7 @@ func TestPlayground(t *testing.T) {
 		require.NoError(err)
 	}()
 
+	// Test 1: Create playground without specifying playground_type (should default to "rag")
 	name := "Integration Test" + uuid.New().String()
 	description := "This is a test playground."
 	playground, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
@@ -857,6 +858,7 @@ func TestPlayground(t *testing.T) {
 	require.Equal(playground.ID, getPlayground.ID)
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
+	require.Equal("rag", getPlayground.PlaygroundType)
 
 	// Update the playground request
 	updateName := "Updated Integration Test" + uuid.New().String()
@@ -880,6 +882,30 @@ func TestPlayground(t *testing.T) {
 	assert.Equal(updateDescription, updatedPlayground.Description)
 
 	err = s.DeletePlayground(ctx, playground.ID)
+	require.NoError(err)
+
+	// Test 2: Create playground with explicit playground_type "agentic"
+	name2 := "Integration Test Agentic" + uuid.New().String()
+	description2 := "This is a test agentic playground."
+	playground2, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
+		Name:           name2,
+		Description:    description2,
+		UseCaseID:      useCase.ID,
+		PlaygroundType: "agentic",
+	})
+	require.NoError(err)
+	require.NotNil(playground2)
+	assert.NotEmpty(playground2.ID)
+
+	getPlayground2, err := s.GetPlayground(ctx, playground2.ID)
+	require.NoError(err)
+	require.NotNil(getPlayground2)
+	require.Equal(playground2.ID, getPlayground2.ID)
+	require.Equal(name2, getPlayground2.Name)
+	require.Equal(description2, getPlayground2.Description)
+	require.Equal("agentic", getPlayground2.PlaygroundType)
+
+	err = s.DeletePlayground(ctx, playground2.ID)
 	require.NoError(err)
 }
 

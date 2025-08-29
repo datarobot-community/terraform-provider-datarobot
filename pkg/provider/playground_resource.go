@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -59,6 +60,16 @@ func (r *PlaygroundResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"playground_type": schema.StringAttribute{
+				MarkdownDescription: "The type of the Playground, either 'rag' (default) or 'agentic'.",
+				Computed:            true,
+				Optional:            true,
+				Default:             stringdefault.StaticString("rag"),
+				Validators:          PlaygroundTypeValidators(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
 		},
 	}
 }
@@ -86,11 +97,18 @@ func (r *PlaygroundResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	// Get the playground type, defaulting to "rag" if not set
+	playgroundType := "rag"
+	if !data.PlaygroundType.IsNull() && !data.PlaygroundType.IsUnknown() {
+		playgroundType = data.PlaygroundType.ValueString()
+	}
+
 	traceAPICall("CreatePlayground")
 	createResp, err := r.provider.service.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
-		Name:        data.Name.ValueString(),
-		Description: data.Description.ValueString(),
-		UseCaseID:   data.UseCaseID.ValueString(),
+		Name:           data.Name.ValueString(),
+		Description:    data.Description.ValueString(),
+		UseCaseID:      data.UseCaseID.ValueString(),
+		PlaygroundType: playgroundType,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Playground", err.Error())
@@ -130,6 +148,11 @@ func (r *PlaygroundResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	data.Name = types.StringValue(playground.Name)
 	data.UseCaseID = types.StringValue(playground.UseCaseID)
+	// Set playground type, defaulting to "rag" if not returned by API
+	data.PlaygroundType = types.StringValue("rag")
+	if playground.PlaygroundType != "" {
+		data.PlaygroundType = types.StringValue(playground.PlaygroundType)
+	}
 	if playground.Description != "" {
 		data.Description = types.StringValue(playground.Description)
 	}
