@@ -298,6 +298,7 @@ resource "datarobot_llm_blueprint" "test" {
 	llm_settings = {
 		custom_model_id = datarobot_custom_model.test.id
 	}
+	prompt_type = "ONE_TIME_PROMPT"
 }`, llmID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "llm_id", llmID),
