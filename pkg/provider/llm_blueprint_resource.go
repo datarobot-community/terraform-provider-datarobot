@@ -107,6 +107,10 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 						MarkdownDescription: "Guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.",
 						Optional:            true,
 					},
+					"custom_model_id": schema.StringAttribute{
+						MarkdownDescription: "The ID of the custom model to use via chat completion interface.",
+						Optional:            true,
+					},
 				},
 			},
 			"prompt_type": schema.StringAttribute{
@@ -207,6 +211,7 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 			Temperature:         Float64ValuePointerOptional(data.LLMSettings.Temperature),
 			TopP:                Float64ValuePointerOptional(data.LLMSettings.TopP),
 			SystemPrompt:        StringValuePointerOptional(data.LLMSettings.SystemPrompt),
+			CustomModelID:       StringValuePointerOptional(data.LLMSettings.CustomModelID),
 		}
 	}
 

@@ -91,6 +91,7 @@ Optional:
 
 Optional:
 
+- `custom_model_id` (String) The ID of the custom model to use via chat completion interface.
 - `max_completion_length` (Number) The maximum number of tokens allowed in the completion. The combined count of this value and prompt tokens must be below the model's maximum context size, where prompt token count is comprised of system prompt, user prompt, recent chat history, and vector database citations.
 - `system_prompt` (String) Guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.
 - `temperature` (Number) Controls the randomness of model output, where higher values return more diverse output and lower values return more deterministic results.
