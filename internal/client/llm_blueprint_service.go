@@ -21,6 +21,7 @@ type LLMSettings struct {
 	Temperature         *float64 `json:"temperature,omitempty"`
 	TopP                *float64 `json:"topP,omitempty"`
 	SystemPrompt        *string  `json:"systemPrompt,omitempty"`
+	CustomModelID       *string  `json:"customModelId,omitempty"`
 }
 
 type CustomModelLLMSettings struct {

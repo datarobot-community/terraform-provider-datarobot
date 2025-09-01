@@ -159,6 +159,7 @@ type LLMSettings struct {
 	Temperature         types.Float64 `tfsdk:"temperature"`
 	TopP                types.Float64 `tfsdk:"top_p"`
 	SystemPrompt        types.String  `tfsdk:"system_prompt"`
+	CustomModelID       types.String  `tfsdk:"custom_model_id"`
 }
 
 type CustomModelLLMSettings struct {
