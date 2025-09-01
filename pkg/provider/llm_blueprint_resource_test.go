@@ -287,9 +287,6 @@ resource "datarobot_custom_model" "test" {
   files = []
 }
 
-resource "datarobot_use_case" "test" {
-	name = "test use case"
-}
 resource "datarobot_playground" "test" {
 	name = "test playground"
 	use_case_id = datarobot_use_case.test.id
