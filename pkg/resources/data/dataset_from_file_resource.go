@@ -1,21 +1,21 @@
 package data
 
 import (
-    "context"
-    "errors"
-    "fmt"
-    "io"
-    "os"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
 
-    "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
-    "github.com/datarobot-community/terraform-provider-datarobot/internal/common"
-    provmodels "github.com/datarobot-community/terraform-provider-datarobot/pkg/models"
-    "github.com/hashicorp/terraform-plugin-framework/path"
-    "github.com/hashicorp/terraform-plugin-framework/resource"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/common"
+	"github.com/datarobot-community/terraform-provider-datarobot/pkg/models"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Ensure types fully satisfy framework interfaces.
@@ -57,7 +57,7 @@ func (r *DatasetFromFileResource) Configure(ctx context.Context, req resource.Co
 }
 
 func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-    var data provmodels.DatasetFromFileResourceModel
+    var data models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
     if resp.Diagnostics.HasError() { return }
 
@@ -95,7 +95,7 @@ func (r *DatasetFromFileResource) Create(ctx context.Context, req resource.Creat
 }
 
 func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-    var data provmodels.DatasetFromFileResourceModel
+    var data models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
     if resp.Diagnostics.HasError() { return }
     if data.ID.IsNull() { return }
@@ -112,10 +112,10 @@ func (r *DatasetFromFileResource) Read(ctx context.Context, req resource.ReadReq
 }
 
 func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-    var state provmodels.DatasetFromFileResourceModel
+    var state models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
     if resp.Diagnostics.HasError() { return }
-    var plan provmodels.DatasetFromFileResourceModel
+    var plan models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
     if resp.Diagnostics.HasError() { return }
 
@@ -137,7 +137,7 @@ func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.Updat
 }
 
 func (r *DatasetFromFileResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-    var state provmodels.DatasetFromFileResourceModel
+    var state models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
     if resp.Diagnostics.HasError() { return }
     common.TraceAPICall("DeleteDataset")
@@ -154,7 +154,7 @@ func (r *DatasetFromFileResource) ImportState(ctx context.Context, req resource.
 
 func (r *DatasetFromFileResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
     if req.Plan.Raw.IsNull() { return } // destroy
-    var plan provmodels.DatasetFromFileResourceModel
+    var plan models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...) ; if resp.Diagnostics.HasError() { return }
     // compute file hash
     hash, err := common.ComputeFileHash(plan.FilePath.ValueString())
@@ -162,7 +162,7 @@ func (r *DatasetFromFileResource) ModifyPlan(ctx context.Context, req resource.M
     plan.FileHash = types.StringValue(hash)
     resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
     if req.State.Raw.IsNull() { return } // create
-    var state provmodels.DatasetFromFileResourceModel
+    var state models.DatasetFromFileResourceModel
     resp.Diagnostics.Append(req.State.Get(ctx, &state)...) ; if resp.Diagnostics.HasError() { return }
     if plan.FileHash != state.FileHash { resp.RequiresReplace.Append(path.Root("file_hash")) }
 }

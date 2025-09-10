@@ -1,0 +1,40 @@
+# Mapping of resource filename prefixes to target domain subdirectories under pkg/resources
+# Adjust as needed before running migration tool in execute mode.
+resource_domains:
+  api_token_credential: auth
+  basic_credential: auth
+  aws_credential: auth
+  azure_credential: auth
+  google_cloud_service_account_credential: auth
+  data_store: data
+  data_source: data
+  dataset_from_file: data
+  dataset_from_url: data
+  dataset_from_datasource: data
+  execution_environment: deployment
+  execution_environment_data_source: deployment
+  notebook: notebook
+  custom_model: deployments
+  custom_model_llm_validation: genai
+  registered_model: mlops
+  registered_model_from_leaderboard: mlops
+  batch_prediction_job_definition: batch
+  custom_job: job
+  custom_metric_job: metric
+  custom_metric_from_job: metric
+  custom_metric: metric
+  deployment: deployment
+  deployment_retraining_policy: deployment
+  prediction_environment: deployment
+  notification_channel: notification
+  notification_policy: notification
+  use_case: application
+  llm_blueprint: llm
+  vector_database: llm
+  playground: application
+  remote_repository: application
+  application_source: application
+  application_source_from_template: application
+  custom_application: application
+  custom_application_from_environment: application
+  qa_application: application
