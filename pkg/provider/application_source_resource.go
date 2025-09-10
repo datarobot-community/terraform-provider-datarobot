@@ -394,11 +394,11 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	// always create a new version
-	currentVersionNum := int([]rune(applicationSource.LatestVersion.Label)[1] - '0') // v1 -> 1
+	// Always create a new version.
+	nextLabel := nextLabelFromLatest(applicationSource.LatestVersion.Label)
 	createVersionRequest := &client.CreateApplicationSourceVersionRequest{
 		BaseVersion: applicationSource.LatestVersion.ID,
-		Label:       fmt.Sprintf("v%d", currentVersionNum+1),
+		Label:       nextLabel,
 	}
 	if plan.Resources != nil {
 		createVersionRequest.Resources = &client.ApplicationResources{
