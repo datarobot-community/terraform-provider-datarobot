@@ -373,3 +373,4 @@ type RetrainingSettingsRetrieve struct {
 	PredictionEnvironment RetrainingSettingsItem `json:"predictionEnvironment"`
 	RetrainingUser        RetrainingUser         `json:"retrainingUser"`
 }
+

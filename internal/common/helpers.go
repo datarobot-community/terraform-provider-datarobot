@@ -1,9 +1,11 @@
 package common
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -153,6 +155,11 @@ func CheckApplicationNameAlreadyExists(err error, name string) string {
 	return checkNameAlreadyExists(err, name, "Application")
 }
 
+func CheckRegisteredModelNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Registered Model")
+}
+
+
 func checkNameAlreadyExists(err error, name string, resourceType string) string {
 	errMessage := err.Error()
 	if strings.Contains(errMessage, "already in use") ||
@@ -275,7 +282,7 @@ func formatRuntimeParameterValuesInternal(
 		}
 	}
 
-	return listValueFromRuntimParameters(ctx, parameters)
+	return ListValueFromRuntimeParameters(ctx, parameters)
 }
 
 func isManagedByGuards(param client.RuntimeParameter) bool {
@@ -288,7 +295,8 @@ func isManagedByRetrainingPolicy(param client.RuntimeParameter) bool {
 	return param.FieldName == deploymentParamName ||
 		param.FieldName == retrainingPolicyIDParamName
 }
-func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []models.RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
+
+func ListValueFromRuntimeParameters(ctx context.Context, runtimeParameterValues []models.RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
 	return types.ListValueFrom(
 		ctx, types.ObjectType{
 			AttrTypes: map[string]attr.Type{
@@ -330,7 +338,7 @@ func ComputeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.
 	}
 
 	for _, file := range localFiles {
-		hashValues = append(hashValues, computeHash(file.Content))
+		hashValues = append(hashValues, ComputeHash(file.Content))
 	}
 
 	// convert hashValues to types.List
@@ -343,7 +351,7 @@ func ComputeFilesHashes(ctx context.Context, files types.Dynamic) (hashes types.
 	return
 }
 
-func computeHash(value []byte) (hash string) {
+func ComputeHash(value []byte) (hash string) {
 	sha256 := sha256.New()
 	sha256.Write(value)
 	hash = hex.EncodeToString(sha256.Sum(nil))
@@ -526,7 +534,7 @@ func ComputeFolderHash(folderPath types.String) (hash types.String, err error) {
 		}
 
 		// calculate hash of all file hashes
-		hash = types.StringValue(computeHash([]byte(hashValue)))
+		hash = types.StringValue(ComputeHash([]byte(hashValue)))
 	}
 
 	return
@@ -743,4 +751,319 @@ func UpdateUseCasesForEntity(
 	}
 
 	return
+}
+
+
+func WaitForRegisteredModelVersionToBeReady(ctx context.Context, service client.Service, registeredModelId string, versionId string) error {
+	expBackoff := GetExponentialBackoff()
+
+	operation := func() error {
+		ready, err := service.IsRegisteredModelVersionReady(ctx, registeredModelId, versionId)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if !ready {
+			return errors.New("registered model version is not ready")
+		}
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+
+
+func ZipDirectory(source, target string) (content []byte, err error) {
+	zipFile, err := os.Create(target)
+	if err != nil {
+		return
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	err = WalkSymlinkSafe(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		header.Name, err = filepath.Rel(filepath.Dir(source), path)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		_, err = io.Copy(writer, file)
+		return err
+	})
+
+	if err := zipWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	if content, err = os.ReadFile(target); err != nil {
+		return
+	}
+	defer os.Remove(target)
+
+	return
+}
+
+
+
+func ConvertRuntimeParameterValues(
+	ctx context.Context,
+	tfRuntimeParameterValues basetypes.ListValue,
+) (
+	jsonParamsStr string,
+	err error,
+) {
+	params, err := ConvertRuntimeParameterValuesToList(ctx, tfRuntimeParameterValues)
+	if err != nil {
+		return
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	jsonParamsStr = string(jsonParams)
+
+	return
+}
+
+func ConvertRuntimeParameterValuesToList(
+	ctx context.Context,
+	tfRuntimeParameterValues basetypes.ListValue,
+) (
+	params []client.RuntimeParameterValueRequest,
+	err error,
+) {
+	runtimeParameterValues := make([]models.RuntimeParameterValue, 0)
+	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameter values")
+		return
+	}
+
+	params = make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
+	for i, param := range runtimeParameterValues {
+		var value any
+		value, err = FormatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+		if err != nil {
+			return
+		}
+		params[i] = client.RuntimeParameterValueRequest{
+			FieldName: param.Key.ValueString(),
+			Type:      param.Type.ValueString(),
+			Value:     &value,
+		}
+	}
+
+	return
+}
+
+
+
+func WaitForGenAITaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, true)
+}
+
+func WaitForTaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, false)
+}
+
+func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, id string, isGenAI bool) error {
+	expBackoff := GetExponentialBackoff()
+
+	operation := func() error {
+		var task *client.TaskStatusResponse
+		var err error
+		if isGenAI {
+			TraceAPICall("GetGenAITaskStatus")
+			task, err = s.GetGenAITaskStatus(ctx, id)
+		} else {
+			TraceAPICall("GetTaskStatus")
+			task, err = s.GetTaskStatus(ctx, id)
+		}
+
+		if err != nil {
+			if err.Error() == "request was redirected" { // the task was completed, so the request got redirected
+				return nil
+			}
+			return backoff.Permanent(err)
+		}
+
+		if task.Status == "ERROR" {
+			return backoff.Permanent(errors.New(task.Message))
+		}
+
+		if task.Status != "COMPLETED" {
+			return errors.New("task is not completed")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	return backoff.Retry(operation, expBackoff)
+}
+
+
+func SetStringValueIfKnown(target *string, source basetypes.StringValue) {
+	if IsKnown(source) {
+		*target = source.ValueString()
+	}
+}
+
+
+func Contains[T any](s []T, value T) bool {
+	for _, v := range s {
+		if reflect.DeepEqual(v, value) {
+			return true
+		}
+	}
+	return false
+}
+
+
+
+func ConvertScheduleFromAPI(clientSchedule client.Schedule) (schedule models.Schedule, err error) {
+	schedule = models.Schedule{}
+
+	convertScheduleExpressionFromAPI := func(expression any) ([]types.String, error) {
+		if expression == nil {
+			return nil, nil
+		}
+
+		switch v := expression.(type) {
+		case []string:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				convertedExpression[i] = types.StringValue(val)
+			}
+			return convertedExpression, nil
+		case []int:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				convertedExpression[i] = types.StringValue(strconv.Itoa(val))
+			}
+			return convertedExpression, nil
+		case []interface{}:
+			convertedExpression := make([]types.String, len(v))
+			for i, val := range v {
+				switch val := val.(type) {
+				case string:
+					convertedExpression[i] = types.StringValue(val)
+				case int:
+					convertedExpression[i] = types.StringValue(strconv.Itoa(val))
+				case float64:
+					convertedExpression[i] = types.StringValue(fmt.Sprintf("%.0f", val))
+				default:
+					return nil, fmt.Errorf("unsupported schedule expression type: %T", val)
+				}
+			}
+			return convertedExpression, nil
+		default:
+			return nil, fmt.Errorf("unsupported schedule expression type: %T", expression)
+		}
+	}
+
+	// Convert each schedule field
+	minute, err := convertScheduleExpressionFromAPI(clientSchedule.Minute)
+	if err != nil {
+		return
+	}
+	schedule.Minute = minute
+
+	hour, err := convertScheduleExpressionFromAPI(clientSchedule.Hour)
+	if err != nil {
+		return
+	}
+	schedule.Hour = hour
+
+	dayOfMonth, err := convertScheduleExpressionFromAPI(clientSchedule.DayOfMonth)
+	if err != nil {
+		return
+	}
+	schedule.DayOfMonth = dayOfMonth
+
+	month, err := convertScheduleExpressionFromAPI(clientSchedule.Month)
+	if err != nil {
+		return
+	}
+	schedule.Month = month
+
+	dayOfWeek, err := convertScheduleExpressionFromAPI(clientSchedule.DayOfWeek)
+	if err != nil {
+		return
+	}
+	schedule.DayOfWeek = dayOfWeek
+
+	return
+}
+
+
+func ListValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []models.RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
+	return types.ListValueFrom(
+		ctx, types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		}, runtimeParameterValues)
+}
+
+
+
+func FormatRuntimeParameterValuesForRetrainingJob(
+	ctx context.Context,
+	runtimeParameterValues []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (
+	basetypes.ListValue,
+	diag.Diagnostics,
+) {
+	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
+}
+
+
+func ConvertTfStringListToPtr(input []types.String) *[]string {
+	output := make([]string, len(input))
+	for i, value := range input {
+		output[i] = value.ValueString()
+	}
+
+	return &output
 }

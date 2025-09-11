@@ -1,0 +1,291 @@
+package auth
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/common"
+	"github.com/datarobot-community/terraform-provider-datarobot/pkg/models"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+)
+
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &GoogleCloudCredentialResource{}
+var _ resource.ResourceWithImportState = &GoogleCloudCredentialResource{}
+var _ resource.ResourceWithModifyPlan = &GoogleCloudCredentialResource{}
+
+func NewGoogleCloudCredentialResource() resource.Resource {
+	return &GoogleCloudCredentialResource{}
+}
+
+// GoogleCloudCredentialResource defines the resource implementation.
+type GoogleCloudCredentialResource struct {
+	service client.Service
+}
+
+func (r *GoogleCloudCredentialResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_google_cloud_credential"
+}
+
+func (r *GoogleCloudCredentialResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		// This description is used by the documentation generator and the language server.
+		MarkdownDescription: "Api Token Credential",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The ID of the Google Cloud Credential.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The name of the Google Cloud Credential.",
+				Required:            true,
+			},
+			"gcp_key": schema.StringAttribute{
+				Optional:            true,
+				Sensitive:           true,
+				MarkdownDescription: "The GCP key in JSON format.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"gcp_key_file": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The file that has the GCP key. Cannot be used with `gcp_key`.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"gcp_key_file_hash": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The hash of the GCP key file contents.",
+			},
+		},
+	}
+}
+
+func (r *GoogleCloudCredentialResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
+	accessor, ok := req.ProviderData.(common.ServiceAccessor)
+	if !ok {
+		resp.Diagnostics.AddError("Unexpected Provider Data Type", fmt.Sprintf("Expected ServiceAccessor, got %T", req.ProviderData))
+		return
+	}
+	r.service = accessor.GetService()
+}
+
+func (r *GoogleCloudCredentialResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	gcpKey, err := r.getGCPKey(data)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting GCP key", err.Error())
+		return
+	}
+
+	common.TraceAPICall("CreateGoogleCloudCredential")
+	createResp, err := r.service.CreateCredential(ctx, &client.CredentialRequest{
+		Name:           data.Name.ValueString(),
+		CredentialType: client.CredentialTypeGCP,
+		GCPKey:         &gcpKey,
+	})
+	if err != nil {
+		errMessage := common.CheckCredentialNameAlreadyExists(err, data.Name.ValueString())
+		resp.Diagnostics.AddError("Error creating Google Cloud Credential", errMessage)
+		return
+	}
+
+	data.ID = types.StringValue(createResp.ID)
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+}
+
+func (r *GoogleCloudCredentialResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if data.ID.IsNull() {
+		return
+	}
+
+	common.TraceAPICall("GetGoogleCloudCredential")
+	credential, err := r.service.GetCredential(ctx, data.ID.ValueString())
+	if err != nil {
+		if _, ok := err.(*client.NotFoundError); ok {
+			resp.Diagnostics.AddWarning(
+				"Google Cloud Credential not found",
+				fmt.Sprintf("Google Cloud Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Google Cloud Credential with ID %s", data.ID.ValueString()),
+				err.Error())
+		}
+		return
+	}
+
+	data.Name = types.StringValue(credential.Name)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *GoogleCloudCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	common.TraceAPICall("UpdateGoogleCloudCredential")
+	_, err := r.service.UpdateCredential(ctx,
+		data.ID.ValueString(),
+		&client.CredentialRequest{
+			Name: data.Name.ValueString(),
+		})
+	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"Google Cloud Credential not found",
+				fmt.Sprintf("Google Cloud Credential with ID %s is not found. Removing from state.", data.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			errMessage := common.CheckCredentialNameAlreadyExists(err, data.Name.ValueString())
+			resp.Diagnostics.AddError("Error updating Google Cloud Credential", errMessage)
+		}
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+}
+
+func (r *GoogleCloudCredentialResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	common.TraceAPICall("DeleteGoogleCloudCredential")
+	err := r.service.DeleteCredential(ctx, data.ID.ValueString())
+	if err != nil {
+		if !errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddError("Error deleting Google Cloud Credential", err.Error())
+			return
+		}
+	}
+}
+
+func (r *GoogleCloudCredentialResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r GoogleCloudCredentialResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.Conflicting(
+			path.MatchRoot("gcp_key"),
+			path.MatchRoot("gcp_key_file"),
+		),
+	}
+}
+
+func (r GoogleCloudCredentialResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		// Resource is being destroyed
+		return
+	}
+
+	var plan models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// compute gcp key file content hash
+	hash := types.StringNull()
+	if common.IsKnown(plan.GCPKeyFile) {
+		fileContentHash, err := common.ComputeFileHash(plan.GCPKeyFile.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error calculating gcp key file hash", err.Error())
+			return
+		}
+		hash = types.StringValue(fileContentHash)
+	}
+	plan.GCPKeyFileHash = hash
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+
+	if req.State.Raw.IsNull() {
+		// Resource is being created
+		return
+	}
+
+	var state models.GoogleCloudCredentialResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.GCPKeyFileHash != state.GCPKeyFileHash {
+		resp.RequiresReplace.Append(path.Root("gcp_key_file_hash"))
+	}
+}
+
+func (r *GoogleCloudCredentialResource) getGCPKey(data models.GoogleCloudCredentialResourceModel) (gcpKey client.GCPKey, err error) {
+	var gcpKeyBytes []byte
+	if common.IsKnown(data.GCPKey) {
+		gcpKeyBytes = []byte(data.GCPKey.ValueString())
+	} else {
+		if gcpKeyBytes, err = r.getGCPKeyFromFile(data.GCPKeyFile.ValueString()); err != nil {
+			return
+		}
+	}
+
+	err = json.Unmarshal(gcpKeyBytes, &gcpKey)
+	return
+}
+
+func (r *GoogleCloudCredentialResource) getGCPKeyFromFile(filePath string) (
+	fileContent []byte,
+	err error,
+) {
+	fileReader, err := os.Open(filePath)
+	if err != nil {
+		return
+	}
+	defer fileReader.Close()
+
+	fileContent, err = io.ReadAll(fileReader)
+	if err != nil {
+		return
+	}
+
+	return
+}

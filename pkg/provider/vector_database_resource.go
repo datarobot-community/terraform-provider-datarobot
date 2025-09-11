@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
 
-// NewVectorDatabaseResource returns the new implementation (applications package).
+// NewVectorDatabaseResource returns the new implementation (genai package).
 func NewVectorDatabaseResource() resource.Resource { return genai.NewVectorDatabaseResource() }
 
 // NOTE: No legacy types or logic retained here.
