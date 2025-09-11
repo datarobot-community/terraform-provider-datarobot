@@ -70,7 +70,7 @@ func TraceAPICall(api string) {
 }
 
 // internal backoff helper
-func getExponentialBackoff() backoff.BackOff {
+func GetExponentialBackoff() backoff.BackOff {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 1 * time.Second
 	expBackoff.MaxInterval = 10 * time.Second
@@ -85,7 +85,7 @@ func getExponentialBackoff() backoff.BackOff {
 
 // WaitForDatasetToBeReady polls the dataset until completed or error state.
 func WaitForDatasetToBeReady(ctx context.Context, service client.Service, datasetID string) (*client.Dataset, error) {
-	expBackoff := getExponentialBackoff()
+	expBackoff := GetExponentialBackoff()
 
 	operation := func() error {
 		TraceAPICall("GetDataset")
@@ -122,39 +122,6 @@ func AddEntityToUseCase(ctx context.Context, service client.Service, useCaseID, 
 	return nil
 }
 
-// UpdateUseCasesForEntity performs diff add/remove logic for use case links.
-func UpdateUseCasesForEntity(
-	ctx context.Context,
-	service client.Service,
-	entityType string,
-	entityID string,
-	stateUseCaseIDs []string,
-	planUseCaseIDs []string,
-) error {
-	// additions
-	for _, id := range planUseCaseIDs {
-		if !contains(stateUseCaseIDs, id) {
-			TraceAPICall(fmt.Sprintf("Add%sToUseCase", strings.ToUpper(entityType)))
-			if err := AddEntityToUseCase(ctx, service, id, entityType, entityID); err != nil {
-				return err
-			}
-		}
-	}
-	// removals
-	for _, id := range stateUseCaseIDs {
-		if !contains(planUseCaseIDs, id) {
-			TraceAPICall(fmt.Sprintf("Remove%sFromUseCase", strings.ToUpper(entityType)))
-			if err := service.RemoveEntityFromUseCase(ctx, id, entityType, entityID); err != nil {
-				if _, ok := err.(*client.NotFoundError); ok { // already gone
-					continue
-				}
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // ComputeFileHash returns the sha256 hash of a file's contents.
 func ComputeFileHash(path string) (string, error) {
 	f, err := os.Open(path)
@@ -180,6 +147,10 @@ func contains[T comparable](arr []T, v T) bool {
 
 func CheckCredentialNameAlreadyExists(err error, name string) string {
 	return checkNameAlreadyExists(err, name, "Credential")
+}
+
+func CheckApplicationNameAlreadyExists(err error, name string) string {
+	return checkNameAlreadyExists(err, name, "Application")
 }
 
 func checkNameAlreadyExists(err error, name string, resourceType string) string {
@@ -683,4 +654,93 @@ func convertScheduleExpression(expression []types.String) (any, error) {
 	}
 
 	return convertedExpression, nil
+}
+
+
+
+func WaitForApplicationToBeReady(ctx context.Context, service client.Service, id string) (*client.Application, error) {
+	expBackoff := GetExponentialBackoff()
+
+	operation := func() error {
+		TraceAPICall("GetCustomApplication")
+		customApplication, err := service.GetApplication(ctx, id)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		if customApplication.Status == "failed" {
+			return backoff.Permanent(errors.New("application failed to create, review the logs for more details"))
+		}
+
+		if customApplication.Status != "running" {
+			return errors.New("application is not ready")
+		}
+
+		return nil
+	}
+
+	// Retry the operation using the backoff strategy
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		return nil, err
+	}
+
+	TraceAPICall("GetCustomApplication")
+	return service.GetApplication(ctx, id)
+}
+
+func UpdateUseCasesForEntity(
+	ctx context.Context,
+	service client.Service,
+	entityType string,
+	entityID string,
+	stateUseCaseIDs []types.String,
+	planUseCaseIDs []types.String,
+) (err error) {
+	if !reflect.DeepEqual(stateUseCaseIDs, planUseCaseIDs) {
+		useCasesToAdd := make([]string, 0)
+		for _, useCaseID := range planUseCaseIDs {
+			found := false
+			for _, oldUseCaseID := range stateUseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToAdd = append(useCasesToAdd, useCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToAdd {
+			TraceAPICall(fmt.Sprintf("Add%sToUseCase", strings.ToUpper(entityType)))
+			if err = AddEntityToUseCase(ctx, service, useCaseID, entityType, entityID); err != nil {
+				return
+			}
+		}
+
+		useCasesToRemove := make([]string, 0)
+		for _, oldUseCaseID := range stateUseCaseIDs {
+			found := false
+			for _, useCaseID := range planUseCaseIDs {
+				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					break
+				}
+			}
+			if !found {
+				useCasesToRemove = append(useCasesToRemove, oldUseCaseID.ValueString())
+			}
+		}
+
+		for _, useCaseID := range useCasesToRemove {
+			TraceAPICall(fmt.Sprintf("Remove%sFromUseCase", strings.ToUpper(entityType)))
+			if err = service.RemoveEntityFromUseCase(ctx, useCaseID, entityType, entityID); err != nil {
+				if _, ok := err.(*client.NotFoundError); ok {
+					err = nil
+					continue
+				}
+				return
+			}
+		}
+	}
+
+	return
 }

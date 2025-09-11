@@ -126,10 +126,10 @@ func (r *DatasetFromFileResource) Update(ctx context.Context, req resource.Updat
     }
 
     // update use cases links
-    stateUCs := make([]string, len(state.UseCaseIDs))
-    for i, v := range state.UseCaseIDs { stateUCs[i] = v.ValueString() }
-    planUCs := make([]string, len(plan.UseCaseIDs))
-    for i, v := range plan.UseCaseIDs { planUCs[i] = v.ValueString() }
+    stateUCs := make([]types.String, len(state.UseCaseIDs))
+    copy(stateUCs, state.UseCaseIDs)
+    planUCs := make([]types.String, len(plan.UseCaseIDs))
+    copy(planUCs, plan.UseCaseIDs)
     if err := common.UpdateUseCasesForEntity(ctx, r.service, "dataset", plan.ID.ValueString(), stateUCs, planUCs); err != nil {
         resp.Diagnostics.AddError("Update use cases error", err.Error()); return }
 
