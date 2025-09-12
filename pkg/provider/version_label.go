@@ -6,20 +6,21 @@ import (
 	"strconv"
 )
 
-// versionLabelPattern matches version labels like "v1", "v10", or "123".
-// Groups: [full match, optional 'v' prefix, numeric part].
+// versionLabelPattern matches version labels with optional 'v' prefix followed by digits.
+// Capture groups: [0]=full match, [1]=optional 'v' prefix, [2]=numeric part.
+// Examples: "v1" -> ["v1", "v", "1"], "123" -> ["123", "", "123"].
 var versionLabelPattern = regexp.MustCompile(`^(v)?(\d+)$`)
 
-// nextLabelFromLatest computes the next version label from the latest.
-// Output is always with 'v' prefix for consistency with past behavior.
-// For valid inputs: increments the numeric part (e.g., "v1" -> "v2", "1" -> "v2").
-// For invalid inputs: falls back to "v1".
+// nextLabelFromLatest computes the next version label from the current one.
+// Always returns 'v'-prefixed labels for consistency with DataRobot's versioning scheme.
+// For valid numeric inputs: increments the number and adds 'v' prefix if missing.
+// For invalid inputs: returns "v1" as safe fallback.
 //
-// Examples:
-//
-//	"v10" -> "v11"
-//	"1"   -> "v2"
-//	"abc" -> "v1"
+// Behavior:
+//   - "v10" -> "v11" (increment existing v-prefixed version)
+//   - "5"   -> "v6"  (add v-prefix to bare number)
+//   - "abc" -> "v1"  (fallback for invalid input)
+//   - ""    -> "v1"  (fallback for empty input)
 func nextLabelFromLatest(latest string) string {
 	// Always return labels with 'v' prefix for consistency with past behavior.
 	nextNum := 1
