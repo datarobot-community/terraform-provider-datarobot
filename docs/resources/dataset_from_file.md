@@ -3,12 +3,12 @@
 page_title: "datarobot_dataset_from_file Resource - datarobot"
 subcategory: ""
 description: |-
-  Data set from file
+  Dataset uploaded from a local file
 ---
 
 # datarobot_dataset_from_file (Resource)
 
-Data set from file
+Dataset uploaded from a local file
 
 ## Example Usage
 
@@ -32,14 +32,14 @@ output "example_id" {
 
 ### Required
 
-- `file_path` (String) The path to the file to upload.
+- `file_path` (String) Path to the file to upload
 
 ### Optional
 
-- `name` (String) The name of the Dataset. Defaults to the file name.
-- `use_case_ids` (List of String) The list of Use Case IDs to add the Dataset to.
+- `name` (String) Dataset name; defaults to filename
+- `use_case_ids` (List of String) Use Case IDs to link
 
 ### Read-Only
 
-- `file_hash` (String) The hash of the file contents.
-- `id` (String) The ID of the Dataset.
+- `file_hash` (String) Hash of file contents
+- `id` (String) Dataset ID

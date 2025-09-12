@@ -290,95 +290,6 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 	return errMessage
 }
 
-func formatRuntimeParameterValues(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
-	parametersInPlan basetypes.ListValue,
-) (
-	basetypes.ListValue,
-	diag.Diagnostics,
-) {
-	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, false)
-}
-
-func formatRuntimeParameterValuesForRetrainingJob(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
-	parametersInPlan basetypes.ListValue,
-) (
-	basetypes.ListValue,
-	diag.Diagnostics,
-) {
-	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
-}
-
-func formatRuntimeParameterValuesInternal(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
-	parametersInPlan basetypes.ListValue,
-	isRetrainingJob bool,
-) (
-	basetypes.ListValue,
-	diag.Diagnostics,
-) {
-	// copy parameters in stable order
-	parameters := make([]RuntimeParameterValue, 0)
-
-	if IsKnown(parametersInPlan) {
-		if diags := parametersInPlan.ElementsAs(ctx, &parameters, false); diags.HasError() {
-			return basetypes.ListValue{}, diags
-		}
-	}
-
-	sort.SliceStable(runtimeParameterValues, func(i, j int) bool {
-		return runtimeParameterValues[i].FieldName < runtimeParameterValues[j].FieldName
-	})
-	for _, param := range runtimeParameterValues {
-		// skip the parameter if it already exists in the plan
-		found := false
-		for _, p := range parameters {
-			if p.Key == types.StringValue(param.FieldName) {
-				found = true
-				break
-			}
-		}
-		if found {
-			continue
-		}
-
-		if isManagedByGuards(param) {
-			// skip the parameter if it is managed by guards
-			continue
-		}
-
-		if isRetrainingJob && isManagedByRetrainingPolicy(param) {
-			// skip the parameter if it is managed by retraining policy
-			continue
-		}
-
-		parameter := RuntimeParameterValue{
-			Key:   types.StringValue(param.FieldName),
-			Type:  types.StringValue(param.Type),
-			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
-		}
-
-		var defaultValue = param.DefaultValue
-		if param.DefaultValue == nil {
-			switch param.Type {
-			case "numeric":
-				defaultValue = 0.0
-			case "boolean":
-				defaultValue = false
-			}
-		}
-
-		if param.CurrentValue != defaultValue {
-			parameters = append(parameters, parameter)
-		}
-	}
-
-	return listValueFromRuntimParameters(ctx, parameters)
-}
 
 func isManagedByGuards(param client.RuntimeParameter) bool {
 	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
@@ -386,10 +297,6 @@ func isManagedByGuards(param client.RuntimeParameter) bool {
 		param.FieldName == nemoAzureOpenAiRuntimeParam
 }
 
-func isManagedByRetrainingPolicy(param client.RuntimeParameter) bool {
-	return param.FieldName == deploymentParamName ||
-		param.FieldName == retrainingPolicyIDParamName
-}
 
 func formatRuntimeParameterValue(paramType, paramValue string) (any, error) {
 	switch paramType {

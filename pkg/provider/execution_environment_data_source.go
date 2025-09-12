@@ -1,105 +1,15 @@
 package provider
 
-import (
-	"context"
-	"fmt"
+// Code-generated legacy shim. DO NOT RESTORE original implementation.
+// Maintained only temporarily to avoid import churn during refactor.
+// Delegates to new implementation under pkg/resources/data.
 
-	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+import (
+	"github.com/datarobot-community/terraform-provider-datarobot/pkg/resources/environment"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-type ExecutionEnvironmentDataSource struct {
-	provider *Provider
-}
+// NewExecutionEnvironmentDataSource returns the new implementation (environment package).
+func NewExecutionEnvironmentDataSource() datasource.DataSource { return environment.NewExecutionEnvironmentDataSource() }
 
-func NewExecutionEnvironmentDataSource() datasource.DataSource {
-	return &ExecutionEnvironmentDataSource{}
-}
-
-func (d *ExecutionEnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_execution_environment"
-}
-
-func (r *ExecutionEnvironmentDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{
-		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Execution Environment",
-
-		Attributes: map[string]schema.Attribute{
-			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The name of the Execution Environment.",
-			},
-			"id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The ID of the Execution Environment.",
-			},
-			"description": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The description of the Execution Environment.",
-			},
-			"programming_language": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The programming language of the Execution Environment.",
-			},
-			"version_id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The ID of the Execution Environment Version.",
-			},
-		},
-	}
-}
-
-func (r *ExecutionEnvironmentDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	var ok bool
-	if r.provider, ok = req.ProviderData.(*Provider); !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected  %T, got: %T. Please report this issue to the provider developers.", Provider{}, req.ProviderData),
-		)
-	}
-}
-
-func (r *ExecutionEnvironmentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var config ExecutionEnvironmentDataSourceModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	executionEnvironments, err := r.provider.service.ListExecutionEnvironments(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to list Execution Environments", err.Error())
-		return
-	}
-
-	found := false
-	var executionEnvironment client.ExecutionEnvironment
-	for _, executionEnvironment = range executionEnvironments {
-		if executionEnvironment.Name == config.Name.ValueString() {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with name %q not found", config.Name.ValueString()))
-		return
-	}
-
-	config.ID = types.StringValue(executionEnvironment.ID)
-	config.Name = types.StringValue(executionEnvironment.Name)
-	config.Description = types.StringValue(executionEnvironment.Description)
-	config.ProgrammingLanguage = types.StringValue(executionEnvironment.ProgrammingLanguage)
-	config.VersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
-}
+// NOTE: No legacy types or logic retained here.
