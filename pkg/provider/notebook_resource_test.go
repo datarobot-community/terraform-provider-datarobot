@@ -149,7 +149,7 @@ func TestNotebookResourceMethods(t *testing.T) {
 
 	mockService := mock_client.NewMockService(ctrl)
 
-	r := &NotebookResource{
+	r := &models.NotebookResource{
 		provider: &Provider{
 			service: mockService,
 		},
