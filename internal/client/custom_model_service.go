@@ -1,5 +1,9 @@
 package client
 
+import (
+	"encoding/json"
+)
+
 const (
 	RuntimeParameterTypeBoolean    string = "boolean"
 	RuntimeParameterTypeCredential string = "credential"
@@ -45,7 +49,7 @@ type CustomModel struct {
 	ClassLabels                                 []string           `json:"classLabels,omitempty"`
 	IsTrainingDataForVersionsPermanentlyEnabled bool               `json:"isTrainingDataForVersionsPermanentlyEnabled"`
 	IsProxyModel                                bool               `json:"isProxyModel"`
-	DeploymentsCount                            int64              `json:"deploymentsCount"`
+	DeploymentsCount                            *json.Number       `json:"deploymentsCount"`
 }
 
 type CustomModelVersion struct {
@@ -57,9 +61,9 @@ type CustomModelVersion struct {
 	Dependencies             []Dependency             `json:"dependencies"`
 	RuntimeParameters        []RuntimeParameter       `json:"runtimeParameters"`
 	Items                    []FileItem               `json:"items"`
-	MaximumMemory            *int64                   `json:"maximumMemory"`
+	MaximumMemory            *json.Number             `json:"maximumMemory"`
 	NetworkEgressPolicy      *string                  `json:"networkEgressPolicy"`
-	Replicas                 *int64                   `json:"replicas"`
+	Replicas                 *json.Number             `json:"replicas"`
 	ResourceBundleID         *string                  `json:"resourceBundleId"`
 	TrainingData             *CustomModelTrainingData `json:"trainingData"`
 	HoldoutData              *CustomModelHoldoutData  `json:"holdoutData"`
@@ -113,8 +117,8 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	BaseEnvironmentVersionID string   `json:"baseEnvironmentVersionId,omitempty"`
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
-	Replicas                 int64    `json:"replicas,omitempty"`
-	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
+	Replicas                 json.Number `json:"replicas,omitempty"`
+	MaximumMemory            json.Number `json:"maximumMemory,omitempty"`
 	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
 	ResourceBundleID         *string  `json:"resourceBundleId"`
 	KeepTrainingHoldoutData  *bool    `json:"keepTrainingHoldoutData,omitempty"`
@@ -202,9 +206,9 @@ type GuardConfigurationResponse struct {
 type GuardCostInfo struct {
 	Currency    string  `json:"currency,omitempty"`
 	InputPrice  float64 `json:"inputPrice,omitempty"`
-	InputUnit   int64   `json:"inputUnit,omitempty"`
-	OutputPrice float64 `json:"outputPrice,omitempty"`
-	OutputUnit  int64   `json:"outputUnit,omitempty"`
+	InputUnit   *json.Number `json:"inputUnit,omitempty"`
+	OutputPrice float64         `json:"outputPrice,omitempty"`
+	OutputUnit  *json.Number `json:"outputUnit,omitempty"`
 }
 
 type AdditionalGuardConfig struct {
@@ -261,33 +265,33 @@ type DependencyBuild struct {
 }
 
 type CreateCustomModelLLMValidationRequest struct {
-	DeploymentID      string  `json:"deploymentId"`
-	ModelID           *string `json:"modelId,omitempty"`
-	Name              *string `json:"name,omitempty"`
-	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
-	PromptColumnName  *string `json:"promptColumnName,omitempty"`
-	TargetColumnName  *string `json:"targetColumnName,omitempty"`
-	ChatModelID       *string `json:"chatModelId,omitempty"`
-	UseCaseID         *string `json:"useCaseId,omitempty"`
+	DeploymentID      string          `json:"deploymentId"`
+	ModelID           *string         `json:"modelId,omitempty"`
+	Name              *string         `json:"name,omitempty"`
+	PredictionTimeout *json.Number `json:"predictionTimeout,omitempty"`
+	PromptColumnName  *string         `json:"promptColumnName,omitempty"`
+	TargetColumnName  *string         `json:"targetColumnName,omitempty"`
+	ChatModelID       *string         `json:"chatModelId,omitempty"`
+	UseCaseID         *string         `json:"useCaseId,omitempty"`
 }
 
 type UpdateCustomModelLLMValidationRequest struct {
-	DeploymentID      *string `json:"deploymentId,omitempty"`
-	ModelID           *string `json:"modelId,omitempty"`
-	Name              *string `json:"name,omitempty"`
-	PredictionTimeout *int64  `json:"predictionTimeout,omitempty"`
-	PromptColumnName  *string `json:"promptColumnName,omitempty"`
-	TargetColumnName  *string `json:"targetColumnName,omitempty"`
-	ChatModelID       *string `json:"chatModelId,omitempty"`
+	DeploymentID      *string         `json:"deploymentId,omitempty"`
+	ModelID           *string         `json:"modelId,omitempty"`
+	Name              *string         `json:"name,omitempty"`
+	PredictionTimeout *json.Number `json:"predictionTimeout,omitempty"`
+	PromptColumnName  *string         `json:"promptColumnName,omitempty"`
+	TargetColumnName  *string         `json:"targetColumnName,omitempty"`
+	ChatModelID       *string         `json:"chatModelId,omitempty"`
 }
 
 type CustomModelLLMValidation struct {
 	ID                string  `json:"id"`
 	Name              string  `json:"name"`
 	ModelID           string  `json:"modelId"`
-	DeploymentID      string  `json:"deploymentId"`
-	PredictionTimeout int64   `json:"predictionTimeout"`
-	PromptColumnName  string  `json:"promptColumnName"`
+	DeploymentID      string          `json:"deploymentId"`
+	PredictionTimeout *json.Number `json:"predictionTimeout"`
+	PromptColumnName  string          `json:"promptColumnName"`
 	TargetColumnName  string  `json:"targetColumnName"`
 	ChatModelID       *string `json:"chatModelId,omitempty"`
 	UseCaseID         string  `json:"useCaseId"`

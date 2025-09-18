@@ -130,7 +130,9 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 
 	// Deserialize the response into the provided result type
 	result = new(T)
-	if err := json.Unmarshal(respBody, result); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(respBody))
+	decoder.UseNumber()
+	if err := decoder.Decode(result); err != nil {
 		return result, &resp.Header, WrapGenericError("failed to unmarshal response", err)
 	}
 
@@ -337,7 +339,9 @@ func uploadFilesFromBinaries[T any](
 
 	// Deserialize the response into the provided result type
 	result = new(T)
-	if err := json.Unmarshal(respBody, result); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(respBody))
+	decoder.UseNumber()
+	if err := decoder.Decode(result); err != nil {
 		return result, WrapGenericError("failed to unmarshal response", err)
 	}
 

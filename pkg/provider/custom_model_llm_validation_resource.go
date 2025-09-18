@@ -135,7 +135,7 @@ func (r *CustomModelLLMValidationResource) Create(ctx context.Context, req resou
 		DeploymentID:      data.DeploymentID.ValueString(),
 		ModelID:           StringValuePointerOptional(data.ModelID),
 		Name:              StringValuePointerOptional(data.Name),
-		PredictionTimeout: Int64ValuePointerOptional(data.PredictionTimeout),
+		PredictionTimeout: NumberPtrFromInt64Ptr(Int64ValuePointerOptional(data.PredictionTimeout)),
 		PromptColumnName:  StringValuePointerOptional(data.PromptColumnName),
 		TargetColumnName:  StringValuePointerOptional(data.TargetColumnName),
 		ChatModelID:       StringValuePointerOptional(data.ChatModelID),
@@ -201,7 +201,7 @@ func (r *CustomModelLLMValidationResource) Read(ctx context.Context, req resourc
 	data.PromptColumnName = types.StringValue(customModelLlmValidation.PromptColumnName)
 	data.TargetColumnName = types.StringValue(customModelLlmValidation.TargetColumnName)
 	data.ChatModelID = types.StringPointerValue(customModelLlmValidation.ChatModelID)
-	data.PredictionTimeout = types.Int64Value(customModelLlmValidation.PredictionTimeout)
+	data.PredictionTimeout = types.Int64Value(Int64FromNumberPtr(customModelLlmValidation.PredictionTimeout))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -231,7 +231,7 @@ func (r *CustomModelLLMValidationResource) Update(ctx context.Context, req resou
 			PromptColumnName:  StringValuePointerOptional(plan.PromptColumnName),
 			TargetColumnName:  StringValuePointerOptional(plan.TargetColumnName),
 			ChatModelID:       StringValuePointerOptional(plan.ChatModelID),
-			PredictionTimeout: Int64ValuePointerOptional(plan.PredictionTimeout),
+			PredictionTimeout: NumberPtrFromInt64Ptr(Int64ValuePointerOptional(plan.PredictionTimeout)),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {

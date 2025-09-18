@@ -622,7 +622,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.NegativeClassLabel = types.StringValue(customModel.NegativeClassLabel)
 	state.PredictionThreshold = types.Float64Value(customModel.PredictionThreshold)
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
-	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
+	if customModel.DeploymentsCount != nil {
+		if deployCount, err := customModel.DeploymentsCount.Int64(); err == nil {
+			state.DeploymentsCount = types.Int64Value(deployCount)
+		}
+	}
 
 	if IsKnown(plan.RuntimeParameterValues) {
 		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
@@ -683,13 +687,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	payload := &client.CreateCustomModelVersionFromLatestRequest{
 		IsMajorUpdate:       "false",
 		BaseEnvironmentID:   baseEnvironmentID,
-		Replicas:            plan.Replicas.ValueInt64(),
+		Replicas:            NumberFromInt64(plan.Replicas.ValueInt64()),
 		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
 		memoryMB = plan.MemoryMB.ValueInt64()
 		state.MemoryMB = types.Int64Value(memoryMB)
-		payload.MaximumMemory = memoryMB * 1024 * 1024
+		payload.MaximumMemory = NumberFromInt64(memoryMB * 1024 * 1024)
 	}
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
 	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, payload); err != nil {
@@ -993,7 +997,7 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	if customModel.DeploymentsCount > 0 {
+	if Int64FromNumberPtr(customModel.DeploymentsCount) > 0 {
 		if state.TargetName != plan.TargetName {
 			addCannotChangeAttributeError(resp, "target_name")
 			return
@@ -1108,7 +1112,7 @@ func loadCustomModelToTerraformState(
 		state.Language = types.StringValue(customModel.Language)
 	}
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
-	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
+	state.DeploymentsCount = types.Int64Value(Int64FromNumberPtr(customModel.DeploymentsCount))
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
@@ -1132,12 +1136,15 @@ func loadCustomModelToTerraformState(
 	}
 
 	if customModel.LatestVersion.MaximumMemory != nil {
-		state.MemoryMB = types.Int64Value(*customModel.LatestVersion.MaximumMemory / (1024 * 1024))
+		maxMem, err := customModel.LatestVersion.MaximumMemory.Int64()
+		if err == nil {
+			state.MemoryMB = types.Int64Value(maxMem / (1024 * 1024))
+		}
 	}
 
 	state.Replicas = types.Int64Value(defaultReplicas)
 	if customModel.LatestVersion.Replicas != nil {
-		state.Replicas = types.Int64Value(*customModel.LatestVersion.Replicas)
+		state.Replicas = types.Int64Value(Int64FromNumber(*customModel.LatestVersion.Replicas))
 	}
 
 	state.NetworkAccess = types.StringValue(defaultNetworkAccess)
@@ -1432,9 +1439,9 @@ func (r *CustomModelResource) createCustomModelVersionFromGuards(
 				Cost: &client.GuardCostInfo{
 					Currency:    guardConfigToAdd.AdditionalGuardConfig.Cost.Currency.ValueString(),
 					InputPrice:  guardConfigToAdd.AdditionalGuardConfig.Cost.InputPrice.ValueFloat64(),
-					InputUnit:   guardConfigToAdd.AdditionalGuardConfig.Cost.InputUnit.ValueInt64(),
+					InputUnit:   NumberPtrFromInt64(guardConfigToAdd.AdditionalGuardConfig.Cost.InputUnit.ValueInt64()),
 					OutputPrice: guardConfigToAdd.AdditionalGuardConfig.Cost.OutputPrice.ValueFloat64(),
-					OutputUnit:  guardConfigToAdd.AdditionalGuardConfig.Cost.OutputUnit.ValueInt64(),
+					OutputUnit:  NumberPtrFromInt64(guardConfigToAdd.AdditionalGuardConfig.Cost.OutputUnit.ValueInt64()),
 				},
 			}
 		}
@@ -1523,7 +1530,7 @@ func (r *CustomModelResource) updateCustomModel(
 		Language:            plan.Language.ValueString(),
 	}
 
-	if customModel.DeploymentsCount < 1 {
+	if Int64FromNumberPtr(customModel.DeploymentsCount) < 1 {
 		updateRequest.TargetName = plan.TargetName.ValueString()
 		updateRequest.PositiveClassLabel = plan.PositiveClassLabel.ValueString()
 		updateRequest.NegativeClassLabel = plan.NegativeClassLabel.ValueString()
@@ -1806,12 +1813,12 @@ func (r *CustomModelResource) updateResourceSettings(
 	payload := &client.CreateCustomModelVersionFromLatestRequest{
 		IsMajorUpdate:       "false",
 		BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
-		Replicas:            plan.Replicas.ValueInt64(),
+		Replicas:            NumberFromInt64(plan.Replicas.ValueInt64()),
 		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
 		maxMemory := plan.MemoryMB.ValueInt64() * 1024 * 1024
-		payload.MaximumMemory = maxMemory
+		payload.MaximumMemory = NumberFromInt64(maxMemory)
 		state.MemoryMB = types.Int64Value(plan.MemoryMB.ValueInt64())
 	}
 
