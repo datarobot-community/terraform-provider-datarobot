@@ -57,7 +57,7 @@ type CustomModelVersion struct {
 	Dependencies             []Dependency             `json:"dependencies"`
 	RuntimeParameters        []RuntimeParameter       `json:"runtimeParameters"`
 	Items                    []FileItem               `json:"items"`
-	MaximumMemory            *int64                   `json:"maximumMemory"`
+	MaximumMemory            *float64                 `json:"maximumMemory"`
 	NetworkEgressPolicy      *string                  `json:"networkEgressPolicy"`
 	Replicas                 *int64                   `json:"replicas"`
 	ResourceBundleID         *string                  `json:"resourceBundleId"`

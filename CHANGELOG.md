@@ -1,5 +1,12 @@
 ## Unreleased
 
+## [0.10.19] - 2025-09-18
+
+### Fixed
+
+- Fixed maximumMemory field in custom models that is occassionally a float
+
+
 ## [0.10.18] - 2025-09-18
 
 ### Fixed
