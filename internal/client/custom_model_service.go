@@ -57,7 +57,7 @@ type CustomModelVersion struct {
 	Dependencies             []Dependency             `json:"dependencies"`
 	RuntimeParameters        []RuntimeParameter       `json:"runtimeParameters"`
 	Items                    []FileItem               `json:"items"`
-	MaximumMemory            *int64                   `json:"maximumMemory"`
+	MaximumMemory            *float64                 `json:"maximumMemory"`
 	NetworkEgressPolicy      *string                  `json:"networkEgressPolicy"`
 	Replicas                 *int64                   `json:"replicas"`
 	ResourceBundleID         *string                  `json:"resourceBundleId"`
@@ -114,7 +114,7 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
 	Replicas                 int64    `json:"replicas,omitempty"`
-	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
+	MaximumMemory            float64  `json:"maximumMemory,omitempty"`
 	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
 	ResourceBundleID         *string  `json:"resourceBundleId"`
 	KeepTrainingHoldoutData  *bool    `json:"keepTrainingHoldoutData,omitempty"`
