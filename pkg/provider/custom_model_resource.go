@@ -1132,7 +1132,7 @@ func loadCustomModelToTerraformState(
 	}
 
 	if customModel.LatestVersion.MaximumMemory != nil {
-		state.MemoryMB = types.Int64Value(*customModel.LatestVersion.MaximumMemory / (1024 * 1024))
+		state.MemoryMB = types.Int64Value(int64(*customModel.LatestVersion.MaximumMemory / (1024 * 1024)))
 	}
 
 	state.Replicas = types.Int64Value(defaultReplicas)

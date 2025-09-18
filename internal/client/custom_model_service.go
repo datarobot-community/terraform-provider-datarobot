@@ -114,7 +114,7 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
 	Replicas                 int64    `json:"replicas,omitempty"`
-	MaximumMemory            float64  `json:"maximumMemory,omitempty"`
+	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
 	NetworkEgressPolicy      string   `json:"networkEgressPolicy,omitempty"`
 	ResourceBundleID         *string  `json:"resourceBundleId"`
 	KeepTrainingHoldoutData  *bool    `json:"keepTrainingHoldoutData,omitempty"`
