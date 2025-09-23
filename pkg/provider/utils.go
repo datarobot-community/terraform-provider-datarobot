@@ -856,15 +856,22 @@ func zipDirectory(source, target string) (content []byte, err error) {
 			return err
 		}
 
+		// Skip the root directory itself so we only include its contents
+		if path == source {
+			return nil
+		}
+
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
 			return err
 		}
 
-		header.Name, err = filepath.Rel(filepath.Dir(source), path)
+		header.Name, err = filepath.Rel(source, path)
 		if err != nil {
 			return err
 		}
+		// Normalize separators to forward slash for cross-platform consistency
+		header.Name = filepath.ToSlash(header.Name)
 
 		if info.IsDir() {
 			header.Name += "/"

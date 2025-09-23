@@ -1,5 +1,11 @@
 ## Unreleased
 
+## [0.10.20] - 2025-09-22
+
+### Fixed
+
+- Fixed Windows zip file portability issue for making execution environments
+
 ## [0.10.19] - 2025-09-18
 
 ### Fixed
