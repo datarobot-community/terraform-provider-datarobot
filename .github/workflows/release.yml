@@ -80,22 +80,23 @@ jobs:
             exit 0
           fi
           payload=$(jq -n --arg tag "$TAG" --arg repo "$REPO" --arg run "$RUN_URL" '{
-            text: "*Release failed*: " + $repo + " " + $tag,
+            text: "*DataRobot Terraform Provider failed*: \($repo) \($tag)",
             blocks: [
               {
                 "type":"section",
-                "text":{"type":"mrkdwn","text":"*:x: Release failed* `" + $repo + "` tag `" + $tag + "`"}
+                "text":{"type":"mrkdwn","text":"*:x: DataRobot Terraform Provider release failed: * `\($tag)`"}
               },
-              {
+                 {
                 "type":"section",
-                "text":{"type":"mrkdwn","text":"<" + $run + "|View workflow run logs>"}
-              },
+                "text":{"type":"mrkdwn","text":"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run logs>"}
+                },
               {
                 "type":"context",
                 "elements":[
-                  {"type":"mrkdwn","text":"Tag: `" + $tag + "` • Repository: `" + $repo + "`"}
+                  {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
                 ]
               }
             ]
           }')
           curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+
