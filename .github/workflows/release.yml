@@ -52,7 +52,7 @@ jobs:
             blocks: [
               {
           "type":"section",
-          "text":{"type":"mrkdwn","text":"*:rocket: New DataRobot Terraform Provider released * <\($url)|\($tag)>"}
+          "text":{"type":"mrkdwn","text":"*:rocket: New DataRobot Terraform Provider released: * <\($url)|\($tag)>"}
               },
               {
           "type":"context",
