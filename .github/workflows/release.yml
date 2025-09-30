@@ -51,14 +51,14 @@ jobs:
             text: "*New release*: \($repo) \($tag)",
             blocks: [
               {
-                "type":"section",
-                "text":{"type":"mrkdwn","text":"*:rocket: New Terraform Provider release* <\($url)|\($repo) \($tag)>"}
+          "type":"section",
+          "text":{"type":"mrkdwn","text":"*:rocket: New DataRobot Terraform Provider released * <\($url)|\($tag)>"}
               },
               {
-                "type":"context",
-                "elements":[
-                  {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
-                ]
+          "type":"context",
+          "elements":[
+            {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
+          ]
               }
             ]
           }')
