@@ -8,6 +8,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -103,6 +104,34 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "version_name", newVersionName),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Test tags functionality
+			{
+				Config: registeredModelResourceConfigWithTags(name, "example_description", "1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName, nil),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "tags.0.name", "team"),
+					resource.TestCheckResourceAttr(resourceName, "tags.0.value", "engineering"),
+					resource.TestCheckResourceAttr(resourceName, "tags.1.name", "env"),
+					resource.TestCheckResourceAttr(resourceName, "tags.1.value", "test"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update tags
+			{
+				Config: registeredModelResourceConfigWithUpdatedTags(name, "example_description", "1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkRegisteredModelResourceExists(resourceName, nil),
+					resource.TestCheckResourceAttr(resourceName, "tags.0.name", "team"),
+					resource.TestCheckResourceAttr(resourceName, "tags.0.value", "marketing"),
+					resource.TestCheckResourceAttr(resourceName, "tags.1.name", "version"),
+					resource.TestCheckResourceAttr(resourceName, "tags.1.value", "v2"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -268,6 +297,125 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 	}
 }
 
+func TestConvertTagsToClientTags(t *testing.T) {
+	t.Parallel()
+
+	// Test conversion from Terraform types to client types
+	tfTags := []Tag{
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("engineering"),
+		},
+		{
+			Name:  types.StringValue("env"),
+			Value: types.StringValue("test"),
+		},
+	}
+
+	clientTags := convertTagsToClientTags(tfTags)
+
+	if len(clientTags) != 2 {
+		t.Fatalf("Expected 2 client tags, got %d", len(clientTags))
+	}
+
+	if clientTags[0].Name != "team" || clientTags[0].Value != "engineering" {
+		t.Errorf("Expected first tag to be {team: engineering}, got {%s: %s}", clientTags[0].Name, clientTags[0].Value)
+	}
+
+	if clientTags[1].Name != "env" || clientTags[1].Value != "test" {
+		t.Errorf("Expected second tag to be {env: test}, got {%s: %s}", clientTags[1].Name, clientTags[1].Value)
+	}
+}
+
+func TestConvertClientTagsToTfTags(t *testing.T) {
+	t.Parallel()
+
+	// Test conversion from client types to Terraform types
+	clientTags := []client.Tag{
+		{
+			Name:  "team",
+			Value: "engineering",
+		},
+		{
+			Name:  "env",
+			Value: "test",
+		},
+	}
+
+	tfTags := convertClientTagsToTfTags(clientTags)
+
+	if len(tfTags) != 2 {
+		t.Fatalf("Expected 2 terraform tags, got %d", len(tfTags))
+	}
+
+	if tfTags[0].Name.ValueString() != "team" || tfTags[0].Value.ValueString() != "engineering" {
+		t.Errorf("Expected first tag to be {team: engineering}, got {%s: %s}", tfTags[0].Name.ValueString(), tfTags[0].Value.ValueString())
+	}
+
+	if tfTags[1].Name.ValueString() != "env" || tfTags[1].Value.ValueString() != "test" {
+		t.Errorf("Expected second tag to be {env: test}, got {%s: %s}", tfTags[1].Name.ValueString(), tfTags[1].Value.ValueString())
+	}
+}
+
+func TestAreTagsEqual(t *testing.T) {
+	t.Parallel()
+
+	// Test equal tags
+	tags1 := []Tag{
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("engineering"),
+		},
+		{
+			Name:  types.StringValue("env"),
+			Value: types.StringValue("test"),
+		},
+	}
+
+	tags2 := []Tag{
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("engineering"),
+		},
+		{
+			Name:  types.StringValue("env"),
+			Value: types.StringValue("test"),
+		},
+	}
+
+	if !areTagsEqual(tags1, tags2) {
+		t.Error("Expected equal tags to be equal")
+	}
+
+	// Test different tags
+	tags3 := []Tag{
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("marketing"),
+		},
+		{
+			Name:  types.StringValue("env"),
+			Value: types.StringValue("prod"),
+		},
+	}
+
+	if areTagsEqual(tags1, tags3) {
+		t.Error("Expected different tags to not be equal")
+	}
+
+	// Test different lengths
+	tags4 := []Tag{
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("engineering"),
+		},
+	}
+
+	if areTagsEqual(tags1, tags4) {
+		t.Error("Expected tags with different lengths to not be equal")
+	}
+}
+
 func registeredModelResourceConfig(name, description string, versionName, useCaseResourceName *string, guardName string) string {
 	versionNameStr := ""
 	if versionName != nil {
@@ -329,6 +477,124 @@ resource "datarobot_registered_model" "test" {
 	%s
 }
 `, guardName, name, description, versionNameStr, useCaseIDsStr)
+}
+
+func registeredModelResourceConfigWithTags(name, description string, guardName string) string {
+	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_registered_model" {
+	name = "test registered model"
+}
+resource "datarobot_remote_repository" "test_registered_model" {
+	name        = "Test Registered Model"
+	description = "test"
+	location    = "https://github.com/datarobot-community/custom-models"
+	source_type = "github"
+	}
+resource "datarobot_custom_model" "test_registered_model" {
+	name = "test registered model"
+	description = "test"
+	target_type = "Binary"
+	target_name = "my_label"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	source_remote_repositories = [
+		{
+			id = datarobot_remote_repository.test_registered_model.id
+			ref = "master"
+			source_paths = [
+				"custom_inference/python/gan_mnist/custom.py",
+				"custom_inference/python/gan_mnist/gan_weights.h5",
+			]
+		}
+	]
+
+	guard_configurations = [
+		{
+			template_name = "Rouge 1"
+			name = "Rouge 1 %v"
+			stages = [ "response" ]
+			intervention = {
+				action = "block"
+				message = "you have been blocked by rouge 1 guard"
+				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
+			}
+		},
+	]
+}
+resource "datarobot_registered_model" "test" {
+	name = "%s"
+	description = "%s"
+	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
+	
+	tags {
+		name  = "team"
+		value = "engineering"
+	}
+	
+	tags {
+		name  = "env"
+		value = "test"
+	}
+}
+`, guardName, name, description)
+}
+
+func registeredModelResourceConfigWithUpdatedTags(name, description string, guardName string) string {
+	return fmt.Sprintf(`
+resource "datarobot_use_case" "test_registered_model" {
+	name = "test registered model"
+}
+resource "datarobot_remote_repository" "test_registered_model" {
+	name        = "Test Registered Model"
+	description = "test"
+	location    = "https://github.com/datarobot-community/custom-models"
+	source_type = "github"
+	}
+resource "datarobot_custom_model" "test_registered_model" {
+	name = "test registered model"
+	description = "test"
+	target_type = "Binary"
+	target_name = "my_label"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	source_remote_repositories = [
+		{
+			id = datarobot_remote_repository.test_registered_model.id
+			ref = "master"
+			source_paths = [
+				"custom_inference/python/gan_mnist/custom.py",
+				"custom_inference/python/gan_mnist/gan_weights.h5",
+			]
+		}
+	]
+
+	guard_configurations = [
+		{
+			template_name = "Rouge 1"
+			name = "Rouge 1 %v"
+			stages = [ "response" ]
+			intervention = {
+				action = "block"
+				message = "you have been blocked by rouge 1 guard"
+				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
+			}
+		},
+	]
+}
+resource "datarobot_registered_model" "test" {
+	name = "%s"
+	description = "%s"
+	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
+	
+	tags {
+		name  = "team"
+		value = "marketing"
+	}
+	
+	tags {
+		name  = "version"
+		value = "v2"
+	}
+}
+`, guardName, name, description)
 }
 
 func textGenerationRegisteredModelResourceConfig(

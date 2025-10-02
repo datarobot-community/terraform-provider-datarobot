@@ -757,6 +757,28 @@ func convertTfStringListToPtr(input []types.String) *[]string {
 	return &output
 }
 
+func convertTagsToClientTags(tfTags []Tag) []client.Tag {
+	clientTags := make([]client.Tag, len(tfTags))
+	for i, tag := range tfTags {
+		clientTags[i] = client.Tag{
+			Name:  tag.Name.ValueString(),
+			Value: tag.Value.ValueString(),
+		}
+	}
+	return clientTags
+}
+
+func convertClientTagsToTfTags(clientTags []client.Tag) []Tag {
+	tfTags := make([]Tag, len(clientTags))
+	for i, tag := range clientTags {
+		tfTags[i] = Tag{
+			Name:  types.StringValue(tag.Name),
+			Value: types.StringValue(tag.Value),
+		}
+	}
+	return tfTags
+}
+
 func convertDynamicType(tfType types.Dynamic) any {
 	switch t := tfType.UnderlyingValue().(type) {
 	case types.String:

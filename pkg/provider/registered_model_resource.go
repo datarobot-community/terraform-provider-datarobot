@@ -73,6 +73,22 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
 				ElementType:         types.StringType,
 			},
+			"tags": schema.ListNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tags to assign to the Registered Model version.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the tag.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the tag.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -104,6 +120,7 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
 		Name:                 getVersionName(data, 1),
 		RegisteredModelName:  data.Name.ValueString(),
+		Tags:                 convertTagsToClientTags(data.Tags),
 	}
 
 	if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, data.CustomModelVersionId.ValueString()); err != nil {
@@ -206,6 +223,7 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
+	data.Tags = convertClientTagsToTfTags(latestRegisteredModelVersion.Tags)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -273,6 +291,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			RegisteredModelID:    registeredModel.ID,
 			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
 			Name:                 versionName,
+			Tags:                 convertTagsToClientTags(plan.Tags),
 		}
 
 		if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, plan.CustomModelVersionId.ValueString()); err != nil {
@@ -344,6 +363,26 @@ func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
 	}
 
 	return fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), versionNum)
+}
+
+func areTagsEqual(stateTags []Tag, planTags []Tag) bool {
+	if len(stateTags) != len(planTags) {
+		return false
+	}
+
+	// Create maps for easier comparison
+	stateTagMap := make(map[string]string)
+	for _, tag := range stateTags {
+		stateTagMap[tag.Name.ValueString()] = tag.Value.ValueString()
+	}
+
+	for _, tag := range planTags {
+		if stateTagMap[tag.Name.ValueString()] != tag.Value.ValueString() {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (customModel client.CustomModel, err error) {

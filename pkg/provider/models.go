@@ -377,6 +377,7 @@ type RegisteredModelResourceModel struct {
 	Description          types.String   `tfsdk:"description"`
 	CustomModelVersionId types.String   `tfsdk:"custom_model_version_id"`
 	UseCaseIDs           []types.String `tfsdk:"use_case_ids"`
+	Tags                 []Tag          `tfsdk:"tags"`
 }
 
 type RegisteredModelFromLeaderboardResourceModel struct {
