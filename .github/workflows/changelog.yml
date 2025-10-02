@@ -33,8 +33,6 @@ jobs:
 
             const goChanged = files.some(f =>
               f.filename.endsWith('.go') &&
-              !f.filename.startsWith('vendor/') &&
-              !f.filename.startsWith('hack/') &&
               !f.filename.startsWith('.github/') &&
               f.status !== 'removed'
             );
