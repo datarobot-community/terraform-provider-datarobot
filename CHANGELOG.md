@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added support for creating tags for registered model version
+
 ## [0.10.20] - 2025-09-22
 
 ### Fixed
