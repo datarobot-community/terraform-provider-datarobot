@@ -40,3 +40,63 @@ jobs:
           # GitHub sets the GITHUB_TOKEN secret automatically.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+      - name: Notify Slack
+        if: success()
+        env:
+            SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+            TAG: ${{ github.ref_name }}
+            REPO: ${{ github.repository }}
+        run: |
+          payload=$(jq -n --arg tag "$TAG" --arg repo "$REPO" --arg url "https://github.com/$REPO/releases/tag/$TAG" '{
+            text: "*New release*: \($repo) \($tag)",
+            blocks: [
+              {
+          "type":"section",
+          "text":{"type":"mrkdwn","text":"*:rocket: New DataRobot Terraform Provider released: * <\($url)|\($tag)>"}
+              },
+              {
+          "type":"context",
+          "elements":[
+            {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
+          ]
+              }
+            ]
+          }')
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+  notify-failure:
+    needs: goreleaser
+    if: needs.goreleaser.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack (failure)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "Missing SLACK_WEBHOOK_URL."
+            exit 0
+          fi
+          payload=$(jq -n --arg tag "$TAG" --arg repo "$REPO" --arg run "$RUN_URL" '{
+            text: "*DataRobot Terraform Provider failed*: \($repo) \($tag)",
+            blocks: [
+              {
+                "type":"section",
+                "text":{"type":"mrkdwn","text":"*:x: DataRobot Terraform Provider release failed: * `\($tag)`"}
+              },
+                 {
+                "type":"section",
+                "text":{"type":"mrkdwn","text":"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run logs>"}
+                },
+              {
+                "type":"context",
+                "elements":[
+                  {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
+                ]
+              }
+            ]
+          }')
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+

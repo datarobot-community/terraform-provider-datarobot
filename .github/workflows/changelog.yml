@@ -1,0 +1,100 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled]
+    paths:
+      - '**/*.go'
+      - 'CHANGELOG.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  changelog:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate CHANGELOG presence when .go files change
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const marker = '<!-- changelog-check -->';
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            // Gather changed files
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 }
+            );
+
+            const goChanged = files.some(f =>
+              f.filename.endsWith('.go') &&
+              !f.filename.startsWith('.github/') &&
+              f.status !== 'removed'
+            );
+
+            const changelogChanged = files.some(f => f.filename === 'CHANGELOG.md');
+
+            // Skip logic via label
+            const skip = pr.labels?.some(l => /skip changelog/i.test(l.name)) || false;
+
+            if (!goChanged) {
+              core.info('No .go file changes detected; changelog check passed.');
+              return;
+            }
+
+            if (skip) {
+              core.notice('Skip label present; bypassing changelog requirement.');
+              return;
+            }
+
+            if (changelogChanged) {
+              // Remove previous warning comment if present (optional)
+              const comments = await github.paginate(
+                github.rest.issues.listComments,
+                { owner, repo, issue_number: pr.number, per_page: 100 }
+              );
+              const existing = comments.find(c => c.body?.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id,
+                  body: `${marker}\n✅ CHANGELOG.md updated. Thank you.`
+                });
+              }
+              core.info('CHANGELOG.md updated; check passed.');
+              return;
+            }
+
+            // Prepare / upsert warning comment
+            const body = `${marker}
+              ⚠️ A CHANGELOG update is required.
+
+              Detected changes to Go source files but no CHANGELOG.md modification.
+
+              Please:
+              1. Add an entry under the Unreleased section in CHANGELOG.md describing the user-facing impact.
+              2. Force-push or push a new commit.
+
+              (You can add a label "skip changelog" only if this truly has zero externally observable effect.)`;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: pr.number, per_page: 100 }
+            );
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr.number, body
+              });
+            }
+
+            core.setFailed('Go files changed without CHANGELOG.md update.');
