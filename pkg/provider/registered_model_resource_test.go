@@ -114,7 +114,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelResourceExists(resourceName, nil),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
-					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttr(resourceName, "tags.0.name", "team"),
 					resource.TestCheckResourceAttr(resourceName, "tags.0.value", "engineering"),
 					resource.TestCheckResourceAttr(resourceName, "tags.1.name", "env"),
