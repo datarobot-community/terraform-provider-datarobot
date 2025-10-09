@@ -365,26 +365,6 @@ func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
 	return fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), versionNum)
 }
 
-func areTagsEqual(stateTags []Tag, planTags []Tag) bool {
-	if len(stateTags) != len(planTags) {
-		return false
-	}
-
-	// Create maps for easier comparison
-	stateTagMap := make(map[string]string)
-	for _, tag := range stateTags {
-		stateTagMap[tag.Name.ValueString()] = tag.Value.ValueString()
-	}
-
-	for _, tag := range planTags {
-		if stateTagMap[tag.Name.ValueString()] != tag.Value.ValueString() {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (customModel client.CustomModel, err error) {
 	traceAPICall("ListCustomModels")
 	customModels, err := r.provider.service.ListCustomModels(ctx)

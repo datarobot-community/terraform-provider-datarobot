@@ -357,6 +357,26 @@ func TestConvertClientTagsToTfTags(t *testing.T) {
 	}
 }
 
+func areTagsEqual(stateTags []Tag, planTags []Tag) bool {
+	if len(stateTags) != len(planTags) {
+		return false
+	}
+
+	// Create maps for easier comparison
+	stateTagMap := make(map[string]string)
+	for _, tag := range stateTags {
+		stateTagMap[tag.Name.ValueString()] = tag.Value.ValueString()
+	}
+
+	for _, tag := range planTags {
+		if stateTagMap[tag.Name.ValueString()] != tag.Value.ValueString() {
+			return false
+		}
+	}
+
+	return true
+}
+
 func TestAreTagsEqual(t *testing.T) {
 	t.Parallel()
 
