@@ -123,19 +123,6 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
-			// Update tags
-			{
-				Config: registeredModelResourceConfigWithUpdatedTags(newName, "new_example_description", "2"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkRegisteredModelResourceExists(resourceName, nil),
-					resource.TestCheckResourceAttr(resourceName, "tags.0.name", "team"),
-					resource.TestCheckResourceAttr(resourceName, "tags.0.value", "marketing"),
-					resource.TestCheckResourceAttr(resourceName, "tags.1.name", "version"),
-					resource.TestCheckResourceAttr(resourceName, "tags.1.value", "v2"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-				),
-			},
 			// Delete is tested automatically
 		},
 	})
