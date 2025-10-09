@@ -545,15 +545,16 @@ resource "datarobot_registered_model" "test" {
 	description = "%s"
 	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
 	
-	tags {
-		name  = "team"
-		value = "engineering"
-	}
-	
-	tags {
-		name  = "env"
-		value = "test"
-	}
+	tags = [
+		{
+			name  = "team"
+			value = "engineering"
+		},
+		{
+			name  = "env"
+			value = "test"
+		}
+	]
 }
 `, guardName, name, description)
 }
@@ -604,15 +605,16 @@ resource "datarobot_registered_model" "test" {
 	description = "%s"
 	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
 	
-	tags {
-		name  = "team"
-		value = "marketing"
-	}
-	
-	tags {
-		name  = "version"
-		value = "v2"
-	}
+	tags = [
+		{
+			name  = "team"
+			value = "marketing"
+		},
+		{
+			name  = "version"
+			value = "v2"
+		}
+	]
 }
 `, guardName, name, description)
 }
