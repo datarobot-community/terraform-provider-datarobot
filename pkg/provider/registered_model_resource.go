@@ -223,7 +223,9 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
-	data.Tags = convertClientTagsToTfTags(latestRegisteredModelVersion.Tags)
+	if len(latestRegisteredModelVersion.Tags) > 0 {
+		data.Tags = convertClientTagsToTfTags(latestRegisteredModelVersion.Tags)
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
