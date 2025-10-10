@@ -546,66 +546,6 @@ resource "datarobot_registered_model" "test" {
 `, guardName, name, description)
 }
 
-func registeredModelResourceConfigWithUpdatedTags(name, description string, guardName string) string {
-	return fmt.Sprintf(`
-resource "datarobot_use_case" "test_registered_model" {
-	name = "test registered model"
-}
-resource "datarobot_remote_repository" "test_registered_model" {
-	name        = "Test Registered Model"
-	description = "test"
-	location    = "https://github.com/datarobot-community/custom-models"
-	source_type = "github"
-	}
-resource "datarobot_custom_model" "test_registered_model" {
-	name = "test registered model"
-	description = "test"
-	target_type = "Binary"
-	target_name = "my_label"
-	base_environment_id = "65f9b27eab986d30d4c64268"
-	source_remote_repositories = [
-		{
-			id = datarobot_remote_repository.test_registered_model.id
-			ref = "master"
-			source_paths = [
-				"custom_inference/python/gan_mnist/custom.py",
-				"custom_inference/python/gan_mnist/gan_weights.h5",
-			]
-		}
-	]
-
-	guard_configurations = [
-		{
-			template_name = "Rouge 1"
-			name = "Rouge 1 %v"
-			stages = [ "response" ]
-			intervention = {
-				action = "block"
-				message = "you have been blocked by rouge 1 guard"
-				condition = jsonencode({"comparand": 0.8, "comparator": "lessThan"})
-			}
-		},
-	]
-}
-resource "datarobot_registered_model" "test" {
-	name = "%s"
-	description = "%s"
-	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
-	
-	tags = [
-		{
-			name  = "team"
-			value = "marketing"
-		},
-		{
-			name  = "version"
-			value = "v2"
-		}
-	]
-}
-`, guardName, name, description)
-}
-
 func textGenerationRegisteredModelResourceConfig(
 	resourceName string,
 	includePrompt bool,
