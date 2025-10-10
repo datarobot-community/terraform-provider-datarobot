@@ -26,6 +26,7 @@ resource "datarobot_registered_model" "example" {
   custom_model_version_id = datarobot_custom_model.example.version_id
   name                    = "Example Registered Model"
   description             = "Description for the example registered model"
+
   tags = [
     {
       name  = "ab-test"
