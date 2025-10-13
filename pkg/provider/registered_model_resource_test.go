@@ -70,7 +70,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 						tfjsonpath.New("version_id"),
 					),
 					compareValuesDiffer.AddStateValue(
-						resourceName,
+					resourceName,
 						tfjsonpath.New("use_case_ids"),
 					),
 					compareValuesSame.AddStateValue(
@@ -115,10 +115,17 @@ func TestAccRegisteredModelResource(t *testing.T) {
 					checkRegisteredModelResourceExists(resourceName, nil),
 					resource.TestCheckResourceAttr(resourceName, "name", newName),
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
-					resource.TestCheckResourceAttr(resourceName, "tags.0.name", "team"),
-					resource.TestCheckResourceAttr(resourceName, "tags.0.value", "engineering"),
-					resource.TestCheckResourceAttr(resourceName, "tags.1.name", "env"),
-					resource.TestCheckResourceAttr(resourceName, "tags.1.value", "test"),
+					// Check that we have exactly 2 tags
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+					// Use order-independent checks
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{
+						"name":  "team",
+						"value": "engineering",
+					}),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{
+						"name":  "env",
+						"value": "test",
+					}),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
