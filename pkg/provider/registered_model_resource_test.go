@@ -394,6 +394,22 @@ func TestAreTagsEqual(t *testing.T) {
 		t.Error("Expected equal tags to be equal")
 	}
 
+	// Test equal tags in different order
+	tags2Reordered := []Tag{
+		{
+			Name:  types.StringValue("env"),
+			Value: types.StringValue("test"),
+		},
+		{
+			Name:  types.StringValue("team"),
+			Value: types.StringValue("engineering"),
+		},
+	}
+
+	if !areTagsEqual(tags1, tags2Reordered) {
+		t.Error("Expected equal tags in different order to be equal")
+	}
+
 	// Test different tags
 	tags3 := []Tag{
 		{
@@ -531,7 +547,7 @@ resource "datarobot_registered_model" "test" {
 	name = "%s"
 	description = "%s"
 	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
-	
+
 	tags = [
 		{
 			name  = "team"
