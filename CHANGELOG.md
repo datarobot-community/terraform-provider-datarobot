@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added MCP custom model target type
+
 ## [0.10.20] - 2025-09-22
 
 ### Fixed
