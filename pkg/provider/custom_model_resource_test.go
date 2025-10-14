@@ -1025,7 +1025,7 @@ func TestAccMCPCustomModelResource(t *testing.T) {
 			},
 			// Update parameters and add use case
 			{
-				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "python", &useCaseResourceName),
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -1037,7 +1037,7 @@ func TestAccMCPCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
-					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -1045,7 +1045,7 @@ func TestAccMCPCustomModelResource(t *testing.T) {
 			},
 			// Update use case
 			{
-				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "python", &useCaseResourceName2),
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName2),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -1057,7 +1057,7 @@ func TestAccMCPCustomModelResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
-					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
@@ -1065,13 +1065,13 @@ func TestAccMCPCustomModelResource(t *testing.T) {
 			},
 			// Remove use case
 			{
-				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "python", nil),
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
 					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
 					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
-					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
