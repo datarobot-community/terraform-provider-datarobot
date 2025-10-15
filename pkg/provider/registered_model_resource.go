@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -73,6 +74,22 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The list of Use Case IDs to add the Registered Model version to.",
 				ElementType:         types.StringType,
 			},
+			"tags": schema.SetNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tags to assign to the Registered Model version.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the tag.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the tag.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -104,6 +121,7 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
 		Name:                 getVersionName(data, 1),
 		RegisteredModelName:  data.Name.ValueString(),
+		Tags:                 convertSetTagsToClientTags(data.Tags),
 	}
 
 	if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, data.CustomModelVersionId.ValueString()); err != nil {
@@ -206,6 +224,41 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
+	if len(latestRegisteredModelVersion.Tags) > 0 {
+		tagElements := make([]attr.Value, 0, len(latestRegisteredModelVersion.Tags))
+		for _, tag := range latestRegisteredModelVersion.Tags {
+			tagObject, diags := types.ObjectValue(
+				map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+				map[string]attr.Value{
+					"name":  types.StringValue(tag.Name),
+					"value": types.StringValue(tag.Value),
+				},
+			)
+			if diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+			tagElements = append(tagElements, tagObject)
+		}
+
+		tagSet, diags := types.SetValue(
+			types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+			},
+			tagElements,
+		)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		data.Tags = tagSet
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -273,6 +326,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			RegisteredModelID:    registeredModel.ID,
 			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
 			Name:                 versionName,
+			Tags:                 convertSetTagsToClientTags(plan.Tags),
 		}
 
 		if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, plan.CustomModelVersionId.ValueString()); err != nil {
@@ -394,4 +448,34 @@ func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Cont
 		}
 	}
 	return nil
+}
+
+func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
+	if tagsSet.IsNull() || tagsSet.IsUnknown() {
+		return []client.Tag{}
+	}
+
+	var tags []client.Tag
+	for _, elem := range tagsSet.Elements() {
+		tagObj, ok := elem.(types.Object)
+		if !ok {
+			continue // Skip invalid elements
+		}
+		tagAttrs := tagObj.Attributes()
+
+		nameAttr, nameOk := tagAttrs["name"].(types.String)
+		valueAttr, valueOk := tagAttrs["value"].(types.String)
+
+		if !nameOk || !valueOk {
+			continue // Skip invalid attributes
+		}
+
+		tag := client.Tag{
+			Name:  nameAttr.ValueString(),
+			Value: valueAttr.ValueString(),
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags
 }
