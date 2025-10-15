@@ -457,12 +457,22 @@ func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
 
 	var tags []client.Tag
 	for _, elem := range tagsSet.Elements() {
-		tagObj := elem.(types.Object)
+		tagObj, ok := elem.(types.Object)
+		if !ok {
+			continue // Skip invalid elements
+		}
 		tagAttrs := tagObj.Attributes()
 
+		nameAttr, nameOk := tagAttrs["name"].(types.String)
+		valueAttr, valueOk := tagAttrs["value"].(types.String)
+
+		if !nameOk || !valueOk {
+			continue // Skip invalid attributes
+		}
+
 		tag := client.Tag{
-			Name:  tagAttrs["name"].(types.String).ValueString(),
-			Value: tagAttrs["value"].(types.String).ValueString(),
+			Name:  nameAttr.ValueString(),
+			Value: valueAttr.ValueString(),
 		}
 		tags = append(tags, tag)
 	}

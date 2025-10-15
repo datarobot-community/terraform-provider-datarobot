@@ -70,7 +70,7 @@ func TestAccRegisteredModelResource(t *testing.T) {
 						tfjsonpath.New("version_id"),
 					),
 					compareValuesDiffer.AddStateValue(
-					resourceName,
+						resourceName,
 						tfjsonpath.New("use_case_ids"),
 					),
 					compareValuesSame.AddStateValue(
