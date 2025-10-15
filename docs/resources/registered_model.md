@@ -61,7 +61,7 @@ output "datarobot_registered_model_version_id" {
 ### Optional
 
 - `description` (String) The description of the Registered Model.
-- `tags` (Attributes List) The list of tags to assign to the Registered Model version. (see [below for nested schema](#nestedatt--tags))
+- `tags` (Attributes Set) The list of tags to assign to the Registered Model version. (see [below for nested schema](#nestedatt--tags))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version.
 
