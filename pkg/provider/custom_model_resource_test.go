@@ -994,6 +994,94 @@ func TestAccTextGenerationCustomModelResource(t *testing.T) {
 	})
 }
 
+func TestAccMCPCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	resourceName := "datarobot_custom_model.test_mcp_server"
+	useCaseResourceName := "test_mcp_server"
+	useCaseResourceName2 := "test_new_mcp_server"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: mcpServerCustomModelResourceConfig("example_name", "target", "python", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters and add use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
 func TestAccUnstructuredCustomModelResource(t *testing.T) {
 	t.Parallel()
 
@@ -1496,6 +1584,40 @@ resource "datarobot_use_case" "test_new_text_generation" {
 resource "datarobot_custom_model" "test_text_generation" {
 	name        		= "%s"
 	target_type         = "TextGeneration"
+	target_name         = "%s"
+	language 			= "%s"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	is_proxy 			= true
+	%s
+	%s
+}
+`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
+}
+
+func mcpServerCustomModelResourceConfig(
+	name,
+	targetName,
+	language string,
+	useCaseResourceName *string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_mcp_server")
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
+	return fmt.Sprintf(`
+%s
+resource "datarobot_use_case" "test_mcp_server" {
+	name = "test custom model mcp server"
+}
+resource "datarobot_use_case" "test_new_mcp_server" {
+	name = "test new custom model mcp server"
+}
+
+resource "datarobot_custom_model" "test_mcp_server" {
+	name        		= "%s"
+	target_type         = "MCP"
 	target_name         = "%s"
 	language 			= "%s"
 	base_environment_id = "65f9b27eab986d30d4c64268"
