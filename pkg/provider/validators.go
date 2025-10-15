@@ -507,6 +507,7 @@ func CustomModelTargetTypeValidators() []validator.String {
 			"Unstructured",
 			"VectorDatabase",
 			"AgenticWorkflow",
+			"MCP",
 		),
 	}
 }
