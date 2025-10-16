@@ -26,6 +26,17 @@ resource "datarobot_registered_model" "example" {
   custom_model_version_id = datarobot_custom_model.example.version_id
   name                    = "Example Registered Model"
   description             = "Description for the example registered model"
+
+  tags = [
+    {
+      name  = "ab-test"
+      value = "a1"
+    },
+    {
+      name  = "team"
+      value = "marketing"
+    }
+  ]
 }
 
 output "datarobot_registered_model_id" {
@@ -50,6 +61,7 @@ output "datarobot_registered_model_version_id" {
 ### Optional
 
 - `description` (String) The description of the Registered Model.
+- `tags` (Attributes Set) The list of tags to assign to the Registered Model version. (see [below for nested schema](#nestedatt--tags))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version.
 
@@ -57,3 +69,11 @@ output "datarobot_registered_model_version_id" {
 
 - `id` (String) The ID of the Registered Model.
 - `version_id` (String) The ID of the Registered Model Version.
+
+<a id="nestedatt--tags"></a>
+### Nested Schema for `tags`
+
+Required:
+
+- `name` (String) The name of the tag.
+- `value` (String) The value of the tag.

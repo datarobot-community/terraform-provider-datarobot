@@ -1,4 +1,7 @@
-## Unreleased
+## [0.10.21] - 2025-10-15
+
+- Added support for creating tags for registered model version
+- Added MCP custom model target type
 
 ## [0.10.20] - 2025-09-22
 

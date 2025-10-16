@@ -1089,6 +1089,129 @@ func TestDatasetCreatingVersion(t *testing.T) {
 	assert.Equal(updateReq.Name, getUpdatedDataset.Name)
 }
 
+func TestRegisteredModelServiceWithTags(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.TODO()
+	assert := assert.New(t)
+	require := require.New(t)
+
+	s := initializeTest(t)
+
+	// Create a use case request
+	req := &client.UseCaseRequest{
+		Name:        "Integration Test Tags" + uuid.New().String(),
+		Description: "This is a test use case for tags.",
+	}
+
+	// Create a use case
+	useCase, err := s.CreateUseCase(ctx, req)
+	require.NoError(err)
+	require.NotNil(useCase)
+	require.NotEmpty(useCase.ID)
+
+	// Delete the use case
+	defer func() {
+		err = s.DeleteUseCase(ctx, useCase.ID)
+		require.NoError(err)
+	}()
+
+	name := "Integration Test Tags" + uuid.New().String()
+	description := "This is a test playground for tags."
+	playgroundType := "rag"
+	playground, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
+		Name:           name,
+		Description:    description,
+		UseCaseID:      useCase.ID,
+		PlaygroundType: playgroundType,
+	})
+	require.NoError(err)
+	require.NotNil(playground)
+	assert.NotEmpty(playground.ID)
+
+	llmID := "azure-openai-gpt-4-o-mini"
+	llmBlueprintName := "Integration Test Tags" + uuid.New().String()
+	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
+		Name:         llmBlueprintName,
+		Description:  "This is a test LLM blueprint for tags.",
+		PlaygroundID: playground.ID,
+		LLMID:        &llmID,
+	})
+	require.NoError(err)
+	require.NotEmpty(llmBlueprint.ID)
+	require.Equal(llmBlueprintName, llmBlueprint.Name)
+
+	resp, err := s.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
+		LLMBlueprintID: llmBlueprint.ID,
+	})
+	require.NoError(err)
+	require.NotEmpty(resp.CustomModelID)
+
+	defer func() {
+		err = s.DeleteCustomModel(ctx, resp.CustomModelID)
+		require.NoError(err)
+	}()
+
+	timeout := 15 * time.Minute
+	start := time.Now()
+	for {
+		status, err := s.IsCustomModelReady(ctx, resp.CustomModelID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for custom model to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	customModel, err := s.GetCustomModel(ctx, resp.CustomModelID)
+	require.NoError(err)
+
+	registeredModelVersion, err := s.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
+		CustomModelVersionID: customModel.LatestVersion.ID,
+		Name:                 "Integration Test Tags" + uuid.New().String(),
+		Tags: []client.Tag{
+			{Name: "team", Value: "engineering"},
+			{Name: "env", Value: "test"},
+		},
+	})
+	require.NoError(err)
+	require.NotEmpty(registeredModelVersion.ID)
+
+	defer func() {
+		err = s.DeleteRegisteredModel(ctx, registeredModelVersion.RegisteredModelID)
+		require.NoError(err)
+	}()
+
+	start = time.Now()
+	for {
+		status, err := s.IsRegisteredModelVersionReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for registered model version to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	// Verify that tags were set during creation
+	createdVersion, err := s.GetRegisteredModelVersion(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+	require.NoError(err)
+	require.Len(createdVersion.Tags, 2)
+
+	// Check that both expected tags are present (order not guaranteed)
+	tagMap := make(map[string]string)
+	for _, tag := range createdVersion.Tags {
+		tagMap[tag.Name] = tag.Value
+	}
+	require.Equal("engineering", tagMap["team"])
+	require.Equal("test", tagMap["env"])
+}
+
 func initializeTest(t *testing.T) client.Service {
 	if os.Getenv("ENABLE_INTEGRATION_TESTS") != "true" {
 		t.Skip("Integration tests are disabled")
