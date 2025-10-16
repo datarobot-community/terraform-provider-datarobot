@@ -19,8 +19,8 @@ func TestAccLLMBlueprintResource(t *testing.T) {
 	t.Parallel()
 
 	resourceName := "datarobot_llm_blueprint.test"
-	llmID := "azure-openai-gpt-3.5-turbo"
-	newLLMID := "amazon-titan"
+	llmID := "azure-openai-gpt-4-o-mini"
+	newLLMID := "amazon-nova-micro"
 	deployedLLMID := "custom-model"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
@@ -253,4 +253,58 @@ func checkLlmBlueprintResourceExists(resourceName string) resource.TestCheckFunc
 
 		return fmt.Errorf("LLM Blueprint not found")
 	}
+}
+
+func TestAccLLMBlueprintResource_ChatInterfaceCustomModel(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_llm_blueprint.test"
+	llmID := "chat-interface-custom-model"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "datarobot_use_case" "test" {
+  name        = "test"
+  description = "test"
+}
+
+data "datarobot_execution_environment" "agentic_env" {
+  name = "[DataRobot] Python 3.11 GenAI Agents"
+}
+
+resource "datarobot_custom_model" "test" {
+  name                        = "test custom model"
+  base_environment_id         = data.datarobot_execution_environment.agentic_env.id
+  base_environment_version_id = data.datarobot_execution_environment.agentic_env.version_id
+  target_type                 = "AgenticWorkflow"
+  target_name                 = "response"
+  language                    = "python"
+  use_case_ids                = [datarobot_use_case.test.id]
+  files = []
+}
+
+resource "datarobot_playground" "test" {
+	name = "test playground"
+	use_case_id = datarobot_use_case.test.id
+}
+resource "datarobot_llm_blueprint" "test" {
+	name = "test blueprint"
+	playground_id = datarobot_playground.test.id
+	llm_id = "%s"
+	llm_settings = {
+		custom_model_id = datarobot_custom_model.test.id
+	}
+	prompt_type = "ONE_TIME_PROMPT"
+}`, llmID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "llm_id", llmID),
+					resource.TestCheckResourceAttrSet(resourceName, "llm_settings.custom_model_id"),
+				),
+			},
+		},
+	})
 }

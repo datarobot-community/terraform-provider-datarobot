@@ -469,7 +469,7 @@ func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles
 
 	if IsKnown(folderPath) {
 		folder := folderPath.ValueString()
-		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+		if err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
 			if innerErr != nil {
 				return innerErr
 			}
@@ -612,14 +612,13 @@ func computeFolderHash(folderPath types.String) (hash types.String, err error) {
 		hashValue := ""
 		filesInFolder := make([]string, 0)
 		folder := folderPath.ValueString()
-		if err = filepath.Walk(folder, func(path string, info os.FileInfo, innerErr error) error {
+		if err = WalkSymlinkSafe(folder, func(path string, info os.FileInfo, innerErr error) error {
 			if innerErr != nil {
 				return innerErr
 			}
 			if info.IsDir() {
 				return nil
 			}
-
 			filesInFolder = append(filesInFolder, path)
 			return nil
 		}); err != nil {
@@ -690,7 +689,7 @@ func computeHash(value []byte) (hash string) {
 }
 
 func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -698,7 +697,7 @@ func Int64ValuePointerOptional(value basetypes.Int64Value) *int64 {
 }
 
 func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -706,7 +705,7 @@ func Float64ValuePointerOptional(value basetypes.Float64Value) *float64 {
 }
 
 func StringValuePointerOptional(value basetypes.StringValue) *string {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -714,7 +713,7 @@ func StringValuePointerOptional(value basetypes.StringValue) *string {
 }
 
 func BoolValuePointerOptional(value basetypes.BoolValue) *bool {
-	if value.IsUnknown() {
+	if value.IsUnknown() || value.IsNull() {
 		return nil
 	}
 
@@ -756,6 +755,28 @@ func convertTfStringListToPtr(input []types.String) *[]string {
 	}
 
 	return &output
+}
+
+func convertTagsToClientTags(tfTags []Tag) []client.Tag {
+	clientTags := make([]client.Tag, len(tfTags))
+	for i, tag := range tfTags {
+		clientTags[i] = client.Tag{
+			Name:  tag.Name.ValueString(),
+			Value: tag.Value.ValueString(),
+		}
+	}
+	return clientTags
+}
+
+func convertClientTagsToTfTags(clientTags []client.Tag) []Tag {
+	tfTags := make([]Tag, len(clientTags))
+	for i, tag := range clientTags {
+		tfTags[i] = Tag{
+			Name:  types.StringValue(tag.Name),
+			Value: types.StringValue(tag.Value),
+		}
+	}
+	return tfTags
 }
 
 func convertDynamicType(tfType types.Dynamic) any {
@@ -852,9 +873,14 @@ func zipDirectory(source, target string) (content []byte, err error) {
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	err = filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	err = WalkSymlinkSafe(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Skip the root directory itself so we only include its contents
+		if path == source {
+			return nil
 		}
 
 		header, err := zip.FileInfoHeader(info)
@@ -862,10 +888,12 @@ func zipDirectory(source, target string) (content []byte, err error) {
 			return err
 		}
 
-		header.Name, err = filepath.Rel(filepath.Dir(source), path)
+		header.Name, err = filepath.Rel(source, path)
 		if err != nil {
 			return err
 		}
+		// Normalize separators to forward slash for cross-platform consistency
+		header.Name = filepath.ToSlash(header.Name)
 
 		if info.IsDir() {
 			header.Name += "/"
@@ -1050,4 +1078,26 @@ func prepareTestFolder(folderPath string) (string, error) {
 
 	// Return the path to the created directory
 	return filepath.Abs(folderPath)
+}
+
+// Helper functions for converting pointer values back to Terraform types.
+func Int64PointerValue(ptr *int64) types.Int64 {
+	if ptr == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(*ptr)
+}
+
+func BoolPointerValue(ptr *bool) types.Bool {
+	if ptr == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*ptr)
+}
+
+func StringPointerValue(ptr *string) types.String {
+	if ptr == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(*ptr)
 }

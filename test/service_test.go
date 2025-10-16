@@ -131,7 +131,7 @@ func TestCustomModel(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
-	llmID := "azure-openai-gpt-3.5-turbo"
+	llmID := "azure-openai-gpt-4-o-mini"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
@@ -373,7 +373,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
-	llmID := "azure-openai-gpt-3.5-turbo"
+	llmID := "azure-openai-gpt-4-o-mini"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
@@ -687,7 +687,7 @@ func TestLLMBlueprint(t *testing.T) {
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
 
-	llmID := "azure-openai-gpt-3.5-turbo"
+	llmID := "azure-openai-gpt-4-o-mini"
 	llmBlueprintName := "Integration Test" + uuid.New().String()
 	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
 		Name:         llmBlueprintName,
@@ -840,6 +840,7 @@ func TestPlayground(t *testing.T) {
 		require.NoError(err)
 	}()
 
+	// Test 1: Create playground without specifying playground_type (should default to "rag")
 	name := "Integration Test" + uuid.New().String()
 	description := "This is a test playground."
 	playground, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
@@ -857,6 +858,7 @@ func TestPlayground(t *testing.T) {
 	require.Equal(playground.ID, getPlayground.ID)
 	require.Equal(name, getPlayground.Name)
 	require.Equal(description, getPlayground.Description)
+	require.Equal("rag", getPlayground.PlaygroundType)
 
 	// Update the playground request
 	updateName := "Updated Integration Test" + uuid.New().String()
@@ -880,6 +882,30 @@ func TestPlayground(t *testing.T) {
 	assert.Equal(updateDescription, updatedPlayground.Description)
 
 	err = s.DeletePlayground(ctx, playground.ID)
+	require.NoError(err)
+
+	// Test 2: Create playground with explicit playground_type "agentic"
+	name2 := "Integration Test Agentic" + uuid.New().String()
+	description2 := "This is a test agentic playground."
+	playground2, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
+		Name:           name2,
+		Description:    description2,
+		UseCaseID:      useCase.ID,
+		PlaygroundType: "agentic",
+	})
+	require.NoError(err)
+	require.NotNil(playground2)
+	assert.NotEmpty(playground2.ID)
+
+	getPlayground2, err := s.GetPlayground(ctx, playground2.ID)
+	require.NoError(err)
+	require.NotNil(getPlayground2)
+	require.Equal(playground2.ID, getPlayground2.ID)
+	require.Equal(name2, getPlayground2.Name)
+	require.Equal(description2, getPlayground2.Description)
+	require.Equal("agentic", getPlayground2.PlaygroundType)
+
+	err = s.DeletePlayground(ctx, playground2.ID)
 	require.NoError(err)
 }
 
@@ -1061,6 +1087,129 @@ func TestDatasetCreatingVersion(t *testing.T) {
 	require.Equal(resp.ID, getUpdatedDataset.ID)
 	require.NotEmpty(getUpdatedDataset.VersionID)
 	assert.Equal(updateReq.Name, getUpdatedDataset.Name)
+}
+
+func TestRegisteredModelServiceWithTags(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.TODO()
+	assert := assert.New(t)
+	require := require.New(t)
+
+	s := initializeTest(t)
+
+	// Create a use case request
+	req := &client.UseCaseRequest{
+		Name:        "Integration Test Tags" + uuid.New().String(),
+		Description: "This is a test use case for tags.",
+	}
+
+	// Create a use case
+	useCase, err := s.CreateUseCase(ctx, req)
+	require.NoError(err)
+	require.NotNil(useCase)
+	require.NotEmpty(useCase.ID)
+
+	// Delete the use case
+	defer func() {
+		err = s.DeleteUseCase(ctx, useCase.ID)
+		require.NoError(err)
+	}()
+
+	name := "Integration Test Tags" + uuid.New().String()
+	description := "This is a test playground for tags."
+	playgroundType := "rag"
+	playground, err := s.CreatePlayground(ctx, &client.CreatePlaygroundRequest{
+		Name:           name,
+		Description:    description,
+		UseCaseID:      useCase.ID,
+		PlaygroundType: playgroundType,
+	})
+	require.NoError(err)
+	require.NotNil(playground)
+	assert.NotEmpty(playground.ID)
+
+	llmID := "azure-openai-gpt-4-o-mini"
+	llmBlueprintName := "Integration Test Tags" + uuid.New().String()
+	llmBlueprint, err := s.CreateLLMBlueprint(ctx, &client.CreateLLMBlueprintRequest{
+		Name:         llmBlueprintName,
+		Description:  "This is a test LLM blueprint for tags.",
+		PlaygroundID: playground.ID,
+		LLMID:        &llmID,
+	})
+	require.NoError(err)
+	require.NotEmpty(llmBlueprint.ID)
+	require.Equal(llmBlueprintName, llmBlueprint.Name)
+
+	resp, err := s.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
+		LLMBlueprintID: llmBlueprint.ID,
+	})
+	require.NoError(err)
+	require.NotEmpty(resp.CustomModelID)
+
+	defer func() {
+		err = s.DeleteCustomModel(ctx, resp.CustomModelID)
+		require.NoError(err)
+	}()
+
+	timeout := 15 * time.Minute
+	start := time.Now()
+	for {
+		status, err := s.IsCustomModelReady(ctx, resp.CustomModelID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for custom model to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	customModel, err := s.GetCustomModel(ctx, resp.CustomModelID)
+	require.NoError(err)
+
+	registeredModelVersion, err := s.CreateRegisteredModelFromCustomModelVersion(ctx, &client.CreateRegisteredModelFromCustomModelRequest{
+		CustomModelVersionID: customModel.LatestVersion.ID,
+		Name:                 "Integration Test Tags" + uuid.New().String(),
+		Tags: []client.Tag{
+			{Name: "team", Value: "engineering"},
+			{Name: "env", Value: "test"},
+		},
+	})
+	require.NoError(err)
+	require.NotEmpty(registeredModelVersion.ID)
+
+	defer func() {
+		err = s.DeleteRegisteredModel(ctx, registeredModelVersion.RegisteredModelID)
+		require.NoError(err)
+	}()
+
+	start = time.Now()
+	for {
+		status, err := s.IsRegisteredModelVersionReady(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+		require.NoError(err)
+		if status {
+			break
+		}
+		if time.Since(start) > timeout {
+			require.FailNow("timeout reached while waiting for registered model version to be ready")
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	// Verify that tags were set during creation
+	createdVersion, err := s.GetRegisteredModelVersion(ctx, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+	require.NoError(err)
+	require.Len(createdVersion.Tags, 2)
+
+	// Check that both expected tags are present (order not guaranteed)
+	tagMap := make(map[string]string)
+	for _, tag := range createdVersion.Tags {
+		tagMap[tag.Name] = tag.Value
+	}
+	require.Equal("engineering", tagMap["team"])
+	require.Equal("test", tagMap["env"])
 }
 
 func initializeTest(t *testing.T) client.Service {

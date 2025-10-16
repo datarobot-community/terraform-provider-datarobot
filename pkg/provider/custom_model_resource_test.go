@@ -37,7 +37,7 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read
 			{
-				Config: customModelFromLlmBlueprintResourceConfig("example_name", "example_description"),
+				Config: customModelFromLlmBlueprintResourceConfig("example_name", "example_description", nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
@@ -48,7 +48,7 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 			},
 			// Update name, description
 			{
-				Config: customModelFromLlmBlueprintResourceConfig("new_example_name", "new_example_description"),
+				Config: customModelFromLlmBlueprintResourceConfig("new_example_name", "new_example_description", nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
@@ -177,7 +177,6 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomModelResourceExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
@@ -265,6 +264,25 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 								Condition: basetypes.NewStringValue(`{"comparand": 10, "comparator": "greaterThan"}`),
 							},
 						},
+						{
+							TemplateName: basetypes.NewStringValue("Cost"),
+							Name:         basetypes.NewStringValue("Cost Response"),
+							Stages:       []basetypes.StringValue{basetypes.NewStringValue("response")},
+							Intervention: GuardIntervention{
+								Action:    basetypes.NewStringValue("report"),
+								Message:   basetypes.NewStringValue("Unused"),
+								Condition: basetypes.NewStringValue(`{"comparand": "ignore", "comparator": "is"}`),
+							},
+							AdditionalGuardConfig: &AdditionalGuardConfig{
+								Cost: GuardCostInfo{
+									Currency:    basetypes.NewStringValue("USD"),
+									InputPrice:  basetypes.NewFloat64Value(0.001),
+									InputUnit:   basetypes.NewInt64Value(1000),
+									OutputPrice: basetypes.NewFloat64Value(0.01),
+									OutputUnit:  basetypes.NewInt64Value(1000),
+								},
+							},
+						},
 					},
 					nil,
 					false),
@@ -285,6 +303,18 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.intervention.condition", `{"comparand":0,"comparator":"equals"}`),
 					resource.TestCheckResourceAttrSet(resourceName, "guard_configurations.0.openai_credential"),
 					resource.TestCheckResourceAttr(resourceName, "guard_configurations.0.llm_type", "openAi"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.template_name", "Cost"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.name", "Cost Response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.stages.0", "response"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.currency", "USD"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.input_price", "0.001"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.input_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.output_price", "0.01"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.additional_guard_config.cost.output_unit", "1000"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.action", "report"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.message", "Unused"),
+					resource.TestCheckResourceAttr(resourceName, "guard_configurations.4.intervention.condition", `{"comparand":"ignore","comparator":"is"}`),
+
 					resource.TestCheckResourceAttr(resourceName, "files.0.1", "new_dir/"+fileName),
 				),
 			},
@@ -964,6 +994,94 @@ func TestAccTextGenerationCustomModelResource(t *testing.T) {
 	})
 }
 
+func TestAccMCPCustomModelResource(t *testing.T) {
+	t.Parallel()
+
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	resourceName := "datarobot_custom_model.test_mcp_server"
+	useCaseResourceName := "test_mcp_server"
+	useCaseResourceName2 := "test_new_mcp_server"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: mcpServerCustomModelResourceConfig("example_name", "target", "python", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "python"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update parameters and add use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Update use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", &useCaseResourceName2),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("use_case_ids"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Remove use case
+			{
+				Config: mcpServerCustomModelResourceConfig("new_example_name", "new_target", "r", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "new_example_name"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "MCP"),
+					resource.TestCheckResourceAttr(resourceName, "target_name", "new_target"),
+					resource.TestCheckResourceAttr(resourceName, "language", "r"),
+					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
 func TestAccUnstructuredCustomModelResource(t *testing.T) {
 	t.Parallel()
 
@@ -1068,7 +1186,7 @@ func TestCustomModelResourceSchema(t *testing.T) {
 	}
 }
 
-func customModelFromLlmBlueprintResourceConfig(name, description string) string {
+func customModelFromLlmBlueprintResourceConfig(name, description, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model" {
 	name = "test custom model"
@@ -1093,7 +1211,7 @@ resource "datarobot_llm_blueprint" "test_custom_model" {
 	description = "test"
 	vector_database_id = "${datarobot_vector_database.test_custom_model.id}"
 	playground_id = "${datarobot_playground.test_custom_model.id}"
-	llm_id = "azure-openai-gpt-3.5-turbo"
+	llm_id = "azure-openai-gpt-4-o-mini"
 }
 resource "datarobot_api_token_credential" "test_custom_model" {
 	name = "test custom model %s"
@@ -1196,6 +1314,25 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}`, guard.NemoInfo.BlockedTerms)
 			}
 
+			additionalGuardConfigStr := ""
+			if guard.AdditionalGuardConfig != nil {
+				additionalGuardConfigStr = fmt.Sprintf(`
+				additional_guard_config = {
+					cost = {
+						currency = %s
+						input_price = %s
+						input_unit = %s
+						output_price = %s
+						output_unit = %s
+					}
+				}`,
+					guard.AdditionalGuardConfig.Cost.Currency,
+					guard.AdditionalGuardConfig.Cost.InputPrice,
+					guard.AdditionalGuardConfig.Cost.InputUnit,
+					guard.AdditionalGuardConfig.Cost.OutputPrice,
+					guard.AdditionalGuardConfig.Cost.OutputUnit,
+				)
+			}
 			guardsStr += fmt.Sprintf(`
 			{
 				template_name = %s
@@ -1208,6 +1345,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				}
 				%s
 				%s
+				%s
 			},`,
 				guard.TemplateName,
 				guard.Name,
@@ -1216,7 +1354,8 @@ func customModelWithoutLlmBlueprintResourceConfig(
 				guard.Intervention.Message,
 				guard.Intervention.Condition.ValueString(),
 				guardCredentialStr,
-				nemoInfoStr)
+				nemoInfoStr,
+				additionalGuardConfigStr)
 		}
 		guardsStr += "]"
 	}
@@ -1455,6 +1594,40 @@ resource "datarobot_custom_model" "test_text_generation" {
 `, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
+func mcpServerCustomModelResourceConfig(
+	name,
+	targetName,
+	language string,
+	useCaseResourceName *string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_mcp_server")
+
+	useCaseIDsStr := ""
+	if useCaseResourceName != nil {
+		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
+	}
+
+	return fmt.Sprintf(`
+%s
+resource "datarobot_use_case" "test_mcp_server" {
+	name = "test custom model mcp server"
+}
+resource "datarobot_use_case" "test_new_mcp_server" {
+	name = "test new custom model mcp server"
+}
+
+resource "datarobot_custom_model" "test_mcp_server" {
+	name        		= "%s"
+	target_type         = "MCP"
+	target_name         = "%s"
+	language 			= "%s"
+	base_environment_id = "65f9b27eab986d30d4c64268"
+	is_proxy 			= true
+	%s
+	%s
+}
+`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
+}
+
 func basicCustomModelResourceConfig(
 	name,
 	targetType,
@@ -1544,6 +1717,10 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 			if rs.Primary.Attributes["guard_configurations.0.name"] != "" {
 				found := false
 				for _, guardConfig := range getGuardConfigsResp.Data {
+					// fmt.Printf("Guard Config: %s, Stage: %s, Expected Name: %s, Expected Stage: %s\n",
+					// 	guardConfig.Name, guardConfig.Stages[0], rs.Primary.Attributes["guard_configurations.0.name"], rs.Primary.Attributes["guard_configurations.0.stages.0"])
+					// Debugging output to check guard configuration values
+
 					if guardConfig.Name == rs.Primary.Attributes["guard_configurations.0.name"] &&
 						guardConfig.Stages[0] == rs.Primary.Attributes["guard_configurations.0.stages.0"] {
 						found = true

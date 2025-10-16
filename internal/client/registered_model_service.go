@@ -5,6 +5,7 @@ type CreateRegisteredModelFromCustomModelRequest struct {
 	Name                 string `json:"name"`
 	RegisteredModelName  string `json:"registeredModelName,omitempty"`
 	Prompt               string `json:"prompt,omitempty"`
+	Tags                 []Tag  `json:"tags,omitempty"`
 
 	// To create a new version of an existing registered model
 	RegisteredModelID string `json:"registeredModelId,omitempty"`

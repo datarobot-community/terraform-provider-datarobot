@@ -100,15 +100,23 @@ func (r *ApplicationSourceFromTemplateResource) Schema(ctx context.Context, req 
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The replicas for the Application Source.",
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The resource label for the Application Source.",
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The session affinity for the Application Source.",
+					},
+					"service_web_requests_on_root_path": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether to service web requests on the root path for the Application Source.",
 					},
 				},
 			},
@@ -189,9 +197,10 @@ func (r *ApplicationSourceFromTemplateResource) Create(ctx context.Context, req 
 	updateApplicationSourceVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
 	if data.Resources != nil {
 		updateApplicationSourceVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
@@ -274,6 +283,17 @@ func (r *ApplicationSourceFromTemplateResource) Create(ctx context.Context, req 
 		return
 	}
 
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		applicationSource.LatestVersion.RuntimeParameters,
@@ -317,6 +337,17 @@ func (r *ApplicationSourceFromTemplateResource) Read(ctx context.Context, req re
 	data.Name = types.StringValue(applicationSource.Name)
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
+
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
 
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -372,14 +403,23 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 		return
 	}
 
-	// always create a new version
-	currentVersionNum := int([]rune(applicationSource.LatestVersion.Label)[1] - '0') // v1 -> 1
+	// Always create a new version.
+	nextLabel := nextLabelFromLatest(applicationSource.LatestVersion.Label)
+	createVersionRequest := &client.CreateApplicationSourceVersionRequest{
+		BaseVersion: applicationSource.LatestVersion.ID,
+		Label:       nextLabel,
+	}
+	if plan.Resources != nil {
+		createVersionRequest.Resources = &client.ApplicationResources{
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	traceAPICall("CreateApplicationSourceVersion")
-	createApplicationSourceFromTemplateVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(),
-		&client.CreateApplicationSourceVersionRequest{
-			BaseVersion: applicationSource.LatestVersion.ID,
-			Label:       fmt.Sprintf("v%d", currentVersionNum+1),
-		})
+	createApplicationSourceFromTemplateVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(), createVersionRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application Source version", err.Error())
 		return
@@ -400,9 +440,10 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
 	if plan.Resources != nil {
 		updateVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
@@ -483,6 +524,17 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
+
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if plan.Resources != nil {
+		plan.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
 
 	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -663,27 +715,17 @@ func (r *ApplicationSourceFromTemplateResource) updateLocalFiles(
 		}
 	}
 
-	// Batch file deletions in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(filesToDelete); i += batchSize {
-		end := i + batchSize
-		if end > len(filesToDelete) {
-			end = len(filesToDelete)
-		}
-
-		batchToDelete := filesToDelete[i:end]
-		if len(batchToDelete) > 0 {
-			traceAPICall("UpdateApplicationSourceFromTemplateVersion")
-			_, err = r.provider.service.UpdateApplicationSourceVersion(
-				ctx,
-				state.ID.ValueString(),
-				applicationSourceFromTemplateVersion.ID,
-				&client.UpdateApplicationSourceVersionRequest{
-					FilesToDelete: batchToDelete,
-				})
-			if err != nil {
-				return
-			}
+	if len(filesToDelete) > 0 {
+		traceAPICall("UpdateApplicationSourceFromTemplateVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersion(
+			ctx,
+			state.ID.ValueString(),
+			applicationSourceFromTemplateVersion.ID,
+			&client.UpdateApplicationSourceVersionRequest{
+				FilesToDelete: filesToDelete,
+			})
+		if err != nil {
+			return
 		}
 	}
 

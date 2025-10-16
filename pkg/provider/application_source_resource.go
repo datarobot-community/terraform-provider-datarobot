@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -93,15 +94,23 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The replicas for the Application Source.",
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The resource label for the Application Source.",
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The session affinity for the Application Source.",
+					},
+					"service_web_requests_on_root_path": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether to service web requests on the root path for the Application Source.",
 					},
 				},
 			},
@@ -182,9 +191,10 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	}
 	if data.Resources != nil {
 		createApplicationSourceVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(data.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(data.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(data.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
@@ -264,6 +274,17 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		applicationSource.LatestVersion.RuntimeParameters,
@@ -307,6 +328,17 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	data.Name = types.StringValue(applicationSource.Name)
 	data.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
+
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if data.Resources != nil {
+		data.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
 
 	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
@@ -362,14 +394,23 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	// always create a new version
-	currentVersionNum := int([]rune(applicationSource.LatestVersion.Label)[1] - '0') // v1 -> 1
+	// Always create a new version.
+	nextLabel := nextLabelFromLatest(applicationSource.LatestVersion.Label)
+	createVersionRequest := &client.CreateApplicationSourceVersionRequest{
+		BaseVersion: applicationSource.LatestVersion.ID,
+		Label:       nextLabel,
+	}
+	if plan.Resources != nil {
+		createVersionRequest.Resources = &client.ApplicationResources{
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	traceAPICall("CreateApplicationSourceVersion")
-	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(),
-		&client.CreateApplicationSourceVersionRequest{
-			BaseVersion: applicationSource.LatestVersion.ID,
-			Label:       fmt.Sprintf("v%d", currentVersionNum+1),
-		})
+	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(ctx, plan.ID.ValueString(), createVersionRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application Source version", err.Error())
 		return
@@ -390,9 +431,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
 	if plan.Resources != nil {
 		updateVersionRequest.Resources = &client.ApplicationResources{
-			Replicas:        Int64ValuePointerOptional(plan.Resources.Replicas),
-			SessionAffinity: BoolValuePointerOptional(plan.Resources.SessionAffinity),
-			ResourceLabel:   StringValuePointerOptional(plan.Resources.ResourceLabel),
+			Replicas:                     Int64ValuePointerOptional(plan.Resources.Replicas),
+			SessionAffinity:              BoolValuePointerOptional(plan.Resources.SessionAffinity),
+			ResourceLabel:                StringValuePointerOptional(plan.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(plan.Resources.ServiceWebRequestsOnRootPath),
 		}
 	}
 
@@ -474,6 +516,17 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
 
+	// Only populate resources if the user originally configured them
+	// This preserves the user's intent - if they didn't configure resources, keep them as null
+	if plan.Resources != nil {
+		plan.Resources = &ApplicationSourceResources{
+			Replicas:                     Int64PointerValue(applicationSource.LatestVersion.Resources.Replicas),
+			SessionAffinity:              BoolPointerValue(applicationSource.LatestVersion.Resources.SessionAffinity),
+			ResourceLabel:                StringPointerValue(applicationSource.LatestVersion.Resources.ResourceLabel),
+			ServiceWebRequestsOnRootPath: BoolPointerValue(applicationSource.LatestVersion.Resources.ServiceWebRequestsOnRootPath),
+		}
+	}
+
 	plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
 		applicationSource.LatestVersion.RuntimeParameters,
@@ -509,8 +562,14 @@ func (r *ApplicationSourceResource) ImportState(ctx context.Context, req resourc
 }
 
 func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	tflog.Debug(ctx, "ModifyPlan called", map[string]any{
+		"plan_raw_is_null":  req.Plan.Raw.IsNull(),
+		"state_raw_is_null": req.State.Raw.IsNull(),
+	})
+
 	if req.Plan.Raw.IsNull() {
 		// Resource is being destroyed
+		tflog.Debug(ctx, "ModifyPlan: Resource being destroyed")
 		return
 	}
 
@@ -521,6 +580,10 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		return
 	}
 
+	tflog.Debug(ctx, "ModifyPlan: Got plan", map[string]any{
+		"resources_is_nil": plan.Resources == nil,
+	})
+
 	// compute file content hashes
 	filesHashes, err := computeFilesHashes(ctx, plan.Files)
 	if err != nil {
@@ -529,16 +592,29 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 	}
 	plan.FilesHashes = filesHashes
 
+	tflog.Debug(ctx, "ModifyPlan: Computed file hashes")
+
 	folderPathHash, err := computeFolderHash(plan.FolderPath)
 	if err != nil {
 		resp.Diagnostics.AddError("Error calculating folder path hash", err.Error())
 		return
 	}
 	plan.FolderPathHash = folderPathHash
+
+	tflog.Debug(ctx, "ModifyPlan: Computed folder hash")
+
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		tflog.Debug(ctx, "ModifyPlan: Error setting plan after hashes")
+		return
+	}
+
+	tflog.Debug(ctx, "ModifyPlan: Set plan after hashes")
 
 	if req.State.Raw.IsNull() {
 		// resource is being created
+		tflog.Debug(ctx, "ModifyPlan: Resource being created, setting final plan")
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
 
@@ -581,6 +657,10 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 			}, []RuntimeParameterValue{})
 	}
 
+	tflog.Debug(ctx, "ModifyPlan: Final plan state", map[string]any{
+		"resources_is_nil": plan.Resources == nil,
+	})
+
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
@@ -607,21 +687,30 @@ func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 		return
 	}
 
-	// Batch file uploads in groups of 100 to avoid API limits
-	const batchSize = 100
+	tflog.Debug(ctx, "Uploading files in batches", map[string]interface{}{
+		"total_files": len(localFiles),
+		"batch_size":  100,
+	})
+
+	// Upload files in batches of 100 to avoid API limits
+	batchSize := 100
 	for i := 0; i < len(localFiles); i += batchSize {
 		end := i + batchSize
 		if end > len(localFiles) {
 			end = len(localFiles)
 		}
+		batch := localFiles[i:end]
 
-		batchToUpload := localFiles[i:end]
-		if len(batchToUpload) > 0 {
-			traceAPICall("UpdateApplicationSourceVersion")
-			_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, batchToUpload)
-			if err != nil {
-				return
-			}
+		tflog.Debug(ctx, "Uploading file batch", map[string]interface{}{
+			"batch_start": i + 1,
+			"batch_end":   end,
+			"batch_count": len(batch),
+		})
+
+		traceAPICall("UpdateApplicationSourceVersion")
+		_, err = r.provider.service.UpdateApplicationSourceVersionFiles(ctx, id, versionId, batch)
+		if err != nil {
+			return fmt.Errorf("failed to upload file batch %d-%d: %w", i+1, end, err)
 		}
 	}
 
@@ -643,16 +732,27 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 		}
 	}
 
-	// Batch file deletions in groups of 100 to avoid API limits
-	const batchSize = 100
-	for i := 0; i < len(filesToDelete); i += batchSize {
-		end := i + batchSize
-		if end > len(filesToDelete) {
-			end = len(filesToDelete)
-		}
+	if len(filesToDelete) > 0 {
+		tflog.Debug(ctx, "Deleting files in batches", map[string]interface{}{
+			"total_files": len(filesToDelete),
+			"batch_size":  100,
+		})
 
-		batchToDelete := filesToDelete[i:end]
-		if len(batchToDelete) > 0 {
+		// Delete files in batches of 100 to avoid API limits
+		batchSize := 100
+		for i := 0; i < len(filesToDelete); i += batchSize {
+			end := i + batchSize
+			if end > len(filesToDelete) {
+				end = len(filesToDelete)
+			}
+			batchToDelete := filesToDelete[i:end]
+
+			tflog.Debug(ctx, "Deleting file batch", map[string]interface{}{
+				"batch_start": i + 1,
+				"batch_end":   end,
+				"batch_count": len(batchToDelete),
+			})
+
 			traceAPICall("UpdateApplicationSourceVersion")
 			_, err = r.provider.service.UpdateApplicationSourceVersion(
 				ctx,
@@ -662,7 +762,7 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 					FilesToDelete: batchToDelete,
 				})
 			if err != nil {
-				return
+				return fmt.Errorf("failed to delete file batch %d-%d: %w", i+1, end, err)
 			}
 		}
 	}

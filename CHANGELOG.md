@@ -1,8 +1,151 @@
-## [v0.9.4] - 2025-05-09
+## [0.10.21] - 2025-10-15
+
+- Added support for creating tags for registered model version
+- Added MCP custom model target type
+
+## [0.10.20] - 2025-09-22
+
+### Fixed
+
+- Fixed Windows zip file portability issue for making execution environments
+
+## [0.10.19] - 2025-09-18
+
+### Fixed
+
+- Fixed maximumMemory field in custom models that is occassionally a float
+
+
+## [0.10.18] - 2025-09-18
+
+### Fixed
+
+- Fixed version label auto-increment for Application Source (no wrap after v10)
+
+## [0.10.17] - 2025-09-01
+
+- Added a new key `llm_settings.custom_model_id` to `datarobot_llm_blueprint` resource
+
+## [0.10.16] - 2025-08-27
+
+- Added a new `playground_type` key to `datarobot_playground` resource
+- Added documentation for the DATAROBOT_TIMEOUT_MINUTES environment variable for deployments and other long-running operations
+
+## [0.10.15] - 2025-08-26
+
+### Changed
+
+- Dropped validators for model names on LLM Blueprints
+
+## [0.10.14] - 2025-08-13
+
+### Added
+
+- Added a new `additional_guard_config` field for GuardConfiguration structure.
+
+## [0.10.13] - 2025-07-24
+
+### Fixed
+
+- Relaxes basic auth password length to 1 character
+
+## [0.10.12] - 2025-07-18
+
+### Added
+
+- Added a parameter `docker_image_uri` for ExecutionEnvironmentResource to allow environment version creation from image URI
+
+## [0.10.11] - 2025-07-15
+
+### Fixed
+
+- Moved OAuth provider resources to `api/v2`
+
+## [0.10.10] - 2025-07-01
+
+### Fixed
+
+- Fixed OAuth resource such that if a Client ID changes, the resource should be replaced
+
+## [0.10.9] - 2025-06-23
+
+### Fixed
+
+- Fixed test name conflicts in batch file tests and LLM blueprint tests that could cause CI failures due to duplicate resource names
+
+## [0.10.8] - 2025-06-19
+
+### Fixed
+
+- Ensure PROMPT_COLUMN_NAME is correctly propagated to newly created Registered Model Versions
+
+## [0.10.7] - 2025-06-16
+
+### Added
+
+- Added support for specifying the `resources` field when creating a Custom Application from another Custom Application.
+
+## [0.10.6] - 2025-06-12
+
+### Added
+
+- Added ability to create Custom Applications consisting of 100+ files.
+
+## [0.10.5] - 2025-06-10
+
+### Added
+
+- Added new resource for managing OAuth providers in DataRobot (11.1+). This resource allows you to create, read, update, and delete OAuth provider configurations.
+
+## [0.10.4] - 2025-06-03
+
+### Added
+
+- Added AgenticWorkflow custom model target type
+
+## [0.10.3] - 2025-06-02
+
+### Removed
+
+- Added back symlink support from revert
+
+## [0.10.2] - 2025-06-02
+
+### Removed
+
+- Reverted a fix to allow uploading 100+ files due to issues with Pulumi bridge provider
+
+## [0.10.1] - 2025-05-29
+
+### Fixed
+
+- Windows build does not have inodes, dropped cycle detection for symlinks
+
+## [0.10.0] - 2025-05-29
+
+### Added
+
+- Added support for following symlinks for folders in custom models
+
+## [v0.9.5] - 2025-05-20
 
 ### Fixed
 
 - Fixed batch file uploads and deletions to avoid API limits by processing them in groups of 100.
+- Fixed the DynamicPseudoType error happening w/ the pulumi client.
+
+## [v0.9.4] - 2025-05-14
+
+### Added
+
+- Schedule support for the `CustomJob` resource.
+- DeploymentRetrainingPolicy now supports `use_case_id` attribute setting.
+- Password length validation in `basic_credential` resource.
+
+### Fixed
+
+- Fixed batch file uploads and deletions to avoid API limits by processing them in groups of 100.
+- Fixed test naming convention to avoid conflicts with other test files.
 
 ## [v0.9.3] - 2025-04-23
 
@@ -17,15 +160,18 @@
 ## [v0.9.1] - 2025-04-17
 
 ### Added
+
 - Add `retraining_settings` to the Deployment resource.
 - Add functionality to dynamic creation/delete folders when testing some resources, to prevent silly errors.
 
 ### Changed
+
 - Flow of how environment variables are set in the provider.
 - README.md, and DEVELOPMENT.md updated with a contributing information and some tips.
 - Updated some resources to load environment variables from the provider instead of directly from the environment during resource initialization (applies only to tests, not the provider itself).
 
 ### Fixed
+
 - Fix `notebook_resource` tests
 
 ## 0.8.19

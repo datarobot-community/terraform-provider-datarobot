@@ -132,6 +132,7 @@ Required:
 
 Optional:
 
+- `additional_guard_config` (Attributes) Additional guard configuration (see [below for nested schema](#nestedatt--guard_configurations--additional_guard_config))
 - `deployment_id` (String) The deployment ID of this guard.
 - `input_column_name` (String) The input column name of this guard.
 - `llm_type` (String) The LLM type for this guard.
@@ -152,6 +153,26 @@ Required:
 Optional:
 
 - `message` (String) The message of the guard intervention.
+
+
+<a id="nestedatt--guard_configurations--additional_guard_config"></a>
+### Nested Schema for `guard_configurations.additional_guard_config`
+
+Optional:
+
+- `cost` (Attributes) Cost metric configuration (see [below for nested schema](#nestedatt--guard_configurations--additional_guard_config--cost))
+
+<a id="nestedatt--guard_configurations--additional_guard_config--cost"></a>
+### Nested Schema for `guard_configurations.additional_guard_config.cost`
+
+Required:
+
+- `currency` (String) Currency for cost calculation (USD)
+- `input_price` (Number) LLM Price for input_unit tokens
+- `input_unit` (Number) No of input tokens for given price
+- `output_price` (Number) LLM Price for output_unit tokens
+- `output_unit` (Number) No of output tokens for given price
+
 
 
 <a id="nestedatt--guard_configurations--nemo_info"></a>

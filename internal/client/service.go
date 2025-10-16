@@ -199,7 +199,7 @@ type Service interface {
 	GetCustomTemplateFile(ctx context.Context, customTemplateID, fileID string) (*CustomTemplateFile, error)
 
 	// Application
-	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error)
+	CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationRequest) (*Application, error)
 	CreateQAApplication(ctx context.Context, req *CreateQAApplicationRequest) (*Application, error)
 	GetApplication(ctx context.Context, id string) (*Application, error)
 	UpdateApplication(ctx context.Context, id string, req *UpdateApplicationRequest) (*Application, error)
@@ -236,6 +236,11 @@ type Service interface {
 	UpdateNotebook(ctx context.Context, id string, useCaseID string) (*Notebook, error)
 	DeleteNotebook(ctx context.Context, id string) error
 
+	// DR OAuth
+	CreateAppOAuthProvider(ctx context.Context, req *CreateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
+	GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error)
+	UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
+	DeleteAppOAuthProvider(ctx context.Context, id string) error
 	// Add your service methods here
 }
 
@@ -548,7 +553,11 @@ func (s *ServiceImpl) ListCustomModelVersions(ctx context.Context, id string) ([
 }
 
 func (s *ServiceImpl) ListGuardTemplates(ctx context.Context) ([]GuardTemplate, error) {
-	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", nil)
+	type template_params struct {
+		IncludeAgentic bool `url:"includeAgentic"`
+	}
+	param := template_params{true}
+	return GetAllPages[GuardTemplate](s.client, ctx, "/guardTemplates/", &param)
 }
 
 func (s *ServiceImpl) GetGuardConfigurationsForCustomModelVersion(ctx context.Context, id string) (*GuardConfigurationResponse, error) {
@@ -882,7 +891,7 @@ func (s *ServiceImpl) GetCustomTemplateFile(ctx context.Context, customTemplateI
 	return Get[CustomTemplateFile](s.client, ctx, "/customTemplates/"+customTemplateID+"/files/"+fileID+"/")
 }
 
-func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationeRequest) (*Application, error) {
+func (s *ServiceImpl) CreateCustomApplication(ctx context.Context, req *CreateCustomApplicationRequest) (*Application, error) {
 	return Post[Application](s.client, ctx, "/customApplications/", req)
 }
 
@@ -945,7 +954,22 @@ func (s *ServiceImpl) ListExecutionEnvironments(ctx context.Context) ([]Executio
 }
 
 func (s *ServiceImpl) CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error) {
-	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/", http.MethodPost, req.Files, map[string]string{"description": req.Description})
+	params := map[string]string{
+		"description": req.Description,
+	}
+
+	if req.DockerImageUri != "" {
+		params["dockerImageUri"] = req.DockerImageUri
+	}
+
+	return uploadFilesFromBinaries[ExecutionEnvironmentVersion](
+		s.client,
+		ctx,
+		"/executionEnvironments/"+id+"/versions/",
+		http.MethodPost,
+		req.Files,
+		params,
+	)
 }
 
 func (s *ServiceImpl) GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error) {
@@ -1001,4 +1025,21 @@ func (s *ServiceImpl) UpdateNotebook(ctx context.Context, id string, useCaseID s
 
 func (s *ServiceImpl) DeleteNotebook(ctx context.Context, id string) error {
 	return Delete(s.apiGWClient, ctx, fmt.Sprintf("/nbx/notebooks/%s/", id))
+}
+
+// OAUTH Provider Service Implementation.
+func (s *ServiceImpl) CreateAppOAuthProvider(ctx context.Context, req *CreateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error) {
+	return Post[AppOAuthProviderResponse](s.client, ctx, "/externalOAuth/providers/", req)
+}
+
+func (s *ServiceImpl) GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error) {
+	return Get[AppOAuthProviderResponse](s.client, ctx, "/externalOAuth/providers/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error) {
+	return Patch[AppOAuthProviderResponse](s.client, ctx, "/externalOAuth/providers/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteAppOAuthProvider(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/externalOAuth/providers/"+id+"/")
 }

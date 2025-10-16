@@ -79,7 +79,6 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 			"llm_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the LLM for the LLM Blueprint. If custom_model_llm_settings is set, this value must be 'custom-model'.",
 				Optional:            true,
-				Validators:          LlmIDValidators(),
 				PlanModifiers: []planmodifier.String{
 					// in order to generate an update to the custom model resource, we need to force a replace
 					stringplanmodifier.RequiresReplace(),
@@ -106,6 +105,10 @@ func (r *LLMBlueprintResource) Schema(ctx context.Context, req resource.SchemaRe
 					},
 					"system_prompt": schema.StringAttribute{
 						MarkdownDescription: "Guides the style of the LLM response. It is a 'universal' prompt, prepended to all individual prompts.",
+						Optional:            true,
+					},
+					"custom_model_id": schema.StringAttribute{
+						MarkdownDescription: "The ID of the custom model to use via chat completion interface.",
 						Optional:            true,
 					},
 				},
@@ -208,6 +211,7 @@ func (r *LLMBlueprintResource) Create(ctx context.Context, req resource.CreateRe
 			Temperature:         Float64ValuePointerOptional(data.LLMSettings.Temperature),
 			TopP:                Float64ValuePointerOptional(data.LLMSettings.TopP),
 			SystemPrompt:        StringValuePointerOptional(data.LLMSettings.SystemPrompt),
+			CustomModelID:       StringValuePointerOptional(data.LLMSettings.CustomModelID),
 		}
 	}
 

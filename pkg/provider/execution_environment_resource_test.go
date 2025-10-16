@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -58,7 +59,7 @@ def run():
     )
 
     st.markdown("""
-    This is an example streamlit app. 
+    This is an example streamlit app.
     """)
 
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("streamlit"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("requests"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,6 +128,7 @@ if __name__ == "__main__":
 					"customModel",
 					"version_description",
 					&tarFileName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
@@ -155,6 +157,7 @@ if __name__ == "__main__":
 					"customApplication",
 					"version_description",
 					&tarFileName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesSame.AddStateValue(
@@ -178,13 +181,13 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
 				),
 			},
-			// udpate tar file contents triggers new version
+			// update tar file contents triggers new version
 			{
 				PreConfig: func() {
 					os.Remove(tarFileName)
 
 					// update tar file
-					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("streamlit\nflask"), 0644); err != nil {
+					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("requests\nhttpx"), 0644); err != nil {
 						t.Fatal(err)
 					}
 
@@ -212,6 +215,7 @@ if __name__ == "__main__":
 					"customApplication",
 					"version_description",
 					&tarFileName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -240,6 +244,7 @@ if __name__ == "__main__":
 					"customApplication",
 					"new_version_description",
 					&tarFileName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -268,6 +273,7 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					&zipFileName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -296,6 +302,7 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					&dirName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -323,7 +330,7 @@ if __name__ == "__main__":
 			{
 				PreConfig: func() {
 					// update requirements file
-					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("streamlit"), 0644); err != nil {
+					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("requests"), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -334,6 +341,7 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					&dirName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -366,7 +374,8 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					nil,
-					&dockerImageFileName),
+					&dockerImageFileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -398,7 +407,8 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					nil,
-					&dockerImage2FileName),
+					&dockerImage2FileName,
+					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
 						resourceName,
@@ -430,6 +440,7 @@ if __name__ == "__main__":
 					"customModel",
 					"new_version_description",
 					&dirName,
+					nil,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -478,6 +489,107 @@ func TestExecutionEnvironmentResourceSchema(t *testing.T) {
 	}
 }
 
+func TestAccExecutionEnvironmentResourceFromUri(t *testing.T) {
+	t.Parallel()
+
+	// Define variables needed for this specific test case
+	dockerImageFileName := "../../test/golang_prebuilt_environment.tar.gz"
+	dockerImageURI := "docker.io/library/alpine:latest"
+	dockerImageURI_updated := "docker.io/library/alpine:3.19"
+	resourceName := "datarobot_execution_environment.test"
+	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Test for conflicting docker_image and docker_image_uri
+			{
+				Config: executionEnvironmentResourceConfig(
+					"conflict_test",
+					"description",
+					"python",
+					"customModel",
+					"version_description",
+					nil, // no docker_context_path
+					&dockerImageFileName,
+					&dockerImageURI,
+				),
+				ExpectError: regexp.MustCompile(`(?i)These attributes cannot be configured together:`),
+			},
+			// Create environment version from URI
+			{
+				Config: executionEnvironmentResourceConfig(
+					"example_name",
+					"example_description",
+					"python",
+					"customModel",
+					"env_version_from_uri_description",
+					nil,
+					nil,
+					&dockerImageURI,
+				),
+
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesSame.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "env_version_from_uri_description"),
+					resource.TestCheckResourceAttr(resourceName, "docker_image_uri", "docker.io/library/alpine:latest"),
+					// when version is created from URI we set status to success right away.
+					resource.TestCheckResourceAttr(resourceName, "build_status", "success"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+
+			// Update docker image URI triggers new version
+			{
+				Config: executionEnvironmentResourceConfig(
+					"example_name",
+					"example_description",
+					"python",
+					"customModel",
+					"env_version_from_uri_description",
+					nil,
+					nil,
+					&dockerImageURI_updated,
+				),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name"),
+					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
+					resource.TestCheckResourceAttr(resourceName, "programming_language", "python"),
+					resource.TestCheckResourceAttr(resourceName, "use_cases.0", "customModel"),
+					resource.TestCheckResourceAttr(resourceName, "version_description", "env_version_from_uri_description"),
+					resource.TestCheckResourceAttr(resourceName, "docker_image_uri", "docker.io/library/alpine:3.19"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "build_status"),
+				),
+			},
+		},
+	})
+}
+
 func executionEnvironmentResourceConfig(
 	name,
 	description,
@@ -486,6 +598,7 @@ func executionEnvironmentResourceConfig(
 	versionDescription string,
 	dockerContextPath *string,
 	dockerImage *string,
+	dockerImageUri *string,
 ) string {
 	dockerContextPathStr := ""
 	if dockerContextPath != nil {
@@ -501,6 +614,13 @@ func executionEnvironmentResourceConfig(
 			`, *dockerImage)
 	}
 
+	dockerImageUriStr := ""
+	if dockerImageUri != nil {
+		dockerImageUriStr = fmt.Sprintf(`
+	docker_image_uri = "%s"
+	`, *dockerImageUri)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_execution_environment" "test" {
 	name = "%s"
@@ -510,6 +630,7 @@ resource "datarobot_execution_environment" "test" {
 	version_description = "%s"
 	%s
 	%s
+	%s
 }
 `, name,
 		description,
@@ -517,7 +638,8 @@ resource "datarobot_execution_environment" "test" {
 		useCase,
 		versionDescription,
 		dockerContextPathStr,
-		dockerImageStr)
+		dockerImageStr,
+		dockerImageUriStr)
 }
 
 func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
@@ -547,7 +669,8 @@ func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
 			executionEnvironment.Description == rs.Primary.Attributes["description"] &&
 			executionEnvironment.ProgrammingLanguage == rs.Primary.Attributes["programming_language"] &&
 			executionEnvironment.UseCases[0] == rs.Primary.Attributes["use_cases.0"] &&
-			executionEnvironment.LatestVersion.Description == rs.Primary.Attributes["version_description"] {
+			executionEnvironment.LatestVersion.Description == rs.Primary.Attributes["version_description"] &&
+			executionEnvironment.LatestVersion.DockerImageUri == rs.Primary.Attributes["docker_image_uri"] {
 			return nil
 		}
 
@@ -556,7 +679,7 @@ func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
 }
 
 func createTarFile(tarWriter *tar.Writer, dirName string) (err error) {
-	err = filepath.Walk(dirName, func(file string, fi os.FileInfo, err error) error {
+	err = WalkSymlinkSafe(dirName, func(file string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

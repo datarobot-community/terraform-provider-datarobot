@@ -128,10 +128,11 @@ type ChunkingParametersModel struct {
 
 // PlaygroundResourceModel describes the playground associated to a use case.
 type PlaygroundResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	Description types.String `tfsdk:"description"`
-	UseCaseID   types.String `tfsdk:"use_case_id"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	Description    types.String `tfsdk:"description"`
+	UseCaseID      types.String `tfsdk:"use_case_id"`
+	PlaygroundType types.String `tfsdk:"playground_type"`
 }
 
 // LLMBlueprintResourceModel describes the LLM blueprint resource.
@@ -158,6 +159,7 @@ type LLMSettings struct {
 	Temperature         types.Float64 `tfsdk:"temperature"`
 	TopP                types.Float64 `tfsdk:"top_p"`
 	SystemPrompt        types.String  `tfsdk:"system_prompt"`
+	CustomModelID       types.String  `tfsdk:"custom_model_id"`
 }
 
 type CustomModelLLMSettings struct {
@@ -222,18 +224,19 @@ type SourceRemoteRepository struct {
 }
 
 type GuardConfiguration struct {
-	TemplateName       types.String      `tfsdk:"template_name"`
-	Name               types.String      `tfsdk:"name"`
-	Stages             []types.String    `tfsdk:"stages"`
-	Intervention       GuardIntervention `tfsdk:"intervention"`
-	DeploymentID       types.String      `tfsdk:"deployment_id"`
-	InputColumnName    types.String      `tfsdk:"input_column_name"`
-	OutputColumnName   types.String      `tfsdk:"output_column_name"`
-	OpenAICredential   types.String      `tfsdk:"openai_credential"`
-	OpenAIApiBase      types.String      `tfsdk:"openai_api_base"`
-	OpenAIDeploymentID types.String      `tfsdk:"openai_deployment_id"`
-	LlmType            types.String      `tfsdk:"llm_type"`
-	NemoInfo           *NemoInfo         `tfsdk:"nemo_info"`
+	TemplateName          types.String           `tfsdk:"template_name"`
+	Name                  types.String           `tfsdk:"name"`
+	Stages                []types.String         `tfsdk:"stages"`
+	Intervention          GuardIntervention      `tfsdk:"intervention"`
+	DeploymentID          types.String           `tfsdk:"deployment_id"`
+	InputColumnName       types.String           `tfsdk:"input_column_name"`
+	OutputColumnName      types.String           `tfsdk:"output_column_name"`
+	OpenAICredential      types.String           `tfsdk:"openai_credential"`
+	OpenAIApiBase         types.String           `tfsdk:"openai_api_base"`
+	OpenAIDeploymentID    types.String           `tfsdk:"openai_deployment_id"`
+	LlmType               types.String           `tfsdk:"llm_type"`
+	NemoInfo              *NemoInfo              `tfsdk:"nemo_info"`
+	AdditionalGuardConfig *AdditionalGuardConfig `tfsdk:"additional_guard_config"`
 }
 
 type GuardIntervention struct {
@@ -258,6 +261,18 @@ type NemoInfo struct {
 type OverallModerationConfiguration struct {
 	TimeoutSec    types.Int64  `tfsdk:"timeout_sec"`
 	TimeoutAction types.String `tfsdk:"timeout_action"`
+}
+
+type AdditionalGuardConfig struct {
+	Cost GuardCostInfo `tfsdk:"cost"`
+}
+
+type GuardCostInfo struct {
+	Currency    types.String  `tfsdk:"currency"`
+	InputPrice  types.Float64 `tfsdk:"input_price"`
+	InputUnit   types.Int64   `tfsdk:"input_unit"`
+	OutputPrice types.Float64 `tfsdk:"output_price"`
+	OutputUnit  types.Int64   `tfsdk:"output_unit"`
 }
 
 // CustomModelLLMValidationResourceModel describes the custom model LLM validation resource.
@@ -362,6 +377,7 @@ type RegisteredModelResourceModel struct {
 	Description          types.String   `tfsdk:"description"`
 	CustomModelVersionId types.String   `tfsdk:"custom_model_version_id"`
 	UseCaseIDs           []types.String `tfsdk:"use_case_ids"`
+	Tags                 types.Set      `tfsdk:"tags"`
 }
 
 type RegisteredModelFromLeaderboardResourceModel struct {
@@ -704,33 +720,36 @@ type ApplicationSourceFromTemplateResourceModel struct {
 }
 
 type ApplicationSourceResources struct {
-	Replicas        types.Int64  `tfsdk:"replicas"`
-	SessionAffinity types.Bool   `tfsdk:"session_affinity"`
-	ResourceLabel   types.String `tfsdk:"resource_label"`
+	Replicas                     types.Int64  `tfsdk:"replicas"`
+	SessionAffinity              types.Bool   `tfsdk:"session_affinity"`
+	ResourceLabel                types.String `tfsdk:"resource_label"`
+	ServiceWebRequestsOnRootPath types.Bool   `tfsdk:"service_web_requests_on_root_path"`
 }
 
 type CustomApplicationResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	SourceID                 types.String   `tfsdk:"source_id"`
-	SourceVersionID          types.String   `tfsdk:"source_version_id"`
-	Name                     types.String   `tfsdk:"name"`
-	ApplicationUrl           types.String   `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
-	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
+	ID                       types.String                `tfsdk:"id"`
+	SourceID                 types.String                `tfsdk:"source_id"`
+	SourceVersionID          types.String                `tfsdk:"source_version_id"`
+	Name                     types.String                `tfsdk:"name"`
+	ApplicationUrl           types.String                `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool                  `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String              `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool                  `tfsdk:"allow_auto_stopping"`
+	Resources                *ApplicationSourceResources `tfsdk:"resources"`
+	UseCaseIDs               []types.String              `tfsdk:"use_case_ids"`
 }
 
 type CustomApplicationFromEnvironmentResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	EnvironmentID            types.String   `tfsdk:"environment_id"`
-	EnvironmentVersionID     types.String   `tfsdk:"environment_version_id"`
-	Name                     types.String   `tfsdk:"name"`
-	ApplicationUrl           types.String   `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
-	UseCaseIDs               []types.String `tfsdk:"use_case_ids"`
+	ID                       types.String                `tfsdk:"id"`
+	EnvironmentID            types.String                `tfsdk:"environment_id"`
+	EnvironmentVersionID     types.String                `tfsdk:"environment_version_id"`
+	Name                     types.String                `tfsdk:"name"`
+	ApplicationUrl           types.String                `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool                  `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients []types.String              `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool                  `tfsdk:"allow_auto_stopping"`
+	Resources                *ApplicationSourceResources `tfsdk:"resources"`
+	UseCaseIDs               []types.String              `tfsdk:"use_case_ids"`
 }
 
 // CredentialResourceModel describes the credential resource.
@@ -796,6 +815,7 @@ type ExecutionEnvironmentResourceModel struct {
 	DockerContextHash   types.String   `tfsdk:"docker_context_hash"`
 	DockerImage         types.String   `tfsdk:"docker_image"`
 	DockerImageHash     types.String   `tfsdk:"docker_image_hash"`
+	DockerImageUri      types.String   `tfsdk:"docker_image_uri"`
 	BuildStatus         types.String   `tfsdk:"build_status"`
 }
 
@@ -907,4 +927,15 @@ type CustomJobScheduleModel struct {
 
 type CustomjobScheduleListModel struct {
 	Data []CustomJobScheduleModel `tfsdk:"data"`
+}
+
+type AppOAuthResourceModel struct {
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	OrgID          types.String `tfsdk:"org_id"`
+	Type           types.String `tfsdk:"type"`
+	ClientID       types.String `tfsdk:"client_id"`
+	ClientSecret   types.String `tfsdk:"client_secret"`
+	SecureConfigID types.String `tfsdk:"secure_config_id"`
+	Status         types.String `tfsdk:"status"`
 }
