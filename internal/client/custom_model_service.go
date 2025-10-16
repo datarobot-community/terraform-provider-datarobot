@@ -138,11 +138,6 @@ type CustomModelHoldoutData struct {
 	PartitionColumn *string `json:"partitionColumn,omitempty"`
 }
 
-type CreateCustomModelVersionFromFilesRequest struct {
-	BaseEnvironmentID string     `json:"baseEnvironmentId"`
-	Files             []FileInfo `json:"files"`
-}
-
 type CreateCustomModelVersionFromRemoteRepositoryRequest struct {
 	IsMajorUpdate     bool     `json:"isMajorUpdate"`
 	BaseEnvironmentID string   `json:"baseEnvironmentId,omitempty"`

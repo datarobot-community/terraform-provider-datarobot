@@ -1101,3 +1101,12 @@ func StringPointerValue(ptr *string) types.String {
 	}
 	return types.StringValue(*ptr)
 }
+
+func localFilesContain(files []client.FileInfo, path string) bool {
+	for _, file := range files {
+		if file.Path == path {
+			return true
+		}
+	}
+	return false
+}

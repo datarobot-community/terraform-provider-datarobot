@@ -567,7 +567,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-		})
+		}, []client.FileInfo{})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
@@ -589,12 +589,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
+	err := r.updateOrCreateCustomModelVersionFromLatest(
 		ctx,
-		plan.FolderPath,
-		plan.Files,
+		nil,
 		customModelID,
-		baseEnvironmentID)
+		&state,
+		plan,
+	)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
@@ -1017,8 +1018,7 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 
 	// reset unknown version id if if hashess have been changed
-	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
-		plan.FolderPathHash != state.FolderPathHash {
+	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) || plan.FolderPathHash != state.FolderPathHash {
 		plan.VersionID = types.StringUnknown()
 	}
 
@@ -1253,32 +1253,6 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	}
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-func (r *CustomModelResource) createCustomModelVersionFromFiles(
-	ctx context.Context,
-	folderPath types.String,
-	files types.Dynamic,
-	customModelID string,
-	baseEnvironmentID string,
-) (
-	err error,
-) {
-	localFiles, err := prepareLocalFiles(folderPath, files)
-	if err != nil {
-		return
-	}
-
-	traceAPICall("CreateCustomModelVersionFromLocalFiles")
-	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
-		BaseEnvironmentID: baseEnvironmentID,
-		Files:             localFiles,
-	})
 	if err != nil {
 		return
 	}
@@ -1590,7 +1564,7 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 			IsMajorUpdate:          "false",
 			BaseEnvironmentID:      customModel.LatestVersion.BaseEnvironmentID,
 			RuntimeParameterValues: string(jsonParams),
-		}); err != nil {
+		}, []client.FileInfo{}); err != nil {
 			return
 		}
 	}
@@ -1646,7 +1620,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 				IsMajorUpdate:     "false",
 				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 				FilesToDelete:     filesToDelete,
-			})
+			}, []client.FileInfo{})
 			if err != nil {
 				return
 			}
@@ -1683,56 +1657,6 @@ func (r *CustomModelResource) updateRemoteRepositories(
 			}
 		}
 		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-	}
-
-	return
-}
-
-func (r *CustomModelResource) updateLocalFiles(
-	ctx context.Context,
-	customModel *client.CustomModel,
-	state *CustomModelResourceModel,
-	plan CustomModelResourceModel,
-) (
-	err error,
-) {
-	if !reflect.DeepEqual(plan.Files, state.Files) ||
-		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
-		plan.FolderPath != state.FolderPath ||
-		plan.FolderPathHash != state.FolderPathHash {
-		filesToDelete := make([]string, 0)
-		for _, item := range customModel.LatestVersion.Items {
-			if item.FileSource == "local" {
-				filesToDelete = append(filesToDelete, item.ID)
-			}
-		}
-
-		if len(filesToDelete) > 0 {
-			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-				IsMajorUpdate:     "false",
-				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-				FilesToDelete:     filesToDelete,
-			})
-			if err != nil {
-				return
-			}
-		}
-
-		if err = r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.FolderPath,
-			plan.Files,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		); err != nil {
-			return
-		}
-
-		state.Files = plan.Files
-		state.FolderPath = plan.FolderPath
-		state.FolderPathHash = plan.FolderPathHash
-		state.FilesHashes = plan.FilesHashes
 	}
 
 	return
@@ -1816,7 +1740,7 @@ func (r *CustomModelResource) updateResourceSettings(
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload); err != nil {
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload, []client.FileInfo{}); err != nil {
 		return
 	}
 	state.Replicas = plan.Replicas
@@ -1841,7 +1765,7 @@ func (r *CustomModelResource) updateTrainingDataset(
 			IsMajorUpdate:           "true",
 			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
 			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
-		})
+		}, []client.FileInfo{})
 		if err != nil {
 			return
 		}
@@ -1875,7 +1799,7 @@ func (r *CustomModelResource) addResourceBundle(
 			IsMajorUpdate:     "false",
 			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
 			ResourceBundleID:  plan.ResourceBundleID.ValueStringPointer(),
-		}); err != nil {
+		}, []client.FileInfo{}); err != nil {
 			return
 		}
 		state.MemoryMB = types.Int64Null() // reset memory if resource bundle is set
@@ -1931,7 +1855,7 @@ func (r *CustomModelResource) assignTrainingDataset(
 		}
 
 		var customModelVersion *client.CustomModelVersion
-		customModelVersion, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, createVersionFromLatestRequest)
+		customModelVersion, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, createVersionFromLatestRequest, []client.FileInfo{})
 		if err != nil {
 			return
 		}
@@ -1998,6 +1922,60 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 		for _, classLabel := range plan.ClassLabels {
 			classLabels = append(classLabels, classLabel.ValueString())
 		}
+	}
+
+	return
+}
+
+func (r *CustomModelResource) updateOrCreateCustomModelVersionFromLatest(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	customModelID string,
+	state *CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if !reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPath != state.FolderPath ||
+		plan.FolderPathHash != state.FolderPathHash {
+		
+		localFiles, innerErr := prepareLocalFiles(plan.FolderPath, plan.Files)
+		if innerErr != nil {
+			return innerErr
+		}
+		
+
+		filesToDelete := make([]string, 0)
+		if customModel != nil {
+			for _, item := range customModel.LatestVersion.Items {
+				if item.FileSource == "local" && !localFilesContain(localFiles, item.FilePath) {
+					filesToDelete = append(filesToDelete, item.ID)
+				}
+			}
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		req := &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:       "false",
+			FilesToDelete:       filesToDelete,
+		}
+
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(
+			ctx,
+			customModelID,
+			req,
+			localFiles,
+		); 
+		if err != nil {
+			return
+		}
+
+		state.Files = plan.Files
+		state.FolderPath = plan.FolderPath
+		state.FolderPathHash = plan.FolderPathHash
+		state.FilesHashes = plan.FilesHashes
 	}
 
 	return
