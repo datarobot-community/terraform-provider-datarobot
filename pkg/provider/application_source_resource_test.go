@@ -605,3 +605,11 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 		return fmt.Errorf("Application Source not found")
 	}
 }
+
+// Test-only struct for generating test configurations
+type ApplicationSourceResources struct {
+	Replicas                     types.Int64
+	SessionAffinity              types.Bool
+	ResourceLabel                types.String
+	ServiceWebRequestsOnRootPath types.Bool
+}

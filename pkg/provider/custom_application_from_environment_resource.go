@@ -91,6 +91,7 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 			},
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The resources for the Custom Application.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
@@ -168,13 +169,13 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	}
 
 	// Add resources if provided
-	if data.Resources != nil {
-		createRequest.Resources = &client.ApplicationResources{
-			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
-			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
-			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
-			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
-		}
+	apiResources, diags := ApplicationResourcesToAPI(ctx, data.Resources)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	if apiResources != nil {
+		createRequest.Resources = apiResources
 	}
 
 	application, err := r.provider.service.CreateCustomApplication(ctx, createRequest)
@@ -271,16 +272,9 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
-	// Populate resources from API response
+	// Always populate resources from API response (field is Computed)
 	if application.Resources != nil {
-		data.Resources = &ApplicationSourceResources{
-			Replicas:                     Int64PointerValue(application.Resources.Replicas),
-			SessionAffinity:              BoolPointerValue(application.Resources.SessionAffinity),
-			ResourceLabel:                StringPointerValue(application.Resources.ResourceLabel),
-			ServiceWebRequestsOnRootPath: BoolPointerValue(application.Resources.ServiceWebRequestsOnRootPath),
-		}
-	} else {
-		data.Resources = nil
+		data.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
