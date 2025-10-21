@@ -89,8 +89,7 @@ type Service interface {
 	// Custom Model
 	CreateCustomModel(ctx context.Context, req *CreateCustomModelRequest) (*CustomModel, error)
 	CreateCustomModelFromLLMBlueprint(ctx context.Context, req *CreateCustomModelFromLLMBlueprintRequest) (*CreateCustomModelVersionFromLLMBlueprintResponse, error)
-	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error)
-	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error)
+	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionFromLatestRequest, files []FileInfo) (*CustomModelVersion, error)
 	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error)
 	GetCustomModel(ctx context.Context, id string) (*CustomModel, error)
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
@@ -512,12 +511,25 @@ func (s *ServiceImpl) CreateCustomModelFromLLMBlueprint(ctx context.Context, req
 	return Post[CreateCustomModelVersionFromLLMBlueprintResponse](s.client, ctx, "/genai/customModelVersions/", req)
 }
 
-func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error) {
-	return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
-}
-
-func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error) {
-	return uploadFilesFromBinaries[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", http.MethodPatch, req.Files, map[string]string{"baseEnvironmentId": req.BaseEnvironmentID, "isMajorUpdate": "false"})
+func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionFromLatestRequest, files []FileInfo) (*CustomModelVersion, error) {
+	return uploadFilesFromBinaries[CustomModelVersion](
+		s.client, 
+		ctx, 
+		"/customModels/"+id+"/versions/", 
+		http.MethodPatch, 
+		files, 
+		map[string]string{
+			"baseEnvironmentId":        req.BaseEnvironmentID,
+			"baseEnvironmentVersionId": req.BaseEnvironmentVersionID,
+			"isMajorUpdate":            req.IsMajorUpdate,
+			"runtimeParameterValues":   req.RuntimeParameterValues,
+			"replicas":                 fmt.Sprintf("%d", req.Replicas),
+			"maximumMemory":            fmt.Sprintf("%d", req.MaximumMemory),
+			"networkEgressPolicy":      req.NetworkEgressPolicy,
+			"trainingData":             req.TrainingData,
+			"holdoutData":              req.HoldoutData,
+		},
+	)
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error) {
