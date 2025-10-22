@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Fixed `resources` field not being populated in Application Source and Custom Application resources - now properly exposed as computed fields for Terraform state and Pulumi outputs
+
 ## [0.10.21] - 2025-10-15
 
 - Added support for creating tags for registered model version

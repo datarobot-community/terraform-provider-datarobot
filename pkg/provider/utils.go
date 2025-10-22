@@ -1102,14 +1102,19 @@ func StringPointerValue(ptr *string) types.String {
 	return types.StringValue(*ptr)
 }
 
-// ApplicationResourcesFromAPI converts API ApplicationResources to basetypes.ObjectValue.
-func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.ApplicationResources) basetypes.ObjectValue {
-	attrTypes := map[string]attr.Type{
+// applicationResourcesAttrTypes returns the attribute types for ApplicationResources.
+func applicationResourcesAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
 		"replicas":                          types.Int64Type,
 		"resource_label":                    types.StringType,
 		"session_affinity":                  types.BoolType,
 		"service_web_requests_on_root_path": types.BoolType,
 	}
+}
+
+// ApplicationResourcesFromAPI converts API ApplicationResources to basetypes.ObjectValue.
+func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.ApplicationResources) basetypes.ObjectValue {
+	attrTypes := applicationResourcesAttrTypes()
 
 	attrValues := map[string]attr.Value{
 		"replicas":                          Int64PointerValue(apiResources.Replicas),

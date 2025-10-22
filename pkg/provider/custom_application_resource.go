@@ -223,6 +223,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 
+	// Populate resources from API response (field is Computed).
+	if application.Resources != nil {
+		data.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		data.Resources = types.ObjectNull(applicationResourcesAttrTypes())
+	}
+
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddCustomApplicationToUseCase")
 		if err = addEntityToUseCase(
@@ -274,9 +281,12 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
-	// Always populate resources from API response (field is Computed)
+	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
 		data.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		// Explicitly set to null if API doesn't return resources.
+		data.Resources = types.ObjectNull(applicationResourcesAttrTypes())
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
