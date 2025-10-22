@@ -343,6 +343,14 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		return
 	}
 
+	// Populate resources from API response (field is Computed).
+	if application.Resources != nil {
+		plan.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		// Explicitly set to null if API doesn't return resources.
+		plan.Resources = types.ObjectNull(applicationResourcesAttrTypes())
+	}
+
 	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,

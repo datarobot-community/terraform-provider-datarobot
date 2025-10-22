@@ -350,6 +350,14 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
 
+	// Populate resources from API response (field is Computed).
+	if application.Resources != nil {
+		plan.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		// Explicitly set to null if API doesn't return resources.
+		plan.Resources = types.ObjectNull(applicationResourcesAttrTypes())
+	}
+
 	if err = updateUseCasesForEntity(
 		ctx,
 		r.provider.service,
