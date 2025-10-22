@@ -1102,7 +1102,7 @@ func StringPointerValue(ptr *string) types.String {
 	return types.StringValue(*ptr)
 }
 
-// ApplicationResourcesFromAPI converts API ApplicationResources to basetypes.ObjectValue
+// ApplicationResourcesFromAPI converts API ApplicationResources to basetypes.ObjectValue.
 func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.ApplicationResources) basetypes.ObjectValue {
 	attrTypes := map[string]attr.Type{
 		"replicas":                          types.Int64Type,
@@ -1127,7 +1127,7 @@ func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.Applic
 	return objValue
 }
 
-// ApplicationResourcesToAPI converts basetypes.ObjectValue to API ApplicationResources
+// ApplicationResourcesToAPI converts basetypes.ObjectValue to API ApplicationResources.
 func ApplicationResourcesToAPI(ctx context.Context, resources basetypes.ObjectValue) (*client.ApplicationResources, diag.Diagnostics) {
 	var diags diag.Diagnostics
 

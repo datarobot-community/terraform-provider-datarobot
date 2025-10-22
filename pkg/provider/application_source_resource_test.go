@@ -606,7 +606,7 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 	}
 }
 
-// Test-only struct for generating test configurations
+// Test-only struct for generating test configurations.
 type ApplicationSourceResources struct {
 	Replicas                     types.Int64
 	SessionAffinity              types.Bool
