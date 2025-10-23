@@ -92,18 +92,18 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The resources for the Custom Application.",
+				MarkdownDescription: "The resources for the Custom Application. If not specified, default values will be computed by the API based on the cluster configuration.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
-						MarkdownDescription: "The number of replicas for the Custom Application.",
+						MarkdownDescription: "The number of replicas for the Custom Application. Computed by API if not specified.",
 						Validators: []validator.Int64{
 							int64validator.AtLeast(1),
 						},
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "The resource label for the Custom Application.",
+						MarkdownDescription: "The resource label for the Custom Application (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
 								"cpu.nano",
@@ -123,11 +123,11 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
-						MarkdownDescription: "Whether session affinity is enabled for the Custom Application.",
+						MarkdownDescription: "Whether session affinity is enabled for the Custom Application. Computed by API if not specified.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
-						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application.",
+						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application. Computed by API if not specified.",
 					},
 				},
 			},

@@ -91,27 +91,27 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The resources for the Application Source.",
+				MarkdownDescription: "The resources for the Application Source. If not specified, default values will be computed by the API based on the cluster configuration.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
 						Computed:            true,
-						MarkdownDescription: "The replicas for the Application Source.",
+						MarkdownDescription: "The number of replicas for the Application Source. Computed by API if not specified.",
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
 						Computed:            true,
-						MarkdownDescription: "The resource label for the Application Source.",
+						MarkdownDescription: "The resource label for the Application Source (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.",
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
-						MarkdownDescription: "The session affinity for the Application Source.",
+						MarkdownDescription: "Whether session affinity is enabled for the Application Source. Computed by API if not specified.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
-						MarkdownDescription: "Whether to service web requests on the root path for the Application Source.",
+						MarkdownDescription: "Whether to service web requests on the root path for the Application Source. Computed by API if not specified.",
 					},
 				},
 			},
