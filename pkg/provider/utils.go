@@ -1101,3 +1101,84 @@ func StringPointerValue(ptr *string) types.String {
 	}
 	return types.StringValue(*ptr)
 }
+
+// applicationResourcesAttrTypes returns the attribute types for ApplicationResources.
+func applicationResourcesAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"replicas":                          types.Int64Type,
+		"resource_label":                    types.StringType,
+		"session_affinity":                  types.BoolType,
+		"service_web_requests_on_root_path": types.BoolType,
+	}
+}
+
+// ApplicationResourcesFromAPI converts API ApplicationResources to basetypes.ObjectValue.
+func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.ApplicationResources) basetypes.ObjectValue {
+	attrTypes := applicationResourcesAttrTypes()
+
+	attrValues := map[string]attr.Value{
+		"replicas":                          Int64PointerValue(apiResources.Replicas),
+		"resource_label":                    StringPointerValue(apiResources.ResourceLabel),
+		"session_affinity":                  BoolPointerValue(apiResources.SessionAffinity),
+		"service_web_requests_on_root_path": BoolPointerValue(apiResources.ServiceWebRequestsOnRootPath),
+	}
+
+	objValue, diags := types.ObjectValue(attrTypes, attrValues)
+	if diags.HasError() {
+		tflog.Error(ctx, "Error creating resources ObjectValue", map[string]any{"diagnostics": diags})
+		return types.ObjectNull(attrTypes)
+	}
+
+	return objValue
+}
+
+// ApplicationResourcesToAPI converts basetypes.ObjectValue to API ApplicationResources.
+func ApplicationResourcesToAPI(ctx context.Context, resources basetypes.ObjectValue) (*client.ApplicationResources, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// Handle null/unknown
+	if resources.IsNull() {
+		return nil, diags
+	}
+	if resources.IsUnknown() {
+		return nil, diags
+	}
+
+	attrs := resources.Attributes()
+
+	apiResources := &client.ApplicationResources{}
+
+	// Extract replicas
+	if replicasAttr, ok := attrs["replicas"]; ok {
+		if replicasVal, ok := replicasAttr.(types.Int64); ok && !replicasVal.IsNull() && !replicasVal.IsUnknown() {
+			val := replicasVal.ValueInt64()
+			apiResources.Replicas = &val
+		}
+	}
+
+	// Extract resource_label
+	if labelAttr, ok := attrs["resource_label"]; ok {
+		if labelVal, ok := labelAttr.(types.String); ok && !labelVal.IsNull() && !labelVal.IsUnknown() {
+			val := labelVal.ValueString()
+			apiResources.ResourceLabel = &val
+		}
+	}
+
+	// Extract session_affinity
+	if affinityAttr, ok := attrs["session_affinity"]; ok {
+		if affinityVal, ok := affinityAttr.(types.Bool); ok && !affinityVal.IsNull() && !affinityVal.IsUnknown() {
+			val := affinityVal.ValueBool()
+			apiResources.SessionAffinity = &val
+		}
+	}
+
+	// Extract service_web_requests_on_root_path
+	if rootPathAttr, ok := attrs["service_web_requests_on_root_path"]; ok {
+		if rootPathVal, ok := rootPathAttr.(types.Bool); ok && !rootPathVal.IsNull() && !rootPathVal.IsUnknown() {
+			val := rootPathVal.ValueBool()
+			apiResources.ServiceWebRequestsOnRootPath = &val
+		}
+	}
+
+	return apiResources, diags
+}

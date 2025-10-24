@@ -146,10 +146,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.service_web_requests_on_root_path"),
+					// Resources are now populated from API (computed field)
+					resource.TestCheckResourceAttrSet(resourceName, "resources.replicas"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.resource_label"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.session_affinity"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.service_web_requests_on_root_path"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -237,10 +238,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", appCodeFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.service_web_requests_on_root_path"),
+					// Resources are now populated from API (computed field)
+					resource.TestCheckResourceAttrSet(resourceName, "resources.replicas"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.resource_label"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.session_affinity"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.service_web_requests_on_root_path"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
@@ -277,10 +279,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.service_web_requests_on_root_path"),
+					// Resources are now populated from API (computed field)
+					resource.TestCheckResourceAttrSet(resourceName, "resources.replicas"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.resource_label"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.session_affinity"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.service_web_requests_on_root_path"),
 				),
 			},
 			// Add new file to folder_path
@@ -315,10 +318,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.service_web_requests_on_root_path"),
+					// Resources are now populated from API (computed field)
+					resource.TestCheckResourceAttrSet(resourceName, "resources.replicas"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.resource_label"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.session_affinity"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.service_web_requests_on_root_path"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
@@ -353,10 +357,11 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "folder_path_hash"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.resource_label"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.session_affinity"),
-					resource.TestCheckNoResourceAttr(resourceName, "resources.service_web_requests_on_root_path"),
+					// Resources are now populated from API (computed field)
+					resource.TestCheckResourceAttrSet(resourceName, "resources.replicas"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.resource_label"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.session_affinity"),
+					resource.TestCheckResourceAttrSet(resourceName, "resources.service_web_requests_on_root_path"),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
 					resource.TestCheckResourceAttr(resourceName, "base_environment_version_id", baseEnvironmentVersionID),
 				),
@@ -604,4 +609,12 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 
 		return fmt.Errorf("Application Source not found")
 	}
+}
+
+// Test-only struct for generating test configurations.
+type ApplicationSourceResources struct {
+	Replicas                     types.Int64
+	SessionAffinity              types.Bool
+	ResourceLabel                types.String
+	ServiceWebRequestsOnRootPath types.Bool
 }

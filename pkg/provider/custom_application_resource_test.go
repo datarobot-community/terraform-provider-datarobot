@@ -694,3 +694,87 @@ resource "datarobot_custom_application" "real_batch_test" {
 }
 `, nameSalt, baseEnvironmentID, folderPath, nameSalt)
 }
+
+func TestAccCustomApplicationWithResourcesFromSource(t *testing.T) {
+	t.Parallel()
+
+	folderPath := "custom_application_resources_test"
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	startAppScript := `#!/usr/bin/env bash
+echo "Starting App"
+streamlit run streamlit-app.py
+`
+
+	appCode := `import streamlit as st
+st.title("Resources Test App")
+	`
+
+	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resourceName := "datarobot_custom_application.test"
+	sourceResourceName := "datarobot_application_source.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: customApplicationWithResourcesFromSourceConfig(folderPath),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Verify ApplicationSource has resources populated
+					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
+					resource.TestCheckResourceAttrSet(sourceResourceName, "version_id"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.replicas", "2"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.resource_label", "cpu.medium"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.session_affinity", "true"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.service_web_requests_on_root_path", "false"),
+
+					// Verify CustomApplication exists
+					// NOTE: resources won't be populated unless explicitly passed from the source
+					// This test demonstrates that resources are now VISIBLE in the ApplicationSource,
+					// allowing users to reference them when creating CustomApplications
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
+				),
+			},
+		},
+	})
+}
+
+func customApplicationWithResourcesFromSourceConfig(folderPath string) string {
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "test" {
+	name = "Resources Test Source %s"
+	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	folder_path = "%s"
+	resources = {
+		replicas = 2
+		resource_label = "cpu.medium"
+		session_affinity = true
+		service_web_requests_on_root_path = false
+	}
+}
+
+resource "datarobot_custom_application" "test" {
+	name = "Resources Test App %s"
+	source_version_id = datarobot_application_source.test.version_id
+	external_access_enabled = false
+	allow_auto_stopping = true
+}
+`, nameSalt, folderPath, nameSalt)
+}

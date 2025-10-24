@@ -92,18 +92,19 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"resources": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The resources for the Custom Application.",
+				Computed:            true,
+				MarkdownDescription: "The resources for the Custom Application. If not specified, default values will be computed by the API based on the cluster configuration.",
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
-						MarkdownDescription: "The number of replicas for the Custom Application.",
+						MarkdownDescription: "The number of replicas for the Custom Application. Computed by API if not specified.",
 						Validators: []validator.Int64{
 							int64validator.AtLeast(1),
 						},
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "The resource label for the Custom Application.",
+						MarkdownDescription: "The resource label for the Custom Application (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
 								"cpu.nano",
@@ -123,11 +124,11 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
-						MarkdownDescription: "Whether session affinity is enabled for the Custom Application.",
+						MarkdownDescription: "Whether session affinity is enabled for the Custom Application. Computed by API if not specified.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
-						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application.",
+						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application. Computed by API if not specified.",
 					},
 				},
 			},
@@ -169,13 +170,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	}
 
 	// Add resources if provided
-	if data.Resources != nil {
-		createRequest.Resources = &client.ApplicationResources{
-			Replicas:                     Int64ValuePointerOptional(data.Resources.Replicas),
-			SessionAffinity:              BoolValuePointerOptional(data.Resources.SessionAffinity),
-			ResourceLabel:                StringValuePointerOptional(data.Resources.ResourceLabel),
-			ServiceWebRequestsOnRootPath: BoolValuePointerOptional(data.Resources.ServiceWebRequestsOnRootPath),
-		}
+	apiResources, diags := ApplicationResourcesToAPI(ctx, data.Resources)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	if apiResources != nil {
+		createRequest.Resources = apiResources
 	}
 
 	application, err := r.provider.service.CreateCustomApplication(ctx, createRequest)
@@ -221,6 +222,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+
+	// Populate resources from API response (field is Computed).
+	if application.Resources != nil {
+		data.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		data.Resources = types.ObjectNull(applicationResourcesAttrTypes())
+	}
 
 	for _, useCaseID := range data.UseCaseIDs {
 		traceAPICall("AddCustomApplicationToUseCase")
@@ -273,16 +281,12 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
-	// Populate resources from API response
+	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
-		data.Resources = &ApplicationSourceResources{
-			Replicas:                     Int64PointerValue(application.Resources.Replicas),
-			SessionAffinity:              BoolPointerValue(application.Resources.SessionAffinity),
-			ResourceLabel:                StringPointerValue(application.Resources.ResourceLabel),
-			ServiceWebRequestsOnRootPath: BoolPointerValue(application.Resources.ServiceWebRequestsOnRootPath),
-		}
+		data.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
 	} else {
-		data.Resources = nil
+		// Explicitly set to null if API doesn't return resources.
+		data.Resources = types.ObjectNull(applicationResourcesAttrTypes())
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -345,6 +349,14 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
+
+	// Populate resources from API response (field is Computed).
+	if application.Resources != nil {
+		plan.Resources = ApplicationResourcesFromAPI(ctx, *application.Resources)
+	} else {
+		// Explicitly set to null if API doesn't return resources.
+		plan.Resources = types.ObjectNull(applicationResourcesAttrTypes())
+	}
 
 	if err = updateUseCasesForEntity(
 		ctx,

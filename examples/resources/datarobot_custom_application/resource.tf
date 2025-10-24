@@ -43,3 +43,8 @@ output "datarobot_custom_application_url" {
   value       = datarobot_custom_application.example.application_url
   description = "The URL for the example custom application"
 }
+
+output "datarobot_custom_application_resources" {
+  value       = datarobot_custom_application.example.resources
+  description = "The resources for the example custom application (computed by API if not specified)"
+}

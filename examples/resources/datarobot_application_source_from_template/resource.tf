@@ -32,3 +32,8 @@ output "datarobot_application_source_version_id" {
   value       = datarobot_application_source_from_template.example.version_id
   description = "The version ID for the example application source"
 }
+
+output "datarobot_application_source_resources" {
+  value       = datarobot_application_source_from_template.example.resources
+  description = "The resources for the example application source (computed by API if not specified)"
+}
