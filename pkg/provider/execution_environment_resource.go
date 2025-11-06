@@ -72,7 +72,7 @@ func (r *ExecutionEnvironmentResource) Schema(ctx context.Context, req resource.
 				Validators:          ExecutionEnvironmentUseCasesValidators(),
 			},
 			"version_id": schema.StringAttribute{
-				Computed:            true,
+				Optional:            true,
 				MarkdownDescription: "The ID of the Execution Environment Version.",
 			},
 			"version_description": schema.StringAttribute{
@@ -243,6 +243,25 @@ func (r *ExecutionEnvironmentResource) Read(ctx context.Context, req resource.Re
 		return
 	}
 
+	var executionEnvironmentVersion *client.ExecutionEnvironmentVersion
+	if IsKnown(data.VersionID) && data.VersionID.ValueString() != "" {
+		targetExecutionEnvironmentVersion, err := r.provider.service.GetExecutionEnvironmentVersion(ctx, executionEnvironment.ID, data.VersionID.ValueString())
+		if err != nil {
+			if _, ok := err.(*client.NotFoundError); ok {
+				resp.Diagnostics.AddWarning(
+					"Execution Environment Version not found",
+					fmt.Sprintf("Execution Environment Version with ID %s is not found. Using latest version instead.", data.VersionID.ValueString()))
+				executionEnvironmentVersion = targetExecutionEnvironmentVersion
+			} else {
+				resp.Diagnostics.AddError("Error getting Execution Environment Version", err.Error())
+				return
+			}
+		}
+	} else {
+		executionEnvironmentVersion = &executionEnvironment.LatestVersion
+	}
+
+	// data.ID = types.StringValue(executionEnvironment.ID)
 	data.Name = types.StringValue(executionEnvironment.Name)
 	data.ProgrammingLanguage = types.StringValue(executionEnvironment.ProgrammingLanguage)
 	useCases := make([]types.String, len(executionEnvironment.UseCases))
@@ -253,14 +272,14 @@ func (r *ExecutionEnvironmentResource) Read(ctx context.Context, req resource.Re
 	if executionEnvironment.Description != "" {
 		data.Description = types.StringValue(executionEnvironment.Description)
 	}
-	data.VersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
-	if executionEnvironment.LatestVersion.Description != "" {
-		data.VersionDescription = types.StringValue(executionEnvironment.LatestVersion.Description)
+	data.VersionID = types.StringValue(executionEnvironmentVersion.ID)
+	if executionEnvironmentVersion.Description != "" {
+		data.VersionDescription = types.StringValue(executionEnvironmentVersion.Description)
 	}
-	if executionEnvironment.LatestVersion.DockerImageUri != "" {
-		data.DockerImageUri = types.StringValue(executionEnvironment.LatestVersion.DockerImageUri)
+	if executionEnvironmentVersion.DockerImageUri != "" {
+		data.DockerImageUri = types.StringValue(executionEnvironmentVersion.DockerImageUri)
 	}
-	data.BuildStatus = types.StringValue(executionEnvironment.LatestVersion.BuildStatus)
+	data.BuildStatus = types.StringValue(executionEnvironmentVersion.BuildStatus)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
