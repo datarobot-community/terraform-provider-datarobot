@@ -107,13 +107,8 @@ func (r *ExecutionEnvironmentDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	// Check if execution environment was found before accessing it
 	if !found {
-		if config.Name.ValueString() != "" {
-			resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with name %q not found", config.Name.ValueString()))
-		} else {
-			resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with ID %q not found", config.ID.ValueString()))
-		}
+		resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with ID %q or name %q not found", config.ID.ValueString(), config.Name.ValueString()))
 		return
 	}
 

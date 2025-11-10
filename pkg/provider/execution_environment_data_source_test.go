@@ -57,7 +57,6 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 			}, nil)
 		}
 
-		// Mock for lookup by ID (will be used in test steps)
 		mockService.EXPECT().GetExecutionEnvironment(gomock.Any(), id).Return(&client.ExecutionEnvironment{
 			ID:                  id,
 			Name:                executionEnvironment.Name,
@@ -68,7 +67,6 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 			},
 		}, nil).AnyTimes()
 
-		// Mock for lookup by ID with specific version
 		specificVersionID := uuid.NewString()
 		mockService.EXPECT().GetExecutionEnvironmentVersion(gomock.Any(), id, specificVersionID).Return(&client.ExecutionEnvironmentVersion{
 			ID:          specificVersionID,
