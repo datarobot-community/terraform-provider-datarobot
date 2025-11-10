@@ -3,6 +3,9 @@
 ### Fixed
 
 - Fixed `resources` field not being populated in Application Source and Custom Application resources - now properly exposed as computed fields for Terraform state and Pulumi outputs
+- Added ability to provide version ID for Execution Environment Read operation;
+- Added ability to lookup Execution Environment entity by environment ID & version ID, alongside the name attribute;
+- Fixed the problem of creating custom model with execution environment version ID set but still ending up with the latest version ID instead of provided one.
 
 ## [0.10.21] - 2025-10-15
 
