@@ -474,7 +474,6 @@ func TestAccExecutionEnvironmentResourceReadWithVersionID(t *testing.T) {
 
 	resourceName := "datarobot_execution_environment.test"
 
-	// create directory
 	dirName := "execution_environment_context_version_test"
 	err := os.Mkdir(dirName, 0755)
 	if err != nil {

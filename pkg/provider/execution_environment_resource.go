@@ -256,7 +256,6 @@ func (r *ExecutionEnvironmentResource) Read(ctx context.Context, req resource.Re
 		executionEnvironmentVersion = &executionEnvironment.LatestVersion
 	}
 
-	// data.ID = types.StringValue(executionEnvironment.ID)
 	data.Name = types.StringValue(executionEnvironment.Name)
 	data.ProgrammingLanguage = types.StringValue(executionEnvironment.ProgrammingLanguage)
 	useCases := make([]types.String, len(executionEnvironment.UseCases))
