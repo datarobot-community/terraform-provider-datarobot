@@ -72,7 +72,7 @@ func (r *ExecutionEnvironmentResource) Schema(ctx context.Context, req resource.
 				Validators:          ExecutionEnvironmentUseCasesValidators(),
 			},
 			"version_id": schema.StringAttribute{
-				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The ID of the Execution Environment Version.",
 			},
 			"version_description": schema.StringAttribute{
@@ -247,15 +247,10 @@ func (r *ExecutionEnvironmentResource) Read(ctx context.Context, req resource.Re
 	if IsKnown(data.VersionID) && data.VersionID.ValueString() != "" {
 		targetExecutionEnvironmentVersion, err := r.provider.service.GetExecutionEnvironmentVersion(ctx, executionEnvironment.ID, data.VersionID.ValueString())
 		if err != nil {
-			if _, ok := err.(*client.NotFoundError); ok {
-				resp.Diagnostics.AddWarning(
-					"Execution Environment Version not found",
-					fmt.Sprintf("Execution Environment Version with ID %s is not found. Using latest version instead.", data.VersionID.ValueString()))
-				executionEnvironmentVersion = targetExecutionEnvironmentVersion
-			} else {
-				resp.Diagnostics.AddError("Error getting Execution Environment Version", err.Error())
-				return
-			}
+			resp.Diagnostics.AddError("Error getting Execution Environment Version", err.Error())
+			return
+		} else {
+			executionEnvironmentVersion = targetExecutionEnvironmentVersion
 		}
 	} else {
 		executionEnvironmentVersion = &executionEnvironment.LatestVersion
