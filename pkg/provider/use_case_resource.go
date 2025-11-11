@@ -173,7 +173,7 @@ func (r *UseCaseResource) Delete(ctx context.Context, req resource.DeleteRequest
 	err := r.provider.service.DeleteUseCase(ctx, data.ID.ValueString())
 	if err != nil {
 		if !errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddError("Error getting Use Case info", err.Error())
+			resp.Diagnostics.AddError("Error deleting Use Case", err.Error())
 			return
 		}
 	}
