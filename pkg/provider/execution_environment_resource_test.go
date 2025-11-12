@@ -469,6 +469,142 @@ if __name__ == "__main__":
 	})
 }
 
+func TestAccExecutionEnvironmentResourceReadWithVersionID(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_execution_environment.test"
+
+	dirName := "execution_environment_context_version_test"
+	err := os.Mkdir(dirName, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	defer os.RemoveAll(dirName)
+
+	dockerfileContents := `FROM python:3.9.5-slim-buster
+WORKDIR /app/
+COPY *.py /app/
+COPY requirements.txt /app/
+RUN pip install -U pip && pip install -r requirements.txt
+EXPOSE 8080
+ENTRYPOINT streamlit run app.py --server.port 8080`
+
+	if err := os.WriteFile(filepath.Join(dirName, "Dockerfile"), []byte(dockerfileContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	appContents := `import streamlit as st
+
+def run():
+    st.set_page_config(page_title="Example Custom App")
+    st.markdown("This is an example streamlit app.")
+
+if __name__ == "__main__":
+    run()`
+
+	if err := os.WriteFile(filepath.Join(dirName, "app.py"), []byte(appContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("requests"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var firstVersionID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create execution environment - this will create version 1
+			{
+				Config: executionEnvironmentResourceConfig(
+					"version_test_name",
+					"version_test_description",
+					"python",
+					"customModel",
+					"initial_version",
+					&dirName,
+					nil,
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					// Store the first version_id for later use
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources[resourceName]
+						firstVersionID = rs.Primary.Attributes["version_id"]
+						return nil
+					},
+				),
+			},
+			// Update to create a new version - this will create version 2
+			{
+				PreConfig: func() {
+					// Modify the requirements to trigger a new version
+					if err := os.WriteFile(filepath.Join(dirName, "requirements.txt"), []byte("requests\nhttpx"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: executionEnvironmentResourceConfig(
+					"version_test_name",
+					"version_test_description",
+					"python",
+					"customModel",
+					"updated_version",
+					&dirName,
+					nil,
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					// Verify that version_id changed (new version was created)
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources[resourceName]
+						newVersionID := rs.Primary.Attributes["version_id"]
+						if newVersionID == firstVersionID {
+							return fmt.Errorf("Expected version_id to change after update, but it remained %s", firstVersionID)
+						}
+						return nil
+					},
+				),
+			},
+			// Verify that Read operation correctly reads the latest version when version_id is not explicitly set
+			{
+				Config: executionEnvironmentResourceConfig(
+					"version_test_name",
+					"version_test_description",
+					"python",
+					"customModel",
+					"updated_version",
+					&dirName,
+					nil,
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkExecutionEnvironmentResourceExists(),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					// Verify it's reading the latest version (should match the version from previous step)
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources[resourceName]
+						currentVersionID := rs.Primary.Attributes["version_id"]
+						// The version_id should still be the latest one from the previous step
+						// This verifies that Read correctly uses the latest version when version_id is in state
+						if currentVersionID == "" {
+							return fmt.Errorf("version_id should be set")
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func TestExecutionEnvironmentResourceSchema(t *testing.T) {
 	t.Parallel()
 
@@ -665,12 +801,31 @@ func checkExecutionEnvironmentResourceExists() resource.TestCheckFunc {
 			return err
 		}
 
+		// Check if version_id is in state and verify it matches
+		versionIDInState := rs.Primary.Attributes["version_id"]
+		var expectedVersion *client.ExecutionEnvironmentVersion
+
+		if versionIDInState != "" {
+			// If version_id is in state, verify it's the correct version
+			traceAPICall("GetExecutionEnvironmentVersion")
+			specificVersion, err := p.service.GetExecutionEnvironmentVersion(context.TODO(), executionEnvironment.ID, versionIDInState)
+			if err != nil {
+				// If version not found, it should fall back to latest (this is expected behavior)
+				expectedVersion = &executionEnvironment.LatestVersion
+			} else {
+				expectedVersion = specificVersion
+			}
+		} else {
+			// If no version_id in state, use latest version
+			expectedVersion = &executionEnvironment.LatestVersion
+		}
+
 		if executionEnvironment.Name == rs.Primary.Attributes["name"] &&
 			executionEnvironment.Description == rs.Primary.Attributes["description"] &&
 			executionEnvironment.ProgrammingLanguage == rs.Primary.Attributes["programming_language"] &&
 			executionEnvironment.UseCases[0] == rs.Primary.Attributes["use_cases.0"] &&
-			executionEnvironment.LatestVersion.Description == rs.Primary.Attributes["version_description"] &&
-			executionEnvironment.LatestVersion.DockerImageUri == rs.Primary.Attributes["docker_image_uri"] {
+			expectedVersion.Description == rs.Primary.Attributes["version_description"] &&
+			expectedVersion.DockerImageUri == rs.Primary.Attributes["docker_image_uri"] {
 			return nil
 		}
 

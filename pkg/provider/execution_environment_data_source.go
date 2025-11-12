@@ -29,12 +29,14 @@ func (r *ExecutionEnvironmentDataSource) Schema(ctx context.Context, _ datasourc
 
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The name of the Execution Environment.",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The name of the Execution Environment. Either `id` or `name` must be provided.",
 			},
 			"id": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The ID of the Execution Environment.",
+				MarkdownDescription: "The ID of the Execution Environment. Either `id` or `name` must be provided.",
 			},
 			"description": schema.StringAttribute{
 				Computed:            true,
@@ -46,6 +48,7 @@ func (r *ExecutionEnvironmentDataSource) Schema(ctx context.Context, _ datasourc
 			},
 			"version_id": schema.StringAttribute{
 				Computed:            true,
+				Optional:            true,
 				MarkdownDescription: "The ID of the Execution Environment Version.",
 			},
 		},
@@ -75,31 +78,55 @@ func (r *ExecutionEnvironmentDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	executionEnvironments, err := r.provider.service.ListExecutionEnvironments(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to list Execution Environments", err.Error())
-		return
-	}
-
+	var executionEnvironment *client.ExecutionEnvironment
+	var err error
 	found := false
-	var executionEnvironment client.ExecutionEnvironment
-	for _, executionEnvironment = range executionEnvironments {
-		if executionEnvironment.Name == config.Name.ValueString() {
-			found = true
-			break
+
+	if config.ID.ValueString() != "" {
+		executionEnvironment, err = r.provider.service.GetExecutionEnvironment(ctx, config.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get Execution Environment by ID", err.Error())
+			return
 		}
+		found = true
+	} else if config.Name.ValueString() != "" {
+		executionEnvironments, err := r.provider.service.ListExecutionEnvironments(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to list Execution Environments", err.Error())
+			return
+		}
+		for idx := range executionEnvironments {
+			if executionEnvironments[idx].Name == config.Name.ValueString() {
+				executionEnvironment = &executionEnvironments[idx]
+				found = true
+				break
+			}
+		}
+	} else {
+		resp.Diagnostics.AddError("Missing required attributes", "Either 'id' or 'name' must be specified to look up an Execution Environment.")
+		return
 	}
 
 	if !found {
-		resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with name %q not found", config.Name.ValueString()))
+		resp.Diagnostics.AddError("Execution Environment not found", fmt.Sprintf("Execution Environment with ID %q or name %q not found", config.ID.ValueString(), config.Name.ValueString()))
 		return
+	}
+
+	executionEnvironmentVersion := &executionEnvironment.LatestVersion
+	if config.VersionID.ValueString() != "" {
+		version, err := r.provider.service.GetExecutionEnvironmentVersion(ctx, executionEnvironment.ID, config.VersionID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get Execution Environment Version", err.Error())
+			return
+		}
+		executionEnvironmentVersion = version
 	}
 
 	config.ID = types.StringValue(executionEnvironment.ID)
 	config.Name = types.StringValue(executionEnvironment.Name)
 	config.Description = types.StringValue(executionEnvironment.Description)
 	config.ProgrammingLanguage = types.StringValue(executionEnvironment.ProgrammingLanguage)
-	config.VersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
+	config.VersionID = types.StringValue(executionEnvironmentVersion.ID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }

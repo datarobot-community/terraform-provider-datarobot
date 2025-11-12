@@ -124,6 +124,10 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 		return result, &resp.Header, nil
 	}
 
+	if req.Method == http.MethodDelete && resp.StatusCode == http.StatusOK {
+		return result, &resp.Header, nil
+	}
+
 	if c.cfg.Debug {
 		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
@@ -144,7 +148,13 @@ func Get[T any](c *Client, ctx context.Context, path string) (*T, error) {
 func GetAllPages[T any](c *Client, ctx context.Context, path string, queryReq any) ([]T, error) {
 	var results []T
 	pathValues, _ := query.Values(queryReq)
-	nextURL := path + "?" + pathValues.Encode()
+	queryStr := pathValues.Encode()
+	var nextURL string
+	if queryStr != "" {
+		nextURL = path + "?" + queryStr
+	} else {
+		nextURL = path
+	}
 
 	// Fetch all pages.
 	for nextURL != "" {
@@ -157,8 +167,12 @@ func GetAllPages[T any](c *Client, ctx context.Context, path string, queryReq an
 
 		nextURL = result.Next
 		if nextURL != "" {
-			query := strings.Split(nextURL, "?")[1]
-			nextURL = path + "?" + query
+			if strings.Contains(nextURL, "?") {
+				query := strings.Split(nextURL, "?")[1]
+				nextURL = path + "?" + query
+			} else {
+				nextURL = path
+			}
 		}
 	}
 

@@ -43,7 +43,9 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 func testApplicationSourceResource(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
-	newName := "application_source " + nameSalt
+	testUniqueID := nameSalt + "-" + t.Name()
+	name := "application_source " + testUniqueID
+	newName := "new_application_source " + testUniqueID
 
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
@@ -127,7 +129,7 @@ runtimeParameterDefinitions:
 					),
 				},
 				Config: applicationSourceResourceConfig(
-					"",
+					name,
 					&baseEnvironmentID,
 					nil,
 					[]FileTuple{
@@ -142,7 +144,7 @@ runtimeParameterDefinitions:
 					nil),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkApplicationSourceResourceExists(),
-					resource.TestCheckResourceAttrSet(resourceName, "name"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "files.0.0", metadataFileName),
 					resource.TestCheckResourceAttr(resourceName, "files.1.0", startAppFileName),
 					resource.TestCheckResourceAttrSet(resourceName, "files_hashes.0"),
@@ -381,8 +383,9 @@ func testApplicationSourceResourceBatchFiles(t *testing.T, isMock bool) {
 
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 
-	// Create a temporary directory for test files
-	testDir := "test_batch_files"
+	testUniqueID := nameSalt + "-" + t.Name()
+	testDir := fmt.Sprintf("test_batch_files_%s", testUniqueID)
+	os.RemoveAll(testDir)
 	if err := os.Mkdir(testDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +437,7 @@ runtimeParameterDefinitions:
 			// Create and Read with batch files
 			{
 				Config: applicationSourceResourceConfig(
-					"batch test application source "+nameSalt,
+					"batch test application source "+testUniqueID,
 					&baseEnvironmentID,
 					nil,
 					fileTuples,

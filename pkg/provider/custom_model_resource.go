@@ -633,9 +633,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:          "false",
-			BaseEnvironmentID:      baseEnvironmentID,
-			RuntimeParameterValues: runtimeParameterValues,
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        baseEnvironmentID,
+			BaseEnvironmentVersionID: baseEnvironmentVersionID,
+			RuntimeParameterValues:   runtimeParameterValues,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
@@ -672,6 +673,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		ctx,
 		customModelID,
 		baseEnvironmentID,
+		baseEnvironmentVersionID,
 		plan.TrainingDatasetID,
 		plan.TrainingDataPartitionColumn,
 		&state)
@@ -681,10 +683,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	payload := &client.CreateCustomModelVersionFromLatestRequest{
-		IsMajorUpdate:       "false",
-		BaseEnvironmentID:   baseEnvironmentID,
-		Replicas:            plan.Replicas.ValueInt64(),
-		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		Replicas:                 plan.Replicas.ValueInt64(),
+		NetworkEgressPolicy:      plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
 		memoryMB = plan.MemoryMB.ValueInt64()
@@ -1476,9 +1479,10 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		keepTrainingHoldoutData := true
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:           "true",
-			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
-			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
+			IsMajorUpdate:            "true",
+			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+			KeepTrainingHoldoutData:  &keepTrainingHoldoutData,
 		})
 		if err != nil {
 			return
@@ -1587,9 +1591,10 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 
 		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
 		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:          "false",
-			BaseEnvironmentID:      customModel.LatestVersion.BaseEnvironmentID,
-			RuntimeParameterValues: string(jsonParams),
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+			RuntimeParameterValues:   string(jsonParams),
 		}); err != nil {
 			return
 		}
@@ -1643,9 +1648,10 @@ func (r *CustomModelResource) updateRemoteRepositories(
 		if len(filesToDelete) > 0 {
 			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
 			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-				IsMajorUpdate:     "false",
-				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-				FilesToDelete:     filesToDelete,
+				IsMajorUpdate:            "false",
+				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+				FilesToDelete:            filesToDelete,
 			})
 			if err != nil {
 				return
@@ -1710,9 +1716,10 @@ func (r *CustomModelResource) updateLocalFiles(
 		if len(filesToDelete) > 0 {
 			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
 			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-				IsMajorUpdate:     "false",
-				BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-				FilesToDelete:     filesToDelete,
+				IsMajorUpdate:            "false",
+				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+				FilesToDelete:            filesToDelete,
 			})
 			if err != nil {
 				return
@@ -1804,10 +1811,11 @@ func (r *CustomModelResource) updateResourceSettings(
 	err error,
 ) {
 	payload := &client.CreateCustomModelVersionFromLatestRequest{
-		IsMajorUpdate:       "false",
-		BaseEnvironmentID:   customModel.LatestVersion.BaseEnvironmentID,
-		Replicas:            plan.Replicas.ValueInt64(),
-		NetworkEgressPolicy: plan.NetworkAccess.ValueString(),
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+		BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+		Replicas:                 plan.Replicas.ValueInt64(),
+		NetworkEgressPolicy:      plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
 		maxMemory := plan.MemoryMB.ValueInt64() * 1024 * 1024
@@ -1838,9 +1846,10 @@ func (r *CustomModelResource) updateTrainingDataset(
 		keepTrainingHoldoutData := false
 		traceAPICall("CreateCustomModelVersionFromLatest")
 		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:           "true",
-			BaseEnvironmentID:       customModel.LatestVersion.BaseEnvironmentID,
-			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
+			IsMajorUpdate:            "true",
+			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+			KeepTrainingHoldoutData:  &keepTrainingHoldoutData,
 		})
 		if err != nil {
 			return
@@ -1850,6 +1859,7 @@ func (r *CustomModelResource) updateTrainingDataset(
 			ctx,
 			customModel.ID,
 			customModel.LatestVersion.BaseEnvironmentID,
+			customModel.LatestVersion.BaseEnvironmentVersionID,
 			plan.TrainingDatasetID,
 			plan.TrainingDataPartitionColumn,
 			state)
@@ -1872,9 +1882,10 @@ func (r *CustomModelResource) addResourceBundle(
 	if IsKnown(plan.ResourceBundleID) {
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:     "false",
-			BaseEnvironmentID: customModel.LatestVersion.BaseEnvironmentID,
-			ResourceBundleID:  plan.ResourceBundleID.ValueStringPointer(),
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+			ResourceBundleID:         plan.ResourceBundleID.ValueStringPointer(),
 		}); err != nil {
 			return
 		}
@@ -1891,6 +1902,7 @@ func (r *CustomModelResource) assignTrainingDataset(
 	ctx context.Context,
 	customModelID string,
 	baseEnvironmentID string,
+	baseEnvironmentVersionID string,
 	trainingDatasetID types.String,
 	trainingDataPartitionColumn types.String,
 	state *CustomModelResourceModel,
@@ -1911,10 +1923,11 @@ func (r *CustomModelResource) assignTrainingDataset(
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		keepTrainingHoldoutData := false
 		createVersionFromLatestRequest := &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:           "false",
-			BaseEnvironmentID:       baseEnvironmentID,
-			KeepTrainingHoldoutData: &keepTrainingHoldoutData,
-			TrainingData:            string(jsonTrainingData),
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        baseEnvironmentID,
+			BaseEnvironmentVersionID: baseEnvironmentVersionID,
+			KeepTrainingHoldoutData:  &keepTrainingHoldoutData,
+			TrainingData:             string(jsonTrainingData),
 		}
 
 		if IsKnown(trainingDataPartitionColumn) {
