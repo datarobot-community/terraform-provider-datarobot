@@ -1,4 +1,4 @@
-## [0.10.22] - 2025-11-10
+## [0.10.23] - 2025-11-10
 
 - Fixed `resources` field not being populated in Application Source and Custom Application resources - now properly exposed as computed fields for Terraform state and Pulumi outputs
 - Added ability to provide version ID for Execution Environment Read operation;
