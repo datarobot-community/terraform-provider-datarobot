@@ -609,7 +609,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
-	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 	state.Description = types.StringValue(customModel.Description)
 	state.SourceRemoteRepositories = plan.SourceRemoteRepositories
 	state.FolderPath = plan.FolderPath
@@ -743,6 +742,17 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 	state.UseCaseIDs = plan.UseCaseIDs
+
+	// Read the final model state one more time to ensure we have the latest base environment version ID
+	// This is important because dependency builds and other operations might have changed it
+	customModel, err = r.provider.service.GetCustomModel(ctx, customModelID)
+	if err != nil {
+		resp.Diagnostics.AddError("Error getting final Custom Model state", err.Error())
+		return
+	}
+	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
+	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
 	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
 		ctx,
