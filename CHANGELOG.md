@@ -1,3 +1,6 @@
+## [0.10.24] - 2025-11-13
+- fixes the problem of keeping Terraform state in sync during custom model creation
+
 ## [0.10.23] - 2025-11-10
 
 - Fixed `resources` field not being populated in Application Source and Custom Application resources - now properly exposed as computed fields for Terraform state and Pulumi outputs
