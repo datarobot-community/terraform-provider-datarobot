@@ -1042,15 +1042,19 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		}
 	}
 
-	if !IsKnown(plan.BaseEnvironmentVersionID) {
-		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
+	// Reset BaseEnvironmentVersionID if BaseEnvironmentID has changed
+	// This must be checked first, even if BaseEnvironmentVersionID is currently known,
+	// because Terraform may preserve the old value from state
+	if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentID) &&
+		plan.BaseEnvironmentID != state.BaseEnvironmentID {
+		// base environment has changed, reset version id so API can resolve the correct version
+		plan.BaseEnvironmentVersionID = types.StringUnknown()
+	} else if !IsKnown(plan.BaseEnvironmentVersionID) {
+		// BaseEnvironmentID hasn't changed, and BaseEnvironmentVersionID is unknown
+		if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentID) &&
+			plan.BaseEnvironmentID == state.BaseEnvironmentID {
 			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
-		} else if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentVersionID) &&
-			plan.BaseEnvironmentID != state.BaseEnvironmentID {
-			// base environment has changed, explicitly reset version id to unknown
-			// so API can resolve the correct version for the new environment
-			plan.BaseEnvironmentVersionID = types.StringUnknown()
 		}
 	}
 
