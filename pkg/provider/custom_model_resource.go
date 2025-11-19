@@ -1046,6 +1046,11 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
 			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
+		} else if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentVersionID) &&
+			plan.BaseEnvironmentID != state.BaseEnvironmentID {
+			// base environment has changed, explicitly reset version id to unknown
+			// so API can resolve the correct version for the new environment
+			plan.BaseEnvironmentVersionID = types.StringUnknown()
 		}
 	}
 
