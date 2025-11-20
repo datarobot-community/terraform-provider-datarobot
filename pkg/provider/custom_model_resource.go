@@ -1042,19 +1042,21 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		}
 	}
 
-	// Reset BaseEnvironmentVersionID if BaseEnvironmentID has changed
-	// This must be checked first, even if BaseEnvironmentVersionID is currently known,
-	// because Terraform may preserve the old value from state
-	if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentID) &&
-		plan.BaseEnvironmentID != state.BaseEnvironmentID {
-		// base environment has changed, reset version id so API can resolve the correct version
-		plan.BaseEnvironmentVersionID = types.StringUnknown()
-	} else if !IsKnown(plan.BaseEnvironmentVersionID) {
-		// BaseEnvironmentID hasn't changed, and BaseEnvironmentVersionID is unknown
-		if IsKnown(plan.BaseEnvironmentID) && IsKnown(state.BaseEnvironmentID) &&
-			plan.BaseEnvironmentID == state.BaseEnvironmentID {
+	if !IsKnown(plan.BaseEnvironmentVersionID) {
+		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
 			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
+		} else if IsKnown(plan.BaseEnvironmentID) {
+			// if base environment id has changed, look up the latest version for the new environment
+			traceAPICall("GetExecutionEnvironment")
+			executionEnvironment, err := r.provider.service.GetExecutionEnvironment(ctx, plan.BaseEnvironmentID.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error getting Execution Environment",
+					fmt.Sprintf("Unable to get Execution Environment %s: %s", plan.BaseEnvironmentID.ValueString(), err.Error()))
+				return
+			}
+			plan.BaseEnvironmentVersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
 		}
 	}
 
