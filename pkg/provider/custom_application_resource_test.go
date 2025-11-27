@@ -778,3 +778,143 @@ resource "datarobot_custom_application" "test" {
 }
 `, nameSalt, folderPath, nameSalt)
 }
+
+func TestAccCustomApplicationRequiredKeyScopeLevel(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_application.test_scope"
+	folderPath := "custom_application_scope_test"
+
+	err := os.Mkdir(folderPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	startAppScript := `#!/usr/bin/env bash
+echo "Starting App"
+streamlit run streamlit-app.py
+`
+
+	appCode := `import streamlit as st
+from datarobot import Client
+from datarobot.client import set_client
+
+def start_streamlit():
+    set_client(Client())
+    st.title("Scope Level Test Application")
+
+if __name__ == "__main__":
+    start_streamlit()
+`
+
+	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with required_key_scope_level set to "viewer"
+			{
+				Config: customApplicationWithScopeLevelConfig(folderPath, "viewer"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "viewer"),
+					checkCustomApplicationScopeLevel(resourceName, "viewer"),
+				),
+			},
+			// Update to "admin"
+			{
+				Config: customApplicationWithScopeLevelConfig(folderPath, "admin"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "admin"),
+					checkCustomApplicationScopeLevel(resourceName, "admin"),
+				),
+			},
+			// Unset the field (null)
+			{
+				Config: customApplicationWithScopeLevelConfig(folderPath, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckNoResourceAttr(resourceName, "required_key_scope_level"),
+					checkCustomApplicationScopeLevel(resourceName, ""),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func customApplicationWithScopeLevelConfig(folderPath, scopeLevel string) string {
+	scopeLevelAttr := ""
+	if scopeLevel != "" {
+		scopeLevelAttr = fmt.Sprintf(`
+	required_key_scope_level = "%s"`, scopeLevel)
+	}
+
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "test_scope" {
+	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	folder_path = "%s"
+}
+
+resource "datarobot_custom_application" "test_scope" {
+	source_version_id = datarobot_application_source.test_scope.version_id
+	name = "Scope Level Test App"
+	allow_auto_stopping = false%s
+}
+`, folderPath, scopeLevelAttr)
+}
+
+func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No ID is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = NewService(cl)
+
+		traceAPICall("GetApplicationInTest")
+		application, err := p.service.GetApplication(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		if expectedLevel == "" {
+			// Field should be nil/null
+			if application.RequiredKeyScopeLevel != nil {
+				return fmt.Errorf("RequiredKeyScopeLevel should be nil but is %s", *application.RequiredKeyScopeLevel)
+			}
+		} else {
+			// Field should match expected value
+			if application.RequiredKeyScopeLevel == nil {
+				return fmt.Errorf("RequiredKeyScopeLevel is nil but should be %s", expectedLevel)
+			}
+			if *application.RequiredKeyScopeLevel != expectedLevel {
+				return fmt.Errorf("RequiredKeyScopeLevel is %s but should be %s", *application.RequiredKeyScopeLevel, expectedLevel)
+			}
+		}
+
+		return nil
+	}
+}
