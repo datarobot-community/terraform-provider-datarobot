@@ -1,3 +1,7 @@
+## [0.10.25] - 2025-11-27
+
+- Fixed `required_key_scope_level` field not being populated in Custom Application - now supports scoped API key levels (viewer, user, admin)
+
 ## [0.10.24] - 2025-11-13
 - fixes the problem of keeping Terraform state in sync during custom model creation
 
