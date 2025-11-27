@@ -137,6 +137,17 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
+			"required_key_scope_level": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The scoped Api key level for the Custom Application.",
+				Validators: []validator.String{
+					stringvalidator.OneOf(
+						"viewer",
+						"user",
+						"admin",
+					),
+				},
+			},
 		},
 	}
 }
