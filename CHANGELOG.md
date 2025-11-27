@@ -1,4 +1,4 @@
-## [0.10.25] - 2025-11-27
+## [Unreleased]
 
 - Fixed `required_key_scope_level` field not being populated in Custom Application - now supports scoped API key levels (viewer, user, admin)
 
