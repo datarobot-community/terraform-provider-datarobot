@@ -22,6 +22,7 @@ type Application struct {
 	ExternalAccessRecipients         []string              `json:"externalAccessRecipients"`
 	AllowAutoStopping                bool                  `json:"allowAutoStopping"`
 	Resources                        *ApplicationResources `json:"resources,omitempty"`
+	RequiredKeyScopeLevel            *string               `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type UpdateApplicationRequest struct {
@@ -30,6 +31,7 @@ type UpdateApplicationRequest struct {
 	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
 	AllowAutoStopping                bool     `json:"allowAutoStopping"`
+	RequiredKeyScopeLevel            *string  `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type CreateApplicationSourceFromTemplateRequest struct {
