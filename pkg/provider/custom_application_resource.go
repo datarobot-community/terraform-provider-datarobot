@@ -177,7 +177,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
-		ApplicationSourceVersionID: data.SourceVersionID.ValueString()
+		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
 	}
 
 	// Add required key scope level if provided
