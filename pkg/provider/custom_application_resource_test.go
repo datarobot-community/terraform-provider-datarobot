@@ -833,24 +833,6 @@ if __name__ == "__main__":
 					checkCustomApplicationScopeLevel(resourceName, "viewer"),
 				),
 			},
-			// Update to "admin"
-			{
-				Config: customApplicationWithScopeLevelConfig(folderPath, "admin"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "admin"),
-					checkCustomApplicationScopeLevel(resourceName, "admin"),
-				),
-			},
-			// Unset the field (null)
-			{
-				Config: customApplicationWithScopeLevelConfig(folderPath, ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckNoResourceAttr(resourceName, "required_key_scope_level"),
-					checkCustomApplicationScopeLevel(resourceName, ""),
-				),
-			},
 			// Delete is tested automatically
 		},
 	})

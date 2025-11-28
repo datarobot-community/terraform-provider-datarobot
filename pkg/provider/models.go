@@ -745,6 +745,7 @@ type CustomApplicationFromEnvironmentResourceModel struct {
 	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
+	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
 // CredentialResourceModel describes the credential resource.

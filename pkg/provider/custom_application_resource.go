@@ -177,7 +177,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
-		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
+		ApplicationSourceVersionID: data.SourceVersionID.ValueString()
+	}
+
+	// Add required key scope level if provided
+	if IsKnown(data.RequiredKeyScopeLevel) && !data.RequiredKeyScopeLevel.IsNull() {
+		val := data.RequiredKeyScopeLevel.ValueString()
+		createRequest.RequiredKeyScopeLevel = &val
 	}
 
 	// Add resources if provided
@@ -198,7 +204,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
-	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() || IsKnown(data.RequiredKeyScopeLevel) {
+	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
 		recipients := make([]string, len(data.ExternalAccessRecipients))
 		for i, recipient := range data.ExternalAccessRecipients {
 			recipients[i] = recipient.ValueString()
@@ -212,11 +218,6 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 
 		if IsKnown(data.Name) {
 			updateRequest.Name = data.Name.ValueString()
-		}
-
-		if IsKnown(data.RequiredKeyScopeLevel) {
-			val := data.RequiredKeyScopeLevel.ValueString()
-			updateRequest.RequiredKeyScopeLevel = &val
 		}
 
 		traceAPICall("UpdateCustomApplication")
@@ -346,16 +347,6 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 
 	if state.SourceVersionID.ValueString() != plan.SourceVersionID.ValueString() {
 		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
-	}
-
-	if !plan.RequiredKeyScopeLevel.Equal(state.RequiredKeyScopeLevel) {
-		if IsKnown(plan.RequiredKeyScopeLevel) {
-			val := plan.RequiredKeyScopeLevel.ValueString()
-			updateRequest.RequiredKeyScopeLevel = &val
-		} else {
-			// Explicitly set to nil to unset the field
-			updateRequest.RequiredKeyScopeLevel = nil
-		}
 	}
 
 	traceAPICall("UpdateCustomApplication")

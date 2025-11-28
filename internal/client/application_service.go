@@ -8,6 +8,7 @@ type CreateCustomApplicationRequest struct {
 	ApplicationSourceVersionID string                `json:"applicationSourceVersionId,omitempty"`
 	EnvironmentID              string                `json:"environmentId,omitempty"`
 	Resources                  *ApplicationResources `json:"resources,omitempty"`
+	RequiredKeyScopeLevel      *string               `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type Application struct {
@@ -31,7 +32,6 @@ type UpdateApplicationRequest struct {
 	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
 	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
 	AllowAutoStopping                bool     `json:"allowAutoStopping"`
-	RequiredKeyScopeLevel            *string  `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type CreateApplicationSourceFromTemplateRequest struct {
