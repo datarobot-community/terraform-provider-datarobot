@@ -295,7 +295,12 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
-	data.RequiredKeyScopeLevel = types.StringValue(*application.RequiredKeyScopeLevel)
+
+	if application.RequiredKeyScopeLevel != nil {
+		data.RequiredKeyScopeLevel = types.StringValue(*application.RequiredKeyScopeLevel)
+	} else {
+		data.RequiredKeyScopeLevel = types.StringNull()
+	}
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
