@@ -136,6 +136,14 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 					},
 				},
 			},
+			"required_key_scope_level": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 		},
 	}
 }
@@ -205,6 +213,8 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		createApplicationSourceVersionRequest.BaseEnvironmentID = data.BaseEnvironmentID.ValueString()
 	}
 
+	createApplicationSourceVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
+
 	traceAPICall("CreateApplicationSourceVersion")
 	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(
 		ctx,
@@ -217,6 +227,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	data.VersionID = types.StringValue(createApplicationSourceVersionResp.ID)
 	data.BaseEnvironmentID = types.StringValue(createApplicationSourceVersionResp.BaseEnvironmentID)
 	data.BaseEnvironmentVersionID = types.StringValue(createApplicationSourceVersionResp.BaseEnvironmentVersionID)
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(createApplicationSourceVersionResp.RequiredKeyScopeLevel)
 
 	err = r.addLocalFilesToApplicationSource(
 		ctx,
@@ -262,6 +273,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 			createApplicationSourceVersionResp.ID,
 			&client.UpdateApplicationSourceVersionRequest{
 				RuntimeParameterValues: string(jsonParams),
+				RequiredKeyScopeLevel:  createApplicationSourceVersionResp.RequiredKeyScopeLevel, // not overriding RequiredKeyScopeLevel with None
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())
@@ -333,6 +345,7 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 		resp.Diagnostics.Append(diags...)
 		return
 	}
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(applicationSource.LatestVersion.RequiredKeyScopeLevel)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -482,6 +495,8 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	updateVersionRequest.RuntimeParameterValues = string(jsonParams)
 
+	updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
+
 	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
 		plan.ID.ValueString(),
@@ -500,6 +515,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	plan.VersionID = types.StringValue(applicationSource.LatestVersion.ID)
 	plan.BaseEnvironmentID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentID)
 	plan.BaseEnvironmentVersionID = types.StringValue(applicationSource.LatestVersion.BaseEnvironmentVersionID)
+	plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(createApplicationSourceVersionResp.RequiredKeyScopeLevel)
 
 	// Always populate resources from API response (field is Computed)
 	plan.Resources = ApplicationResourcesFromAPI(ctx, applicationSource.LatestVersion.Resources)
@@ -622,6 +638,11 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		plan.VersionID = types.StringUnknown()
 	}
 
+	// use RequiredKeyScopeLevel from state if not set for plan
+	if plan.RequiredKeyScopeLevel.IsUnknown() {
+		plan.RequiredKeyScopeLevel = state.RequiredKeyScopeLevel
+	}
+
 	if !IsKnown(plan.RuntimeParameterValues) {
 		// use empty list if runtime parameter values are unknown
 		plan.RuntimeParameterValues, _ = types.ListValueFrom(
@@ -736,7 +757,8 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 				state.ID.ValueString(),
 				applicationSourceVersion.ID,
 				&client.UpdateApplicationSourceVersionRequest{
-					FilesToDelete: batchToDelete,
+					FilesToDelete:         batchToDelete,
+					RequiredKeyScopeLevel: client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString()), // not overriding RequiredKeyScopeLevel with None
 				})
 			if err != nil {
 				return fmt.Errorf("failed to delete file batch %d-%d: %w", i+1, end, err)
