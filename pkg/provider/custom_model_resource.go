@@ -13,6 +13,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -441,6 +442,22 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Model version to.",
 				ElementType:         types.StringType,
 			},
+			"tags": schema.SetNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tags to assign to the Custom Model.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the tag.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the tag.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -522,6 +539,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
 		}
 
+		tags := getCustomModelTags(plan.Tags, plan.TargetType.ValueString())
+
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
 			Name:                plan.Name.ValueString(),
@@ -536,6 +555,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsProxyModel:        plan.IsProxy.ValueBool(),
 			ClassLabels:         classLabels,
 			IsTrainingDataForVersionsPermanentlyEnabled: true,
+			Tags: tags,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -1157,6 +1177,34 @@ func loadCustomModelToTerraformState(
 	if customModel.LatestVersion.NetworkEgressPolicy != nil {
 		state.NetworkAccess = types.StringValue(*customModel.LatestVersion.NetworkEgressPolicy)
 	}
+
+	if len(customModel.Tags) > 0 {
+		tagElements := make([]attr.Value, 0, len(customModel.Tags))
+		for _, tag := range customModel.Tags {
+			tagObject, _ := types.ObjectValue(
+				map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+				map[string]attr.Value{
+					"name":  types.StringValue(tag.Name),
+					"value": types.StringValue(tag.Value),
+				},
+			)
+			tagElements = append(tagElements, tagObject)
+		}
+
+		tagSet, _ := types.SetValue(
+			types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+			},
+			tagElements,
+		)
+		state.Tags = tagSet
+	}
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModel, error) {
@@ -1530,11 +1578,14 @@ func (r *CustomModelResource) updateCustomModel(
 		return
 	}
 
+	tags := getCustomModelTags(plan.Tags, plan.TargetType.ValueString())
+
 	updateRequest := &client.UpdateCustomModelRequest{
 		Name:                plan.Name.ValueString(),
 		Description:         plan.Description.ValueString(),
 		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
 		Language:            plan.Language.ValueString(),
+		Tags:                tags,
 	}
 
 	if customModel.DeploymentsCount < 1 {
@@ -2024,4 +2075,17 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 	}
 
 	return
+}
+
+func getCustomModelTags(tagsSet types.Set, targetType string) []client.Tag {
+	tags := convertSetTagsToClientTags(tagsSet)
+
+	if targetType == "MCP" {
+		tags = append(tags, client.Tag{
+			Name:  "tool",
+			Value: "mcp",
+		})
+	}
+
+	return tags
 }

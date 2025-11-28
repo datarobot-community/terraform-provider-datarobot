@@ -66,6 +66,16 @@ resource "datarobot_custom_model" "example" {
   # memory_mb      = 512
   # replicas       = 2
   # network_access = "NONE"
+  # tags = [
+  #   {
+  #     name  = "team"
+  #     value = "engineering"
+  #   },
+  #   {
+  #     name  = "env"
+  #     value = "test"
+  #   }
+  # ]
 }
 
 output "example_id" {
@@ -106,6 +116,7 @@ output "example_id" {
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
 - `target_name` (String) The target name of the Custom Model.
 - `target_type` (String) The target type of the Custom Model.
+- `tags` (Attributes Set) The list of tags to assign to the Custom Model. (see [below for nested schema](#nestedatt--tags))
 - `training_data_partition_column` (String) The name of the partition column in the training dataset assigned to the Custom Model.
 - `training_dataset_id` (String) The ID of the training dataset assigned to the Custom Model.
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Model version to.
@@ -215,3 +226,12 @@ Required:
 - `id` (String) The ID of the source remote repository.
 - `ref` (String) The reference of the source remote repository.
 - `source_paths` (List of String) The list of source paths in the source remote repository.
+
+
+<a id="nestedatt--tags"></a>
+### Nested Schema for `tags`
+
+Required:
+
+- `name` (String) The name of the tag.
+- `value` (String) The value of the tag.

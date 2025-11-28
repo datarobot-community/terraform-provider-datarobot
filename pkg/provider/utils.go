@@ -779,6 +779,36 @@ func convertClientTagsToTfTags(clientTags []client.Tag) []Tag {
 	return tfTags
 }
 
+func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
+	if tagsSet.IsNull() || tagsSet.IsUnknown() {
+		return []client.Tag{}
+	}
+
+	var tags []client.Tag
+	for _, elem := range tagsSet.Elements() {
+		tagObj, ok := elem.(types.Object)
+		if !ok {
+			continue
+		}
+		tagAttrs := tagObj.Attributes()
+
+		nameAttr, nameOk := tagAttrs["name"].(types.String)
+		valueAttr, valueOk := tagAttrs["value"].(types.String)
+
+		if !nameOk || !valueOk {
+			continue
+		}
+
+		tag := client.Tag{
+			Name:  nameAttr.ValueString(),
+			Value: valueAttr.ValueString(),
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags
+}
+
 func convertDynamicType(tfType types.Dynamic) any {
 	switch t := tfType.UnderlyingValue().(type) {
 	case types.String:

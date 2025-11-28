@@ -1,3 +1,7 @@
+## [0.10.27] - 2025-12-05
+
+- Added support for creating tags for custom model
+
 ## [0.10.26] - 2025-12-04
 
 - Fixed `required_key_scope_level` field not being populated in Custom Application - now supports scoped API key levels (viewer, user, admin)

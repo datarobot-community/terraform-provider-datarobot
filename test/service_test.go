@@ -1212,6 +1212,70 @@ func TestRegisteredModelServiceWithTags(t *testing.T) {
 	require.Equal("test", tagMap["env"])
 }
 
+func TestCustomModelServiceWithTags(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.TODO()
+	assert := assert.New(t)
+	require := require.New(t)
+
+	s := initializeTest(t)
+
+	// Create a custom model with tags
+	customModelName := "Integration Test Custom Model Tags" + uuid.New().String()
+	customModel, err := s.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
+		Name:            customModelName,
+		TargetType:      "Unstructured",
+		CustomModelType: "inference",
+		Tags: []client.Tag{
+			{Name: "team", Value: "engineering"},
+			{Name: "env", Value: "test"},
+		},
+	})
+	require.NoError(err)
+	require.NotEmpty(customModel.ID)
+
+	defer func() {
+		err = s.DeleteCustomModel(ctx, customModel.ID)
+		require.NoError(err)
+	}()
+
+	// Verify that tags were set during creation
+	retrievedModel, err := s.GetCustomModel(ctx, customModel.ID)
+	require.NoError(err)
+	require.Len(retrievedModel.Tags, 2)
+
+	// Check that both expected tags are present (order not guaranteed)
+	tagMap := make(map[string]string)
+	for _, tag := range retrievedModel.Tags {
+		tagMap[tag.Name] = tag.Value
+	}
+	assert.Equal("engineering", tagMap["team"])
+	assert.Equal("test", tagMap["env"])
+
+	// Test updating tags
+	updatedModel, err := s.UpdateCustomModel(ctx, customModel.ID, &client.UpdateCustomModelRequest{
+		Tags: []client.Tag{
+			{Name: "team", Value: "data-science"},
+			{Name: "env", Value: "production"},
+		},
+	})
+	require.NoError(err)
+	require.NotNil(updatedModel)
+
+	// Verify updated tags
+	retrievedModel, err = s.GetCustomModel(ctx, customModel.ID)
+	require.NoError(err)
+	require.Len(retrievedModel.Tags, 2)
+
+	tagMap = make(map[string]string)
+	for _, tag := range retrievedModel.Tags {
+		tagMap[tag.Name] = tag.Value
+	}
+	assert.Equal("data-science", tagMap["team"])
+	assert.Equal("production", tagMap["env"])
+}
+
 func initializeTest(t *testing.T) client.Service {
 	if os.Getenv("ENABLE_INTEGRATION_TESTS") != "true" {
 		t.Skip("Integration tests are disabled")
