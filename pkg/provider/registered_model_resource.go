@@ -449,33 +449,3 @@ func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Cont
 	}
 	return nil
 }
-
-func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
-	if tagsSet.IsNull() || tagsSet.IsUnknown() {
-		return []client.Tag{}
-	}
-
-	var tags []client.Tag
-	for _, elem := range tagsSet.Elements() {
-		tagObj, ok := elem.(types.Object)
-		if !ok {
-			continue // Skip invalid elements
-		}
-		tagAttrs := tagObj.Attributes()
-
-		nameAttr, nameOk := tagAttrs["name"].(types.String)
-		valueAttr, valueOk := tagAttrs["value"].(types.String)
-
-		if !nameOk || !valueOk {
-			continue // Skip invalid attributes
-		}
-
-		tag := client.Tag{
-			Name:  nameAttr.ValueString(),
-			Value: valueAttr.ValueString(),
-		}
-		tags = append(tags, tag)
-	}
-
-	return tags
-}
