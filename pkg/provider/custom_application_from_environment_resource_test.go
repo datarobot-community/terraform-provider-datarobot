@@ -270,7 +270,7 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create with required_key_scope_level set to "user"
 			{
-				Config: customApplicationFromEnvWithScopeLevelConfig(folderPath, "user"),
+				Config: customApplicationFromEnvWithScopeLevelConfig("user"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "user"),
@@ -282,7 +282,7 @@ if __name__ == "__main__":
 	})
 }
 
-func customApplicationFromEnvWithScopeLevelConfig(folderPath, scopeLevel string) string {
+func customApplicationFromEnvWithScopeLevelConfig(scopeLevel string) string {
 	scopeLevelAttr := ""
 	if scopeLevel != "" {
 		scopeLevelAttr = fmt.Sprintf(`
