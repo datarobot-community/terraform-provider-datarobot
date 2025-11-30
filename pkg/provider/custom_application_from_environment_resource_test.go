@@ -321,18 +321,14 @@ func checkCustomApplicationFromEnvScopeLevel(resourceName, expectedLevel string)
 			return err
 		}
 
+		level := string(application.RequiredKeyScopeLevel)
 		if expectedLevel == "" {
-			// Field should be nil/null
-			if application.RequiredKeyScopeLevel != nil {
-				return fmt.Errorf("RequiredKeyScopeLevel should be nil but is %s", *application.RequiredKeyScopeLevel)
+			if level != "" { // NoRequirements represented by empty string
+				return fmt.Errorf("RequiredKeyScopeLevel should be empty but is %s", level)
 			}
 		} else {
-			// Field should match expected value
-			if application.RequiredKeyScopeLevel == nil {
-				return fmt.Errorf("RequiredKeyScopeLevel is nil but should be %s", expectedLevel)
-			}
-			if *application.RequiredKeyScopeLevel != expectedLevel {
-				return fmt.Errorf("RequiredKeyScopeLevel is %s but should be %s", *application.RequiredKeyScopeLevel, expectedLevel)
+			if level != expectedLevel {
+				return fmt.Errorf("RequiredKeyScopeLevel is %s but should be %s", level, expectedLevel)
 			}
 		}
 
