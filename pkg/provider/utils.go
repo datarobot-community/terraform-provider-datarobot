@@ -1183,7 +1183,7 @@ func ApplicationResourcesToAPI(ctx context.Context, resources basetypes.ObjectVa
 	return apiResources, diags
 }
 
-// Convert ScopedLevel type to types.String
+// Convert ScopedLevel type to types.String.
 func scopeLevelToTerraformString(scopeLevel client.ScopeLevel) types.String {
 	if scopeLevel == client.NoRequirements {
 		return types.StringNull()

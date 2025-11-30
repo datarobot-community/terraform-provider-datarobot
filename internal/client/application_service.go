@@ -8,17 +8,17 @@ import (
 type ScopeLevel string
 
 const (
-	// App requires API Key with permission only for GET requests
+	// App requires API Key with permission only for GET requests.
 	ViewerLevel ScopeLevel = "viewer"
 
 	// App requires API Key with permission only for
-	// GET, POST, PUT, PATCH requests
+	// GET, POST, PUT, PATCH requests.
 	UserLevel ScopeLevel = "user"
 
-	// App requires API Key without permissions restriction
+	// App requires API Key without permissions restriction.
 	AdminLevel ScopeLevel = "admin"
 
-	// App does not need user's API Key
+	// App does not need user's API Key.
 	NoRequirements ScopeLevel = ""
 )
 
