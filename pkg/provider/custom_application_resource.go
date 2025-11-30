@@ -139,13 +139,10 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"required_key_scope_level": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The scoped Api key level for the Custom Application.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"viewer",
-						"user",
-						"admin",
-					),
+				Computed:            true,
+				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -178,12 +175,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
 		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
-	}
-
-	// Add required key scope level if provided
-	if IsKnown(data.RequiredKeyScopeLevel) && !data.RequiredKeyScopeLevel.IsNull() {
-		val := data.RequiredKeyScopeLevel.ValueString()
-		createRequest.RequiredKeyScopeLevel = &val
+		RequiredKeyScopeLevel:      client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString()),
 	}
 
 	// Add resources if provided
@@ -261,6 +253,8 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -298,11 +292,7 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
-	if application.RequiredKeyScopeLevel != nil {
-		data.RequiredKeyScopeLevel = types.StringValue(*application.RequiredKeyScopeLevel)
-	} else {
-		data.RequiredKeyScopeLevel = types.StringNull()
-	}
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {

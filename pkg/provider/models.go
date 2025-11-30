@@ -688,7 +688,7 @@ type QAApplicationResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
+	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stFopping"`
 }
 
 type ApplicationSourceResourceModel struct {
@@ -703,6 +703,7 @@ type ApplicationSourceResourceModel struct {
 	FilesHashes              types.List            `tfsdk:"files_hashes"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	RuntimeParameterValues   types.List            `tfsdk:"runtime_parameter_values"`
+	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
 type ApplicationSourceFromTemplateResourceModel struct {
