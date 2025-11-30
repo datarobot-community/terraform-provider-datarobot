@@ -176,8 +176,11 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
-		EnvironmentID:         data.EnvironmentID.ValueString(),
-		RequiredKeyScopeLevel: client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString()),
+		EnvironmentID: data.EnvironmentID.ValueString(),
+	}
+
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		createRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
 	}
 
 	// Add resources if provided
@@ -254,6 +257,8 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 			return
 		}
 	}
+
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }

@@ -213,7 +213,9 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		createApplicationSourceVersionRequest.BaseEnvironmentID = data.BaseEnvironmentID.ValueString()
 	}
 
-	createApplicationSourceVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		createApplicationSourceVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
+	}
 
 	traceAPICall("CreateApplicationSourceVersion")
 	createApplicationSourceVersionResp, err := r.provider.service.CreateApplicationSourceVersion(
@@ -299,6 +301,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -494,7 +497,11 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	updateVersionRequest.RuntimeParameterValues = string(jsonParams)
 
-	updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
+	// Only set RequiredKeyScopeLevel when known. For known-null, ValueString()
+	// returns "" (NoRequirements), which marshals as JSON null.
+	if IsKnown(plan.RequiredKeyScopeLevel) {
+		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
+	}
 
 	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,

@@ -37,17 +37,22 @@ func (level ScopeLevel) MarshalJSON() ([]byte, error) {
 }
 
 func (level *ScopeLevel) UnmarshalJSON(data []byte) (err error) {
-	var providedString string
-	if err := json.Unmarshal(data, &providedString); err != nil {
+	var providedPtr *string
+	if err := json.Unmarshal(data, &providedPtr); err != nil {
 		return err
 	}
+	if providedPtr == nil {
+		*level = NoRequirements
+		return nil
+	}
 
-	var providedLevel = ScopeLevel(providedString)
+	providedString := *providedPtr
+	providedLevel := ScopeLevel(providedString)
 
 	for _, levelValue := range levelsChoice {
 		if providedLevel == levelValue {
 			*level = providedLevel
-			return
+			return nil
 		}
 	}
 
