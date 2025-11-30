@@ -176,13 +176,8 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
-		EnvironmentID: data.EnvironmentID.ValueString(),
-	}
-
-	// Add required key scope level if provided
-	if IsKnown(data.RequiredKeyScopeLevel) && !data.RequiredKeyScopeLevel.IsNull() {
-		val := data.RequiredKeyScopeLevel.ValueString()
-		createRequest.RequiredKeyScopeLevel = &val
+		EnvironmentID:         data.EnvironmentID.ValueString(),
+		RequiredKeyScopeLevel: client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString()),
 	}
 
 	// Add resources if provided
@@ -295,12 +290,7 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
-
-	if application.RequiredKeyScopeLevel != nil {
-		data.RequiredKeyScopeLevel = types.StringValue(*application.RequiredKeyScopeLevel)
-	} else {
-		data.RequiredKeyScopeLevel = types.StringNull()
-	}
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
