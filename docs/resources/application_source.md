@@ -63,6 +63,7 @@ output "datarobot_application_source_resources" {
 - `files` (Dynamic) The list of tuples, where values in each tuple are the local filesystem path and the path the file should be placed in the Application Source. If list is of strings, then basenames will be used for tuples.
 - `folder_path` (String) The path to a folder containing files to build the Application Source. Each file in the folder is uploaded under path relative to a folder path.
 - `name` (String) The name of the Application Source.
+- `required_key_scope_level` (String) The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.
 - `resources` (Attributes) The resources for the Application Source. If not specified, default values will be computed by the API based on the cluster configuration. (see [below for nested schema](#nestedatt--resources))
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 
