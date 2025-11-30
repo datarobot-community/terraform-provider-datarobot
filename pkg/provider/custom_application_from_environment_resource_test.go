@@ -271,7 +271,7 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create with required_key_scope_level set to "user"
 			{
-				Config: customApplicationFromEnvWithScopeLevelConfig("user"),
+				Config: customApplicationFromEnvWithScopeLevelConfig(folderPath, "user"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "user"),
@@ -283,23 +283,28 @@ if __name__ == "__main__":
 	})
 }
 
-func customApplicationFromEnvWithScopeLevelConfig(scopeLevel string) string {
+func customApplicationFromEnvWithScopeLevelConfig(folderPath, scopeLevel string) string {
 	scopeLevelAttr := ""
 	if scopeLevel != "" {
 		scopeLevelAttr = fmt.Sprintf(`
   required_key_scope_level = "%s"`, scopeLevel)
 	}
 
-	// Generate unique name to avoid conflicts
-	uniqueName := fmt.Sprintf("Scope Level Test App From Env %d", time.Now().Unix())
+	uniqueSuffix := time.Now().Unix()
 
 	return fmt.Sprintf(`
+resource "datarobot_execution_environment" "test_scope_env" {
+  name = "Test Scope Env %d"
+  description = "Test environment for scope level"
+  programming_language = "python"
+}
+
 resource "datarobot_custom_application_from_environment" "test_scope" {
-  environment_id = "6542cd582a9d3d51bf4ac71e"
-  name = "%s"
+  environment_id = datarobot_execution_environment.test_scope_env.id
+  name = "Required Key Scope Level Test App From Env %d"
   allow_auto_stopping = false%s
 }
-`, uniqueName, scopeLevelAttr)
+`, uniqueSuffix, uniqueSuffix, scopeLevelAttr)
 }
 
 func checkCustomApplicationFromEnvScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
