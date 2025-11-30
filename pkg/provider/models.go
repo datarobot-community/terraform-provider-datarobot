@@ -688,7 +688,7 @@ type QAApplicationResourceModel struct {
 	ApplicationUrl           types.String   `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
 	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stFopping"`
+	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
 }
 
 type ApplicationSourceResourceModel struct {
