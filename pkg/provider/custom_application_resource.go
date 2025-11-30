@@ -175,7 +175,10 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
 		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
-		RequiredKeyScopeLevel:      client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString()),
+	}
+
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		createRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
 	}
 
 	// Add resources if provided
@@ -362,6 +365,7 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
