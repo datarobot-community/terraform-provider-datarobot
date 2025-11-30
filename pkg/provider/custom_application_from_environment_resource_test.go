@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -289,13 +290,16 @@ func customApplicationFromEnvWithScopeLevelConfig(scopeLevel string) string {
   required_key_scope_level = "%s"`, scopeLevel)
 	}
 
+	// Generate unique name to avoid conflicts
+	uniqueName := fmt.Sprintf("Scope Level Test App From Env %d", time.Now().Unix())
+
 	return fmt.Sprintf(`
 resource "datarobot_custom_application_from_environment" "test_scope" {
   environment_id = "6542cd582a9d3d51bf4ac71e"
-  name = "Scope Level Test App From Env"
+  name = "%s"
   allow_auto_stopping = false%s
 }
-`, scopeLevelAttr)
+`, uniqueName, scopeLevelAttr)
 }
 
 func checkCustomApplicationFromEnvScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
