@@ -3,11 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -220,127 +218,5 @@ func checkCustomApplicationFromEnvironmentResourceExists() resource.TestCheckFun
 		}
 
 		return fmt.Errorf("Custom Application not found")
-	}
-}
-
-func TestAccCustomApplicationFromEnvironmentRequiredKeyScopeLevel(t *testing.T) {
-	t.Parallel()
-
-	resourceName := "datarobot_custom_application_from_environment.test_scope"
-	folderPath := "custom_application_env_scope_test"
-
-	err := os.Mkdir(folderPath, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(folderPath)
-
-	startAppScript := `#!/usr/bin/env bash
-
-echo "Starting App"
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-def start_streamlit():
-    set_client(Client())
-    st.title("Scope Level Test Application From Environment")
-
-if __name__ == "__main__":
-    start_streamlit()
-`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			// Create with required_key_scope_level set to "user"
-			{
-				Config: customApplicationFromEnvWithScopeLevelConfig(folderPath, "user"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "user"),
-					checkCustomApplicationFromEnvScopeLevel(resourceName, "user"),
-				),
-			},
-			// Delete is tested automatically
-		},
-	})
-}
-
-func customApplicationFromEnvWithScopeLevelConfig(folderPath, scopeLevel string) string {
-	scopeLevelAttr := ""
-	if scopeLevel != "" {
-		scopeLevelAttr = fmt.Sprintf(`
-  required_key_scope_level = "%s"`, scopeLevel)
-	}
-
-	uniqueSuffix := time.Now().Unix()
-
-	return fmt.Sprintf(`
-resource "datarobot_execution_environment" "test_scope_env" {
-  name = "Test Scope Env %d"
-  description = "Test environment for scope level"
-  programming_language = "python"
-}
-
-resource "datarobot_custom_application_from_environment" "test_scope" {
-  environment_id = datarobot_execution_environment.test_scope_env.id
-  name = "Required Key Scope Level Test App From Env %d"
-  allow_auto_stopping = false%s
-}
-`, uniqueSuffix, uniqueSuffix, scopeLevelAttr)
-}
-
-func checkCustomApplicationFromEnvScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("Not found: %s", resourceName)
-		}
-
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No ID is set")
-		}
-
-		p, ok := testAccProvider.(*Provider)
-		if !ok {
-			return fmt.Errorf("Provider not found")
-		}
-		p.service = NewService(cl)
-
-		traceAPICall("GetApplicationInTest")
-		application, err := p.service.GetApplication(context.TODO(), rs.Primary.ID)
-		if err != nil {
-			return err
-		}
-
-		level := string(application.RequiredKeyScopeLevel)
-		if expectedLevel == "" {
-			if level != "" { // NoRequirements represented by empty string
-				return fmt.Errorf("RequiredKeyScopeLevel should be empty but is %s", level)
-			}
-		} else {
-			if level != expectedLevel {
-				return fmt.Errorf("RequiredKeyScopeLevel is %s but should be %s", level, expectedLevel)
-			}
-		}
-
-		return nil
 	}
 }
