@@ -136,17 +136,6 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
-			"required_key_scope_level": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "The scoped Api key level for the Custom Application.",
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"viewer",
-						"user",
-						"admin",
-					),
-				},
-			},
 		},
 	}
 }
@@ -177,10 +166,6 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
 		EnvironmentID: data.EnvironmentID.ValueString(),
-	}
-
-	if IsKnown(data.RequiredKeyScopeLevel) {
-		createRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
 	}
 
 	// Add resources if provided
@@ -258,8 +243,6 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 		}
 	}
 
-	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -295,7 +278,6 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
-	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
