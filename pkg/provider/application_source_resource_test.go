@@ -614,6 +614,118 @@ func checkApplicationSourceResourceExists() resource.TestCheckFunc {
 	}
 }
 
+func TestAccApplicationSourceRequiredKeyScopeLevel(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_application_source.test_scope"
+
+	startAppFileName := "start-app.sh"
+	startAppScript := `#!/usr/bin/env bash
+echo "Starting App"
+streamlit run streamlit-app.py
+`
+
+	appCodeFileName := "streamlit-app.py"
+	appCode := `import streamlit as st
+from datarobot import Client
+from datarobot.client import set_client
+
+def start_streamlit():
+    set_client(Client())
+    st.title("Scope Level Test Application")
+
+if __name__ == "__main__":
+    start_streamlit()
+`
+
+	err := os.WriteFile(startAppFileName, []byte(startAppScript), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(startAppFileName)
+
+	err = os.WriteFile(appCodeFileName, []byte(appCode), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(appCodeFileName)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with required_key_scope_level set to "admin"
+			{
+				Config: applicationSourceWithScopeLevelConfig("admin"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "admin"),
+					checkApplicationSourceScopeLevel(resourceName, "admin"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func applicationSourceWithScopeLevelConfig(scopeLevel string) string {
+	scopeLevelAttr := ""
+	if scopeLevel != "" {
+		scopeLevelAttr = fmt.Sprintf(`
+	required_key_scope_level = "%s"`, scopeLevel)
+	}
+
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "test_scope" {
+	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	files = [
+		["start-app.sh"],
+		["streamlit-app.py"]
+	]%s
+}
+`, scopeLevelAttr)
+}
+
+func checkApplicationSourceScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No ID is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = NewService(cl)
+
+		traceAPICall("GetApplicationSourceInTest")
+		applicationSource, err := p.service.GetApplicationSource(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		level := string(applicationSource.LatestVersion.RequiredKeyScopeLevel)
+		if expectedLevel == "" {
+			if level != "" { // empty string represents NoRequirements
+				return fmt.Errorf("RequiredKeyScopeLevel should be empty but is %s", level)
+			}
+		} else {
+			if level != expectedLevel {
+				return fmt.Errorf("RequiredKeyScopeLevel is %s but should be %s", level, expectedLevel)
+			}
+		}
+
+		return nil
+	}
+}
+
 // Test-only struct for generating test configurations.
 type ApplicationSourceResources struct {
 	Replicas                     types.Int64
