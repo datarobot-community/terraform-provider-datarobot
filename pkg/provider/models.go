@@ -703,6 +703,7 @@ type ApplicationSourceResourceModel struct {
 	FilesHashes              types.List            `tfsdk:"files_hashes"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	RuntimeParameterValues   types.List            `tfsdk:"runtime_parameter_values"`
+	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
 type ApplicationSourceFromTemplateResourceModel struct {
@@ -731,6 +732,7 @@ type CustomApplicationResourceModel struct {
 	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
+	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
 type CustomApplicationFromEnvironmentResourceModel struct {
@@ -744,6 +746,7 @@ type CustomApplicationFromEnvironmentResourceModel struct {
 	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
+	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
 // CredentialResourceModel describes the credential resource.

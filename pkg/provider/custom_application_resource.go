@@ -137,6 +137,14 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
+			"required_key_scope_level": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 		},
 	}
 }
@@ -167,6 +175,10 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
 		ApplicationSourceVersionID: data.SourceVersionID.ValueString(),
+	}
+
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		createRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
 	}
 
 	// Add resources if provided
@@ -244,6 +256,8 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -280,6 +294,8 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
+
+	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -349,6 +365,7 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {

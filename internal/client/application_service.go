@@ -1,5 +1,64 @@
 package client
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type ScopeLevel string
+
+const (
+	// App requires API Key with permission only for GET requests.
+	ViewerLevel ScopeLevel = "viewer"
+
+	// App requires API Key with permission only for
+	// GET, POST, PUT, PATCH requests.
+	UserLevel ScopeLevel = "user"
+
+	// App requires API Key without permissions restriction.
+	AdminLevel ScopeLevel = "admin"
+
+	// App does not need user's API Key.
+	NoRequirements ScopeLevel = ""
+)
+
+var levelsChoice = []ScopeLevel{
+	ViewerLevel,
+	UserLevel,
+	AdminLevel,
+	NoRequirements,
+}
+
+func (level ScopeLevel) MarshalJSON() ([]byte, error) {
+	if level == NoRequirements {
+		return json.Marshal(nil)
+	}
+	return json.Marshal(string(level))
+}
+
+func (level *ScopeLevel) UnmarshalJSON(data []byte) (err error) {
+	var providedPtr *string
+	if err := json.Unmarshal(data, &providedPtr); err != nil {
+		return err
+	}
+	if providedPtr == nil {
+		*level = NoRequirements
+		return nil
+	}
+
+	providedString := *providedPtr
+	providedLevel := ScopeLevel(providedString)
+
+	for _, levelValue := range levelsChoice {
+		if providedLevel == levelValue {
+			*level = providedLevel
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid level: %v, choices: %v", providedString, levelsChoice)
+}
+
 type CreateQAApplicationRequest struct {
 	DeploymentID string `json:"deploymentId"`
 }
@@ -8,6 +67,7 @@ type CreateCustomApplicationRequest struct {
 	ApplicationSourceVersionID string                `json:"applicationSourceVersionId,omitempty"`
 	EnvironmentID              string                `json:"environmentId,omitempty"`
 	Resources                  *ApplicationResources `json:"resources,omitempty"`
+	RequiredKeyScopeLevel      ScopeLevel            `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type Application struct {
@@ -22,6 +82,7 @@ type Application struct {
 	ExternalAccessRecipients         []string              `json:"externalAccessRecipients"`
 	AllowAutoStopping                bool                  `json:"allowAutoStopping"`
 	Resources                        *ApplicationResources `json:"resources,omitempty"`
+	RequiredKeyScopeLevel            ScopeLevel            `json:"requiredKeyScopeLevel"`
 }
 
 type UpdateApplicationRequest struct {
@@ -53,6 +114,7 @@ type CreateApplicationSourceVersionRequest struct {
 	BaseEnvironmentVersionID string                `json:"baseEnvironmentVersionId,omitempty"`
 	Resources                *ApplicationResources `json:"resources,omitempty"`
 	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
+	RequiredKeyScopeLevel    ScopeLevel            `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type ApplicationSourceVersion struct {
@@ -64,6 +126,7 @@ type ApplicationSourceVersion struct {
 	RuntimeParameters        []RuntimeParameter   `json:"runtimeParameters,omitempty"`
 	Items                    []FileItem           `json:"items,omitempty"`
 	Resources                ApplicationResources `json:"resources,omitempty"`
+	RequiredKeyScopeLevel    ScopeLevel           `json:"requiredKeyScopeLevel"`
 }
 
 type UpdateApplicationSourceVersionRequest struct {
@@ -72,6 +135,7 @@ type UpdateApplicationSourceVersionRequest struct {
 	Resources                *ApplicationResources `json:"resources,omitempty"`
 	FilesToDelete            []string              `json:"filesToDelete,omitempty"`
 	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
+	RequiredKeyScopeLevel    ScopeLevel            `json:"requiredKeyScopeLevel"`
 }
 
 type ApplicationResources struct {
