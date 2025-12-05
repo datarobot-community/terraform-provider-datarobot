@@ -20,6 +20,7 @@ type CreateCustomModelRequest struct {
 	Language                                    string   `json:"language,omitempty"`
 	ClassLabels                                 []string `json:"classLabels,omitempty"`
 	IsTrainingDataForVersionsPermanentlyEnabled bool     `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
+	Tags                                        []Tag    `json:"tags,omitempty"`
 }
 
 type CreateCustomModelFromLLMBlueprintRequest struct {
@@ -46,6 +47,7 @@ type CustomModel struct {
 	IsTrainingDataForVersionsPermanentlyEnabled bool               `json:"isTrainingDataForVersionsPermanentlyEnabled"`
 	IsProxyModel                                bool               `json:"isProxyModel"`
 	DeploymentsCount                            int64              `json:"deploymentsCount"`
+	Tags                                        []Tag              `json:"tags,omitempty"`
 }
 
 type CustomModelVersion struct {
@@ -94,6 +96,7 @@ type UpdateCustomModelRequest struct {
 	Language                                    string   `json:"language,omitempty"`
 	ClassLabels                                 []string `json:"classLabels,omitempty"`
 	IsTrainingDataForVersionsPermanentlyEnabled bool     `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
+	Tags                                        []Tag    `json:"tags,omitempty"`
 }
 
 type RuntimeParameter struct {

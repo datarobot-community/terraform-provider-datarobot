@@ -205,6 +205,7 @@ type CustomModelResourceModel struct {
 	NetworkAccess                  types.String                    `tfsdk:"network_access"`
 	ResourceBundleID               types.String                    `tfsdk:"resource_bundle_id"`
 	UseCaseIDs                     []types.String                  `tfsdk:"use_case_ids"`
+	Tags                           types.Set                       `tfsdk:"tags"`
 }
 
 type FileTuple struct {

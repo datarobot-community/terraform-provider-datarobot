@@ -51,6 +51,16 @@ resource "datarobot_custom_model" "example" {
   # memory_mb      = 512
   # replicas       = 2
   # network_access = "NONE"
+  # tags = [
+  #   {
+  #     name  = "team"
+  #     value = "engineering"
+  #   },
+  #   {
+  #     name  = "env"
+  #     value = "test"
+  #   }
+  # ]
 }
 
 output "example_id" {
