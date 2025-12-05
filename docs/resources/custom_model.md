@@ -114,9 +114,9 @@ output "example_id" {
 - `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
+- `tags` (Attributes Set) The list of tags to assign to the Custom Model. (see [below for nested schema](#nestedatt--tags))
 - `target_name` (String) The target name of the Custom Model.
 - `target_type` (String) The target type of the Custom Model.
-- `tags` (Attributes Set) The list of tags to assign to the Custom Model. (see [below for nested schema](#nestedatt--tags))
 - `training_data_partition_column` (String) The name of the partition column in the training dataset assigned to the Custom Model.
 - `training_dataset_id` (String) The ID of the training dataset assigned to the Custom Model.
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Model version to.
