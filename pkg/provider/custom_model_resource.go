@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -539,7 +540,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
 		}
 
-		tags := getCustomModelTags(plan.Tags, plan.TargetType.ValueString())
+		tags := convertSetTagsToClientTags(plan.Tags)
 
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
@@ -829,7 +830,8 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	loadCustomModelToTerraformState(
 		*customModel,
 		data.SourceLLMBlueprintID.ValueString(),
-		&data)
+		&data,
+		&resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -1123,6 +1125,7 @@ func loadCustomModelToTerraformState(
 	customModel client.CustomModel,
 	sourceBlueprintId string,
 	state *CustomModelResourceModel,
+	diags *diag.Diagnostics,
 ) {
 	state.ID = types.StringValue(customModel.ID)
 	state.Name = types.StringValue(customModel.Name)
@@ -1181,7 +1184,7 @@ func loadCustomModelToTerraformState(
 	if len(customModel.Tags) > 0 {
 		tagElements := make([]attr.Value, 0, len(customModel.Tags))
 		for _, tag := range customModel.Tags {
-			tagObject, _ := types.ObjectValue(
+			tagObject, tagDiags := types.ObjectValue(
 				map[string]attr.Type{
 					"name":  types.StringType,
 					"value": types.StringType,
@@ -1191,10 +1194,14 @@ func loadCustomModelToTerraformState(
 					"value": types.StringValue(tag.Value),
 				},
 			)
+			if tagDiags.HasError() {
+				diags.Append(tagDiags...)
+				return
+			}
 			tagElements = append(tagElements, tagObject)
 		}
 
-		tagSet, _ := types.SetValue(
+		tagSet, setDiags := types.SetValue(
 			types.ObjectType{
 				AttrTypes: map[string]attr.Type{
 					"name":  types.StringType,
@@ -1203,6 +1210,10 @@ func loadCustomModelToTerraformState(
 			},
 			tagElements,
 		)
+		if setDiags.HasError() {
+			diags.Append(setDiags...)
+			return
+		}
 		state.Tags = tagSet
 	}
 }
@@ -1578,14 +1589,11 @@ func (r *CustomModelResource) updateCustomModel(
 		return
 	}
 
-	tags := getCustomModelTags(plan.Tags, plan.TargetType.ValueString())
-
 	updateRequest := &client.UpdateCustomModelRequest{
 		Name:                plan.Name.ValueString(),
 		Description:         plan.Description.ValueString(),
 		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
 		Language:            plan.Language.ValueString(),
-		Tags:                tags,
 	}
 
 	if customModel.DeploymentsCount < 1 {
@@ -2075,17 +2083,4 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 	}
 
 	return
-}
-
-func getCustomModelTags(tagsSet types.Set, targetType string) []client.Tag {
-	tags := convertSetTagsToClientTags(tagsSet)
-
-	if targetType == "MCP" {
-		tags = append(tags, client.Tag{
-			Name:  "tool",
-			Value: "mcp",
-		})
-	}
-
-	return tags
 }

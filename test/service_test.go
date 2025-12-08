@@ -1252,28 +1252,6 @@ func TestCustomModelServiceWithTags(t *testing.T) {
 	}
 	assert.Equal("engineering", tagMap["team"])
 	assert.Equal("test", tagMap["env"])
-
-	// Test updating tags
-	updatedModel, err := s.UpdateCustomModel(ctx, customModel.ID, &client.UpdateCustomModelRequest{
-		Tags: []client.Tag{
-			{Name: "team", Value: "data-science"},
-			{Name: "env", Value: "production"},
-		},
-	})
-	require.NoError(err)
-	require.NotNil(updatedModel)
-
-	// Verify updated tags
-	retrievedModel, err = s.GetCustomModel(ctx, customModel.ID)
-	require.NoError(err)
-	require.Len(retrievedModel.Tags, 2)
-
-	tagMap = make(map[string]string)
-	for _, tag := range retrievedModel.Tags {
-		tagMap[tag.Name] = tag.Value
-	}
-	assert.Equal("data-science", tagMap["team"])
-	assert.Equal("production", tagMap["env"])
 }
 
 func initializeTest(t *testing.T) client.Service {

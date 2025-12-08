@@ -96,7 +96,6 @@ type UpdateCustomModelRequest struct {
 	Language                                    string   `json:"language,omitempty"`
 	ClassLabels                                 []string `json:"classLabels,omitempty"`
 	IsTrainingDataForVersionsPermanentlyEnabled bool     `json:"isTrainingDataForVersionsPermanentlyEnabled,omitempty"`
-	Tags                                        []Tag    `json:"tags,omitempty"`
 }
 
 type RuntimeParameter struct {
