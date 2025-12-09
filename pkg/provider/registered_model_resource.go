@@ -149,6 +149,21 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 	data.VersionID = types.StringValue(registeredModelVersion.ID)
 	data.VersionName = types.StringValue(registeredModelVersion.Name)
 
+	// Set tags from API response to ensure consistency with Read method
+	if len(registeredModelVersion.Tags) > 0 {
+		data.Tags = initializeTagsFromModel(registeredModelVersion.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		data.Tags = types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+	}
+
 	if IsKnown(data.Description) {
 		traceAPICall("UpdateRegisteredModel")
 		_, err := r.provider.service.UpdateRegisteredModel(ctx,
@@ -241,39 +256,20 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
-	tagElements := make([]attr.Value, 0, len(latestRegisteredModelVersion.Tags))
-	for _, tag := range latestRegisteredModelVersion.Tags {
-		tagObject, diags := types.ObjectValue(
-			map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
-			map[string]attr.Value{
-				"name":  types.StringValue(tag.Name),
-				"value": types.StringValue(tag.Value),
-			},
-		)
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
+
+	if len(latestRegisteredModelVersion.Tags) > 0 {
+		data.Tags = initializeTagsFromModel(latestRegisteredModelVersion.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		tagElements = append(tagElements, tagObject)
-	}
-
-	tagSet, diags := types.SetValue(
-		types.ObjectType{
+	} else {
+		data.Tags = types.SetNull(types.ObjectType{
 			AttrTypes: map[string]attr.Type{
 				"name":  types.StringType,
 				"value": types.StringType,
 			},
-		},
-		tagElements,
-	)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+		})
 	}
-	data.Tags = tagSet
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

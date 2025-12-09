@@ -881,6 +881,11 @@ func normalizeTagsSet(ctx context.Context, tagsSet types.Set) (types.Set, diag.D
 		tagElements = append(tagElements, tagObject)
 	}
 
+	// If no elements were extracted, return null Set (consistent with API behavior)
+	if len(tagElements) == 0 {
+		return types.SetNull(correctElementType), diags
+	}
+
 	// Create Set with correct type
 	tagSet, setDiags := types.SetValue(correctElementType, tagElements)
 	if setDiags.HasError() {

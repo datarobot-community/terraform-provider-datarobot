@@ -8,6 +8,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -372,6 +373,31 @@ func areTagsEqual(stateTags []Tag, planTags []Tag) bool {
 	return true
 }
 
+func TestInitializeTagsFromModelWithEmptyTags(t *testing.T) {
+	t.Parallel()
+
+	// Test that initializeTagsFromModel returns null Set when tags are empty
+	var diags diag.Diagnostics
+	emptyTags := []client.Tag{}
+	result := initializeTagsFromModel(emptyTags, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("Unexpected diagnostics: %+v", diags)
+	}
+
+	// When tags are empty, initializeTagsFromModel creates an empty Set, not null
+	// But we want to verify it creates a Set with correct type
+	if result.IsNull() {
+		t.Error("Expected empty Set, not null Set")
+	}
+	if result.IsUnknown() {
+		t.Error("Expected empty Set, not unknown Set")
+	}
+	if len(result.Elements()) != 0 {
+		t.Errorf("Expected 0 elements in empty Set, got %d", len(result.Elements()))
+	}
+}
+
 func TestNormalizeTagsSet(t *testing.T) {
 	t.Parallel()
 
@@ -438,6 +464,7 @@ func TestNormalizeTagsSet(t *testing.T) {
 	}
 
 	// Test with empty Set (has correct type but empty)
+	// Empty Sets should be converted to null for consistency with API behavior
 	emptySet, _ := types.SetValue(
 		types.ObjectType{
 			AttrTypes: map[string]attr.Type{
@@ -451,11 +478,8 @@ func TestNormalizeTagsSet(t *testing.T) {
 	if diags.HasError() {
 		t.Fatalf("Unexpected diagnostics: %+v", diags)
 	}
-	if normalized.IsNull() {
-		t.Error("Expected normalized empty Set to not be null")
-	}
-	if len(normalized.Elements()) != 0 {
-		t.Errorf("Expected 0 elements, got %d", len(normalized.Elements()))
+	if !normalized.IsNull() {
+		t.Error("Expected normalized empty Set to be null (for consistency with API behavior)")
 	}
 }
 
