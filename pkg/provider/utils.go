@@ -812,6 +812,7 @@ func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
 // normalizeTagsSet ensures that a Tags Set always has the correct ObjectType,
 // converting from DynamicPseudoType or other incorrect types if necessary.
 func normalizeTagsSet(ctx context.Context, tagsSet types.Set) (types.Set, diag.Diagnostics) {
+	_ = ctx // ctx is kept for consistency with Terraform framework patterns
 	var diags diag.Diagnostics
 
 	// Define the correct element type for tags
