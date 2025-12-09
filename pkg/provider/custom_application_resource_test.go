@@ -826,9 +826,10 @@ if __name__ == "__main__":
 		Steps: []resource.TestStep{
 			// Create with required_key_scope_level set to "viewer"
 			{
-				Config: customApplicationWithScopeLevelConfig(folderPath, "viewer"),
+				Config: customApplicationWithScopeLevelConfig(folderPath, "viewer", nameSalt),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "name", "Scope Level Test App "+nameSalt),
 					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "viewer"),
 					checkCustomApplicationScopeLevel(resourceName, "viewer"),
 				),
@@ -838,7 +839,7 @@ if __name__ == "__main__":
 	})
 }
 
-func customApplicationWithScopeLevelConfig(folderPath, scopeLevel string) string {
+func customApplicationWithScopeLevelConfig(folderPath, scopeLevel, nameSalt string) string {
 	scopeLevelAttr := ""
 	if scopeLevel != "" {
 		scopeLevelAttr = fmt.Sprintf(`
@@ -853,10 +854,10 @@ resource "datarobot_application_source" "test_scope" {
 
 resource "datarobot_custom_application" "test_scope" {
 	source_version_id = datarobot_application_source.test_scope.version_id
-	name = "Scope Level Test App"
+	name = "Scope Level Test App %s"
 	allow_auto_stopping = false%s
 }
-`, folderPath, scopeLevelAttr)
+`, folderPath, nameSalt, scopeLevelAttr)
 }
 
 func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resource.TestCheckFunc {
