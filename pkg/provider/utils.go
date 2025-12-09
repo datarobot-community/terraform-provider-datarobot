@@ -809,6 +809,87 @@ func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
 	return tags
 }
 
+// normalizeTagsSet ensures that a Tags Set always has the correct ObjectType,
+// converting from DynamicPseudoType or other incorrect types if necessary.
+func normalizeTagsSet(ctx context.Context, tagsSet types.Set) (types.Set, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// Define the correct element type for tags
+	correctElementType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"name":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	// If null or unknown, return null Set with correct type
+	if tagsSet.IsNull() || tagsSet.IsUnknown() {
+		return types.SetNull(correctElementType), diags
+	}
+
+	// Always extract values and create a new Set with correct type
+	// This handles both correct types and DynamicPseudoType
+	tagElements := make([]attr.Value, 0)
+
+	for _, elem := range tagsSet.Elements() {
+		var nameStr, valueStr string
+
+		// Try to extract name and value from the element
+		// Handle both Object and Dynamic types
+		switch v := elem.(type) {
+		case types.Object:
+			attrs := v.Attributes()
+			if nameAttr, ok := attrs["name"].(types.String); ok {
+				nameStr = nameAttr.ValueString()
+			}
+			if valueAttr, ok := attrs["value"].(types.String); ok {
+				valueStr = valueAttr.ValueString()
+			}
+		case types.Dynamic:
+			// Try to extract from dynamic value
+			dynVal := v.UnderlyingValue()
+			if dynObj, ok := dynVal.(types.Object); ok {
+				attrs := dynObj.Attributes()
+				if nameAttr, ok := attrs["name"].(types.String); ok {
+					nameStr = nameAttr.ValueString()
+				}
+				if valueAttr, ok := attrs["value"].(types.String); ok {
+					valueStr = valueAttr.ValueString()
+				}
+			}
+		default:
+			// Unknown type, skip this element
+			continue
+		}
+
+		// Create tag object with correct type
+		tagObject, tagDiags := types.ObjectValue(
+			map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+			map[string]attr.Value{
+				"name":  types.StringValue(nameStr),
+				"value": types.StringValue(valueStr),
+			},
+		)
+		if tagDiags.HasError() {
+			diags.Append(tagDiags...)
+			continue
+		}
+		tagElements = append(tagElements, tagObject)
+	}
+
+	// Create Set with correct type
+	tagSet, setDiags := types.SetValue(correctElementType, tagElements)
+	if setDiags.HasError() {
+		diags.Append(setDiags...)
+		return types.SetNull(correctElementType), diags
+	}
+
+	return tagSet, diags
+}
+
 func convertDynamicType(tfType types.Dynamic) any {
 	switch t := tfType.UnderlyingValue().(type) {
 	case types.String:

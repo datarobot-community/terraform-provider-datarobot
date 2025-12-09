@@ -488,6 +488,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	// Normalize Tags to ensure it has the correct type
+	plan.Tags, diags = normalizeTagsSet(ctx, plan.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	var state CustomModelResourceModel
 	var customModelID string
 	var baseEnvironmentID string
@@ -784,6 +791,25 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
+		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else if len(customModel.Tags) > 0 {
+		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		state.Tags = types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -791,6 +817,13 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	var data CustomModelResourceModel
 
 	diags := req.State.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags to ensure it has the correct type
+	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -845,9 +878,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	// Normalize Tags to ensure it has the correct type
+	plan.Tags, diags = normalizeTagsSet(ctx, plan.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	var state CustomModelResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags from state to ensure it has the correct type
+	state.Tags, diags = normalizeTagsSet(ctx, state.Tags)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -1182,39 +1229,17 @@ func loadCustomModelToTerraformState(
 	}
 
 	if len(customModel.Tags) > 0 {
-		tagElements := make([]attr.Value, 0, len(customModel.Tags))
-		for _, tag := range customModel.Tags {
-			tagObject, tagDiags := types.ObjectValue(
-				map[string]attr.Type{
-					"name":  types.StringType,
-					"value": types.StringType,
-				},
-				map[string]attr.Value{
-					"name":  types.StringValue(tag.Name),
-					"value": types.StringValue(tag.Value),
-				},
-			)
-			if tagDiags.HasError() {
-				diags.Append(tagDiags...)
-				return
-			}
-			tagElements = append(tagElements, tagObject)
-		}
-
-		tagSet, setDiags := types.SetValue(
-			types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"name":  types.StringType,
-					"value": types.StringType,
-				},
-			},
-			tagElements,
-		)
-		if setDiags.HasError() {
-			diags.Append(setDiags...)
+		state.Tags = initializeTagsFromModel(customModel.Tags, diags)
+		if diags.HasError() {
 			return
 		}
-		state.Tags = tagSet
+	} else {
+		state.Tags = types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
 	}
 }
 
@@ -2057,6 +2082,52 @@ func (r *CustomModelResource) updateDependencyBuild(
 	}
 
 	return
+}
+
+func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.Set {
+	tagElements := make([]attr.Value, 0, len(tags))
+	for _, tag := range tags {
+		tagObject, tagDiags := types.ObjectValue(
+			map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+			map[string]attr.Value{
+				"name":  types.StringValue(tag.Name),
+				"value": types.StringValue(tag.Value),
+			},
+		)
+		if tagDiags.HasError() {
+			diags.Append(tagDiags...)
+			return types.SetNull(types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+			})
+		}
+		tagElements = append(tagElements, tagObject)
+	}
+
+	tagSet, setDiags := types.SetValue(
+		types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		},
+		tagElements,
+	)
+	if setDiags.HasError() {
+		diags.Append(setDiags...)
+		return types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+	}
+	return tagSet
 }
 
 func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err error) {

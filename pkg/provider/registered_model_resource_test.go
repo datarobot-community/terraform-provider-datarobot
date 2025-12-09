@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -369,6 +370,93 @@ func areTagsEqual(stateTags []Tag, planTags []Tag) bool {
 	}
 
 	return true
+}
+
+func TestNormalizeTagsSet(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// Test with null Set
+	nullSet := types.SetNull(types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"name":  types.StringType,
+			"value": types.StringType,
+		},
+	})
+	normalized, diags := normalizeTagsSet(ctx, nullSet)
+	if diags.HasError() {
+		t.Fatalf("Unexpected diagnostics: %+v", diags)
+	}
+	if !normalized.IsNull() {
+		t.Error("Expected normalized null Set to be null")
+	}
+
+	// Test with Set that has correct type
+	tagObject1, _ := types.ObjectValue(
+		map[string]attr.Type{
+			"name":  types.StringType,
+			"value": types.StringType,
+		},
+		map[string]attr.Value{
+			"name":  types.StringValue("team"),
+			"value": types.StringValue("engineering"),
+		},
+	)
+	tagObject2, _ := types.ObjectValue(
+		map[string]attr.Type{
+			"name":  types.StringType,
+			"value": types.StringType,
+		},
+		map[string]attr.Value{
+			"name":  types.StringValue("env"),
+			"value": types.StringValue("test"),
+		},
+	)
+	correctSet, _ := types.SetValue(
+		types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		},
+		[]attr.Value{tagObject1, tagObject2},
+	)
+	normalized, diags = normalizeTagsSet(ctx, correctSet)
+	if diags.HasError() {
+		t.Fatalf("Unexpected diagnostics: %+v", diags)
+	}
+	if normalized.IsNull() {
+		t.Error("Expected normalized Set with values to not be null")
+	}
+	if normalized.IsUnknown() {
+		t.Error("Expected normalized Set with values to not be unknown")
+	}
+	elements := normalized.Elements()
+	if len(elements) != 2 {
+		t.Errorf("Expected 2 elements, got %d", len(elements))
+	}
+
+	// Test with empty Set (has correct type but empty)
+	emptySet, _ := types.SetValue(
+		types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		},
+		[]attr.Value{},
+	)
+	normalized, diags = normalizeTagsSet(ctx, emptySet)
+	if diags.HasError() {
+		t.Fatalf("Unexpected diagnostics: %+v", diags)
+	}
+	if normalized.IsNull() {
+		t.Error("Expected normalized empty Set to not be null")
+	}
+	if len(normalized.Elements()) != 0 {
+		t.Errorf("Expected 0 elements, got %d", len(normalized.Elements()))
+	}
 }
 
 func TestAreTagsEqual(t *testing.T) {

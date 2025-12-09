@@ -7,6 +7,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -117,6 +118,14 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	// Normalize Tags to ensure it has the correct type
+	var diags diag.Diagnostics
+	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
 		CustomModelVersionID: data.CustomModelVersionId.ValueString(),
 		Name:                 getVersionName(data, 1),
@@ -192,6 +201,14 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
+	// Normalize Tags to ensure it has the correct type
+	var diags diag.Diagnostics
+	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if data.ID.IsNull() {
 		return
 	}
@@ -224,41 +241,39 @@ func (r *RegisteredModelResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data.VersionID = types.StringValue(latestRegisteredModelVersion.ID)
 	data.VersionName = types.StringValue(latestRegisteredModelVersion.Name)
-	if len(latestRegisteredModelVersion.Tags) > 0 {
-		tagElements := make([]attr.Value, 0, len(latestRegisteredModelVersion.Tags))
-		for _, tag := range latestRegisteredModelVersion.Tags {
-			tagObject, diags := types.ObjectValue(
-				map[string]attr.Type{
-					"name":  types.StringType,
-					"value": types.StringType,
-				},
-				map[string]attr.Value{
-					"name":  types.StringValue(tag.Name),
-					"value": types.StringValue(tag.Value),
-				},
-			)
-			if diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
-			tagElements = append(tagElements, tagObject)
-		}
-
-		tagSet, diags := types.SetValue(
-			types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"name":  types.StringType,
-					"value": types.StringType,
-				},
+	tagElements := make([]attr.Value, 0, len(latestRegisteredModelVersion.Tags))
+	for _, tag := range latestRegisteredModelVersion.Tags {
+		tagObject, diags := types.ObjectValue(
+			map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
 			},
-			tagElements,
+			map[string]attr.Value{
+				"name":  types.StringValue(tag.Name),
+				"value": types.StringValue(tag.Value),
+			},
 		)
 		if diags.HasError() {
 			resp.Diagnostics.Append(diags...)
 			return
 		}
-		data.Tags = tagSet
+		tagElements = append(tagElements, tagObject)
 	}
+
+	tagSet, diags := types.SetValue(
+		types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		},
+		tagElements,
+	)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	data.Tags = tagSet
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -271,9 +286,24 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
+	// Normalize Tags from plan to ensure it has the correct type
+	var diags diag.Diagnostics
+	plan.Tags, diags = normalizeTagsSet(ctx, plan.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	var state RegisteredModelResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags from state to ensure it has the correct type
+	state.Tags, diags = normalizeTagsSet(ctx, state.Tags)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
