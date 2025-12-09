@@ -13,6 +13,8 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -441,6 +443,22 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Model version to.",
 				ElementType:         types.StringType,
 			},
+			"tags": schema.SetNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "The list of tags to assign to the Custom Model.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the tag.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the tag.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -465,6 +483,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	var memoryMB int64
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags to ensure it has the correct type
+	plan.Tags, diags = normalizeTagsSet(ctx, plan.Tags)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -522,6 +547,8 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
 		}
 
+		tags := convertSetTagsToClientTags(plan.Tags)
+
 		traceAPICall("CreateCustomModel")
 		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
 			Name:                plan.Name.ValueString(),
@@ -536,6 +563,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsProxyModel:        plan.IsProxy.ValueBool(),
 			ClassLabels:         classLabels,
 			IsTrainingDataForVersionsPermanentlyEnabled: true,
+			Tags: tags,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -763,6 +791,25 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
+		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else if len(customModel.Tags) > 0 {
+		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		state.Tags = types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -770,6 +817,13 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	var data CustomModelResourceModel
 
 	diags := req.State.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags to ensure it has the correct type
+	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -809,7 +863,8 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	loadCustomModelToTerraformState(
 		*customModel,
 		data.SourceLLMBlueprintID.ValueString(),
-		&data)
+		&data,
+		&resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -823,9 +878,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	// Normalize Tags to ensure it has the correct type
+	plan.Tags, diags = normalizeTagsSet(ctx, plan.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	var state CustomModelResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Normalize Tags from state to ensure it has the correct type
+	state.Tags, diags = normalizeTagsSet(ctx, state.Tags)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -1103,6 +1172,7 @@ func loadCustomModelToTerraformState(
 	customModel client.CustomModel,
 	sourceBlueprintId string,
 	state *CustomModelResourceModel,
+	diags *diag.Diagnostics,
 ) {
 	state.ID = types.StringValue(customModel.ID)
 	state.Name = types.StringValue(customModel.Name)
@@ -1156,6 +1226,20 @@ func loadCustomModelToTerraformState(
 	state.NetworkAccess = types.StringValue(defaultNetworkAccess)
 	if customModel.LatestVersion.NetworkEgressPolicy != nil {
 		state.NetworkAccess = types.StringValue(*customModel.LatestVersion.NetworkEgressPolicy)
+	}
+
+	if len(customModel.Tags) > 0 {
+		state.Tags = initializeTagsFromModel(customModel.Tags, diags)
+		if diags.HasError() {
+			return
+		}
+	} else {
+		state.Tags = types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
 	}
 }
 
@@ -1998,6 +2082,52 @@ func (r *CustomModelResource) updateDependencyBuild(
 	}
 
 	return
+}
+
+func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.Set {
+	tagElements := make([]attr.Value, 0, len(tags))
+	for _, tag := range tags {
+		tagObject, tagDiags := types.ObjectValue(
+			map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+			map[string]attr.Value{
+				"name":  types.StringValue(tag.Name),
+				"value": types.StringValue(tag.Value),
+			},
+		)
+		if tagDiags.HasError() {
+			diags.Append(tagDiags...)
+			return types.SetNull(types.ObjectType{
+				AttrTypes: map[string]attr.Type{
+					"name":  types.StringType,
+					"value": types.StringType,
+				},
+			})
+		}
+		tagElements = append(tagElements, tagObject)
+	}
+
+	tagSet, setDiags := types.SetValue(
+		types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		},
+		tagElements,
+	)
+	if setDiags.HasError() {
+		diags.Append(setDiags...)
+		return types.SetNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+	}
+	return tagSet
 }
 
 func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err error) {

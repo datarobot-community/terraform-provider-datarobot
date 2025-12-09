@@ -1166,6 +1166,42 @@ func TestAccAnomalyCustomModelResource(t *testing.T) {
 	})
 }
 
+func TestAccCustomModelWithTagsResource(t *testing.T) {
+	t.Parallel()
+
+	resourceName := "datarobot_custom_model.test_with_tags"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with tags
+			{
+				Config: customModelResourceConfigWithTags("example_name_tags", "Unstructured", "python"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "name", "example_name_tags"),
+					resource.TestCheckResourceAttr(resourceName, "target_type", "Unstructured"),
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{
+						"name":  "team",
+						"value": "engineering",
+					}),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{
+						"name":  "env",
+						"value": "test",
+					}),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
 func TestCustomModelResourceSchema(t *testing.T) {
 	t.Parallel()
 
@@ -1740,4 +1776,34 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 
 		return fmt.Errorf("Custom Model not found")
 	}
+}
+
+func customModelResourceConfigWithTags(
+	name,
+	targetType,
+	language string) string {
+	resourceBlock, customModelBlock := remoteRepositoryResource("test_custom_model_tags")
+
+	return fmt.Sprintf(`
+%s
+
+resource "datarobot_custom_model" "test_with_tags" {
+	name        		  							  = "%s"
+	target_type           							  = "%s"
+	language 			  							  = "%s"
+	base_environment_id 							  = "65f9b27eab986d30d4c64268"
+	%s
+
+	tags = [
+		{
+			name  = "team"
+			value = "engineering"
+		},
+		{
+			name  = "env"
+			value = "test"
+		}
+	]
+}
+`, resourceBlock, name, targetType, language, customModelBlock)
 }
