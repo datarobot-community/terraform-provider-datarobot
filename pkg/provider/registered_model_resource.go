@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -427,31 +428,42 @@ func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
 }
 
 func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (customModel client.CustomModel, err error) {
-	traceAPICall("ListCustomModels")
-	customModels, err := r.provider.service.ListCustomModels(ctx)
-	if err != nil {
-		return
-	}
+	expBackoff := getExponentialBackoff()
 
-	for index := range customModels {
-		customModel = customModels[index]
-		if customModel.LatestVersion.ID == customModelVersionID {
-			return
+	operation := func() error {
+		traceAPICall("ListCustomModels")
+		customModels, err := r.provider.service.ListCustomModels(ctx)
+		if err != nil {
+			// Retry on errors as the API might be temporarily unavailable
+			return err
 		}
 
-		var customModelVersions []client.CustomModelVersion
-		if customModelVersions, err = r.provider.service.ListCustomModelVersions(ctx, customModel.ID); err != nil {
-			return
-		}
+		for index := range customModels {
+			customModel = customModels[index]
+			if customModel.LatestVersion.ID == customModelVersionID {
+				return nil
+			}
 
-		for _, customModelVersion := range customModelVersions {
-			if customModelVersion.ID == customModelVersionID {
-				return
+			var customModelVersions []client.CustomModelVersion
+			customModelVersions, err = r.provider.service.ListCustomModelVersions(ctx, customModel.ID)
+			if err != nil {
+				// Retry on errors as the versions list might not be immediately consistent
+				return err
+			}
+
+			for _, customModelVersion := range customModelVersions {
+				if customModelVersion.ID == customModelVersionID {
+					return nil
+				}
 			}
 		}
+
+		// Custom model not found yet, retry
+		return fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
 	}
 
-	err = fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
+	// Retry the operation using the backoff strategy
+	err = backoff.Retry(operation, expBackoff)
 	return
 }
 
