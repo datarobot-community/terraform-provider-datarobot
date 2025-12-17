@@ -533,7 +533,32 @@ func (s *ServiceImpl) IsCustomModelReady(ctx context.Context, id string) (bool, 
 	if err != nil {
 		return false, err
 	}
-	return customModel.LatestVersion.ID != "", nil
+	
+	// Check if version exists
+	if customModel.LatestVersion.ID == "" {
+		return false, nil
+	}
+	
+	// If the model has dependencies, check if dependency build is complete
+	if len(customModel.LatestVersion.Dependencies) > 0 {
+		dependencyBuild, err := s.GetDependencyBuild(ctx, id, customModel.LatestVersion.ID)
+		if err != nil {
+			// If dependency build doesn't exist yet or API returns error, consider not ready
+			return false, nil
+		}
+		
+		// Check build status
+		if dependencyBuild.BuildStatus == "failed" {
+			return false, fmt.Errorf("dependency build failed for custom model %s version %s", id, customModel.LatestVersion.ID)
+		}
+		
+		if dependencyBuild.BuildStatus != "success" {
+			// Build is in progress
+			return false, nil
+		}
+	}
+	
+	return true, nil
 }
 
 func (s *ServiceImpl) UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error) {
