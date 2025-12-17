@@ -540,25 +540,26 @@ func (s *ServiceImpl) IsCustomModelReady(ctx context.Context, id string) (bool, 
 		return false, nil
 	}
 
-	// If the model has dependencies, check if dependency build is complete
+	// If the model has dependencies, check if dependency build is complete (if it exists)
+	// Note: Dependency builds are created separately and may not always exist
 	if len(customModel.LatestVersion.Dependencies) > 0 {
 		dependencyBuild, err := s.GetDependencyBuild(ctx, id, customModel.LatestVersion.ID)
 		if err != nil {
-			// If dependency build doesn't exist yet or hasn't been started, consider not ready
+			// If dependency build doesn't exist or hasn't been started, model is ready
+			// (dependency build is created and managed separately)
 			var notFoundErr *NotFoundError
 			if errors.As(err, &notFoundErr) {
-				return false, nil
+				return true, nil
 			}
-			// Check if build hasn't been started yet (422 error with specific message)
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "build has not been started") {
-				return false, nil
+				return true, nil
 			}
 			// For other errors, propagate them
 			return false, err
 		}
 
-		// Check build status
+		// If dependency build exists, check its status
 		if dependencyBuild.BuildStatus == "failed" {
 			return false, fmt.Errorf("dependency build failed for custom model %s version %s", id, customModel.LatestVersion.ID)
 		}
