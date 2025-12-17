@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Service interface {
@@ -543,9 +544,14 @@ func (s *ServiceImpl) IsCustomModelReady(ctx context.Context, id string) (bool, 
 	if len(customModel.LatestVersion.Dependencies) > 0 {
 		dependencyBuild, err := s.GetDependencyBuild(ctx, id, customModel.LatestVersion.ID)
 		if err != nil {
-			// If dependency build doesn't exist yet, consider not ready
+			// If dependency build doesn't exist yet or hasn't been started, consider not ready
 			var notFoundErr *NotFoundError
 			if errors.As(err, &notFoundErr) {
+				return false, nil
+			}
+			// Check if build hasn't been started yet (422 error with specific message)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "build has not been started") {
 				return false, nil
 			}
 			// For other errors, propagate them

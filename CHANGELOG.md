@@ -1,3 +1,8 @@
+## Unreleased
+
+### Fixed
+ - Fixed flaky test `TestAccDataRobotCustomModel_basic` by adding retry logic for reading Custom Model after creation.
+
 ## [0.10.27] - 2025-12-05
 
 - Added support for creating tags for custom model
