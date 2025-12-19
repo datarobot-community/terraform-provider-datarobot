@@ -461,7 +461,8 @@ func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Cont
 		return fmt.Errorf("error finding Custom Model: %w", err)
 	}
 
-	if customModel.TargetType == "TextGeneration" {
+	switch customModel.TargetType {
+	case "TextGeneration", "AgenticWorkflow":
 		for _, runtimeParameter := range customModel.LatestVersion.RuntimeParameters {
 			if runtimeParameter.FieldName == PromptRuntimeParameterName && runtimeParameter.CurrentValue != nil {
 				prompt, ok := runtimeParameter.CurrentValue.(string)
