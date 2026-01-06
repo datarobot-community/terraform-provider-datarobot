@@ -1,3 +1,7 @@
+## [Unreleased]
+
+- Fixing flaky tests in CI
+
 ## [0.10.27] - 2025-12-05
 
 - Added support for creating tags for custom model
