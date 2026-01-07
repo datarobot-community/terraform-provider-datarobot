@@ -791,24 +791,9 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
-		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	} else if len(customModel.Tags) > 0 {
-		state.Tags = initializeTagsFromModel(customModel.Tags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	} else {
-		state.Tags = types.SetNull(types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
-		})
-	}
+	// Use the planned tags in the state to avoid inconsistency issues
+	// The Read operation will refresh from the API if needed
+	state.Tags = plan.Tags
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -817,13 +802,6 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 	var data CustomModelResourceModel
 
 	diags := req.State.Get(ctx, &data)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Normalize Tags to ensure it has the correct type
-	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -865,6 +843,13 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		data.SourceLLMBlueprintID.ValueString(),
 		&data,
 		&resp.Diagnostics)
+
+	// Normalize Tags after loading from API to ensure correct type
+	data.Tags, diags = normalizeTagsSet(ctx, data.Tags)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -1233,14 +1218,7 @@ func loadCustomModelToTerraformState(
 		if diags.HasError() {
 			return
 		}
-	} else {
-		state.Tags = types.SetNull(types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
-		})
-	}
+	} // Don't overwrite tags with null if API doesn't return them
 }
 
 func (r *CustomModelResource) waitForCustomModelToBeReady(ctx context.Context, customModelId string) (*client.CustomModel, error) {
