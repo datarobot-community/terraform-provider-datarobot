@@ -188,7 +188,7 @@ func datasourceResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_datastore" "test_datasource_db" {
-	canonical_name = "test datasource db"
+	canonical_name = "test datasource db %s"
 	data_store_type = "dr-database-v1"
 	driver_id = "%s"
 	fields = [
@@ -200,7 +200,7 @@ resource "datarobot_datastore" "test_datasource_db" {
 	]
 }
 resource "datarobot_datastore" "test_datasource_connector" {
-	canonical_name = "test datasource connector"
+	canonical_name = "test datasource connector %s"
 	data_store_type = "dr-connector-v1"
 	connector_id = "%s"
 	fields = [
@@ -219,7 +219,7 @@ resource "datarobot_datasource" "test" {
 		%s
 	}
 }
-`, bigQueryDriverID, s3ConnectorID, name, datasourceType, resourceName, params)
+`, nameSalt, bigQueryDriverID, nameSalt, s3ConnectorID, name, datasourceType, resourceName, params)
 }
 
 func checkDatasourceResourceExists() resource.TestCheckFunc {
