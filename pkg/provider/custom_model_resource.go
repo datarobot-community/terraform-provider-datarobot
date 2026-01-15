@@ -1100,6 +1100,17 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
 			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
+		} else if IsKnown(plan.BaseEnvironmentID) {
+			// if base environment id has changed, look up the latest version for the new environment
+			traceAPICall("GetExecutionEnvironment")
+			executionEnvironment, err := r.provider.service.GetExecutionEnvironment(ctx, plan.BaseEnvironmentID.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error getting Execution Environment",
+					fmt.Sprintf("Unable to get Execution Environment %s: %s", plan.BaseEnvironmentID.ValueString(), err.Error()))
+				return
+			}
+			plan.BaseEnvironmentVersionID = types.StringValue(executionEnvironment.LatestVersion.ID)
 		}
 	}
 
