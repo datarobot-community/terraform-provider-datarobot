@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
+
 ## [0.10.29] - 2026-01-25
 
 - Fixed file upload issue. When uploading files (Application Sources, Custom Models, etc.), file paths with whitespace (especially Windows CRLF \r\n) were being sent directly to the API without normalization, causing the error: "Can not store file ..."
