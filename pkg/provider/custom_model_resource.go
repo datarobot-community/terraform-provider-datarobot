@@ -944,7 +944,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValues(ctx, customModel, plan); err != nil {
+	if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -1630,20 +1630,34 @@ func (r *CustomModelResource) updateCustomModel(
 func (r *CustomModelResource) updateRuntimeParameterValues(
 	ctx context.Context,
 	customModel *client.CustomModel,
+	state CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
 	err error,
 ) {
-	runtimeParameterValues := make([]RuntimeParameterValue, 0)
+	planRuntimeParameterValues := make([]RuntimeParameterValue, 0)
 	if IsKnown(plan.RuntimeParameterValues) {
-		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &planRuntimeParameterValues, false); diags.HasError() {
 			err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
 			return
 		}
 	}
 
+	stateRuntimeParameterValues := make([]RuntimeParameterValue, 0)
+	if IsKnown(state.RuntimeParameterValues) {
+		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &stateRuntimeParameterValues, false); diags.HasError() {
+			err = fmt.Errorf("Error reading state runtime parameter values: %s", diags.Errors()[0].Detail())
+			return
+		}
+	}
+
+	planParamKeys := make(map[string]bool)
+	for _, param := range planRuntimeParameterValues {
+		planParamKeys[param.Key.ValueString()] = true
+	}
+
 	params := make([]client.RuntimeParameterValueRequest, 0)
-	for _, param := range runtimeParameterValues {
+	for _, param := range planRuntimeParameterValues {
 		var value any
 		if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
 			return
@@ -1653,6 +1667,17 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 			Type:      param.Type.ValueString(),
 			Value:     &value,
 		})
+	}
+
+	// Add nil values for parameters that exist in state but not in plan (removed parameters)
+	for _, stateParam := range stateRuntimeParameterValues {
+		if !planParamKeys[stateParam.Key.ValueString()] {
+			params = append(params, client.RuntimeParameterValueRequest{
+				FieldName: stateParam.Key.ValueString(),
+				Type:      stateParam.Type.ValueString(),
+				Value:     nil,
+			})
+		}
 	}
 
 	if len(params) > 0 {
