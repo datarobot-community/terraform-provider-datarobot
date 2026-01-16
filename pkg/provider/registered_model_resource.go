@@ -68,6 +68,7 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The ID of the custom model version for this Registered Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"use_case_ids": schema.ListAttribute{
