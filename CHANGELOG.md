@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
+
 ## [0.10.28] - 2026-01-15
 
 ### Fixed
