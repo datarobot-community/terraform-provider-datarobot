@@ -12,6 +12,7 @@ linters:
     - godot
     - govet
     - ineffassign
+    - lll
     - makezero
     - misspell
     - nilerr
@@ -28,6 +29,14 @@ linters:
       min-complexity: 40
     gocognit:
       min-complexity: 70
+    godox:
+      keywords:
+        - TODO
+        - FIXME
+        - HACK
+        - BUG
+    lll:
+      line-length: 400
     revive:
       rules:
         - name: package-comments

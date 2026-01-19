@@ -18,6 +18,10 @@ website/node_modules
 .terraform/
 *.log
 *.bak
+
+# Test coverage and results
+coverage.out
+test-results.xml
 *~
 .*.swp
 .idea

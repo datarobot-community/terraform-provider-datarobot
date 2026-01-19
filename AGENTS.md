@@ -16,6 +16,9 @@ make lint                    # Uses golangci-lint
 # Unit tests
 make test
 
+# Unit tests with coverage report
+make test-coverage
+
 # Acceptance tests (requires TF_ACC=1)
 make testacc
 
@@ -42,8 +45,11 @@ make mocks
 - Use the client service interface from `internal/client/service.go`
 
 ### Testing
-- Unit tests: `go test ./... -v`
+- Unit tests: `make test` or `go test ./... -v`
+- Unit tests with coverage: `make test-coverage` (generates coverage.out report)
 - Acceptance tests require DataRobot credentials and `TF_ACC=1`
+- CI uses `gotestsum` for test timing, JUnit reports, and flaky test retries (--rerun-fails)
+- Test results uploaded as artifacts (test-results.xml, coverage.out)
 - Mocks are generated with mockgen
 
 ### Code Style

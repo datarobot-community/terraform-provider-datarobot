@@ -1,0 +1,111 @@
+# Automated PR Review workflow using Factory Droid
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Automated Code Review
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          echo "Getting changed files..."
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+          cat changed_files.txt
+          echo "files=$(cat changed_files.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Review checklist
+        run: |
+          echo "## PR Review Checklist" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if CHANGELOG was updated
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "CHANGELOG.md"; then
+            echo "- [x] CHANGELOG.md updated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- [ ] CHANGELOG.md updated (may be required for user-facing changes)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check if tests exist for new resources
+          new_resources=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E "pkg/provider/.*_resource\.go$" | grep -v "_test\.go" || true)
+          if [ -n "$new_resources" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### New/Modified Resources" >> $GITHUB_STEP_SUMMARY
+            for resource in $new_resources; do
+              test_file="${resource%%.go}_test.go"
+              if [ -f "$test_file" ]; then
+                echo "- [x] $resource has tests" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "- [ ] $resource missing tests ($test_file)" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          fi
+          
+          # Check for TODOs in changed files
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tech Debt in Changed Files" >> $GITHUB_STEP_SUMMARY
+          todo_count=0
+          for file in $(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep "\.go$"); do
+            if [ -f "$file" ]; then
+              count=$(grep -c "TODO\|FIXME\|HACK\|BUG" "$file" 2>/dev/null || echo "0")
+              if [ "$count" -gt 0 ]; then
+                echo "- $file: $count markers" >> $GITHUB_STEP_SUMMARY
+                todo_count=$((todo_count + count))
+              fi
+            fi
+          done
+          if [ "$todo_count" -eq 0 ]; then
+            echo "No TODO/FIXME markers in changed files" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Get the summary
+            const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+            
+            // Find existing bot comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('PR Review Checklist')
+            );
+            
+            const body = `## 🤖 Automated PR Review\n\n${summary}\n\n---\n*This review was generated automatically.*`;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
