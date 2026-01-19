@@ -1,0 +1,30 @@
+{
+  "autonomy": "medium",
+  "diffMode": "unified",
+  "soundNotifications": true,
+  "commandAllowlist": [
+    "go build",
+    "go test",
+    "go generate",
+    "go mod tidy",
+    "go fmt",
+    "make",
+    "make build",
+    "make test",
+    "make lint",
+    "make generate",
+    "make mocks",
+    "golangci-lint",
+    "git status",
+    "git diff",
+    "git log",
+    "git branch",
+    "git checkout",
+    "git add",
+    "git commit"
+  ],
+  "commandDenylist": [
+    "rm -rf /",
+    "make testacc"
+  ]
+}
