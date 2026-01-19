@@ -3,9 +3,12 @@ linters:
   default: none
   enable:
     - copyloopvar
+    - dupl
     - durationcheck
     - errcheck
     - forcetypeassert
+    - gocognit
+    - gocyclo
     - godot
     - govet
     - ineffassign
@@ -13,10 +16,21 @@ linters:
     - misspell
     - nilerr
     - predeclared
+    - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
+  settings:
+    dupl:
+      threshold: 400
+    gocyclo:
+      min-complexity: 40
+    gocognit:
+      min-complexity: 70
+    revive:
+      rules:
+        - name: package-comments
   exclusions:
     generated: lax
     presets:
@@ -28,6 +42,15 @@ linters:
       - third_party$
       - builtin$
       - examples$
+    rules:
+      - linters:
+          - dupl
+          - gocognit
+          - gocyclo
+        path: _test\.go$
+      - linters:
+          - dupl
+        path: _credential_resource\.go$
 issues:
   max-same-issues: 0
 formatters:
