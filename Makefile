@@ -41,8 +41,12 @@ install: build
 test:
 	go test ./... -v $(TESTARGS) -timeout 5m
 
+test-coverage:
+	go test ./... -v -cover -coverprofile=coverage.out -covermode=atomic -timeout 5m || true
+	@go tool cover -func=coverage.out | tail -1
+
 testacc:
-	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -paralleldot0
+	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -parallel=4
 
 lint:
 	echo "Running checks for service"
