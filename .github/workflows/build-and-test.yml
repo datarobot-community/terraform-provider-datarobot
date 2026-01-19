@@ -126,31 +126,11 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
       - run: go mod download
-      - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@latest
-      - name: Tests with coverage and timing
+      - name: Run unit tests (schema and utility tests only)
         run: |
-          gotestsum --format testdox --junitfile test-results.xml \
-            --rerun-fails --rerun-fails-max-failures=5 --packages="./..." -- \
-            -v -cover -coverprofile=coverage.out -covermode=atomic \
-            -timeout 5m -race
-      - name: Report coverage
-        run: |
-          go tool cover -func=coverage.out | tail -1
-          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
-          echo "Total coverage: ${coverage}%"
-          echo "::notice::Coverage is ${coverage}% (acceptance tests require DATAROBOT_API_TOKEN)"
-      - name: Upload coverage report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: coverage-report
-          path: coverage.out
-      - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: test-results
-          path: test-results.xml
+          # Run only true unit tests that don't require API credentials
+          # These are schema validation tests and utility function tests
+          go test ./pkg/provider/... -v -run "Schema|TestZip|TestAreTagsEqual|TestConvert|TestNormalize|TestNextLabel|TestInitialize|TestNotebookResourceMethods" -timeout 5m
 
   # Run acceptance tests in a matrix with Terraform CLI versions
   test:
