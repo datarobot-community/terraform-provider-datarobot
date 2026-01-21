@@ -323,9 +323,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				Computed:            true,
 				MarkdownDescription: "Owner user details including ID, username and email.",
 				Attributes: map[string]schema.Attribute{
-					"id": schema.StringAttribute{Computed: true},
+					"id":       schema.StringAttribute{Computed: true},
 					"username": schema.StringAttribute{Computed: true},
-					"email": schema.StringAttribute{Computed: true},
+					"email":    schema.StringAttribute{Computed: true},
 				},
 			},
 			"status_details": schema.SingleNestedAttribute{
@@ -337,8 +337,8 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 						MarkdownDescription: "Parsed conditions from the latest workload status.",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
-								"type": schema.StringAttribute{Computed: true},
-								"name": schema.StringAttribute{Computed: true},
+								"type":  schema.StringAttribute{Computed: true},
+								"name":  schema.StringAttribute{Computed: true},
 								"value": schema.StringAttribute{Computed: true},
 							},
 						},
@@ -405,6 +405,12 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 	}
 	// Preserve desired running flag in state
 	state.Running = data.Running
+	// Keep config fields from plan (API may not return them reliably).
+	// This also prevents "inconsistent result after apply" when the API
+	// injects default runtime resources not specified in the config.
+	state.Artifact = data.Artifact
+	state.ArtifactID = data.ArtifactID
+	state.Runtime = data.Runtime
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -626,14 +632,14 @@ func workloadFromClient(ctx context.Context, w *client.WorkloadFormatted) (Workl
 	var diags diag.Diagnostics
 
 	out := WorkloadResourceModel{
-		ID:          types.StringValue(w.ID),
-		Name:        types.StringValue(w.Name),
-		Status:      types.StringValue(string(w.Status)),
-		InternalURL: types.StringValue(w.InternalURL),
-		CreatedAt:   types.StringValue(w.CreatedAt),
-		UpdatedAt:   types.StringValue(w.UpdatedAt),
-		ArtifactID:  types.StringValue(w.ArtifactID),
-		Endpoint:    StringPointerValue(w.Endpoint),
+		ID:           types.StringValue(w.ID),
+		Name:         types.StringValue(w.Name),
+		Status:       types.StringValue(string(w.Status)),
+		InternalURL:  types.StringValue(w.InternalURL),
+		CreatedAt:    types.StringValue(w.CreatedAt),
+		UpdatedAt:    types.StringValue(w.UpdatedAt),
+		ArtifactID:   types.StringValue(w.ArtifactID),
+		Endpoint:     StringPointerValue(w.Endpoint),
 		RunningSince: StringPointerValue(w.RunningSince),
 	}
 
@@ -699,4 +705,3 @@ func workloadRuntimeFromClient(ctx context.Context, rt client.WorkloadRuntimeFor
 }
 
 // status_details mapping is handled by workloadStatusDetailsObjectValueFromClient in utils.go
-

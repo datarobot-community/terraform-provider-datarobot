@@ -1081,23 +1081,23 @@ func (s *ServiceImpl) DeleteArtifact(ctx context.Context, id string) error {
 
 // Workload API: Workloads
 func (s *ServiceImpl) CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*WorkloadFormatted, error) {
-	return Post[WorkloadFormatted](s.client, ctx, "/workloads/", req)
+	return Post[WorkloadFormatted](s.client, ctx, "/console/workloads/", req)
 }
 
 func (s *ServiceImpl) GetWorkload(ctx context.Context, id string) (*WorkloadFormatted, error) {
-	return Get[WorkloadFormatted](s.client, ctx, "/workloads/"+id)
+	return Get[WorkloadFormatted](s.client, ctx, "/console/workloads/"+id)
 }
 
 func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/workloads/"+id)
+	return Delete(s.client, ctx, "/console/workloads/"+id)
 }
 
 func (s *ServiceImpl) StartWorkload(ctx context.Context, id string) error {
-	_, err := Post[CreateVoidResponse](s.client, ctx, "/workloads/"+id+"/start", &CreateVoidRequest{})
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/console/workloads/"+id+"/start", &CreateVoidRequest{})
 	return err
 }
 
 func (s *ServiceImpl) StopWorkload(ctx context.Context, id string) error {
-	_, err := Post[CreateVoidResponse](s.client, ctx, "/workloads/"+id+"/stop", &CreateVoidRequest{})
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/console/workloads/"+id+"/stop", &CreateVoidRequest{})
 	return err
 }
