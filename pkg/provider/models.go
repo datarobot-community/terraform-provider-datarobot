@@ -937,3 +937,121 @@ type AppOAuthResourceModel struct {
 	SecureConfigID types.String `tfsdk:"secure_config_id"`
 	Status         types.String `tfsdk:"status"`
 }
+
+// ArtifactResourceModel describes a Workload API artifact resource.
+type ArtifactResourceModel struct {
+	ID                   types.String          `tfsdk:"id"`
+	Name                 types.String          `tfsdk:"name"`
+	Description          types.String          `tfsdk:"description"`
+	Status               types.String          `tfsdk:"status"`
+	Type                 types.String          `tfsdk:"type"`
+	ArtifactCollectionID types.String          `tfsdk:"artifact_collection_id"`
+	Version              types.Int64           `tfsdk:"version"`
+	CreatedAt            types.String          `tfsdk:"created_at"`
+	UpdatedAt            types.String          `tfsdk:"updated_at"`
+	Spec                 ArtifactSpecModel     `tfsdk:"spec"`
+	Creator              basetypes.ObjectValue `tfsdk:"creator"`
+}
+
+type ArtifactSpecModel struct {
+	ContainerGroups []ArtifactContainerGroupModel `tfsdk:"container_groups"`
+}
+
+type ArtifactContainerGroupModel struct {
+	Containers []ArtifactContainerModel `tfsdk:"containers"`
+}
+
+type ArtifactContainerModel struct {
+	ImageURI        types.String                  `tfsdk:"image_uri"`
+	ResourceRequest ArtifactResourceRequestModel  `tfsdk:"resource_request"`
+	Name            types.String                  `tfsdk:"name"`
+	Description     types.String                  `tfsdk:"description"`
+	Entrypoint      []types.String                `tfsdk:"entrypoint"`
+	EnvironmentVars []ArtifactEnvironmentVarModel `tfsdk:"environment_vars"`
+	Port            types.Int64                   `tfsdk:"port"`
+	Primary         types.Bool                    `tfsdk:"primary"`
+	LivenessProbe   *ArtifactProbeConfigModel     `tfsdk:"liveness_probe"`
+	ReadinessProbe  *ArtifactProbeConfigModel     `tfsdk:"readiness_probe"`
+	StartupProbe    *ArtifactProbeConfigModel     `tfsdk:"startup_probe"`
+}
+
+type ArtifactEnvironmentVarModel struct {
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+type ArtifactResourceRequestModel struct {
+	CPU     types.Float64 `tfsdk:"cpu"`
+	Memory  types.Int64   `tfsdk:"memory"`
+	GPU     types.Int64   `tfsdk:"gpu"`
+	GPUType types.String  `tfsdk:"gpu_type"`
+}
+
+type ArtifactProbeConfigModel struct {
+	Path                types.String `tfsdk:"path"`
+	Scheme              types.String `tfsdk:"scheme"`
+	Port                types.Int64  `tfsdk:"port"`
+	Host                types.String `tfsdk:"host"`
+	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
+	PeriodSeconds       types.Int64  `tfsdk:"period_seconds"`
+	InitialDelaySeconds types.Int64  `tfsdk:"initial_delay_seconds"`
+	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
+	HTTPHeaders         types.Map    `tfsdk:"http_headers"`
+}
+
+// WorkloadResourceModel describes a Workload API workload resource.
+type WorkloadResourceModel struct {
+	ID         types.String                 `tfsdk:"id"`
+	Name       types.String                 `tfsdk:"name"`
+	ArtifactID types.String                 `tfsdk:"artifact_id"`
+	Artifact   *WorkloadInlineArtifactModel `tfsdk:"artifact"`
+	Runtime    WorkloadRuntimeModel         `tfsdk:"runtime"`
+	Running    types.Bool                   `tfsdk:"running"`
+
+	// Computed fields
+	Status        types.String          `tfsdk:"status"`
+	Endpoint      types.String          `tfsdk:"endpoint"`
+	InternalURL   types.String          `tfsdk:"internal_url"`
+	CreatedAt     types.String          `tfsdk:"created_at"`
+	UpdatedAt     types.String          `tfsdk:"updated_at"`
+	RunningSince  types.String          `tfsdk:"running_since"`
+	Creator       basetypes.ObjectValue `tfsdk:"creator"`
+	StatusDetails basetypes.ObjectValue `tfsdk:"status_details"`
+}
+
+type WorkloadInlineArtifactModel struct {
+	Name                 types.String      `tfsdk:"name"`
+	Description          types.String      `tfsdk:"description"`
+	Status               types.String      `tfsdk:"status"`
+	Type                 types.String      `tfsdk:"type"`
+	ArtifactCollectionID types.String      `tfsdk:"artifact_collection_id"`
+	Spec                 ArtifactSpecModel `tfsdk:"spec"`
+}
+
+type WorkloadRuntimeModel struct {
+	ReplicaCount types.Int64                   `tfsdk:"replica_count"`
+	Autoscaling  *WorkloadAutoscalingModel     `tfsdk:"autoscaling"`
+	Resources    []WorkloadResourceBundleModel `tfsdk:"resources"`
+}
+
+type WorkloadResourceBundleModel struct {
+	ResourceBundleID types.String `tfsdk:"resource_bundle_id"`
+	GPUMaker         types.String `tfsdk:"gpu_maker"`
+	GPUTypeLabel     types.String `tfsdk:"gpu_type_label"`
+	Type             types.String `tfsdk:"type"`
+}
+
+type WorkloadAutoscalingModel struct {
+	Enabled  types.Bool                       `tfsdk:"enabled"`
+	Policies []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
+}
+
+type WorkloadAutoscalingPolicyModel struct {
+	ScalingMetric types.String  `tfsdk:"scaling_metric"`
+	Target        types.Float64 `tfsdk:"target"`
+	MinCount      types.Int64   `tfsdk:"min_count"`
+	MaxCount      types.Int64   `tfsdk:"max_count"`
+	Priority      types.Int64   `tfsdk:"priority"`
+}
+
+// status_details is represented as basetypes.ObjectValue to properly handle unknown values for computed nested attributes.

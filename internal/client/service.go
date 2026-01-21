@@ -241,6 +241,20 @@ type Service interface {
 	GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error)
 	UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
 	DeleteAppOAuthProvider(ctx context.Context, id string) error
+
+	// Workload API: Artifacts
+	CreateArtifact(ctx context.Context, req *InputArtifact) (*ArtifactFormatted, error)
+	GetArtifact(ctx context.Context, id string) (*ArtifactFormatted, error)
+	UpdateArtifact(ctx context.Context, id string, req *InputArtifact) (*ArtifactFormatted, error)
+	PatchArtifact(ctx context.Context, id string, req *UpdateArtifactRequest) (*ArtifactFormatted, error)
+	DeleteArtifact(ctx context.Context, id string) error
+
+	// Workload API: Workloads
+	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*WorkloadFormatted, error)
+	GetWorkload(ctx context.Context, id string) (*WorkloadFormatted, error)
+	DeleteWorkload(ctx context.Context, id string) error
+	StartWorkload(ctx context.Context, id string) error
+	StopWorkload(ctx context.Context, id string) error
 	// Add your service methods here
 }
 
@@ -1042,4 +1056,48 @@ func (s *ServiceImpl) UpdateAppOAuthProvider(ctx context.Context, id string, req
 
 func (s *ServiceImpl) DeleteAppOAuthProvider(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/externalOAuth/providers/"+id+"/")
+}
+
+// Workload API: Artifacts
+func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *InputArtifact) (*ArtifactFormatted, error) {
+	return Post[ArtifactFormatted](s.client, ctx, "/registry/artifacts/", req)
+}
+
+func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*ArtifactFormatted, error) {
+	return Get[ArtifactFormatted](s.client, ctx, "/registry/artifacts/"+id)
+}
+
+func (s *ServiceImpl) UpdateArtifact(ctx context.Context, id string, req *InputArtifact) (*ArtifactFormatted, error) {
+	return Put[ArtifactFormatted](s.client, ctx, "/registry/artifacts/"+id, req)
+}
+
+func (s *ServiceImpl) PatchArtifact(ctx context.Context, id string, req *UpdateArtifactRequest) (*ArtifactFormatted, error) {
+	return Patch[ArtifactFormatted](s.client, ctx, "/registry/artifacts/"+id, req)
+}
+
+func (s *ServiceImpl) DeleteArtifact(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/registry/artifacts/"+id)
+}
+
+// Workload API: Workloads
+func (s *ServiceImpl) CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*WorkloadFormatted, error) {
+	return Post[WorkloadFormatted](s.client, ctx, "/workloads/", req)
+}
+
+func (s *ServiceImpl) GetWorkload(ctx context.Context, id string) (*WorkloadFormatted, error) {
+	return Get[WorkloadFormatted](s.client, ctx, "/workloads/"+id)
+}
+
+func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/workloads/"+id)
+}
+
+func (s *ServiceImpl) StartWorkload(ctx context.Context, id string) error {
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/workloads/"+id+"/start", &CreateVoidRequest{})
+	return err
+}
+
+func (s *ServiceImpl) StopWorkload(ctx context.Context, id string) error {
+	_, err := Post[CreateVoidResponse](s.client, ctx, "/workloads/"+id+"/stop", &CreateVoidRequest{})
+	return err
 }

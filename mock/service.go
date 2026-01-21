@@ -154,6 +154,152 @@ func (mr *MockServiceMockRecorder) CreateCredential(ctx, req interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCredential", reflect.TypeOf((*MockService)(nil).CreateCredential), ctx, req)
 }
 
+// CreateArtifact mocks base method.
+func (m *MockService) CreateArtifact(ctx context.Context, req *client.InputArtifact) (*client.ArtifactFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateArtifact", ctx, req)
+	ret0, _ := ret[0].(*client.ArtifactFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateArtifact indicates an expected call of CreateArtifact.
+func (mr *MockServiceMockRecorder) CreateArtifact(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateArtifact", reflect.TypeOf((*MockService)(nil).CreateArtifact), ctx, req)
+}
+
+// CreateWorkload mocks base method.
+func (m *MockService) CreateWorkload(ctx context.Context, req *client.CreateWorkloadRequest) (*client.WorkloadFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateWorkload", ctx, req)
+	ret0, _ := ret[0].(*client.WorkloadFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWorkload indicates an expected call of CreateWorkload.
+func (mr *MockServiceMockRecorder) CreateWorkload(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkload", reflect.TypeOf((*MockService)(nil).CreateWorkload), ctx, req)
+}
+
+// GetWorkload mocks base method.
+func (m *MockService) GetWorkload(ctx context.Context, id string) (*client.WorkloadFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkload", ctx, id)
+	ret0, _ := ret[0].(*client.WorkloadFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkload indicates an expected call of GetWorkload.
+func (mr *MockServiceMockRecorder) GetWorkload(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkload", reflect.TypeOf((*MockService)(nil).GetWorkload), ctx, id)
+}
+
+// DeleteWorkload mocks base method.
+func (m *MockService) DeleteWorkload(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkload", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkload indicates an expected call of DeleteWorkload.
+func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
+}
+
+// StartWorkload mocks base method.
+func (m *MockService) StartWorkload(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartWorkload", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartWorkload indicates an expected call of StartWorkload.
+func (mr *MockServiceMockRecorder) StartWorkload(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkload", reflect.TypeOf((*MockService)(nil).StartWorkload), ctx, id)
+}
+
+// StopWorkload mocks base method.
+func (m *MockService) StopWorkload(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopWorkload", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopWorkload indicates an expected call of StopWorkload.
+func (mr *MockServiceMockRecorder) StopWorkload(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopWorkload", reflect.TypeOf((*MockService)(nil).StopWorkload), ctx, id)
+}
+
+// GetArtifact mocks base method.
+func (m *MockService) GetArtifact(ctx context.Context, id string) (*client.ArtifactFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArtifact", ctx, id)
+	ret0, _ := ret[0].(*client.ArtifactFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetArtifact indicates an expected call of GetArtifact.
+func (mr *MockServiceMockRecorder) GetArtifact(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifact", reflect.TypeOf((*MockService)(nil).GetArtifact), ctx, id)
+}
+
+// UpdateArtifact mocks base method.
+func (m *MockService) UpdateArtifact(ctx context.Context, id string, req *client.InputArtifact) (*client.ArtifactFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateArtifact", ctx, id, req)
+	ret0, _ := ret[0].(*client.ArtifactFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateArtifact indicates an expected call of UpdateArtifact.
+func (mr *MockServiceMockRecorder) UpdateArtifact(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateArtifact", reflect.TypeOf((*MockService)(nil).UpdateArtifact), ctx, id, req)
+}
+
+// PatchArtifact mocks base method.
+func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.UpdateArtifactRequest) (*client.ArtifactFormatted, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifact", ctx, id, req)
+	ret0, _ := ret[0].(*client.ArtifactFormatted)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifact indicates an expected call of PatchArtifact.
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
+}
+
+// DeleteArtifact mocks base method.
+func (m *MockService) DeleteArtifact(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteArtifact", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteArtifact indicates an expected call of DeleteArtifact.
+func (mr *MockServiceMockRecorder) DeleteArtifact(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifact", reflect.TypeOf((*MockService)(nil).DeleteArtifact), ctx, id)
+}
+
 // CreateCustomApplication mocks base method.
 func (m *MockService) CreateCustomApplication(ctx context.Context, req *client.CreateCustomApplicationRequest) (*client.Application, error) {
 	m.ctrl.T.Helper()
