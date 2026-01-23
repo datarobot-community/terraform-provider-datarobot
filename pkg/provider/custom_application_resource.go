@@ -260,7 +260,11 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
-	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	// Only set RequiredKeyScopeLevel if it was specified in the config
+	// If not specified, leave it null to avoid plan drift
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -369,7 +373,12 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
-	plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	
+	// Only update RequiredKeyScopeLevel if it was specified in the config
+	// If it's unknown/null in plan, keep the state value via plan modifier
+	if IsKnown(plan.RequiredKeyScopeLevel) {
+		plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	}
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
