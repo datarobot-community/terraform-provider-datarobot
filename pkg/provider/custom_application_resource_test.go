@@ -286,6 +286,9 @@ func TestAccCustomApplicationWithBatchFiles(t *testing.T) {
 	resourceName := "datarobot_custom_application.batch_test"
 	sourceResourceName := "datarobot_application_source.batch_test"
 
+	// Create unique test identifier to avoid conflicts from failed test runs
+	testUniqueID := nameSalt + "-" + t.Name()
+
 	// Create a temporary directory for test files
 	testDir := "test_batch_app_files"
 	if err := os.Mkdir(testDir, 0755); err != nil {
@@ -360,20 +363,20 @@ numpy
 		Steps: []resource.TestStep{
 			// Create Application Source with 100+ files and Custom Application
 			{
-				Config: customApplicationWithBatchFilesConfig(testDir, baseEnvironmentID, nameSalt),
+				Config: customApplicationWithBatchFilesConfig(testDir, baseEnvironmentID, testUniqueID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					// Check Application Source
 					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
 					resource.TestCheckResourceAttrSet(sourceResourceName, "version_id"),
 					resource.TestCheckResourceAttr(sourceResourceName, "base_environment_id", baseEnvironmentID),
-					resource.TestCheckResourceAttr(sourceResourceName, "name", "Batch Files Test Application Source "+nameSalt),
+					resource.TestCheckResourceAttr(sourceResourceName, "name", "Batch Files Test Application Source "+testUniqueID),
 
 					// Check Custom Application
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
-					resource.TestCheckResourceAttr(resourceName, "name", "Batch Files Test Custom Application "+nameSalt),
+					resource.TestCheckResourceAttr(resourceName, "name", "Batch Files Test Custom Application "+testUniqueID),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 
