@@ -598,6 +598,10 @@ func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err e
 		return
 	}
 
+	// Strip leading/trailing whitespace (including \r\n from Windows CRLF)
+	// This prevents storage errors when file paths contain whitespace characters
+	pathInModel = strings.TrimSpace(pathInModel)
+
 	fileInfo = client.FileInfo{
 		Name:    filepath.Base(localPath),
 		Path:    pathInModel,
