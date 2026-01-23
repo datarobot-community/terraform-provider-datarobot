@@ -222,8 +222,8 @@ func TestPrepareLocalFilesStripsWhitespace(t *testing.T) {
 	}
 }
 
-// TestGetFileInfoRealWorldScenarios tests scenarios that actually occurred in production.
-func TestGetFileInfoRealWorldScenarios(t *testing.T) {
+// TestGetFileInfoProductionScenarios tests scenarios that actually occurred in production.
+func TestGetFileInfoProductionScenarios(t *testing.T) {
 	t.Parallel()
 
 	// Create a test file
