@@ -143,11 +143,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"required_key_scope_level": schema.StringAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				MarkdownDescription: "The API key scope level required for requests to this custom application. Can be set to 'viewer', 'editor', or 'owner'.",
 			},
 		},
 	}
@@ -260,9 +256,8 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
-	// Always populate RequiredKeyScopeLevel from API response on Create
-	// All computed fields must be known after apply
-	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	// Don't read required_key_scope_level from API - keep user-configured value
+	// (field is Optional, not Computed)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -301,7 +296,8 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
-	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	// Don't read required_key_scope_level from API - keep user-configured value
+	// (field is Optional, not Computed)
 
 	// Always populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -348,6 +344,10 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
 	}
 
+	if IsKnown(plan.RequiredKeyScopeLevel) {
+		updateRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
+	}
+
 	traceAPICall("UpdateCustomApplication")
 	_, err := r.provider.service.UpdateApplication(ctx,
 		plan.ID.ValueString(),
@@ -372,9 +372,8 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
 
-	// Always populate computed fields from API response
-	// The plan modifier will prevent drift when the field is not configured
-	plan.RequiredKeyScopeLevel = scopeLevelToTerraformString(application.RequiredKeyScopeLevel)
+	// Don't read required_key_scope_level from API - keep user-configured value
+	// (field is Optional, not Computed)
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
