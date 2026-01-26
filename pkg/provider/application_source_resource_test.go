@@ -50,7 +50,24 @@ func testApplicationSourceResource(t *testing.T, isMock bool) {
 	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
 	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
 
-	startAppFileName := "start-app.sh"
+	// Create a unique directory for this test to avoid parallel test interference
+	testDir := fmt.Sprintf("test_app_source_%s", testUniqueID)
+	os.RemoveAll(testDir)
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testDir)
+
+	// File basenames for references
+	startAppFileBase := "start-app.sh"
+	appCodeFileBase := "streamlit-app.py"
+	metadataFileBase := "metadata.yaml"
+
+	// Full paths for file operations
+	startAppFileName := fmt.Sprintf("%s/%s", testDir, startAppFileBase)
+	appCodeFileName := fmt.Sprintf("%s/%s", testDir, appCodeFileBase)
+	metadataFileName := fmt.Sprintf("%s/%s", testDir, metadataFileBase)
+
 	startAppScript := `#!/usr/bin/env bash
 
 echo "Starting App"
@@ -58,7 +75,6 @@ echo "Starting App"
 streamlit run streamlit-app.py
 `
 
-	appCodeFileName := "streamlit-app.py"
 	appCode := `import streamlit as st
 from datarobot import Client
 from datarobot.client import set_client
@@ -73,7 +89,6 @@ if __name__ == "__main__":
     start_streamlit()
 	`
 
-	metadataFileName := "metadata.yaml"
 	metadata := `name: runtime-params
 
 runtimeParameterDefinitions:
@@ -85,25 +100,21 @@ runtimeParameterDefinitions:
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(startAppFileName)
 
 	err = os.WriteFile(appCodeFileName, []byte(appCode), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(appCodeFileName)
 
 	err = os.WriteFile(metadataFileName, []byte(metadata), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(metadataFileName)
 
-	folderPath := "application_source"
+	folderPath := fmt.Sprintf("%s/application_source", testDir)
 	if err = os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(folderPath)
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
@@ -252,7 +263,7 @@ runtimeParameterDefinitions:
 			// Remove files and add folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile(folderPath+"/"+startAppFileName, []byte(startAppScript), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+startAppFileBase, []byte(startAppScript), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -291,7 +302,7 @@ runtimeParameterDefinitions:
 			// Add new file to folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile(folderPath+"/"+appCodeFileName, []byte(appCode), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+appCodeFileBase, []byte(appCode), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -332,7 +343,7 @@ runtimeParameterDefinitions:
 			// update the contents of a file in folder_path
 			{
 				PreConfig: func() {
-					if err := os.WriteFile(folderPath+"/"+appCodeFileName, []byte("new app code"), 0644); err != nil {
+					if err := os.WriteFile(folderPath+"/"+appCodeFileBase, []byte("new app code"), 0644); err != nil {
 						t.Fatal(err)
 					}
 				},
