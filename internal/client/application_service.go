@@ -115,6 +115,7 @@ type CreateApplicationSourceVersionRequest struct {
 	BaseEnvironmentVersionID string                `json:"baseEnvironmentVersionId,omitempty"`
 	Resources                *ApplicationResources `json:"resources,omitempty"`
 	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters        string                `json:"runtimeParameters,omitempty"`
 	RequiredKeyScopeLevel    ScopeLevel            `json:"requiredKeyScopeLevel,omitempty"`
 }
 
@@ -136,6 +137,7 @@ type UpdateApplicationSourceVersionRequest struct {
 	Resources                *ApplicationResources `json:"resources,omitempty"`
 	FilesToDelete            []string              `json:"filesToDelete,omitempty"`
 	RuntimeParameterValues   string                `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters        string                `json:"runtimeParameters,omitempty"`
 	RequiredKeyScopeLevel    ScopeLevel            `json:"requiredKeyScopeLevel"`
 }
 

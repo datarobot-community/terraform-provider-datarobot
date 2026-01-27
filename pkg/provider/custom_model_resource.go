@@ -663,7 +663,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameterValues:   runtimeParameterValues,
+			RuntimeParameters:        runtimeParameterValues,
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
@@ -1666,7 +1666,7 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-			RuntimeParameterValues:   string(jsonParams),
+			RuntimeParameters:        string(jsonParams),
 		}); err != nil {
 			return
 		}

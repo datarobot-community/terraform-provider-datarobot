@@ -274,8 +274,8 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 			createApplicationSourceResp.ID,
 			createApplicationSourceVersionResp.ID,
 			&client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameterValues: string(jsonParams),
-				RequiredKeyScopeLevel:  createApplicationSourceVersionResp.RequiredKeyScopeLevel, // not overriding RequiredKeyScopeLevel with None
+				RuntimeParameters:     string(jsonParams),
+				RequiredKeyScopeLevel: createApplicationSourceVersionResp.RequiredKeyScopeLevel, // not overriding RequiredKeyScopeLevel with None
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())

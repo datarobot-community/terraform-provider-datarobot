@@ -270,7 +270,7 @@ func (r *ApplicationSourceFromTemplateResource) Create(ctx context.Context, req 
 			createApplicationSourceFromTemplateResp.ID,
 			createApplicationSourceFromTemplateVersionResp.ID,
 			&client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameterValues: string(jsonParams),
+				RuntimeParameters: string(jsonParams),
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())
@@ -489,7 +489,7 @@ func (r *ApplicationSourceFromTemplateResource) Update(ctx context.Context, req 
 		resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
 		return
 	}
-	updateVersionRequest.RuntimeParameterValues = string(jsonParams)
+	updateVersionRequest.RuntimeParameters = string(jsonParams)
 
 	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,

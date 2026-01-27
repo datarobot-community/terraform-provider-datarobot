@@ -114,6 +114,7 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	BaseEnvironmentID        string   `json:"baseEnvironmentId,omitempty"`
 	BaseEnvironmentVersionID string   `json:"baseEnvironmentVersionId,omitempty"`
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters        string   `json:"runtimeParameters,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
 	Replicas                 int64    `json:"replicas,omitempty"`
 	MaximumMemory            int64    `json:"maximumMemory,omitempty"`

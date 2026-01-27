@@ -237,8 +237,8 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		}
 
 		if _, err = r.provider.service.UpdateCustomJob(ctx, customJob.ID, &client.UpdateCustomJobRequest{
-			Name:                   customJob.Name,
-			RuntimeParameterValues: runtimeParameterValues,
+			Name:              customJob.Name,
+			RuntimeParameters: runtimeParameterValues,
 		}); err != nil {
 			resp.Diagnostics.AddError("Error adding runtime parameter values to Custom Job", err.Error())
 			return
@@ -391,11 +391,11 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 	// then update the rest of the Custom Job fields
 	traceAPICall("UpdateCustomJob")
 	_, err = r.provider.service.UpdateCustomJob(ctx, plan.ID.ValueString(), &client.UpdateCustomJobRequest{
-		Name:                   plan.Name.ValueString(),
-		Description:            StringValuePointerOptional(plan.Description),
-		EnvironmentID:          StringValuePointerOptional(plan.EnvironmentID),
-		EnvironmentVersionID:   StringValuePointerOptional(plan.EnvironmentVersionID),
-		RuntimeParameterValues: runtimeParameterValues,
+		Name:                 plan.Name.ValueString(),
+		Description:          StringValuePointerOptional(plan.Description),
+		EnvironmentID:        StringValuePointerOptional(plan.EnvironmentID),
+		EnvironmentVersionID: StringValuePointerOptional(plan.EnvironmentVersionID),
+		RuntimeParameters:    runtimeParameterValues,
 		Resources: &client.CustomJobResources{
 			EgressNetworkPolicy: plan.EgressNetworkPolicy.ValueString(),
 			ResourceBundleID:    StringValuePointerOptional(plan.ResourceBundleID),
