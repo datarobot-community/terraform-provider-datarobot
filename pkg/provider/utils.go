@@ -734,6 +734,102 @@ func convertTfStringMap(tfMap types.Map) map[string]string {
 	return convertedMap
 }
 
+func creatorAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"id":       types.StringType,
+		"username": types.StringType,
+		"email":    types.StringType,
+	}
+}
+
+func creatorObjectValueFromClient(ctx context.Context, c *client.Creator) (basetypes.ObjectValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	attrTypes := creatorAttrTypes()
+	if c == nil {
+		return types.ObjectNull(attrTypes), diags
+	}
+
+	obj, d := types.ObjectValue(attrTypes, map[string]attr.Value{
+		"id":       types.StringValue(c.ID),
+		"username": StringPointerValue(c.Username),
+		"email":    StringPointerValue(c.Email),
+	})
+	diags.Append(d...)
+	if diags.HasError() {
+		return types.ObjectNull(attrTypes), diags
+	}
+	return obj, diags
+}
+
+func workloadConditionAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"type":  types.StringType,
+		"name":  types.StringType,
+		"value": types.StringType,
+	}
+}
+
+func workloadStatusDetailsAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"conditions": types.ListType{ElemType: types.ObjectType{AttrTypes: workloadConditionAttrTypes()}},
+		"log_tail":   types.ListType{ElemType: types.StringType},
+	}
+}
+
+func workloadStatusDetailsObjectValueFromClient(ctx context.Context, sd *client.WorkloadStatusDetails) (basetypes.ObjectValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	attrTypes := workloadStatusDetailsAttrTypes()
+	if sd == nil {
+		return types.ObjectNull(attrTypes), diags
+	}
+
+	condElemType := types.ObjectType{AttrTypes: workloadConditionAttrTypes()}
+	condElems := make([]attr.Value, 0)
+	for _, c := range sd.Conditions {
+		obj, d := types.ObjectValue(condElemType.AttrTypes, map[string]attr.Value{
+			"type":  types.StringValue(c.Type),
+			"name":  types.StringValue(c.Name),
+			"value": types.StringValue(c.Value),
+		})
+		diags.Append(d...)
+		if diags.HasError() {
+			return types.ObjectNull(attrTypes), diags
+		}
+		condElems = append(condElems, obj)
+	}
+
+	conditions := types.ListNull(condElemType)
+	if len(condElems) > 0 {
+		lv, d := types.ListValue(condElemType, condElems)
+		diags.Append(d...)
+		if diags.HasError() {
+			return types.ObjectNull(attrTypes), diags
+		}
+		conditions = lv
+	}
+
+	logTail := types.ListNull(types.StringType)
+	if len(sd.LogTail) > 0 {
+		lv, d := types.ListValueFrom(ctx, types.StringType, sd.LogTail)
+		diags.Append(d...)
+		if diags.HasError() {
+			return types.ObjectNull(attrTypes), diags
+		}
+		logTail = lv
+	}
+
+	obj, d := types.ObjectValue(attrTypes, map[string]attr.Value{
+		"conditions": conditions,
+		"log_tail":   logTail,
+	})
+	diags.Append(d...)
+	if diags.HasError() {
+		return types.ObjectNull(attrTypes), diags
+	}
+	return obj, diags
+}
+
 func convertTfStringList(input []types.String) []string {
 	output := make([]string, len(input))
 	for i, value := range input {
