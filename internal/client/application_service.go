@@ -86,11 +86,12 @@ type Application struct {
 }
 
 type UpdateApplicationRequest struct {
-	Name                             string   `json:"name,omitempty"`
-	CustomApplicationSourceVersionID string   `json:"customApplicationSourceVersionId,omitempty"`
-	ExternalAccessEnabled            bool     `json:"externalAccessEnabled"`
-	ExternalAccessRecipients         []string `json:"externalAccessRecipients"`
-	AllowAutoStopping                bool     `json:"allowAutoStopping"`
+	Name                             string     `json:"name,omitempty"`
+	CustomApplicationSourceVersionID string     `json:"customApplicationSourceVersionId,omitempty"`
+	ExternalAccessEnabled            bool       `json:"externalAccessEnabled"`
+	ExternalAccessRecipients         []string   `json:"externalAccessRecipients"`
+	AllowAutoStopping                bool       `json:"allowAutoStopping"`
+	RequiredKeyScopeLevel            ScopeLevel `json:"requiredKeyScopeLevel,omitempty"`
 }
 
 type CreateApplicationSourceFromTemplateRequest struct {
