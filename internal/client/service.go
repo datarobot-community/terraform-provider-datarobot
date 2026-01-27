@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Service interface {
@@ -513,7 +514,27 @@ func (s *ServiceImpl) CreateCustomModelFromLLMBlueprint(ctx context.Context, req
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error) {
+	if req.RuntimeParameters != "" {
+		result, err := Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
+		if err != nil {
+			errMsg := err.Error()
+			if containsFieldError(errMsg, "runtimeParameters") {
+				fallbackReq := *req
+				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
+				fallbackReq.RuntimeParameters = ""
+				return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", &fallbackReq)
+			}
+			return nil, err
+		}
+		return result, nil
+	}
+
 	return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
+}
+
+func containsFieldError(errMsg, fieldName string) bool {
+	pattern := fieldName + " is not allowed key"
+	return strings.Contains(errMsg, pattern)
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error) {
