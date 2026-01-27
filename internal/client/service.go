@@ -914,7 +914,7 @@ func (s *ServiceImpl) CreateApplicationSourceVersion(ctx context.Context, id str
 		result, err := Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
 		if err != nil {
 			errMsg := err.Error()
-			if containsFieldError(errMsg, "runtimeParameters") {
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
 				fallbackReq := *req
 				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
 				fallbackReq.RuntimeParameters = ""
@@ -933,7 +933,7 @@ func (s *ServiceImpl) UpdateApplicationSourceVersion(ctx context.Context, id str
 		result, err := Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
 		if err != nil {
 			errMsg := err.Error()
-			if containsFieldError(errMsg, "runtimeParameters") {
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
 				fallbackReq := *req
 				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
 				fallbackReq.RuntimeParameters = ""
