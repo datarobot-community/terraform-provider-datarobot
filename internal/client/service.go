@@ -455,6 +455,21 @@ func (s *ServiceImpl) DeleteLLMBlueprint(ctx context.Context, id string) error {
 }
 
 func (s *ServiceImpl) CreateCustomJob(ctx context.Context, req *CreateCustomJobRequest) (*CustomJob, error) {
+	if req.RuntimeParameters != "" {
+		result, err := Post[CustomJob](s.client, ctx, "/customJobs/", req)
+		if err != nil {
+			errMsg := err.Error()
+			if containsFieldError(errMsg, "runtimeParameters") {
+				fallbackReq := *req
+				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
+				fallbackReq.RuntimeParameters = ""
+				return Post[CustomJob](s.client, ctx, "/customJobs/", &fallbackReq)
+			}
+			return nil, err
+		}
+		return result, nil
+	}
+
 	return Post[CustomJob](s.client, ctx, "/customJobs/", req)
 }
 
@@ -463,6 +478,21 @@ func (s *ServiceImpl) GetCustomJob(ctx context.Context, id string) (*CustomJob, 
 }
 
 func (s *ServiceImpl) UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error) {
+	if req.RuntimeParameters != "" {
+		result, err := Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
+		if err != nil {
+			errMsg := err.Error()
+			if containsFieldError(errMsg, "runtimeParameters") {
+				fallbackReq := *req
+				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
+				fallbackReq.RuntimeParameters = ""
+				return Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", &fallbackReq)
+			}
+			return nil, err
+		}
+		return result, nil
+	}
+
 	return Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
 }
 
