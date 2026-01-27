@@ -885,10 +885,40 @@ func (s *ServiceImpl) UpdateApplicationSource(ctx context.Context, id string, re
 }
 
 func (s *ServiceImpl) CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
+	if req.RuntimeParameters != "" {
+		result, err := Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
+		if err != nil {
+			errMsg := err.Error()
+			if containsFieldError(errMsg, "runtimeParameters") {
+				fallbackReq := *req
+				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
+				fallbackReq.RuntimeParameters = ""
+				return Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", &fallbackReq)
+			}
+			return nil, err
+		}
+		return result, nil
+	}
+
 	return Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
 }
 
 func (s *ServiceImpl) UpdateApplicationSourceVersion(ctx context.Context, id string, versionId string, req *UpdateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
+	if req.RuntimeParameters != "" {
+		result, err := Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
+		if err != nil {
+			errMsg := err.Error()
+			if containsFieldError(errMsg, "runtimeParameters") {
+				fallbackReq := *req
+				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
+				fallbackReq.RuntimeParameters = ""
+				return Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", &fallbackReq)
+			}
+			return nil, err
+		}
+		return result, nil
+	}
+
 	return Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
 }
 
