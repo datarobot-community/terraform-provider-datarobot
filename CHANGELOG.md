@@ -8,6 +8,7 @@
 
 - Fixing flaky tests in CI
 - Fixed PROMPT_COLUMN_NAME runtime parameter propagation for AgenticWorkflow custom models in Registered Model Versions
+- Dependency graph issue when replacing a custom model deployment
 
 ## [0.10.27] - 2025-12-05
 
