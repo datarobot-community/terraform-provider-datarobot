@@ -459,7 +459,7 @@ func (s *ServiceImpl) CreateCustomJob(ctx context.Context, req *CreateCustomJobR
 		result, err := Post[CustomJob](s.client, ctx, "/customJobs/", req)
 		if err != nil {
 			errMsg := err.Error()
-			if containsFieldError(errMsg, "runtimeParameters") {
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
 				fallbackReq := *req
 				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
 				fallbackReq.RuntimeParameters = ""
@@ -482,7 +482,7 @@ func (s *ServiceImpl) UpdateCustomJob(ctx context.Context, id string, req *Updat
 		result, err := Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
 		if err != nil {
 			errMsg := err.Error()
-			if containsFieldError(errMsg, "runtimeParameters") {
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
 				fallbackReq := *req
 				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
 				fallbackReq.RuntimeParameters = ""
@@ -548,7 +548,7 @@ func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Conte
 		result, err := Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
 		if err != nil {
 			errMsg := err.Error()
-			if containsFieldError(errMsg, "runtimeParameters") {
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
 				fallbackReq := *req
 				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
 				fallbackReq.RuntimeParameters = ""
@@ -560,11 +560,6 @@ func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Conte
 	}
 
 	return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
-}
-
-func containsFieldError(errMsg, fieldName string) bool {
-	pattern := fieldName + " is not allowed key"
-	return strings.Contains(errMsg, pattern)
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error) {
