@@ -691,6 +691,23 @@ runtimeParameterDefinitions:
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
 				),
 			},
+			// remove runtime param
+			{
+				Config: customModelWithoutRuntimeParamsConfig(),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomModelResourceExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "base_environment_id", baseEnvironmentID),
+					resource.TestCheckNoResourceAttr(resourceName, "runtime_parameter_values.0.value"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
 		},
 	})
 }
@@ -1484,6 +1501,18 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		]
 	}
 	`, value)
+}
+
+func customModelWithoutRuntimeParamsConfig() string {
+	return `
+	resource "datarobot_custom_model" "test_with_runtime_params" {
+		name        		     = "with runtime params"
+		target_type              = "TextGeneration"
+		target_name              = "target"
+		base_environment_id      = "65f9b27eab986d30d4c64268"
+		folder_path 			 = "custom_model_with_runtime_params"
+	}
+	`
 }
 
 func binaryCustomModelResourceConfig(
