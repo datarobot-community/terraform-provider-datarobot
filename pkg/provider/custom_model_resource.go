@@ -653,41 +653,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) {
-		runtimeParameters, err := convertRuntimeParameterValuesToNewAttribute(ctx, plan.RuntimeParameterValues)
+		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, baseEnvironmentID, baseEnvironmentVersionID)
 		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
+			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 			return
-		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        baseEnvironmentID,
-			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameters:        runtimeParameters,
-		})
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
-				if err != nil {
-					resp.Diagnostics.AddError("Error converting runtime parameter values to new attribute", err.Error())
-					return
-				}
-				_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-					IsMajorUpdate:            "false",
-					BaseEnvironmentID:        baseEnvironmentID,
-					BaseEnvironmentVersionID: baseEnvironmentVersionID,
-					RuntimeParameterValues:   runtimeParameterValues,
-				})
-				if err != nil {
-					resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-					return
-				}
-			} else {
-				resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-				return
-			}
 		}
 
 		traceAPICall("WaitForCustomModelToBeReady")
@@ -964,9 +933,12 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValues(ctx, customModel, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-		return
+	if IsKnown(plan.RuntimeParameterValues) {
+		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, state.BaseEnvironmentID.ValueString(), state.BaseEnvironmentVersionID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
+			return
+		}
 	}
 
 	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
@@ -1647,54 +1619,6 @@ func (r *CustomModelResource) updateCustomModel(
 	return
 }
 
-func (r *CustomModelResource) updateRuntimeParameterValues(
-	ctx context.Context,
-	customModel *client.CustomModel,
-	plan CustomModelResourceModel,
-) (
-	err error,
-) {
-	runtimeParameterValues := make([]RuntimeParameterValue, 0)
-	if IsKnown(plan.RuntimeParameterValues) {
-		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-			err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
-			return
-		}
-	}
-
-	params := make([]client.RuntimeParameterValueRequest, 0)
-	for _, param := range runtimeParameterValues {
-		var value any
-		if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
-			return
-		}
-		params = append(params, client.RuntimeParameterValueRequest{
-			FieldName: param.Key.ValueString(),
-			Type:      param.Type.ValueString(),
-			Value:     &value,
-		})
-	}
-
-	if len(params) > 0 {
-		var jsonParams []byte
-		if jsonParams, err = json.Marshal(params); err != nil {
-			return
-		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
-		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
-			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-			RuntimeParameters:        string(jsonParams),
-		}); err != nil {
-			return
-		}
-	}
-
-	return
-}
-
 func (r *CustomModelResource) updateRemoteRepositories(
 	ctx context.Context,
 	customModel *client.CustomModel,
@@ -2080,6 +2004,56 @@ func (r *CustomModelResource) updateDependencyBuild(
 	}
 
 	return
+}
+
+func (r *CustomModelResource) updateRuntimeParameterValuesWithFallback(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	plan CustomModelResourceModel,
+	diags *diag.Diagnostics,
+	baseEnvironmentID string,
+	baseEnvironmentVersionID string,
+) (
+	err error,
+) {
+	runtimeParameters, err := convertRuntimeParameterValuesToNewAttribute(ctx, plan.RuntimeParameterValues)
+	if err != nil {
+		diags.AddError("Error reading runtime parameter values", err.Error())
+		return err
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		RuntimeParameters:        runtimeParameters,
+	})
+
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
+			runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+			if err != nil {
+				diags.AddError("Error converting runtime parameter values to new attribute", err.Error())
+				return err
+			}
+			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+				IsMajorUpdate:            "false",
+				BaseEnvironmentID:        baseEnvironmentID,
+				BaseEnvironmentVersionID: baseEnvironmentVersionID,
+				RuntimeParameterValues:   runtimeParameterValues,
+			})
+			if err != nil {
+				diags.AddError("Error creating Custom Model version", err.Error())
+				return err
+			}
+		} else {
+			diags.AddError("Error creating Custom Model version", err.Error())
+			return err
+		}
+	}
+	return nil
 }
 
 func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.Set {
