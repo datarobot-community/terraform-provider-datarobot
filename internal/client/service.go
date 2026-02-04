@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 type Service interface {
@@ -455,21 +454,6 @@ func (s *ServiceImpl) DeleteLLMBlueprint(ctx context.Context, id string) error {
 }
 
 func (s *ServiceImpl) CreateCustomJob(ctx context.Context, req *CreateCustomJobRequest) (*CustomJob, error) {
-	if req.RuntimeParameters != "" {
-		result, err := Post[CustomJob](s.client, ctx, "/customJobs/", req)
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				fallbackReq := *req
-				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
-				fallbackReq.RuntimeParameters = ""
-				return Post[CustomJob](s.client, ctx, "/customJobs/", &fallbackReq)
-			}
-			return nil, err
-		}
-		return result, nil
-	}
-
 	return Post[CustomJob](s.client, ctx, "/customJobs/", req)
 }
 
@@ -478,21 +462,6 @@ func (s *ServiceImpl) GetCustomJob(ctx context.Context, id string) (*CustomJob, 
 }
 
 func (s *ServiceImpl) UpdateCustomJob(ctx context.Context, id string, req *UpdateCustomJobRequest) (*CustomJob, error) {
-	if req.RuntimeParameters != "" {
-		result, err := Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				fallbackReq := *req
-				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
-				fallbackReq.RuntimeParameters = ""
-				return Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", &fallbackReq)
-			}
-			return nil, err
-		}
-		return result, nil
-	}
-
 	return Patch[CustomJob](s.client, ctx, "/customJobs/"+id+"/", req)
 }
 
@@ -544,21 +513,6 @@ func (s *ServiceImpl) CreateCustomModelFromLLMBlueprint(ctx context.Context, req
 }
 
 func (s *ServiceImpl) CreateCustomModelVersionCreateFromLatest(ctx context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error) {
-	if req.RuntimeParameters != "" {
-		result, err := Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				fallbackReq := *req
-				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
-				fallbackReq.RuntimeParameters = ""
-				return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", &fallbackReq)
-			}
-			return nil, err
-		}
-		return result, nil
-	}
-
 	return Patch[CustomModelVersion](s.client, ctx, "/customModels/"+id+"/versions/", req)
 }
 
@@ -910,40 +864,10 @@ func (s *ServiceImpl) UpdateApplicationSource(ctx context.Context, id string, re
 }
 
 func (s *ServiceImpl) CreateApplicationSourceVersion(ctx context.Context, id string, req *CreateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
-	if req.RuntimeParameters != "" {
-		result, err := Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				fallbackReq := *req
-				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
-				fallbackReq.RuntimeParameters = ""
-				return Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", &fallbackReq)
-			}
-			return nil, err
-		}
-		return result, nil
-	}
-
 	return Post[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/", req)
 }
 
 func (s *ServiceImpl) UpdateApplicationSourceVersion(ctx context.Context, id string, versionId string, req *UpdateApplicationSourceVersionRequest) (*ApplicationSourceVersion, error) {
-	if req.RuntimeParameters != "" {
-		result, err := Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
-		if err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
-				fallbackReq := *req
-				fallbackReq.RuntimeParameterValues = req.RuntimeParameters
-				fallbackReq.RuntimeParameters = ""
-				return Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", &fallbackReq)
-			}
-			return nil, err
-		}
-		return result, nil
-	}
-
 	return Patch[ApplicationSourceVersion](s.client, ctx, "/customApplicationSources/"+id+"/versions/"+versionId+"/", req)
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -652,7 +653,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+		runtimeParameters, err := convertRuntimeParameterValuesToNewAttribute(ctx, plan.RuntimeParameterValues)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
 			return
@@ -663,11 +664,30 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameters:        runtimeParameterValues,
+			RuntimeParameters:        runtimeParameters,
 		})
 		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
+				runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+				if err != nil {
+					resp.Diagnostics.AddError("Error converting runtime parameter values to new attribute", err.Error())
+					return
+				}
+				_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+					IsMajorUpdate:            "false",
+					BaseEnvironmentID:        baseEnvironmentID,
+					BaseEnvironmentVersionID: baseEnvironmentVersionID,
+					RuntimeParameterValues:   runtimeParameterValues,
+				})
+				if err != nil {
+					resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+					return
+				}
+			} else {
+				resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+				return
+			}
 		}
 
 		traceAPICall("WaitForCustomModelToBeReady")
