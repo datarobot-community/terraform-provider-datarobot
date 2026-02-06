@@ -441,6 +441,10 @@ func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customMod
 
 		var customModelVersions []client.CustomModelVersion
 		if customModelVersions, err = r.provider.service.ListCustomModelVersions(ctx, customModel.ID); err != nil {
+			// If the custom model was deleted between listing and fetching versions, continue searching
+			if _, ok := err.(*client.NotFoundError); ok {
+				continue
+			}
 			return
 		}
 
