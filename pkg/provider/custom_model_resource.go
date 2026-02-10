@@ -653,6 +653,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) {
+		// we need to enrich runtime parameters with the current values from the API
 		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, baseEnvironmentID, baseEnvironmentVersionID)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
@@ -913,6 +914,14 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	if IsKnown(plan.RuntimeParameterValues) {
+		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, state.BaseEnvironmentID.ValueString(), state.BaseEnvironmentVersionID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
+			return
+		}
+	}
+
 	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
 		return
@@ -931,14 +940,6 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
 		return
-	}
-
-	if IsKnown(plan.RuntimeParameterValues) {
-		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, state.BaseEnvironmentID.ValueString(), state.BaseEnvironmentVersionID.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-			return
-		}
 	}
 
 	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
@@ -1768,6 +1769,11 @@ func (r *CustomModelResource) updateGuardConfigurations(
 ) (
 	err error,
 ) {
+	// Skip guard configuration updates if there are no guards in either plan or state
+	if len(plan.GuardConfigurations) == 0 && len(state.GuardConfigurations) == 0 {
+		return nil
+	}
+
 	var customModel *client.CustomModel
 	customModel, err = r.provider.service.GetCustomModel(ctx, plan.ID.ValueString())
 	if err != nil {
