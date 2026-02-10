@@ -163,7 +163,7 @@ type RuntimeParameterValueRequest struct {
 type RuntimeParameterRequest struct {
 	FieldName    string `json:"fieldName"`
 	Type         string `json:"type,omitempty"`
-	CurrentValue *any   `json:"value"`
+	CurrentValue *any   `json:"currentValue"`
 }
 
 type GuardTemplate struct {
