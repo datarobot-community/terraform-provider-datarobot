@@ -914,17 +914,38 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
+		return
+	}
+
 	if IsKnown(plan.RuntimeParameterValues) {
 		err = r.updateRuntimeParameterValuesWithFallback(ctx, customModel, plan, &resp.Diagnostics, state.BaseEnvironmentID.ValueString(), state.BaseEnvironmentVersionID.ValueString())
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 			return
 		}
-	}
+		if len(plan.RuntimeParameterValues.Elements()) == 0 {
+			hasModelMetadata, err := hasModelMetadataFile(plan.FolderPath, plan.Files)
+			if err != nil {
+				resp.Diagnostics.AddError("Error checking for model-metadata.yaml", err.Error())
+				return
+			}
 
-	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
-		return
+			if hasModelMetadata {
+				if err = r.createCustomModelVersionFromFiles(
+					ctx,
+					plan.FolderPath,
+					plan.Files,
+					customModel.ID,
+					customModel.LatestVersion.BaseEnvironmentID,
+				); err != nil {
+					resp.Diagnostics.AddError("Error re-uploading files with model metadata", err.Error())
+					return
+				}
+			}
+
+		}
 	}
 
 	if err = r.updateGuardConfigurations(ctx, &state, plan); err != nil {
@@ -2038,7 +2059,7 @@ func (r *CustomModelResource) updateRuntimeParameterValuesWithFallback(
 
 	if err != nil {
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
+		if strings.Contains(errMsg, "runtimeParameters is not allowed key") || strings.Contains(errMsg, "requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled") {
 			runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 			if err != nil {
 				diags.AddError("Error converting runtime parameter values to new attribute", err.Error())
@@ -2132,4 +2153,29 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 	}
 
 	return
+}
+
+func hasModelMetadataFile(folderPath types.String, files types.Dynamic) (bool, error) {
+	if IsKnown(folderPath) {
+		folder := folderPath.ValueString()
+		metadataPath := folder + string(os.PathSeparator) + "model-metadata.yaml"
+		if _, err := os.Stat(metadataPath); err == nil {
+			return true, nil
+		}
+	}
+
+	if IsKnown(files) && files.UnderlyingValue() != nil && IsKnown(files.UnderlyingValue()) {
+		fileTuples, err := formatFiles(files)
+		if err != nil {
+			return false, err
+		}
+
+		for _, file := range fileTuples {
+			if file.PathInModel == "model-metadata.yaml" {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
