@@ -246,7 +246,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	// runtime parameter values must be set after local files are added,
 	// because the runtime parameter definitions are created in the metadata.yaml file
 	if IsKnown(data.RuntimeParameterValues) {
-		err = r.updateRuntimeParameterValuesWithFallback(ctx, *createApplicationSourceVersionResp, data, &resp.Diagnostics)
+		err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, *createApplicationSourceVersionResp, data, &client.UpdateApplicationSourceVersionRequest{}, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 			return
@@ -414,25 +414,13 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		updateVersionRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
 	}
 
-	if IsKnown(plan.RuntimeParameterValues) {
-		err = r.updateRuntimeParameterValuesWithFallback(ctx, applicationSourceVersion, plan, &resp.Diagnostics)
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-			return
-		}
-	}
-
 	// Only set RequiredKeyScopeLevel when known. For known-null, ValueString()
 	// returns "" (NoRequirements), which marshals as JSON null.
 	if IsKnown(plan.RequiredKeyScopeLevel) {
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 
-	traceAPICall("UpdateApplicationSourceVersion")
-	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
-		plan.ID.ValueString(),
-		applicationSourceVersion.ID,
-		updateVersionRequest)
+	err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, applicationSourceVersion, plan, updateVersionRequest, &resp.Diagnostics)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
 		return
@@ -708,10 +696,11 @@ func (r *ApplicationSourceResource) updateLocalFiles(
 	return
 }
 
-func (r *ApplicationSourceResource) updateRuntimeParameterValuesWithFallback(
+func (r *ApplicationSourceResource) updateApplicationSourceWithRuntimeParametersFallback(
 	ctx context.Context,
 	applicationSourceVersion client.ApplicationSourceVersion,
 	plan ApplicationSourceResourceModel,
+	updateVersionRequest *client.UpdateApplicationSourceVersionRequest,
 	diags *diag.Diagnostics,
 ) (
 	err error,
@@ -723,23 +712,20 @@ func (r *ApplicationSourceResource) updateRuntimeParameterValuesWithFallback(
 	}
 
 	traceAPICall("UpdateApplicationSourceVersion")
-	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, plan.ID.ValueString(), applicationSourceVersion.ID, &client.UpdateApplicationSourceVersionRequest{
-		RuntimeParameters:     runtimeParameters,
-		RequiredKeyScopeLevel: client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString()), // not overriding RequiredKeyScopeLevel with None
-	})
+	updateVersionRequest.RuntimeParameters = runtimeParameters
+	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, plan.ID.ValueString(), applicationSourceVersion.ID, updateVersionRequest)
 
 	if err != nil {
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "runtimeParameters is not allowed key") {
+		if strings.Contains(errMsg, "runtimeParameters is not allowed key") || strings.Contains(errMsg, "requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled") {
 			runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 			if err != nil {
 				diags.AddError("Error converting runtime parameter values to new attribute", err.Error())
 				return err
 			}
-			_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, plan.ID.ValueString(), applicationSourceVersion.ID, &client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameterValues: runtimeParameterValues,
-				RequiredKeyScopeLevel:  client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString()), // not overriding RequiredKeyScopeLevel with None
-			})
+			updateVersionRequest.RuntimeParameterValues = runtimeParameterValues
+			updateVersionRequest.RuntimeParameters = ""
+			_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, plan.ID.ValueString(), applicationSourceVersion.ID, updateVersionRequest)
 			if err != nil {
 				diags.AddError("Error updating Application Source version", err.Error())
 				return err
