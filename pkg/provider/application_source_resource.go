@@ -246,7 +246,10 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	// runtime parameter values must be set after local files are added,
 	// because the runtime parameter definitions are created in the metadata.yaml file
 	if IsKnown(data.RuntimeParameterValues) {
-		err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, *createApplicationSourceVersionResp, data, &client.UpdateApplicationSourceVersionRequest{}, &resp.Diagnostics)
+		updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{
+			RequiredKeyScopeLevel: client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString()),
+		}
+		err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, *createApplicationSourceVersionResp, data, updateVersionRequest, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 			return
@@ -420,10 +423,12 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 
-	err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, applicationSourceVersion, plan, updateVersionRequest, &resp.Diagnostics)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
-		return
+	if IsKnown(plan.RuntimeParameterValues) {
+		err = r.updateApplicationSourceWithRuntimeParametersFallback(ctx, applicationSourceVersion, plan, updateVersionRequest, &resp.Diagnostics)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
+			return
+		}
 	}
 
 	applicationSource, err = r.provider.service.GetApplicationSource(ctx, plan.ID.ValueString())
