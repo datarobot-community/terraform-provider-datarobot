@@ -376,7 +376,6 @@ func formatRuntimeParameterValuesInternal(
 			parameters = append(parameters, parameter)
 		}
 	}
-
 	return listValueFromRuntimParameters(ctx, parameters)
 }
 
