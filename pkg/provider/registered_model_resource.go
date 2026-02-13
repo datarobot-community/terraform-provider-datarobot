@@ -151,12 +151,13 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 	data.VersionName = types.StringValue(registeredModelVersion.Name)
 
 	// Set tags from API response to ensure consistency with Read method
+	// Only update tags if API returns them; otherwise keep plan values to avoid inconsistency
 	if len(registeredModelVersion.Tags) > 0 {
 		data.Tags = initializeTagsFromModel(registeredModelVersion.Tags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	} else {
+	} else if data.Tags.IsNull() || data.Tags.IsUnknown() {
 		data.Tags = types.SetNull(types.ObjectType{
 			AttrTypes: map[string]attr.Type{
 				"name":  types.StringType,
@@ -164,6 +165,7 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 			},
 		})
 	}
+	// If tags were provided in the plan but API didn't return them, keep the plan values
 
 	if IsKnown(data.Description) {
 		traceAPICall("UpdateRegisteredModel")
