@@ -2,12 +2,22 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -406,6 +416,332 @@ runtimeParameterDefinitions:
 			// Delete is tested automatically
 		},
 	})
+}
+
+func TestCustomJobResourceConfigValidators_RuntimeParametersConflicting(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	r := NewCustomJobResource().(*CustomJobResource)
+
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+	r.Schema(ctx, schemaRequest, schemaResponse)
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+	s := schemaResponse.Schema
+
+	// Build a config with both runtime fields set (and environment_id set to satisfy AtLeastOneOf).
+	configAttrs := make(map[string]tftypes.Value, len(s.GetAttributes()))
+	for attrName := range s.GetAttributes() {
+		attrType, diags := s.TypeAtPath(ctx, fwpath.Root(attrName))
+		if diags.HasError() {
+			t.Fatalf("failed to get type for attribute %q: %+v", attrName, diags)
+		}
+		configAttrs[attrName] = tftypes.NewValue(attrType.TerraformType(ctx), nil)
+	}
+
+	configAttrs["name"] = tftypes.NewValue(tftypes.String, "cj-test")
+	configAttrs["environment_id"] = tftypes.NewValue(tftypes.String, "env-1")
+
+	// runtime_parameter_values element
+	rpvType, diags := s.TypeAtPath(ctx, fwpath.Root("runtime_parameter_values"))
+	if diags.HasError() {
+		t.Fatalf("failed to get type for runtime_parameter_values: %+v", diags)
+	}
+	rpvListType, ok := rpvType.(basetypes.ListType)
+	if !ok || rpvListType.ElemType == nil {
+		t.Fatalf("unexpected runtime_parameter_values type: %T", rpvType)
+	}
+	rpvElemTfType := rpvListType.ElemType.TerraformType(ctx)
+	rpvElem := tftypes.NewValue(rpvElemTfType, map[string]tftypes.Value{
+		"key":   tftypes.NewValue(tftypes.String, "FOO"),
+		"type":  tftypes.NewValue(tftypes.String, "string"),
+		"value": tftypes.NewValue(tftypes.String, "bar"),
+	})
+	configAttrs["runtime_parameter_values"] = tftypes.NewValue(rpvType.TerraformType(ctx), []tftypes.Value{rpvElem})
+
+	// runtime_parameters element
+	rpType, diags := s.TypeAtPath(ctx, fwpath.Root("runtime_parameters"))
+	if diags.HasError() {
+		t.Fatalf("failed to get type for runtime_parameters: %+v", diags)
+	}
+	rpListType, ok := rpType.(basetypes.ListType)
+	if !ok || rpListType.ElemType == nil {
+		t.Fatalf("unexpected runtime_parameters type: %T", rpType)
+	}
+	rpElemTfType := rpListType.ElemType.TerraformType(ctx)
+	rpElem := tftypes.NewValue(rpElemTfType, map[string]tftypes.Value{
+		"key":   tftypes.NewValue(tftypes.String, "BAZ"),
+		"type":  tftypes.NewValue(tftypes.String, "string"),
+		"value": tftypes.NewValue(tftypes.String, "qux"),
+	})
+	configAttrs["runtime_parameters"] = tftypes.NewValue(rpType.TerraformType(ctx), []tftypes.Value{rpElem})
+
+	configRaw := tftypes.NewValue(s.Type().TerraformType(ctx), configAttrs)
+
+	req := fwresource.ValidateConfigRequest{
+		Config: tfsdk.Config{Schema: s, Raw: configRaw},
+	}
+	resp := &fwresource.ValidateConfigResponse{}
+
+	for _, v := range r.ConfigValidators(ctx) {
+		v.ValidateResource(ctx, req, resp)
+	}
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatalf("expected diagnostics error, got none")
+	}
+
+	found := false
+	for _, d := range resp.Diagnostics {
+		if strings.Contains(strings.ToLower(d.Detail()), "cannot be configured together") ||
+			strings.Contains(strings.ToLower(d.Summary()), "cannot be configured together") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected conflicting-attributes diagnostic, got: %+v", resp.Diagnostics)
+	}
+}
+
+type fakeServiceUpdateCustomJob struct {
+	client.Service
+	calls []fakeUpdateCustomJobCall
+	fn    func(ctx context.Context, id string, req *client.UpdateCustomJobRequest) (*client.CustomJob, error)
+}
+
+type fakeUpdateCustomJobCall struct {
+	id  string
+	req *client.UpdateCustomJobRequest
+}
+
+func (f *fakeServiceUpdateCustomJob) UpdateCustomJob(ctx context.Context, id string, req *client.UpdateCustomJobRequest) (*client.CustomJob, error) {
+	f.calls = append(f.calls, fakeUpdateCustomJobCall{id: id, req: req})
+	if f.fn == nil {
+		return &client.CustomJob{}, nil
+	}
+	return f.fn(ctx, id, req)
+}
+
+func TestUpdateCustomJobWithRuntimeParamsFallback_RuntimeParameters_SendsRuntimeParameters(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameters list: %+v", diags)
+	}
+
+	svc := &fakeServiceUpdateCustomJob{}
+	r := &CustomJobResource{provider: &Provider{service: svc}}
+	plan := CustomJobResourceModel{
+		RuntimeParameters:      runtimeParams,
+		RuntimeParameterValues: types.ListNull(runtimeParamObjectType),
+	}
+	updateReq := &client.UpdateCustomJobRequest{Name: "cj-test"}
+
+	var d diag.Diagnostics
+	err := r.updateCustomJobWithRuntimeParamsFallback(ctx, "cj-1", updateReq, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 UpdateCustomJob call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.id != "cj-1" {
+		t.Fatalf("expected custom job id cj-1, got %q", call.id)
+	}
+	if call.req.RuntimeParameters == "" {
+		t.Fatalf("expected RuntimeParameters to be set, got empty string")
+	}
+	if call.req.RuntimeParameterValues != "" {
+		t.Fatalf("expected RuntimeParameterValues to be empty, got %q", call.req.RuntimeParameterValues)
+	}
+
+	var decoded []client.RuntimeParameterRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameters), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameters JSON %q: %v", call.req.RuntimeParameters, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameters: %+v", decoded)
+	}
+}
+
+func TestUpdateCustomJobWithRuntimeParamsFallback_RuntimeParameterValues_SendsRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParamValues, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameter values list: %+v", diags)
+	}
+
+	svc := &fakeServiceUpdateCustomJob{}
+	r := &CustomJobResource{provider: &Provider{service: svc}}
+	plan := CustomJobResourceModel{
+		RuntimeParameters:      types.ListNull(runtimeParamObjectType),
+		RuntimeParameterValues: runtimeParamValues,
+	}
+	updateReq := &client.UpdateCustomJobRequest{Name: "cj-test"}
+
+	var d diag.Diagnostics
+	err := r.updateCustomJobWithRuntimeParamsFallback(ctx, "cj-1", updateReq, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 UpdateCustomJob call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.req.RuntimeParameterValues == "" {
+		t.Fatalf("expected RuntimeParameterValues to be set, got empty string")
+	}
+	if call.req.RuntimeParameters != "" {
+		t.Fatalf("expected RuntimeParameters to be empty, got %q", call.req.RuntimeParameters)
+	}
+
+	var decoded []client.RuntimeParameterValueRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameterValues), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameterValues JSON %q: %v", call.req.RuntimeParameterValues, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameterValues: %+v", decoded)
+	}
+}
+
+func TestUpdateCustomJobWithRuntimeParamsFallback_RuntimeParameters_FeatureNotEnabled_FallsBackToRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime params list: %+v", diags)
+	}
+	// Ensure legacy list is known and non-empty so fallback branch will execute.
+	runtimeParamValues := runtimeParams
+
+	tests := []struct {
+		name       string
+		firstError string
+	}{
+		{
+			name:       "runtimeParameters not allowed key",
+			firstError: "runtimeParameters is not allowed key",
+		},
+		{
+			name:       "feature not enabled",
+			firstError: "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled",
+		},
+		{
+			name:       "both substrings",
+			firstError: "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled; runtimeParameters is not allowed key",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeServiceUpdateCustomJob{}
+			svc.fn = func(ctx context.Context, id string, req *client.UpdateCustomJobRequest) (*client.CustomJob, error) {
+				// First attempt uses RuntimeParameters and fails with a feature flag / schema error.
+				if req.RuntimeParameters != "" && req.RuntimeParameterValues == "" {
+					return nil, fmt.Errorf("%s", tc.firstError)
+				}
+				// Second attempt uses legacy field and succeeds.
+				if req.RuntimeParameterValues != "" && req.RuntimeParameters == "" {
+					return &client.CustomJob{}, nil
+				}
+				return nil, fmt.Errorf("unexpected request shape: runtime_parameters=%q runtime_parameter_values=%q", req.RuntimeParameters, req.RuntimeParameterValues)
+			}
+
+			r := &CustomJobResource{provider: &Provider{service: svc}}
+			plan := CustomJobResourceModel{
+				RuntimeParameters:      runtimeParams,
+				RuntimeParameterValues: runtimeParamValues,
+			}
+			updateReq := &client.UpdateCustomJobRequest{Name: "cj-test"}
+
+			var d diag.Diagnostics
+			err := r.updateCustomJobWithRuntimeParamsFallback(ctx, "cj-1", updateReq, plan, &d)
+			if err != nil {
+				t.Fatalf("expected nil error (fallback), got: %v", err)
+			}
+			if d.HasError() {
+				t.Fatalf("unexpected diagnostics errors: %+v", d)
+			}
+
+			warnings := 0
+			for _, diagItem := range d {
+				if diagItem.Severity() == diag.SeverityWarning {
+					warnings++
+				}
+			}
+			if warnings != 1 {
+				t.Fatalf("expected 1 warning diagnostic, got %d (%+v)", warnings, d)
+			}
+
+			if got := len(svc.calls); got != 2 {
+				t.Fatalf("expected 2 UpdateCustomJob calls (new then legacy), got %d", got)
+			}
+			if svc.calls[0].req.RuntimeParameters == "" || svc.calls[0].req.RuntimeParameterValues != "" {
+				t.Fatalf("expected first call to use RuntimeParameters only, got: %+v", svc.calls[0].req)
+			}
+			if svc.calls[1].req.RuntimeParameterValues == "" || svc.calls[1].req.RuntimeParameters != "" {
+				t.Fatalf("expected second call to use RuntimeParameterValues only, got: %+v", svc.calls[1].req)
+			}
+		})
+	}
 }
 
 func customJobResourceConfig(
