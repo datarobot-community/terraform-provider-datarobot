@@ -1,5 +1,13 @@
+## [Unreleased]
 
-## [0.10.29] - 2026-02-18
+
+## [0.10.29] - 2026-02-19
+
+### Fixed
+
+- Fixed 409 "Cannot delete custom model with existing deployments" error when updating LLM Blueprint deployments. Added `RequiresReplace()` plan modifiers to ensure proper resource deletion ordering: Deployment → Registered Model → Custom Model. This prevents race conditions during Pulumi/Terraform resource replacement workflows.
+
+- Added `UseStateForUnknown()` plan modifiers to `version_id` fields in Custom Model and Registered Model resources to prevent perpetual Terraform drift.
 
 - Fixed file upload issue. When uploading files (Application Sources, Custom Models, etc.), file paths with whitespace (especially Windows CRLF \r\n) were being sent directly to the API without normalization, causing the error: "Can not store file ..."
 - Fixed Terraform plan drift issues in Custom Application, Custom Model, and Registered Model resources:

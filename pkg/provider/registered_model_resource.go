@@ -57,9 +57,9 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 			"version_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID of the Registered Model Version.",
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
-			},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"version_name": schema.StringAttribute{
 				Optional:            true,
@@ -71,7 +71,7 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The ID of the custom model version for this Registered Model.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-				stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"use_case_ids": schema.ListAttribute{
