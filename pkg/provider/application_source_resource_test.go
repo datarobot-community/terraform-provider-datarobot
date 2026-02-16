@@ -54,7 +54,10 @@ func TestApplicationSourceResourceConfigValidators_RuntimeParametersConflicting(
 
 	ctx := context.Background()
 
-	r := NewApplicationSourceResource().(*ApplicationSourceResource)
+	r, ok := NewApplicationSourceResource().(*ApplicationSourceResource)
+	if !ok {
+		t.Fatal("NewApplicationSourceResource() did not return *ApplicationSourceResource")
+	}
 
 	schemaRequest := fwresource.SchemaRequest{}
 	schemaResponse := &fwresource.SchemaResponse{}
