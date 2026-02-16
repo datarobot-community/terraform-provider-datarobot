@@ -2,12 +2,16 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -1221,6 +1225,363 @@ func TestCustomModelResourceSchema(t *testing.T) {
 
 	if diagnostics.HasError() {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
+
+func TestAccCustomModelResourceSchema_RuntimeParametersConflicting(t *testing.T) {
+	t.Parallel()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: customModelRuntimeParametersConflictingConfig("conflict_runtime_params"),
+				ExpectError: regexp.MustCompile(
+					`(?is)These attributes cannot be configured together:.*(runtime_parameters.*runtime_parameter_values|runtime_parameter_values.*runtime_parameters)`,
+				),
+			},
+		},
+	})
+}
+
+func customModelRuntimeParametersConflictingConfig(name string) string {
+	// This config is intentionally invalid: the resource schema must reject configuring both
+	// runtime_parameters and runtime_parameter_values at the same time.
+	return fmt.Sprintf(`
+resource "datarobot_custom_model" "test_conflict_runtime_params" {
+  name                = "%s"
+  target_type         = "Unstructured"
+  language            = "python"
+  base_environment_id = "65f9b27eab986d30d4c64268"
+
+  runtime_parameter_values = [
+    {
+      key   = "FOO"
+      type  = "string"
+      value = "bar"
+    }
+  ]
+
+  runtime_parameters = [
+    {
+      key   = "BAZ"
+      type  = "string"
+      value = "qux"
+    }
+  ]
+}
+`, name)
+}
+
+type fakeServiceCreateFromLatest struct {
+	client.Service
+	calls []fakeCreateFromLatestCall
+	fn    func(ctx context.Context, id string, req *client.CreateCustomModelVersionFromLatestRequest) (*client.CustomModelVersion, error)
+}
+
+type fakeCreateFromLatestCall struct {
+	id  string
+	req *client.CreateCustomModelVersionFromLatestRequest
+}
+
+func (f *fakeServiceCreateFromLatest) CreateCustomModelVersionCreateFromLatest(
+	ctx context.Context,
+	id string,
+	req *client.CreateCustomModelVersionFromLatestRequest,
+) (*client.CustomModelVersion, error) {
+	f.calls = append(f.calls, fakeCreateFromLatestCall{id: id, req: req})
+	if f.fn == nil {
+		return &client.CustomModelVersion{}, nil
+	}
+	return f.fn(ctx, id, req)
+}
+
+type fakeServiceGuardsNoop struct {
+	client.Service
+
+	getCustomModelCalls   int
+	createFromGuardsCalls int
+}
+
+func (f *fakeServiceGuardsNoop) GetCustomModel(ctx context.Context, id string) (*client.CustomModel, error) {
+	f.getCustomModelCalls++
+	return &client.CustomModel{}, nil
+}
+
+func (f *fakeServiceGuardsNoop) CreateCustomModelVersionFromGuardConfigurations(
+	ctx context.Context,
+	id string,
+	req *client.CreateCustomModelVersionFromGuardsConfigurationRequest,
+) (*client.CreateCustomModelVersionFromGuardsConfigurationResponse, error) {
+	f.createFromGuardsCalls++
+	return &client.CreateCustomModelVersionFromGuardsConfigurationResponse{}, nil
+}
+
+func TestUpdateRuntimeParameterValues_RuntimeParameters_SendsRuntimeParameters(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameters list: %+v", diags)
+	}
+
+	svc := &fakeServiceCreateFromLatest{}
+	r := &CustomModelResource{provider: &Provider{service: svc}}
+	customModel := &client.CustomModel{
+		ID: "cm-1",
+		LatestVersion: client.CustomModelVersion{
+			BaseEnvironmentID:        "be-1",
+			BaseEnvironmentVersionID: "bev-1",
+		},
+	}
+	plan := CustomModelResourceModel{
+		RuntimeParameters:      runtimeParams,
+		RuntimeParameterValues: types.ListNull(runtimeParamObjectType),
+	}
+
+	var d diag.Diagnostics
+	err := r.updateRuntimeParameterValues(ctx, customModel, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+	for _, diagItem := range d {
+		if diagItem.Severity() == diag.SeverityWarning {
+			t.Fatalf("unexpected warning diagnostic: %s: %s", diagItem.Summary(), diagItem.Detail())
+		}
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 CreateFromLatest call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.id != "cm-1" {
+		t.Fatalf("expected custom model id cm-1, got %q", call.id)
+	}
+	if call.req.RuntimeParameters == "" {
+		t.Fatalf("expected RuntimeParameters to be set, got empty string")
+	}
+	if call.req.RuntimeParameterValues != "" {
+		t.Fatalf("expected RuntimeParameterValues to be empty, got %q", call.req.RuntimeParameterValues)
+	}
+
+	var decoded []client.RuntimeParameterRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameters), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameters JSON %q: %v", call.req.RuntimeParameters, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameters: %+v", decoded)
+	}
+}
+
+func TestUpdateRuntimeParameterValues_RuntimeParameterValues_SendsRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParamValues, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameter values list: %+v", diags)
+	}
+
+	svc := &fakeServiceCreateFromLatest{}
+	r := &CustomModelResource{provider: &Provider{service: svc}}
+	customModel := &client.CustomModel{
+		ID: "cm-1",
+		LatestVersion: client.CustomModelVersion{
+			BaseEnvironmentID:        "be-1",
+			BaseEnvironmentVersionID: "bev-1",
+		},
+	}
+	plan := CustomModelResourceModel{
+		RuntimeParameters:      types.ListNull(runtimeParamObjectType),
+		RuntimeParameterValues: runtimeParamValues,
+	}
+
+	var d diag.Diagnostics
+	err := r.updateRuntimeParameterValues(ctx, customModel, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 CreateFromLatest call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.req.RuntimeParameterValues == "" {
+		t.Fatalf("expected RuntimeParameterValues to be set, got empty string")
+	}
+	if call.req.RuntimeParameters != "" {
+		t.Fatalf("expected RuntimeParameters to be empty, got %q", call.req.RuntimeParameters)
+	}
+
+	var decoded []client.RuntimeParameterValueRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameterValues), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameterValues JSON %q: %v", call.req.RuntimeParameterValues, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameterValues: %+v", decoded)
+	}
+}
+
+func TestUpdateRuntimeParameterValues_RuntimeParameters_FeatureNotEnabled_FallsBackToRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime params list: %+v", diags)
+	}
+
+	// Ensure both are "known" so the function can fall back to the legacy field.
+	runtimeParamValues := runtimeParams
+
+	tests := []struct {
+		name       string
+		firstError string
+	}{
+		{
+			name:       "runtimeParameters not allowed key",
+			firstError: "runtimeParameters is not allowed key",
+		},
+		{
+			name:       "feature not enabled",
+			firstError: "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeServiceCreateFromLatest{}
+			svc.fn = func(ctx context.Context, id string, req *client.CreateCustomModelVersionFromLatestRequest) (*client.CustomModelVersion, error) {
+				// First attempt should use RuntimeParameters and fail with a feature flag / schema error.
+				if req.RuntimeParameters != "" && req.RuntimeParameterValues == "" {
+					return nil, fmt.Errorf("%s", tc.firstError)
+				}
+				// Second attempt should use RuntimeParameterValues and succeed.
+				if req.RuntimeParameterValues != "" && req.RuntimeParameters == "" {
+					return &client.CustomModelVersion{}, nil
+				}
+				return nil, fmt.Errorf("unexpected request shape: runtime_parameters=%q runtime_parameter_values=%q", req.RuntimeParameters, req.RuntimeParameterValues)
+			}
+
+			r := &CustomModelResource{provider: &Provider{service: svc}}
+			customModel := &client.CustomModel{
+				ID: "cm-1",
+				LatestVersion: client.CustomModelVersion{
+					BaseEnvironmentID:        "be-1",
+					BaseEnvironmentVersionID: "bev-1",
+				},
+			}
+			plan := CustomModelResourceModel{
+				RuntimeParameters:      runtimeParams,
+				RuntimeParameterValues: runtimeParamValues,
+			}
+
+			var d diag.Diagnostics
+			err := r.updateRuntimeParameterValues(ctx, customModel, plan, &d)
+			if err != nil {
+				t.Fatalf("expected nil error (fallback), got: %v", err)
+			}
+			if d.HasError() {
+				t.Fatalf("unexpected diagnostics errors: %+v", d)
+			}
+
+			warnings := 0
+			for _, diagItem := range d {
+				if diagItem.Severity() == diag.SeverityWarning {
+					warnings++
+				}
+			}
+			if warnings != 1 {
+				t.Fatalf("expected 1 warning diagnostic, got %d (%+v)", warnings, d)
+			}
+
+			if got := len(svc.calls); got != 2 {
+				t.Fatalf("expected 2 CreateFromLatest calls (new then legacy), got %d", got)
+			}
+			if svc.calls[0].req.RuntimeParameters == "" || svc.calls[0].req.RuntimeParameterValues != "" {
+				t.Fatalf("expected first call to use RuntimeParameters only, got: %+v", svc.calls[0].req)
+			}
+			if svc.calls[1].req.RuntimeParameterValues == "" || svc.calls[1].req.RuntimeParameters != "" {
+				t.Fatalf("expected second call to use RuntimeParameterValues only, got: %+v", svc.calls[1].req)
+			}
+		})
+	}
+}
+
+func TestUpdateGuardConfigurations_NoGuardsInPlanAndState_DoesNotCallCreateFromGuards(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	svc := &fakeServiceGuardsNoop{}
+	r := &CustomModelResource{provider: &Provider{service: svc}}
+
+	state := &CustomModelResourceModel{
+		GuardConfigurations: []GuardConfiguration{},
+	}
+	plan := CustomModelResourceModel{
+		ID:                  types.StringValue("cm-1"),
+		GuardConfigurations: []GuardConfiguration{},
+	}
+
+	if err := r.updateGuardConfigurations(ctx, state, plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if svc.getCustomModelCalls != 0 {
+		t.Fatalf("expected GetCustomModel to not be called, got %d calls", svc.getCustomModelCalls)
+	}
+	if svc.createFromGuardsCalls != 0 {
+		t.Fatalf("expected CreateCustomModelVersionFromGuardConfigurations to not be called, got %d calls", svc.createFromGuardsCalls)
 	}
 }
 
