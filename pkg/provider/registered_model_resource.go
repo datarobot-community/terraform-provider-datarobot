@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -57,9 +60,6 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 			"version_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID of the Registered Model Version.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"version_name": schema.StringAttribute{
 				Optional:            true,
@@ -70,8 +70,8 @@ func (r *RegisteredModelResource) Schema(ctx context.Context, req resource.Schem
 				Required:            true,
 				MarkdownDescription: "The ID of the custom model version for this Registered Model.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"use_case_ids": schema.ListAttribute{
@@ -410,12 +410,36 @@ func (r *RegisteredModelResource) Delete(ctx context.Context, req resource.Delet
 	}
 
 	traceAPICall("DeleteRegisteredModel")
-	err := r.provider.service.DeleteRegisteredModel(ctx, data.ID.ValueString())
-	if err != nil {
-		if !errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddError("Error deleting Registered Model", err.Error())
-			return
+
+	// Retry deletion with exponential backoff to handle 409 conflicts
+	// This occurs when Terraform is concurrently deleting deployments during zero-downtime updates
+	operation := func() error {
+		err := r.provider.service.DeleteRegisteredModel(ctx, data.ID.ValueString())
+		if err != nil {
+			// 404 means already deleted - success
+			if errors.Is(err, &client.NotFoundError{}) {
+				return nil
+			}
+
+			// 409 means deployments still exist - retry (they're being deleted by Terraform)
+			var genericErr *client.GenericError
+			if errors.As(err, &genericErr) && strings.Contains(genericErr.Error(), "409") {
+				return err // Retry
+			}
+
+			// Other errors are permanent
+			return backoff.Permanent(err)
 		}
+		return nil
+	}
+
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.MaxElapsedTime = 5 * time.Minute
+
+	err := backoff.Retry(operation, backoff.WithContext(expBackoff, ctx))
+	if err != nil {
+		resp.Diagnostics.AddError("Error deleting Registered Model", err.Error())
+		return
 	}
 }
 
