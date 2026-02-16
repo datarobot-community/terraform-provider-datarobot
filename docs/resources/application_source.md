@@ -65,7 +65,8 @@ output "datarobot_application_source_resources" {
 - `name` (String) The name of the Application Source.
 - `required_key_scope_level` (String) The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.
 - `resources` (Attributes) The resources for the Application Source. If not specified, default values will be computed by the API based on the cluster configuration. (see [below for nested schema](#nestedatt--resources))
-- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
+- `runtime_parameter_values` (Attributes List, Deprecated) [DEPRECATED] The runtime parameter values for the Application Source. (see [below for nested schema](#nestedatt--runtime_parameter_values))
+- `runtime_parameters` (Attributes List) New runtime parameters field that replaces runtime_parameter_values. It doesn't require definitions in metadata file update. (see [below for nested schema](#nestedatt--runtime_parameters))
 
 ### Read-Only
 
@@ -87,6 +88,16 @@ Optional:
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`
+
+Required:
+
+- `key` (String) The name of the runtime parameter.
+- `type` (String) The type of the runtime parameter.
+- `value` (String) The value of the runtime parameter (type conversion is handled internally).
+
+
+<a id="nestedatt--runtime_parameters"></a>
+### Nested Schema for `runtime_parameters`
 
 Required:
 

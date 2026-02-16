@@ -1,4 +1,3 @@
-
 ## [0.10.29] - 2026-02-18
 
 - Fixed file upload issue. When uploading files (Application Sources, Custom Models, etc.), file paths with whitespace (especially Windows CRLF \r\n) were being sent directly to the API without normalization, causing the error: "Can not store file ..."
@@ -8,6 +7,8 @@
   - Fixed `memory_mb` handling to properly transition between null and computed values when switching to/from `resource_bundle_id`
   - Fixed runtime parameter values filtering to skip nil values, preventing `<nil>` strings in state
 - Fixed test isolation issues by adding timestamp-based unique identifiers to prevent name collisions in parallel test runs
+- added support of `runtime_parameters` attribute on custom application resource. Now this field allows runtime parameters creation without providing runtime parameters definitions in the metadata.yaml file;
+- `runtime_parameter_values` attribute on custom application resource is marked as deprecated.
 
 
 ## [0.10.28] - 2026-01-15
