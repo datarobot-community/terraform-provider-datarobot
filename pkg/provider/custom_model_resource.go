@@ -675,7 +675,11 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
-	r.updateRuntimeParameterValues(ctx, customModel, plan, &resp.Diagnostics)
+	err = r.updateRuntimeParameterValues(ctx, customModel, plan, &resp.Diagnostics)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
+		return
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
