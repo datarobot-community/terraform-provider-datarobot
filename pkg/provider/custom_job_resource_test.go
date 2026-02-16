@@ -423,7 +423,10 @@ func TestCustomJobResourceConfigValidators_RuntimeParametersConflicting(t *testi
 
 	ctx := context.Background()
 
-	r := NewCustomJobResource().(*CustomJobResource)
+	r, ok := NewCustomJobResource().(*CustomJobResource)
+	if !ok {
+		t.Fatalf("expected *CustomJobResource, got %T", r)
+	}
 
 	schemaRequest := fwresource.SchemaRequest{}
 	schemaResponse := &fwresource.SchemaResponse{}
