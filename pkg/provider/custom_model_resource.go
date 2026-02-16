@@ -72,6 +72,9 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"version_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID of the latest Custom Model version.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the Custom Model.",

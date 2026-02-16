@@ -59,6 +59,7 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Required:            true,
 				MarkdownDescription: "The ID of the registered model version for this Deployment.",
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
