@@ -159,6 +159,12 @@ type RuntimeParameterValueRequest struct {
 	Value     *any   `json:"value"`
 }
 
+type RuntimeParameterRequest struct {
+	FieldName    string `json:"fieldName"`
+	Type         string `json:"type,omitempty"`
+	CurrentValue *any   `json:"currentValue"`
+}
+
 type GuardTemplate struct {
 	ID            string            `json:"id"`
 	Name          string            `json:"name"`

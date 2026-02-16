@@ -456,6 +456,36 @@ func convertRuntimeParameterValuesToList(
 	return
 }
 
+func convertRuntimeParameterValuesToNewAttribute(ctx context.Context, tfRuntimeParameterValues basetypes.ListValue) (jsonParamsStr string, err error) {
+	runtimeParameters := make([]RuntimeParameterValue, 0)
+	if diags := tfRuntimeParameterValues.ElementsAs(ctx, &runtimeParameters, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameters")
+		return
+	}
+
+	params := make([]client.RuntimeParameterRequest, len(runtimeParameters))
+	for i, param := range runtimeParameters {
+		var value any
+		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+		if err != nil {
+			return
+		}
+		params[i] = client.RuntimeParameterRequest{
+			FieldName:    param.Key.ValueString(),
+			Type:         param.Type.ValueString(),
+			CurrentValue: &value,
+		}
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	jsonParamsStr = string(jsonParams)
+
+	return
+}
+
 func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
 	return types.ListValueFrom(
 		ctx, types.ObjectType{

@@ -299,6 +299,7 @@ type CustomJobResourceModel struct {
 	EnvironmentID          types.String  `tfsdk:"environment_id"`
 	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
 	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
+	RuntimeParameters      types.List    `tfsdk:"runtime_parameters"`
 	FolderPath             types.String  `tfsdk:"folder_path"`
 	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
 	Files                  types.Dynamic `tfsdk:"files"`
