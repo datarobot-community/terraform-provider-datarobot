@@ -10,6 +10,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -92,7 +93,29 @@ func (r *CustomJobResource) Schema(ctx context.Context, req resource.SchemaReque
 			"runtime_parameter_values": schema.ListNestedAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Additional parameters to be injected into a Job at runtime.",
+				MarkdownDescription: "[DEPRECATED] Additional parameters to be injected into a Job at runtime.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"key": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the runtime parameter.",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The type of the runtime parameter.",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
+						},
+					},
+				},
+				DeprecationMessage: "This field requires definitions in metadata file. It's gonna be deprecated in the future versions. Use runtime_parameters instead.",
+			},
+			"runtime_parameters": schema.ListNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "New runtime parameters field that replaces runtime_parameter_values. It doesn't require definitions in metadata file update.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
@@ -229,18 +252,11 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if IsKnown(data.RuntimeParameterValues) {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, data.RuntimeParameterValues)
+	if IsKnown(data.RuntimeParameterValues) || IsKnown(data.RuntimeParameters) {
+		updateRequest := client.UpdateCustomJobRequest{Name: data.Name.ValueString()}
+		err := r.updateCustomJobWithRuntimeParamsFallback(ctx, customJob.ID, &updateRequest, data, &resp.Diagnostics)
 		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
-			return
-		}
-
-		if _, err = r.provider.service.UpdateCustomJob(ctx, customJob.ID, &client.UpdateCustomJobRequest{
-			Name:              customJob.Name,
-			RuntimeParameters: runtimeParameterValues,
-		}); err != nil {
-			resp.Diagnostics.AddError("Error adding runtime parameter values to Custom Job", err.Error())
+			resp.Diagnostics.AddError("Error updating runtime parameters", err.Error())
 			return
 		}
 	}
@@ -268,18 +284,31 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 		data.ScheduleID = types.StringNull()
 	}
 
+	traceAPICall("GetCustomJob")
+	customJob, err = r.provider.service.GetCustomJob(ctx, customJob.ID)
+	if err != nil {
+		if _, ok := err.(*client.NotFoundError); ok {
+			resp.Diagnostics.AddWarning(
+				"Custom Job not found",
+				fmt.Sprintf("Custom Job with ID %s is not found. Removing from state.", customJob.ID))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Custom Job with ID %s", customJob.ID),
+				err.Error())
+		}
+		return
+	}
+
 	data.ID = types.StringValue(customJob.ID)
 	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
-	var diags diag.Diagnostics
-	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
-		ctx,
-		customJob.RuntimeParameters,
-		data)
-	if diags.HasError() {
+
+	if diags := updateRuntimeParametersInPlan(ctx, customJob.RuntimeParameters, &data); diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
 	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
@@ -342,11 +371,8 @@ func (r *CustomJobResource) Read(ctx context.Context, req resource.ReadRequest, 
 	data.EnvironmentID = types.StringValue(customJob.EnvironmentID)
 	data.EnvironmentVersionID = types.StringValue(customJob.EnvironmentVersionID)
 	data.JobType = types.StringValue(customJob.JobType)
-	data.RuntimeParameterValues, diags = checkAndFormatRuntimeParameterValues(
-		ctx,
-		customJob.RuntimeParameters,
-		data)
-	if diags.HasError() {
+
+	if diags := updateRuntimeParametersInPlan(ctx, customJob.RuntimeParameters, &data); diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
 	}
@@ -382,25 +408,19 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
-	if err != nil {
-		resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
-		return
-	}
-
-	// then update the rest of the Custom Job fields
-	traceAPICall("UpdateCustomJob")
-	_, err = r.provider.service.UpdateCustomJob(ctx, plan.ID.ValueString(), &client.UpdateCustomJobRequest{
+	updateRequest := client.UpdateCustomJobRequest{
 		Name:                 plan.Name.ValueString(),
 		Description:          StringValuePointerOptional(plan.Description),
 		EnvironmentID:        StringValuePointerOptional(plan.EnvironmentID),
 		EnvironmentVersionID: StringValuePointerOptional(plan.EnvironmentVersionID),
-		RuntimeParameters:    runtimeParameterValues,
 		Resources: &client.CustomJobResources{
 			EgressNetworkPolicy: plan.EgressNetworkPolicy.ValueString(),
 			ResourceBundleID:    StringValuePointerOptional(plan.ResourceBundleID),
 		},
-	})
+	}
+
+	traceAPICall("UpdateCustomJob")
+	err := r.updateCustomJobWithRuntimeParamsFallback(ctx, plan.ID.ValueString(), &updateRequest, plan, &resp.Diagnostics)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Custom Job", err.Error())
 		return
@@ -437,6 +457,30 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 	} else {
 		plan.ScheduleID = types.StringNull()
 	}
+
+	id := plan.ID.ValueString()
+
+	traceAPICall("GetCustomJob")
+	customJob, err := r.provider.service.GetCustomJob(ctx, id)
+	if err != nil {
+		if _, ok := err.(*client.NotFoundError); ok {
+			resp.Diagnostics.AddWarning(
+				"Custom Job not found",
+				fmt.Sprintf("Custom Job with ID %s is not found. Removing from state.", id))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error getting Custom Job with ID %s", id),
+				err.Error())
+		}
+		return
+	}
+
+	if diags := updateRuntimeParametersInPlan(ctx, customJob.RuntimeParameters, &plan); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -525,10 +569,46 @@ func (r CustomJobResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		}
 	}
 
-	if !IsKnown(plan.RuntimeParameterValues) {
-		// use empty list if runtime parameter values are unknown
-		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	var config CustomJobResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+
+	runtimeParameterObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	fixRuntimeParameterList := func(v types.List, configWasUnset bool) types.List {
+		// Ensure list values are always typed (avoid "MISSING TYPE").
+		if listType, ok := v.Type(ctx).(basetypes.ListType); ok && listType.ElemType == nil {
+			switch {
+			case v.IsNull():
+				v = types.ListNull(runtimeParameterObjectType)
+			case v.IsUnknown():
+				v = types.ListUnknown(runtimeParameterObjectType)
+			default:
+				// Known but missing type (commonly: known empty list)
+				v, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+			}
+		}
+
+		// If the user did not set the attribute, avoid pinning the plan to an empty list.
+		if configWasUnset {
+			if v.IsNull() || (!v.IsUnknown() && len(v.Elements()) == 0) {
+				v = types.ListUnknown(runtimeParameterObjectType)
+			}
+		}
+
+		return v
+	}
+
+	plan.RuntimeParameters = fixRuntimeParameterList(plan.RuntimeParameters, config.RuntimeParameters.IsNull())
+	plan.RuntimeParameterValues = fixRuntimeParameterList(plan.RuntimeParameterValues, config.RuntimeParameterValues.IsNull())
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
@@ -568,18 +648,43 @@ func verifyMetadataForRetrainingJob(data CustomJobResourceModel, resp *resource.
 	}
 }
 
-func checkAndFormatRuntimeParameterValues(ctx context.Context, customJobRuntimeParameters []client.RuntimeParameter, data CustomJobResourceModel) (basetypes.ListValue, diag.Diagnostics) {
-	if data.JobType.ValueString() == retrainingJobType {
-		return formatRuntimeParameterValuesForRetrainingJob(
+func updateRuntimeParametersInPlan(ctx context.Context, customJobRuntimeParameters []client.RuntimeParameter, plan *CustomJobResourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if plan.JobType.ValueString() == retrainingJobType {
+		plan.RuntimeParameterValues, diags = formatRuntimeParameterValuesForRetrainingJob(
 			ctx,
 			customJobRuntimeParameters,
-			data.RuntimeParameterValues)
-	}
+			plan.RuntimeParameterValues)
+		if diags.HasError() {
+			return diags
+		}
 
-	return formatRuntimeParameterValues(
-		ctx,
-		customJobRuntimeParameters,
-		data.RuntimeParameterValues)
+		plan.RuntimeParameters, diags = formatRuntimeParameterValuesForRetrainingJob(
+			ctx,
+			customJobRuntimeParameters,
+			plan.RuntimeParameters)
+		if diags.HasError() {
+			return diags
+		}
+	} else {
+		plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customJobRuntimeParameters,
+			plan.RuntimeParameterValues)
+		if diags.HasError() {
+			return diags
+		}
+
+		plan.RuntimeParameters, diags = formatRuntimeParameterValues(
+			ctx,
+			customJobRuntimeParameters,
+			plan.RuntimeParameters)
+		if diags.HasError() {
+			return diags
+		}
+	}
+	return nil
 }
 
 func (r CustomJobResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
@@ -587,6 +692,10 @@ func (r CustomJobResource) ConfigValidators(ctx context.Context) []resource.Conf
 		resourcevalidator.AtLeastOneOf(
 			path.MatchRoot("environment_id"),
 			path.MatchRoot("environment_version_id"),
+		),
+		resourcevalidator.Conflicting(
+			path.MatchRoot("runtime_parameter_values"),
+			path.MatchRoot("runtime_parameters"),
 		),
 	}
 }
@@ -607,4 +716,53 @@ func convertStringSlice(input []types.String) []any {
 		result = append(result, v)
 	}
 	return result
+}
+
+func (r *CustomJobResource) updateCustomJobWithRuntimeParamsFallback(
+	ctx context.Context,
+	customJobId string,
+	updateRequest *client.UpdateCustomJobRequest,
+	plan CustomJobResourceModel,
+	diags *diag.Diagnostics,
+) (
+	err error,
+) {
+	if IsKnown(plan.RuntimeParameters) {
+		runtimeParameters, err := convertRuntimeParameterValuesToNewAttribute(ctx, plan.RuntimeParameters)
+		if err != nil {
+			diags.AddError("Error converting runtime parameters to new request body attribute", err.Error())
+			return err
+		}
+		updateRequest.RuntimeParameters = runtimeParameters
+		_, err = r.provider.service.UpdateCustomJob(ctx, customJobId, updateRequest)
+		if err != nil {
+			if strings.Contains(err.Error(), "runtimeParameters is not allowed key") || strings.Contains(err.Error(), "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled") {
+				diags.AddWarning("Warning", "RUNTIME_PARAMETERS_IMPROVEMENTS feature is not enabled in your account. Use runtime_parameter_values instead.")
+			} else {
+				diags.AddError("Error during runtime parameters update", err.Error())
+				return err
+			}
+		}
+	}
+
+	if IsKnown(plan.RuntimeParameterValues) {
+		// runtime_parameter_values is deprecated and meant to work with file-based definitions
+		// Only send the update if there are actual values to set
+		// An empty list means "defer to file-based definitions", not "clear all parameters"
+		if len(plan.RuntimeParameterValues.Elements()) > 0 {
+			runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+			if err != nil {
+				diags.AddError("Error converting runtime parameter values to request body attribute", err.Error())
+				return err
+			}
+			updateRequest.RuntimeParameterValues = runtimeParameterValues
+			updateRequest.RuntimeParameters = ""
+			_, err = r.provider.service.UpdateCustomJob(ctx, customJobId, updateRequest)
+			if err != nil {
+				diags.AddError("Error during runtime parameter values update", err.Error())
+				return err
+			}
+		}
+	}
+	return
 }
