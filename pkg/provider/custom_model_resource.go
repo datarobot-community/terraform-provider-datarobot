@@ -1168,10 +1168,9 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 	plan.FolderPathHash = folderPathHash
 
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-
 	if req.State.Raw.IsNull() {
 		// resource is being created
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
 
@@ -1180,6 +1179,21 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// If runtime_parameters is not set in config, preserve the state value to avoid drift
+	if config.RuntimeParameters.IsNull() && !state.RuntimeParameters.IsNull() {
+		plan.RuntimeParameters = state.RuntimeParameters
+	}
+
+	// If runtime_parameter_values is not set in config, preserve the state value to avoid drift
+	if config.RuntimeParameterValues.IsNull() && !state.RuntimeParameterValues.IsNull() {
+		plan.RuntimeParameterValues = state.RuntimeParameterValues
+	}
+
+	// If memory_mb is not set in config, preserve the state value to avoid drift
+	if config.MemoryMB.IsNull() && !state.MemoryMB.IsNull() {
+		plan.MemoryMB = state.MemoryMB
 	}
 
 	customModel, err := r.provider.service.GetCustomModel(ctx, state.ID.ValueString())
