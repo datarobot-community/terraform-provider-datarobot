@@ -2,12 +2,21 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -37,6 +46,95 @@ func TestApplicationSourceResourceSchema(t *testing.T) {
 
 	if diagnostics.HasError() {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
+
+func TestApplicationSourceResourceConfigValidators_RuntimeParametersConflicting(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	r := NewApplicationSourceResource().(*ApplicationSourceResource)
+
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+	r.Schema(ctx, schemaRequest, schemaResponse)
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+	s := schemaResponse.Schema
+
+	// Build a config with both runtime fields set (and base_environment_id set to satisfy AtLeastOneOf).
+	configAttrs := make(map[string]tftypes.Value, len(s.GetAttributes()))
+	for attrName := range s.GetAttributes() {
+		attrType, diags := s.TypeAtPath(ctx, fwpath.Root(attrName))
+		if diags.HasError() {
+			t.Fatalf("failed to get type for attribute %q: %+v", attrName, diags)
+		}
+		configAttrs[attrName] = tftypes.NewValue(attrType.TerraformType(ctx), nil)
+	}
+
+	configAttrs["base_environment_id"] = tftypes.NewValue(tftypes.String, "be-1")
+
+	// runtime_parameter_values element
+	rpvType, diags := s.TypeAtPath(ctx, fwpath.Root("runtime_parameter_values"))
+	if diags.HasError() {
+		t.Fatalf("failed to get type for runtime_parameter_values: %+v", diags)
+	}
+	rpvListType, ok := rpvType.(basetypes.ListType)
+	if !ok || rpvListType.ElemType == nil {
+		t.Fatalf("unexpected runtime_parameter_values type: %T", rpvType)
+	}
+	rpvElemTfType := rpvListType.ElemType.TerraformType(ctx)
+	rpvElem := tftypes.NewValue(rpvElemTfType, map[string]tftypes.Value{
+		"key":   tftypes.NewValue(tftypes.String, "FOO"),
+		"type":  tftypes.NewValue(tftypes.String, "string"),
+		"value": tftypes.NewValue(tftypes.String, "bar"),
+	})
+	configAttrs["runtime_parameter_values"] = tftypes.NewValue(rpvType.TerraformType(ctx), []tftypes.Value{rpvElem})
+
+	// runtime_parameters element
+	rpType, diags := s.TypeAtPath(ctx, fwpath.Root("runtime_parameters"))
+	if diags.HasError() {
+		t.Fatalf("failed to get type for runtime_parameters: %+v", diags)
+	}
+	rpListType, ok := rpType.(basetypes.ListType)
+	if !ok || rpListType.ElemType == nil {
+		t.Fatalf("unexpected runtime_parameters type: %T", rpType)
+	}
+	rpElemTfType := rpListType.ElemType.TerraformType(ctx)
+	rpElem := tftypes.NewValue(rpElemTfType, map[string]tftypes.Value{
+		"key":   tftypes.NewValue(tftypes.String, "BAZ"),
+		"type":  tftypes.NewValue(tftypes.String, "string"),
+		"value": tftypes.NewValue(tftypes.String, "qux"),
+	})
+	configAttrs["runtime_parameters"] = tftypes.NewValue(rpType.TerraformType(ctx), []tftypes.Value{rpElem})
+
+	configRaw := tftypes.NewValue(s.Type().TerraformType(ctx), configAttrs)
+
+	req := fwresource.ValidateConfigRequest{
+		Config: tfsdk.Config{Schema: s, Raw: configRaw},
+	}
+	resp := &fwresource.ValidateConfigResponse{}
+
+	for _, v := range r.ConfigValidators(ctx) {
+		v.ValidateResource(ctx, req, resp)
+	}
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatalf("expected diagnostics error, got none")
+	}
+
+	found := false
+	for _, d := range resp.Diagnostics {
+		if strings.Contains(strings.ToLower(d.Detail()), "cannot be configured together") ||
+			strings.Contains(strings.ToLower(d.Summary()), "cannot be configured together") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected conflicting-attributes diagnostic, got: %+v", resp.Diagnostics)
 	}
 }
 
@@ -382,6 +480,256 @@ runtimeParameterDefinitions:
 			// Delete is tested automatically
 		},
 	})
+}
+
+type fakeServiceUpdateApplicationSourceVersion struct {
+	client.Service
+	calls []fakeUpdateApplicationSourceVersionCall
+	fn    func(ctx context.Context, id string, versionId string, req *client.UpdateApplicationSourceVersionRequest) (*client.ApplicationSourceVersion, error)
+}
+
+type fakeUpdateApplicationSourceVersionCall struct {
+	id        string
+	versionId string
+	req       *client.UpdateApplicationSourceVersionRequest
+}
+
+func (f *fakeServiceUpdateApplicationSourceVersion) UpdateApplicationSourceVersion(
+	ctx context.Context,
+	id string,
+	versionId string,
+	req *client.UpdateApplicationSourceVersionRequest,
+) (*client.ApplicationSourceVersion, error) {
+	f.calls = append(f.calls, fakeUpdateApplicationSourceVersionCall{id: id, versionId: versionId, req: req})
+	if f.fn == nil {
+		return &client.ApplicationSourceVersion{}, nil
+	}
+	return f.fn(ctx, id, versionId, req)
+}
+
+func TestUpdateApplicationSourceRuntimeParameters_RuntimeParameters_SendsRuntimeParameters(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameters list: %+v", diags)
+	}
+
+	svc := &fakeServiceUpdateApplicationSourceVersion{}
+	r := &ApplicationSourceResource{provider: &Provider{service: svc}}
+	applicationSourceVersion := client.ApplicationSourceVersion{ID: "asv-1"}
+	plan := ApplicationSourceResourceModel{
+		ID:                     types.StringValue("as-1"),
+		RequiredKeyScopeLevel:  types.StringNull(),
+		RuntimeParameters:      runtimeParams,
+		RuntimeParameterValues: types.ListNull(runtimeParamObjectType),
+	}
+
+	var d diag.Diagnostics
+	err := r.updateRuntimeParameters(ctx, applicationSourceVersion, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+	for _, diagItem := range d {
+		if diagItem.Severity() == diag.SeverityWarning {
+			t.Fatalf("unexpected warning diagnostic: %s: %s", diagItem.Summary(), diagItem.Detail())
+		}
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 UpdateApplicationSourceVersion call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.id != "as-1" || call.versionId != "asv-1" {
+		t.Fatalf("unexpected ids: id=%q versionId=%q", call.id, call.versionId)
+	}
+	if call.req.RuntimeParameters == "" {
+		t.Fatalf("expected RuntimeParameters to be set, got empty string")
+	}
+	if call.req.RuntimeParameterValues != "" {
+		t.Fatalf("expected RuntimeParameterValues to be empty, got %q", call.req.RuntimeParameterValues)
+	}
+
+	var decoded []client.RuntimeParameterRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameters), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameters JSON %q: %v", call.req.RuntimeParameters, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameters: %+v", decoded)
+	}
+}
+
+func TestUpdateApplicationSourceRuntimeParameters_RuntimeParameterValues_SendsRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParamObjectType := types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+
+	runtimeParamValues, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime parameter values list: %+v", diags)
+	}
+
+	svc := &fakeServiceUpdateApplicationSourceVersion{}
+	r := &ApplicationSourceResource{provider: &Provider{service: svc}}
+	applicationSourceVersion := client.ApplicationSourceVersion{ID: "asv-1"}
+	plan := ApplicationSourceResourceModel{
+		ID:                     types.StringValue("as-1"),
+		RequiredKeyScopeLevel:  types.StringNull(),
+		RuntimeParameters:      types.ListNull(runtimeParamObjectType),
+		RuntimeParameterValues: runtimeParamValues,
+	}
+
+	var d diag.Diagnostics
+	err := r.updateRuntimeParameters(ctx, applicationSourceVersion, plan, &d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.HasError() {
+		t.Fatalf("unexpected diagnostics errors: %+v", d)
+	}
+
+	if got := len(svc.calls); got != 1 {
+		t.Fatalf("expected 1 UpdateApplicationSourceVersion call, got %d", got)
+	}
+	call := svc.calls[0]
+	if call.req.RuntimeParameterValues == "" {
+		t.Fatalf("expected RuntimeParameterValues to be set, got empty string")
+	}
+	if call.req.RuntimeParameters != "" {
+		t.Fatalf("expected RuntimeParameters to be empty, got %q", call.req.RuntimeParameters)
+	}
+
+	var decoded []client.RuntimeParameterValueRequest
+	if err := json.Unmarshal([]byte(call.req.RuntimeParameterValues), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal RuntimeParameterValues JSON %q: %v", call.req.RuntimeParameterValues, err)
+	}
+	if len(decoded) != 1 || decoded[0].FieldName != "FOO" || decoded[0].Type != "string" {
+		t.Fatalf("unexpected decoded RuntimeParameterValues: %+v", decoded)
+	}
+}
+
+func TestUpdateApplicationSourceRuntimeParameters_RuntimeParameters_FeatureNotEnabled_FallsBackToRuntimeParameterValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	runtimeParams, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{
+			Key:   types.StringValue("FOO"),
+			Type:  types.StringValue("string"),
+			Value: types.StringValue("bar"),
+		},
+	})
+	if diags.HasError() {
+		t.Fatalf("failed to build runtime params list: %+v", diags)
+	}
+
+	// Ensure both are "known" so the function can fall back to the legacy field.
+	runtimeParamValues := runtimeParams
+
+	tests := []struct {
+		name       string
+		firstError string
+	}{
+		{
+			name:       "runtimeParameters not allowed key",
+			firstError: "runtimeParameters is not allowed key",
+		},
+		{
+			name:       "feature not enabled",
+			firstError: "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeServiceUpdateApplicationSourceVersion{}
+			svc.fn = func(ctx context.Context, id string, versionId string, req *client.UpdateApplicationSourceVersionRequest) (*client.ApplicationSourceVersion, error) {
+				// First attempt should use RuntimeParameters and fail with a feature flag / schema error.
+				if req.RuntimeParameters != "" && req.RuntimeParameterValues == "" {
+					return nil, fmt.Errorf("%s", tc.firstError)
+				}
+				// Second attempt should use RuntimeParameterValues and succeed.
+				if req.RuntimeParameterValues != "" && req.RuntimeParameters == "" {
+					return &client.ApplicationSourceVersion{}, nil
+				}
+				return nil, fmt.Errorf("unexpected request shape: runtime_parameters=%q runtime_parameter_values=%q", req.RuntimeParameters, req.RuntimeParameterValues)
+			}
+
+			r := &ApplicationSourceResource{provider: &Provider{service: svc}}
+			applicationSourceVersion := client.ApplicationSourceVersion{ID: "asv-1"}
+			plan := ApplicationSourceResourceModel{
+				ID:                     types.StringValue("as-1"),
+				RequiredKeyScopeLevel:  types.StringNull(),
+				RuntimeParameters:      runtimeParams,
+				RuntimeParameterValues: runtimeParamValues,
+			}
+
+			var d diag.Diagnostics
+			err := r.updateRuntimeParameters(ctx, applicationSourceVersion, plan, &d)
+			if err != nil {
+				t.Fatalf("expected nil error (fallback), got: %v", err)
+			}
+			if d.HasError() {
+				t.Fatalf("unexpected diagnostics errors: %+v", d)
+			}
+
+			warnings := 0
+			for _, diagItem := range d {
+				if diagItem.Severity() == diag.SeverityWarning {
+					warnings++
+				}
+			}
+			if warnings != 1 {
+				t.Fatalf("expected 1 warning diagnostic, got %d (%+v)", warnings, d)
+			}
+
+			if got := len(svc.calls); got != 2 {
+				t.Fatalf("expected 2 UpdateApplicationSourceVersion calls (new then legacy), got %d", got)
+			}
+			if svc.calls[0].req.RuntimeParameters == "" || svc.calls[0].req.RuntimeParameterValues != "" {
+				t.Fatalf("expected first call to use RuntimeParameters only, got: %+v", svc.calls[0].req)
+			}
+			if svc.calls[1].req.RuntimeParameterValues == "" || svc.calls[1].req.RuntimeParameters != "" {
+				t.Fatalf("expected second call to use RuntimeParameterValues only, got: %+v", svc.calls[1].req)
+			}
+		})
+	}
 }
 
 func TestAccApplicationSourceResourceBatchFiles(t *testing.T) {
