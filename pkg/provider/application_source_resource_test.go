@@ -16,7 +16,6 @@ import (
 )
 
 func TestAccApplicationSourceResource(t *testing.T) {
-	t.Parallel()
 	testApplicationSourceResource(t, false)
 }
 

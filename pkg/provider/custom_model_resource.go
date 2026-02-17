@@ -1192,7 +1192,7 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 
 	// If memory_mb is not set in config, preserve the state value to avoid drift
-	if config.MemoryMB.IsNull() && !state.MemoryMB.IsNull() {
+	if config.MemoryMB.IsNull() && !state.MemoryMB.IsNull() && config.ResourceBundleID.IsNull() {
 		plan.MemoryMB = state.MemoryMB
 	}
 
