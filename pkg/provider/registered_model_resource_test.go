@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -293,55 +290,6 @@ func TestRegisteredModelResourceSchema(t *testing.T) {
 
 	if diagnostics.HasError() {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
-	}
-}
-
-func TestRegisteredModelResourceCustomModelVersionIDRequiresReplace(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	schemaRequest := fwresource.SchemaRequest{}
-	schemaResponse := &fwresource.SchemaResponse{}
-
-	NewRegisteredModelResource().Schema(ctx, schemaRequest, schemaResponse)
-
-	if schemaResponse.Diagnostics.HasError() {
-		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
-	}
-
-	customModelVersionIDAttr, ok := schemaResponse.Schema.Attributes["custom_model_version_id"]
-	if !ok {
-		t.Fatal("custom_model_version_id attribute not found in schema")
-	}
-
-	stringAttr, ok := customModelVersionIDAttr.(schema.StringAttribute)
-	if !ok {
-		t.Fatal("custom_model_version_id is not a StringAttribute")
-	}
-
-	if len(stringAttr.PlanModifiers) == 0 {
-		t.Fatal("custom_model_version_id has no plan modifiers")
-	}
-
-	foundRequiresReplace := false
-	foundUseStateForUnknown := false
-
-	for _, modifier := range stringAttr.PlanModifiers {
-		typeName := reflect.TypeOf(modifier).String()
-		if strings.Contains(typeName, "requiresReplaceIf") || strings.Contains(typeName, "requiresReplace") {
-			foundRequiresReplace = true
-		}
-		if strings.Contains(typeName, "useStateForUnknown") {
-			foundUseStateForUnknown = true
-		}
-	}
-
-	if !foundRequiresReplace {
-		t.Error("custom_model_version_id does not have RequiresReplace plan modifier")
-	}
-
-	if !foundUseStateForUnknown {
-		t.Error("custom_model_version_id does not have UseStateForUnknown plan modifier")
 	}
 }
 
