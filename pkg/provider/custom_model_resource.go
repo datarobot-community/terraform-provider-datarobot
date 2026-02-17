@@ -445,6 +445,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The memory in MB for the Custom Model.",
+				Default:             nil,
 			},
 			"replicas": schema.Int64Attribute{
 				Optional:            true,
@@ -1189,11 +1190,6 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	// If runtime_parameter_values is not set in config, preserve the state value to avoid drift
 	if config.RuntimeParameterValues.IsNull() && !state.RuntimeParameterValues.IsNull() {
 		plan.RuntimeParameterValues = state.RuntimeParameterValues
-	}
-
-	// If memory_mb is not set in config, preserve the state value to avoid drift
-	if config.MemoryMB.IsNull() && !state.MemoryMB.IsNull() && config.ResourceBundleID.IsNull() {
-		plan.MemoryMB = state.MemoryMB
 	}
 
 	customModel, err := r.provider.service.GetCustomModel(ctx, state.ID.ValueString())

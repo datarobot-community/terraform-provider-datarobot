@@ -738,7 +738,7 @@ func textGenerationRegisteredModelUpdateResourceConfig(
 	promptParamStr := ""
 	if promptParameterValue != nil {
 		promptParamStr = fmt.Sprintf(`
-			runtime_parameters = [
+			runtime_parameter_values = [
 				{
 					key="PROMPT_COLUMN_NAME",
 					type="string",

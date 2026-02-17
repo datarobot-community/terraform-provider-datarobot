@@ -428,7 +428,7 @@ func deploymentResourceConfig(
 	runtimeParameterValuesStr := ""
 	if runtimeParameterValue != "" {
 		runtimeParameterValuesStr = fmt.Sprintf(`
-	runtime_parameters = [
+	runtime_parameter_values = [
 		{
 			key="STRING_PARAMETER",
 			type="string",
