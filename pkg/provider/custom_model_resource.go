@@ -595,7 +595,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			IsMajorUpdate:            "false",
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-		})
+		}, []client.FileInfo{})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 			return
@@ -617,15 +617,25 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModelID,
-		baseEnvironmentID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
-		return
+	// Upload files if provided
+	if IsKnown(plan.FolderPath) || IsKnown(plan.Files) {
+		traceAPICall("WaitForCustomModelToBeReady")
+		customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
+			return
+		}
+
+		localFiles, err := prepareLocalFiles(plan.FolderPath, plan.Files)
+		if err != nil {
+			resp.Diagnostics.AddError("Error preparing local files", err.Error())
+			return
+		}
+
+		if err = r.updateOrCreateCustomModelVersionFromLatest(ctx, customModel, localFiles, []string{}, ""); err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
+			return
+		}
 	}
 
 	traceAPICall("WaitForCustomModelToBeReady")
@@ -664,13 +674,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			BaseEnvironmentID:        baseEnvironmentID,
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
 			RuntimeParameterValues:   runtimeParameterValues,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
+		}, []client.FileInfo{})
 		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
 		if err != nil {
 			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
@@ -722,7 +726,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		payload.MaximumMemory = memoryMB * 1024 * 1024
 	}
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, payload); err != nil {
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, payload, []client.FileInfo{}); err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 		return
 	}
@@ -924,9 +928,79 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
-		return
+	// Consolidate file and runtime parameter updates into a single API call
+	filesChanged := !reflect.DeepEqual(plan.Files, state.Files) ||
+		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+		plan.FolderPath != state.FolderPath ||
+		plan.FolderPathHash != state.FolderPathHash
+
+	runtimeParamsChanged := IsKnown(plan.RuntimeParameterValues)
+
+	if filesChanged || runtimeParamsChanged {
+		filesToDelete := make([]string, 0)
+		localFiles := []client.FileInfo{}
+		runtimeParamsJSON := ""
+
+		// Prepare files if they changed
+		if filesChanged {
+			for _, item := range customModel.LatestVersion.Items {
+				if item.FileSource == "local" {
+					filesToDelete = append(filesToDelete, item.ID)
+				}
+			}
+
+			var err error
+			localFiles, err = prepareLocalFiles(plan.FolderPath, plan.Files)
+			if err != nil {
+				resp.Diagnostics.AddError("Error preparing local files", err.Error())
+				return
+			}
+		}
+
+		// Prepare runtime parameters if they changed
+		if runtimeParamsChanged {
+			runtimeParameterValues := make([]RuntimeParameterValue, 0)
+			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
+				resp.Diagnostics.AddError("Error reading runtime parameter values", diags.Errors()[0].Detail())
+				return
+			}
+
+			params := make([]client.RuntimeParameterValueRequest, 0)
+			for _, param := range runtimeParameterValues {
+				var value any
+				if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
+					resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
+					return
+				}
+				params = append(params, client.RuntimeParameterValueRequest{
+					FieldName: param.Key.ValueString(),
+					Type:      param.Type.ValueString(),
+					Value:     &value,
+				})
+			}
+
+			if len(params) > 0 {
+				var jsonParams []byte
+				if jsonParams, err = json.Marshal(params); err != nil {
+					resp.Diagnostics.AddError("Error marshaling runtime parameters", err.Error())
+					return
+				}
+				runtimeParamsJSON = string(jsonParams)
+			}
+		}
+
+		// Single consolidated API call for both files and runtime parameters
+		if err = r.updateOrCreateCustomModelVersionFromLatest(ctx, customModel, localFiles, filesToDelete, runtimeParamsJSON); err != nil {
+			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
+			return
+		}
+
+		if filesChanged {
+			state.Files = plan.Files
+			state.FolderPath = plan.FolderPath
+			state.FolderPathHash = plan.FolderPathHash
+			state.FilesHashes = plan.FilesHashes
+		}
 	}
 
 	if err = r.updateGuardConfigurations(ctx, &state, plan); err != nil {
@@ -941,16 +1015,6 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 
 	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
-		return
-	}
-
-	if err = r.updateRuntimeParameterValues(ctx, customModel, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-		return
-	}
-
-	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
-		resp.Diagnostics.AddError("Error updating training dataset", err.Error())
 		return
 	}
 
@@ -1335,32 +1399,6 @@ func (r *CustomModelResource) createCustomModelVersionFromRemoteRepository(
 	return
 }
 
-func (r *CustomModelResource) createCustomModelVersionFromFiles(
-	ctx context.Context,
-	folderPath types.String,
-	files types.Dynamic,
-	customModelID string,
-	baseEnvironmentID string,
-) (
-	err error,
-) {
-	localFiles, err := prepareLocalFiles(folderPath, files)
-	if err != nil {
-		return
-	}
-
-	traceAPICall("CreateCustomModelVersionFromLocalFiles")
-	_, err = r.provider.service.CreateCustomModelVersionFromFiles(ctx, customModelID, &client.CreateCustomModelVersionFromFilesRequest{
-		BaseEnvironmentID: baseEnvironmentID,
-		Files:             localFiles,
-	})
-	if err != nil {
-		return
-	}
-
-	return
-}
-
 func (r *CustomModelResource) createCustomModelVersionFromGuards(
 	ctx context.Context,
 	plan CustomModelResourceModel,
@@ -1555,7 +1593,7 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 			KeepTrainingHoldoutData:  &keepTrainingHoldoutData,
-		})
+		}, []client.FileInfo{})
 		if err != nil {
 			return
 		}
@@ -1572,7 +1610,7 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest); err != nil {
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest, []client.FileInfo{}); err != nil {
 		return
 	}
 
@@ -1627,54 +1665,6 @@ func (r *CustomModelResource) updateCustomModel(
 	return
 }
 
-func (r *CustomModelResource) updateRuntimeParameterValues(
-	ctx context.Context,
-	customModel *client.CustomModel,
-	plan CustomModelResourceModel,
-) (
-	err error,
-) {
-	runtimeParameterValues := make([]RuntimeParameterValue, 0)
-	if IsKnown(plan.RuntimeParameterValues) {
-		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-			err = fmt.Errorf("Error reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
-			return
-		}
-	}
-
-	params := make([]client.RuntimeParameterValueRequest, 0)
-	for _, param := range runtimeParameterValues {
-		var value any
-		if value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString()); err != nil {
-			return
-		}
-		params = append(params, client.RuntimeParameterValueRequest{
-			FieldName: param.Key.ValueString(),
-			Type:      param.Type.ValueString(),
-			Value:     &value,
-		})
-	}
-
-	if len(params) > 0 {
-		var jsonParams []byte
-		if jsonParams, err = json.Marshal(params); err != nil {
-			return
-		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParams")
-		if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
-			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-			RuntimeParameterValues:   string(jsonParams),
-		}); err != nil {
-			return
-		}
-	}
-
-	return
-}
-
 func (r *CustomModelResource) updateRemoteRepositories(
 	ctx context.Context,
 	customModel *client.CustomModel,
@@ -1724,7 +1714,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 				FilesToDelete:            filesToDelete,
-			})
+			}, []client.FileInfo{})
 			if err != nil {
 				return
 			}
@@ -1761,57 +1751,6 @@ func (r *CustomModelResource) updateRemoteRepositories(
 			}
 		}
 		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
-	}
-
-	return
-}
-
-func (r *CustomModelResource) updateLocalFiles(
-	ctx context.Context,
-	customModel *client.CustomModel,
-	state *CustomModelResourceModel,
-	plan CustomModelResourceModel,
-) (
-	err error,
-) {
-	if !reflect.DeepEqual(plan.Files, state.Files) ||
-		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
-		plan.FolderPath != state.FolderPath ||
-		plan.FolderPathHash != state.FolderPathHash {
-		filesToDelete := make([]string, 0)
-		for _, item := range customModel.LatestVersion.Items {
-			if item.FileSource == "local" {
-				filesToDelete = append(filesToDelete, item.ID)
-			}
-		}
-
-		if len(filesToDelete) > 0 {
-			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-				IsMajorUpdate:            "false",
-				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
-				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-				FilesToDelete:            filesToDelete,
-			})
-			if err != nil {
-				return
-			}
-		}
-
-		if err = r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.FolderPath,
-			plan.Files,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		); err != nil {
-			return
-		}
-
-		state.Files = plan.Files
-		state.FolderPath = plan.FolderPath
-		state.FolderPathHash = plan.FolderPathHash
-		state.FilesHashes = plan.FilesHashes
 	}
 
 	return
@@ -1896,7 +1835,7 @@ func (r *CustomModelResource) updateResourceSettings(
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatestResources")
-	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload); err != nil {
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload, []client.FileInfo{}); err != nil {
 		return
 	}
 	state.Replicas = plan.Replicas
@@ -1922,7 +1861,7 @@ func (r *CustomModelResource) updateTrainingDataset(
 			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 			KeepTrainingHoldoutData:  &keepTrainingHoldoutData,
-		})
+		}, []client.FileInfo{})
 		if err != nil {
 			return
 		}
@@ -1958,7 +1897,7 @@ func (r *CustomModelResource) addResourceBundle(
 			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
 			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 			ResourceBundleID:         plan.ResourceBundleID.ValueStringPointer(),
-		}); err != nil {
+		}, []client.FileInfo{}); err != nil {
 			return
 		}
 		state.MemoryMB = types.Int64Null() // reset memory if resource bundle is set
@@ -2016,11 +1955,7 @@ func (r *CustomModelResource) assignTrainingDataset(
 		}
 
 		var customModelVersion *client.CustomModelVersion
-		customModelVersion, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, createVersionFromLatestRequest)
-		if err != nil {
-			return
-		}
-		state.TrainingDatasetVersionID = types.StringValue(customModelVersion.TrainingData.DatasetVersionID)
+		customModelVersion, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, createVersionFromLatestRequest, []client.FileInfo{})
 		state.TrainingDatasetName = types.StringValue(customModelVersion.TrainingData.DatasetName)
 
 		err = r.waitForTrainingDataToBeAssigned(ctx, customModelID)
@@ -2131,5 +2066,40 @@ func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err er
 		}
 	}
 
+	return
+}
+
+// updateOrCreateCustomModelVersionFromLatest consolidates file uploads and runtime parameter updates
+// into a single API call to CreateCustomModelVersionCreateFromLatest. This reduces API overhead
+// by combining operations that would otherwise require separate calls.
+//
+// NOTE: This function does NOT handle guard configurations. Guards use a different API endpoint
+// (CreateCustomModelVersionFromGuardConfigurations) with specific restrictions that prevent
+// combining them with file/runtime parameter operations. Guard updates must be handled separately
+// via createCustomModelVersionFromGuards.
+func (r *CustomModelResource) updateOrCreateCustomModelVersionFromLatest(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	localFiles []client.FileInfo,
+	filesToDelete []string,
+	runtimeParameterValues string,
+) (
+	err error,
+) {
+	if len(filesToDelete) > 0 || len(localFiles) > 0 || runtimeParameterValues != "" {
+		traceAPICall("CreateCustomModelVersionCreateFromLatestWithFiles")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(
+			ctx,
+			customModel.ID,
+			&client.CreateCustomModelVersionFromLatestRequest{
+				IsMajorUpdate:            "false",
+				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+				FilesToDelete:            filesToDelete,
+				RuntimeParameterValues:   runtimeParameterValues,
+			},
+			localFiles,
+		)
+	}
 	return
 }

@@ -727,12 +727,3 @@ func isTemplateFile(path string, customTemplate client.CustomTemplate) (string, 
 	}
 	return "", false
 }
-
-func localFilesContain(files []client.FileInfo, path string) bool {
-	for _, file := range files {
-		if file.Path == path {
-			return true
-		}
-	}
-	return false
-}
