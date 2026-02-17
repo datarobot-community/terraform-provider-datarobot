@@ -1622,7 +1622,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	description = "%s"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
 	base_environment_id = "67ab469cecdca772287de644"
-	runtime_parameter_values = [
+	runtime_parameters = [
 	  {
 		  key="OPENAI_API_BASE",
 		  type="string",
