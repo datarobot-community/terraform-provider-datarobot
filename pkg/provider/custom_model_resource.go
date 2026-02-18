@@ -681,9 +681,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
-	if resp.Diagnostics.HasError() {
-		return
-	}
 
 	if len(plan.GuardConfigurations) > 0 {
 		if err = r.createCustomModelVersionFromGuards(
@@ -952,11 +949,6 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValues(ctx, customModel, plan, &resp.Diagnostics); err != nil {
-		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
-		return
-	}
-
 	if err = r.updateGuardConfigurations(ctx, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating guard configurations", err.Error())
 		return
@@ -969,6 +961,11 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 
 	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
+		return
+	}
+
+	if err = r.updateRuntimeParameterValues(ctx, customModel, plan, &resp.Diagnostics); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
 
