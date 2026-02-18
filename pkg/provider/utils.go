@@ -356,12 +356,6 @@ func formatRuntimeParameterValuesInternal(
 			continue
 		}
 
-		parameter := RuntimeParameterValue{
-			Key:   types.StringValue(param.FieldName),
-			Type:  types.StringValue(param.Type),
-			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
-		}
-
 		var defaultValue = param.DefaultValue
 		if param.DefaultValue == nil {
 			switch param.Type {
@@ -372,9 +366,18 @@ func formatRuntimeParameterValuesInternal(
 			}
 		}
 
-		if param.CurrentValue != defaultValue {
-			parameters = append(parameters, parameter)
+		// Skip if current value equals default value or if current value is nil
+		if param.CurrentValue == nil || param.CurrentValue == defaultValue {
+			continue
 		}
+
+		parameter := RuntimeParameterValue{
+			Key:   types.StringValue(param.FieldName),
+			Type:  types.StringValue(param.Type),
+			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
+		}
+
+		parameters = append(parameters, parameter)
 	}
 
 	return listValueFromRuntimParameters(ctx, parameters)

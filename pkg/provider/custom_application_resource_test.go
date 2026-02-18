@@ -287,7 +287,8 @@ func TestAccCustomApplicationWithBatchFiles(t *testing.T) {
 	sourceResourceName := "datarobot_application_source.batch_test"
 
 	// Create unique test identifier to avoid conflicts from failed test runs
-	testUniqueID := nameSalt + "-" + t.Name()
+	// Include timestamp for extra uniqueness in parallel runs
+	testUniqueID := fmt.Sprintf("%s-%s-%d", nameSalt, t.Name(), time.Now().UnixNano())
 
 	// Create a temporary directory for test files
 	testDir := "test_batch_app_files"

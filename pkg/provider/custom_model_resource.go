@@ -419,7 +419,6 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The memory in MB for the Custom Model.",
-				Default:             nil,
 			},
 			"replicas": schema.Int64Attribute{
 				Optional:            true,
@@ -960,6 +959,14 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+
+	// Update memory_mb from API if not using resource bundle
+	if !IsKnown(state.ResourceBundleID) && customModel.LatestVersion.MaximumMemory != nil {
+		state.MemoryMB = types.Int64Value(int64(*customModel.LatestVersion.MaximumMemory / (1024 * 1024)))
+	} else if IsKnown(state.ResourceBundleID) {
+		// When resource bundle is set, memory_mb should be null
+		state.MemoryMB = types.Int64Null()
+	}
 
 	if err = r.updateDependencyBuild(ctx, customModel); err != nil {
 		resp.Diagnostics.AddError("Error updating Custom Model dependency build", err.Error())
@@ -1961,8 +1968,6 @@ func (r *CustomModelResource) addResourceBundle(
 		}); err != nil {
 			return
 		}
-		state.MemoryMB = types.Int64Null() // reset memory if resource bundle is set
-
 	}
 
 	state.ResourceBundleID = plan.ResourceBundleID

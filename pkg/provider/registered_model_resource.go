@@ -373,6 +373,7 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 		plan.VersionID = types.StringValue(registeredModelVersion.ID)
+		plan.VersionName = types.StringValue(registeredModelVersion.Name)
 	}
 
 	// check if we created a new version
