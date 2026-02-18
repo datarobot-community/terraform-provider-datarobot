@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/go-retryablehttp"
@@ -28,6 +29,11 @@ type Provider struct {
 	// communicate with the upstream service. Resource and DataSource
 	// implementations can then make calls using this client.
 	service client.Service
+
+	// pendingCustomModelDeletions stores custom model IDs that failed to delete due to 409 conflicts.
+	// This works around Terraform's non-deterministic deletion order bugs (#37975, #30439).
+	// Key: custom model ID, Value: true if pending deletion
+	pendingCustomModelDeletions sync.Map
 
 	// configured is set to true at the end of the Configure method.
 	// This can be used in Resource and DataSource implementations to verify

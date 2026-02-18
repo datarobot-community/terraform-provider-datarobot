@@ -37,8 +37,9 @@ func TestAccLLMBlueprintDeployment(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "registered_model_version_id"),
 				),
 			},
-			// Update LLM Blueprint system_prompt - this triggers replacement which should cascade
-			// This is the scenario that exposes the cleanup bug
+			// Update LLM Blueprint system_prompt - this triggers replacement which cascades down
+			// This tests that the provider handles Terraform's non-deterministic deletion order
+			// See: https://github.com/hashicorp/terraform/issues/37975 and #30439
 			{
 				Config: llmBlueprintDeploymentConfig(llmID, "tomato"),
 				ConfigStateChecks: []statecheck.StateCheck{

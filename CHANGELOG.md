@@ -1,14 +1,10 @@
 ## [Unreleased]
 
-
 ## [0.10.29] - 2026-02-19
 
 ### Fixed
 
 - Fixed 409 "Cannot delete custom model with existing deployments" error when DataRobot API returns from DELETE operations before async backend deletion completes. Added retry logic with exponential backoff (up to 5 minutes) to Custom Model and Registered Model deletion to wait for in-flight deployment deletions to complete. This handles race conditions caused by the API's async deletion behavior during resource replacement workflows.
-
-
-
 - Fixed file upload issue. When uploading files (Application Sources, Custom Models, etc.), file paths with whitespace (especially Windows CRLF \r\n) were being sent directly to the API without normalization, causing the error: "Can not store file ..."
 - Fixed Terraform plan drift issues in Custom Application, Custom Model, and Registered Model resources:
   - Nested attributes in `resources` block now properly marked as Computed to prevent unexpected plan changes

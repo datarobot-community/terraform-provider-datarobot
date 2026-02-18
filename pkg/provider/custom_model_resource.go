@@ -9,7 +9,6 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -29,6 +28,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -1007,38 +1007,53 @@ func (r *CustomModelResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
+	customModelID := data.ID.ValueString()
+	tflog.Info(ctx, "[DEBUG] Starting Custom Model deletion", map[string]interface{}{
+		"custom_model_id": customModelID,
+	})
 	traceAPICall("DeleteCustomModel")
 
-	// Retry deletion with exponential backoff to handle 409 conflicts
-	// This occurs when Terraform is concurrently deleting deployments during zero-downtime updates
-	operation := func() error {
-		err := r.provider.service.DeleteCustomModel(ctx, data.ID.ValueString())
-		if err != nil {
-			// 404 means already deleted - success
-			if errors.Is(err, &client.NotFoundError{}) {
-				return nil
-			}
-
-			// 409 means deployments still exist - retry (they're being deleted by Terraform)
-			var genericErr *client.GenericError
-			if errors.As(err, &genericErr) && strings.Contains(genericErr.Error(), "409") {
-				return err // Retry
-			}
-
-			// Other errors are permanent
-			return backoff.Permanent(err)
-		}
-		return nil
-	}
-
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.MaxElapsedTime = 5 * time.Minute
-
-	err := backoff.Retry(operation, backoff.WithContext(expBackoff, ctx))
+	// Attempt to delete the custom model
+	err := r.provider.service.DeleteCustomModel(ctx, customModelID)
 	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			// Already deleted - success
+			tflog.Info(ctx, "[DEBUG] Custom Model already deleted", map[string]interface{}{
+				"custom_model_id": customModelID,
+			})
+			return
+		}
+
+		// Check if it's a 409 conflict - means deployments still exist
+		// This works around Terraform's non-deterministic deletion order bugs (#37975, #30439)
+		// Instead of blocking (which creates deadlock), we store the custom model ID in
+		// provider-level state and return success. The deployment will complete the deletion.
+		if strings.Contains(err.Error(), "409 Conflict") || strings.Contains(err.Error(), "existing deployments") {
+			tflog.Warn(ctx, "[DEBUG] Custom Model has deployments, deferring deletion to deployment resource", map[string]interface{}{
+				"custom_model_id": customModelID,
+			})
+
+			// Store custom model ID in provider-level map so Deployment can complete the deletion
+			r.provider.pendingCustomModelDeletions.Store(customModelID, true)
+
+			tflog.Info(ctx, "[DEBUG] Custom Model deletion deferred, stored in provider state", map[string]interface{}{
+				"custom_model_id": customModelID,
+			})
+			return // Success - deployment will complete the deletion
+		}
+
+		// Other errors are fatal
+		tflog.Error(ctx, "[DEBUG] Custom Model deletion failed", map[string]interface{}{
+			"custom_model_id": customModelID,
+			"error":           err.Error(),
+		})
 		resp.Diagnostics.AddError("Error deleting Custom Model", err.Error())
 		return
 	}
+
+	tflog.Info(ctx, "[DEBUG] Custom Model deletion completed successfully", map[string]interface{}{
+		"custom_model_id": customModelID,
+	})
 }
 
 func (r *CustomModelResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

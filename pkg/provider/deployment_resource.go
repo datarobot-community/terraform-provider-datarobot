@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -58,6 +59,9 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"registered_model_version_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The ID of the registered model version for this Deployment.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"prediction_environment_id": schema.StringAttribute{
 				Required:            true,
@@ -846,14 +850,56 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
+	deploymentID := data.ID.ValueString()
+	tflog.Info(ctx, "[DEBUG] Starting Deployment deletion", map[string]interface{}{
+		"deployment_id": deploymentID,
+	})
+
 	traceAPICall("DeleteDeployment")
-	err := r.provider.service.DeleteDeployment(ctx, data.ID.ValueString())
+	err := r.provider.service.DeleteDeployment(ctx, deploymentID)
 	if err != nil {
 		if !errors.Is(err, &client.NotFoundError{}) {
+			tflog.Error(ctx, "[DEBUG] Deployment deletion failed", map[string]interface{}{
+				"deployment_id": deploymentID,
+				"error":         err.Error(),
+			})
 			resp.Diagnostics.AddError("Error deleting Deployment", err.Error())
 			return
 		}
 	}
+	tflog.Info(ctx, "[DEBUG] Deployment deletion completed successfully", map[string]interface{}{
+		"deployment_id": deploymentID,
+	})
+
+	// Check if there are any pending custom model deletions in provider state
+	// This handles Terraform's non-deterministic deletion order bug (#37975, #30439)
+	r.provider.pendingCustomModelDeletions.Range(func(key, value interface{}) bool {
+		customModelID := key.(string)
+		tflog.Info(ctx, "[DEBUG] Found pending custom model deletion, completing it now", map[string]interface{}{
+			"custom_model_id": customModelID,
+		})
+
+		traceAPICall("DeleteCustomModel")
+		err := r.provider.service.DeleteCustomModel(ctx, customModelID)
+		if err != nil {
+			if !errors.Is(err, &client.NotFoundError{}) {
+				tflog.Error(ctx, "[DEBUG] Deferred custom model deletion failed", map[string]interface{}{
+					"custom_model_id": customModelID,
+					"error":           err.Error(),
+				})
+				resp.Diagnostics.AddError("Error deleting deferred Custom Model", err.Error())
+				return false // Stop iteration on error
+			}
+		}
+
+		tflog.Info(ctx, "[DEBUG] Deferred custom model deletion completed successfully", map[string]interface{}{
+			"custom_model_id": customModelID,
+		})
+
+		// Remove from pending deletions
+		r.provider.pendingCustomModelDeletions.Delete(customModelID)
+		return true // Continue iteration
+	})
 }
 
 func (r *DeploymentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
