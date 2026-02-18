@@ -482,7 +482,6 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan CustomModelResourceModel
 	var memoryMB int64
-
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -1000,25 +999,24 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 }
 
 func (r *CustomModelResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data CustomModelResourceModel
 
+	var data CustomModelResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	customModelID := data.ID.ValueString()
-	tflog.Info(ctx, "[DEBUG] Starting Custom Model deletion", map[string]interface{}{
+	tflog.Info(ctx, "Starting Custom Model deletion", map[string]interface{}{
 		"custom_model_id": customModelID,
 	})
 	traceAPICall("DeleteCustomModel")
-
 	// Attempt to delete the custom model
 	err := r.provider.service.DeleteCustomModel(ctx, customModelID)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			// Already deleted - success
-			tflog.Info(ctx, "[DEBUG] Custom Model already deleted", map[string]interface{}{
+			tflog.Info(ctx, "Custom Model already deleted", map[string]interface{}{
 				"custom_model_id": customModelID,
 			})
 			return
@@ -1029,21 +1027,21 @@ func (r *CustomModelResource) Delete(ctx context.Context, req resource.DeleteReq
 		// Instead of blocking (which creates deadlock), we store the custom model ID in
 		// provider-level state and return success. The deployment will complete the deletion.
 		if strings.Contains(err.Error(), "409 Conflict") || strings.Contains(err.Error(), "existing deployments") {
-			tflog.Warn(ctx, "[DEBUG] Custom Model has deployments, deferring deletion to deployment resource", map[string]interface{}{
+			tflog.Debug(ctx, "Custom Model has deployments, deferring deletion to deployment resource", map[string]interface{}{
 				"custom_model_id": customModelID,
 			})
 
 			// Store custom model ID in provider-level map so Deployment can complete the deletion
 			r.provider.pendingCustomModelDeletions.Store(customModelID, true)
 
-			tflog.Info(ctx, "[DEBUG] Custom Model deletion deferred, stored in provider state", map[string]interface{}{
+			tflog.Debug(ctx, "Custom Model deletion deferred, stored in provider state", map[string]interface{}{
 				"custom_model_id": customModelID,
 			})
 			return // Success - deployment will complete the deletion
 		}
 
 		// Other errors are fatal
-		tflog.Error(ctx, "[DEBUG] Custom Model deletion failed", map[string]interface{}{
+		tflog.Error(ctx, "Custom Model deletion failed", map[string]interface{}{
 			"custom_model_id": customModelID,
 			"error":           err.Error(),
 		})
@@ -1051,7 +1049,7 @@ func (r *CustomModelResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	tflog.Info(ctx, "[DEBUG] Custom Model deletion completed successfully", map[string]interface{}{
+	tflog.Info(ctx, "Custom Model deletion completed successfully", map[string]interface{}{
 		"custom_model_id": customModelID,
 	})
 }
