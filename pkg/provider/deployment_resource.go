@@ -874,38 +874,38 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 	// Check if there are any pending custom model deletions in provider state
 	// This handles Terraform's non-deterministic deletion order bug (#37975, #30439)
 	r.provider.pendingCustomModelDeletions.Range(func(key, value interface{}) bool {
-		       customModelID, ok := key.(string)
-		       if !ok {
-			       tflog.Error(ctx, "Deferred custom model deletion failed: key is not a string", map[string]interface{}{
-				       "key": key,
-			       })
-			       resp.Diagnostics.AddError("Error deleting deferred Custom Model", "Key in pendingCustomModelDeletions is not a string")
-			       return true // Continue iteration
-		       }
-		       tflog.Debug(ctx, "Found pending custom model deletion, completing it now", map[string]interface{}{
-			       "custom_model_id": customModelID,
-		       })
+		customModelID, ok := key.(string)
+		if !ok {
+			tflog.Error(ctx, "Deferred custom model deletion failed: key is not a string", map[string]interface{}{
+				"key": key,
+			})
+			resp.Diagnostics.AddError("Error deleting deferred Custom Model", "Key in pendingCustomModelDeletions is not a string")
+			return true // Continue iteration
+		}
+		tflog.Debug(ctx, "Found pending custom model deletion, completing it now", map[string]interface{}{
+			"custom_model_id": customModelID,
+		})
 
-		       traceAPICall("DeleteCustomModel")
-		       err := r.provider.service.DeleteCustomModel(ctx, customModelID)
-		       if err != nil {
-			       if !errors.Is(err, &client.NotFoundError{}) {
-				       tflog.Error(ctx, "Deferred custom model deletion failed", map[string]interface{}{
-					       "custom_model_id": customModelID,
-					       "error":           err.Error(),
-				       })
-				       resp.Diagnostics.AddError("Error deleting deferred Custom Model", err.Error())
-				       return false // Stop iteration on error
-			       }
-		       }
+		traceAPICall("DeleteCustomModel")
+		err := r.provider.service.DeleteCustomModel(ctx, customModelID)
+		if err != nil {
+			if !errors.Is(err, &client.NotFoundError{}) {
+				tflog.Error(ctx, "Deferred custom model deletion failed", map[string]interface{}{
+					"custom_model_id": customModelID,
+					"error":           err.Error(),
+				})
+				resp.Diagnostics.AddError("Error deleting deferred Custom Model", err.Error())
+				return false // Stop iteration on error
+			}
+		}
 
-		       tflog.Debug(ctx, "Deferred custom model deletion completed successfully", map[string]interface{}{
-			       "custom_model_id": customModelID,
-		       })
+		tflog.Debug(ctx, "Deferred custom model deletion completed successfully", map[string]interface{}{
+			"custom_model_id": customModelID,
+		})
 
-		       // Remove from pending deletions
-		       r.provider.pendingCustomModelDeletions.Delete(customModelID)
-		       return true // Continue iteration
+		// Remove from pending deletions
+		r.provider.pendingCustomModelDeletions.Delete(customModelID)
+		return true // Continue iteration
 	})
 }
 
