@@ -1218,10 +1218,15 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		}
 	}
 
-	// reset unknown version id if if hashess have been changed
-	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
+	if config.MemoryMB.IsNull() {
+		plan.MemoryMB = state.MemoryMB
+	}
+
+	if !plan.FilesHashes.Equal(state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
 		plan.VersionID = types.StringUnknown()
+	} else {
+		plan.VersionID = state.VersionID
 	}
 
 	if !IsKnown(plan.BaseEnvironmentID) {
