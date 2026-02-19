@@ -142,6 +142,7 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 		},

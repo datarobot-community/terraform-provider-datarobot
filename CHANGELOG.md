@@ -12,6 +12,7 @@
   - Fixed `memory_mb` handling to properly transition between null and computed values when switching to/from `resource_bundle_id`
   - Fixed runtime parameter values filtering to skip nil values, preventing `<nil>` strings in state
 - Fixed test isolation issues by adding timestamp-based unique identifiers to prevent name collisions in parallel test runs
+- Fixed `required_key_scope_level` field to trigger resource replacement instead of in-place update when changed, since the DataRobot API does not support PATCH operations on this field (affects Application Source and Custom Application resources)
 
 
 ## [0.10.28] - 2026-01-15
