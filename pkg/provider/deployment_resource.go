@@ -873,6 +873,7 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	// Check if there are any pending custom model deletions in provider state
 	// This handles Terraform's non-deterministic deletion order bug (#37975, #30439)
+	// See custom_model_resource.go for where this is set when it receives a 409
 	r.provider.pendingCustomModelDeletions.Range(func(key, value interface{}) bool {
 		customModelID, ok := key.(string)
 		if !ok {
