@@ -112,6 +112,7 @@ runtimeParameterDefinitions:
 	}
 
 	folderPath := fmt.Sprintf("%s/application_source", testDir)
+	os.RemoveAll(folderPath)
 	if err = os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}

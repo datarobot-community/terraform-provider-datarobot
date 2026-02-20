@@ -70,6 +70,7 @@ if __name__ == "__main__":
 	defer os.Remove(appCodeFileName)
 
 	folderPath := "application_source_from_template"
+	os.RemoveAll(folderPath)
 	if err = os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -493,9 +494,9 @@ func applicationSourceFromTemplateResourceConfig(
 	if len(files) > 0 {
 		runtimeParamValueStr = `
 		runtime_parameter_values = [
-			{ 
-				key="SLACK_APP_TOKEN", 
-				type="credential", 
+			{
+				key="SLACK_APP_TOKEN",
+				type="credential",
 				value="${datarobot_api_token_credential.test_app_source_from_template.id}",
 			},
 		  ]`

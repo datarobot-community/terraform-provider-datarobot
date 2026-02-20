@@ -425,11 +425,6 @@ func (r *DeploymentRetrainingPolicyResource) Read(ctx context.Context, req resou
 	if deploymentRetrainingPolicy.UseCase != nil {
 		data.UseCaseID = types.StringValue(deploymentRetrainingPolicy.UseCase.ID)
 	}
-	// Retrieve retraining settings
-	if err != nil {
-		resp.Diagnostics.AddError("Error retrieving Retraining Settings", err.Error())
-		return
-	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }

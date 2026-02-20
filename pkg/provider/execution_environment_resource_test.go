@@ -29,6 +29,7 @@ func TestAccExecutionEnvironmentResource(t *testing.T) {
 
 	// create directory
 	dirName := "execution_environment_context"
+	os.RemoveAll(dirName)
 	err := os.Mkdir(dirName, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
@@ -475,6 +476,7 @@ func TestAccExecutionEnvironmentResourceReadWithVersionID(t *testing.T) {
 	resourceName := "datarobot_execution_environment.test"
 
 	dirName := "execution_environment_context_version_test"
+	os.RemoveAll(dirName)
 	err := os.Mkdir(dirName, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
