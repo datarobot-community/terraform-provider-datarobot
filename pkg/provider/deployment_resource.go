@@ -897,8 +897,11 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 			traceAPICall("DeleteCustomModel")
 			err := r.provider.service.DeleteCustomModel(ctx, customModelID)
 			if err != nil {
-				if errors.Is(err, &client.NotFoundError{}) {
-					// Already deleted - success
+				// Check if already deleted by another process (404 Not Found) - this is success
+				if errors.Is(err, &client.NotFoundError{}) || strings.Contains(err.Error(), "not found") {
+					tflog.Debug(ctx, "Custom model already deleted (404 Not Found), treating as success", map[string]interface{}{
+						"custom_model_id": customModelID,
+					})
 					return nil
 				}
 				// Check if it's still a 409 conflict - retry if so
