@@ -82,6 +82,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	}
 	defer os.Remove(fileName)
 
+	os.RemoveAll(folderPath)
 	err = os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -619,6 +620,7 @@ runtimeParameterDefinitions:
     description: An example of a string parameter
     defaultValue: null`
 
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)

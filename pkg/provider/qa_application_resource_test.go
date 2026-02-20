@@ -20,6 +20,7 @@ func TestAccQAApplicationResource(t *testing.T) {
 	newName := "new_qa_application " + nameSalt
 
 	folderPath := "qa_application"
+	os.RemoveAll(folderPath)
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}

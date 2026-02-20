@@ -157,6 +157,7 @@ runtimeParameterDefinitions:
     type: string
     defaultValue: null`
 
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -228,6 +229,7 @@ runtimeParameterDefinitions:
     type: string
     defaultValue: null`
 
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)

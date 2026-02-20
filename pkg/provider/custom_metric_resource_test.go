@@ -23,6 +23,8 @@ func TestAccCustomMetricResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	folderPath := "custom_metric"
+	// Clean up any existing directory from previous test runs
+	os.RemoveAll(folderPath)
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}

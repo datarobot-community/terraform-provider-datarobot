@@ -58,6 +58,7 @@ func TestAccCustomMetricFromJobResource(t *testing.T) {
 	`
 
 	folderPath := "custom_metric_from_job"
+	os.RemoveAll(folderPath)
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}

@@ -31,6 +31,7 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	useCaseResourceName2 := "test_new_custom_application"
 
 	folderPath := "custom_application"
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -292,6 +293,7 @@ func TestAccCustomApplicationWithBatchFiles(t *testing.T) {
 
 	// Create a temporary directory for test files
 	testDir := "test_batch_app_files"
+	os.RemoveAll(testDir)
 	if err := os.Mkdir(testDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -462,6 +464,7 @@ func TestAccCustomApplicationRealWorldBatchFiles(t *testing.T) {
 
 	// Create a temporary directory for test files
 	testDir := "real_batch_app_files"
+	os.RemoveAll(testDir)
 	if err := os.Mkdir(testDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -703,6 +706,7 @@ func TestAccCustomApplicationWithResourcesFromSource(t *testing.T) {
 	t.Parallel()
 
 	folderPath := "custom_application_resources_test"
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -789,6 +793,7 @@ func TestAccCustomApplicationRequiredKeyScopeLevel(t *testing.T) {
 	resourceName := "datarobot_custom_application.test_scope"
 	folderPath := "custom_application_scope_test"
 
+	os.RemoveAll(folderPath)
 	err := os.Mkdir(folderPath, 0755)
 	if err != nil {
 		t.Fatal(err)
