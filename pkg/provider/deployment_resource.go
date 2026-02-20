@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -20,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -887,17 +889,38 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 			"custom_model_id": customModelID,
 		})
 
-		traceAPICall("DeleteCustomModel")
-		err := r.provider.service.DeleteCustomModel(ctx, customModelID)
-		if err != nil {
-			if !errors.Is(err, &client.NotFoundError{}) {
-				tflog.Error(ctx, "Deferred custom model deletion failed", map[string]interface{}{
-					"custom_model_id": customModelID,
-					"error":           err.Error(),
-				})
-				resp.Diagnostics.AddError("Error deleting deferred Custom Model", err.Error())
-				return false // Stop iteration on error
+		// Calculate timeout from environment or use default
+		timeout := time.Duration(defaultTimeoutMinutes) * time.Minute
+
+		// Retry with exponential backoff because deployment deletion is async
+		err := retry.RetryContext(ctx, timeout, func() *retry.RetryError {
+			traceAPICall("DeleteCustomModel")
+			err := r.provider.service.DeleteCustomModel(ctx, customModelID)
+			if err != nil {
+				if errors.Is(err, &client.NotFoundError{}) {
+					// Already deleted - success
+					return nil
+				}
+				// Check if it's still a 409 conflict - retry if so
+				if strings.Contains(err.Error(), "409 Conflict") || strings.Contains(err.Error(), "existing deployments") {
+					tflog.Debug(ctx, "Custom model still has deployments, retrying deletion", map[string]interface{}{
+						"custom_model_id": customModelID,
+					})
+					return retry.RetryableError(err)
+				}
+				// Other errors are not retryable
+				return retry.NonRetryableError(err)
 			}
+			return nil
+		})
+
+		if err != nil {
+			tflog.Error(ctx, "Deferred custom model deletion failed after retries", map[string]interface{}{
+				"custom_model_id": customModelID,
+				"error":           err.Error(),
+			})
+			resp.Diagnostics.AddError("Error deleting deferred Custom Model", err.Error())
+			return false // Stop iteration on error
 		}
 
 		tflog.Debug(ctx, "Deferred custom model deletion completed successfully", map[string]interface{}{
