@@ -851,9 +851,9 @@ if __name__ == "__main__":
 					checkCustomApplicationScopeLevel(resourceName, "viewer"),
 				),
 			},
-			// Update required_key_scope_level to "editor" - should trigger replacement
+			// Update required_key_scope_level to "user" - should trigger replacement
 			{
-				Config: customApplicationWithScopeLevelConfig(folderPath, "editor", nameSalt),
+				Config: customApplicationWithScopeLevelConfig(folderPath, "user", nameSalt),
 				ConfigStateChecks: []statecheck.StateCheck{
 					// Verify that the ID changed (indicating replacement)
 					compareValuesDiffer.AddStateValue(
@@ -864,8 +864,8 @@ if __name__ == "__main__":
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "name", "Scope Level Test App "+nameSalt),
-					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "editor"),
-					checkCustomApplicationScopeLevel(resourceName, "editor"),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "user"),
+					checkCustomApplicationScopeLevel(resourceName, "user"),
 				),
 			},
 			// Delete is tested automatically

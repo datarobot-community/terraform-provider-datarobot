@@ -498,9 +498,11 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	updateVersionRequest.RuntimeParameterValues = string(jsonParams)
 
-	// Only set RequiredKeyScopeLevel when known and changed. The API does not support PATCH
-	// operations on this field; changing it requires resource replacement (RequiresReplace()).
-	if IsKnown(plan.RequiredKeyScopeLevel) && plan.RequiredKeyScopeLevel != state.RequiredKeyScopeLevel {
+	// Always include RequiredKeyScopeLevel when known to preserve its current value.
+	// UpdateApplicationSourceVersionRequest serializes the zero-value ScopeLevel as null
+	// (no omitempty), which the API treats as a reset to None. If the value changes,
+	// RequiresReplace() in the schema ensures resource replacement rather than an in-place update.
+	if IsKnown(plan.RequiredKeyScopeLevel) {
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 

@@ -143,7 +143,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			},
 			"required_key_scope_level": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The API key scope level required for requests to this custom application. Can be set to 'viewer', 'editor', or 'owner'.",
+				MarkdownDescription: "The API key scope level required for requests to this custom application. Can be set to 'viewer', 'user', or 'admin'.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
