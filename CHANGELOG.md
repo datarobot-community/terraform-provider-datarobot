@@ -3,6 +3,12 @@
 ### Fixed
 
 - Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
+
+
+## [0.10.30] - 2026-02-26
+
+### Fixed
+
 - Fixed `required_key_scope_level` field to trigger resource replacement instead of in-place update when changed, since the DataRobot API does not support PATCH operations on this field (affects Application Source and Custom Application resources). Also fixed Update functions to skip sending this field in PATCH requests when the value has not changed, preventing spurious API errors during updates to other fields.
 
 ## [0.10.29] - 2026-02-19
