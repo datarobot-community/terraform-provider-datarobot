@@ -827,6 +827,8 @@ if __name__ == "__main__":
 		t.Fatal(err)
 	}
 
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -836,11 +838,34 @@ if __name__ == "__main__":
 			// Create with required_key_scope_level set to "viewer"
 			{
 				Config: customApplicationWithScopeLevelConfig(folderPath, "viewer", nameSalt),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "name", "Scope Level Test App "+nameSalt),
 					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "viewer"),
 					checkCustomApplicationScopeLevel(resourceName, "viewer"),
+				),
+			},
+			// Update required_key_scope_level to "editor" - should trigger replacement
+			{
+				Config: customApplicationWithScopeLevelConfig(folderPath, "editor", nameSalt),
+				ConfigStateChecks: []statecheck.StateCheck{
+					// Verify that the ID changed (indicating replacement)
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "name", "Scope Level Test App "+nameSalt),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "editor"),
+					checkCustomApplicationScopeLevel(resourceName, "editor"),
 				),
 			},
 			// Delete is tested automatically

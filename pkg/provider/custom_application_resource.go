@@ -144,6 +144,9 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			"required_key_scope_level": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "The API key scope level required for requests to this custom application. Can be set to 'viewer', 'editor', or 'owner'.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 	}
@@ -344,7 +347,10 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		updateRequest.CustomApplicationSourceVersionID = plan.SourceVersionID.ValueString()
 	}
 
-	if IsKnown(plan.RequiredKeyScopeLevel) {
+	// Only include required_key_scope_level in PATCH if the value has changed.
+	// The API does not support PATCH operations on this field; changing it requires
+	// resource replacement (enforced by RequiresReplace() in the schema).
+	if IsKnown(plan.RequiredKeyScopeLevel) && plan.RequiredKeyScopeLevel != state.RequiredKeyScopeLevel {
 		updateRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 
