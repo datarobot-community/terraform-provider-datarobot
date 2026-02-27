@@ -15,7 +15,7 @@ func TestAccLLMBlueprintDeployment(t *testing.T) {
 	resourceName := "datarobot_deployment.llm_test"
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	llmID := "azure-openai-gpt-4-o-mini"
+	llmID := "azure-openai-gpt-4-o"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
