@@ -1,17 +1,4 @@
-## [Unreleased]
-
-### Fixed
-
-- Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
-
-
-## [0.10.30] - 2026-02-26
-
-### Fixed
-
-- Fixed `required_key_scope_level` field to trigger resource replacement instead of in-place update when changed, since the DataRobot API does not support PATCH operations on this field (affects Application Source and Custom Application resources). Also fixed Update functions to skip sending this field in PATCH requests when the value has not changed, preventing spurious API errors during updates to other fields.
-
-## [0.10.29] - 2026-02-19
+## [0.10.29] - 2026-02-27
 
 ### Fixed
 
@@ -23,7 +10,8 @@
   - Fixed `memory_mb` handling to properly transition between null and computed values when switching to/from `resource_bundle_id`
   - Fixed runtime parameter values filtering to skip nil values, preventing `<nil>` strings in state
 - Fixed test isolation issues by adding timestamp-based unique identifiers to prevent name collisions in parallel test runs
-
+- Fixed `required_key_scope_level` field to trigger resource replacement instead of in-place update when changed, since the DataRobot API does not support PATCH operations on this field (affects Application Source and Custom Application resources). Also fixed Update functions to skip sending this field in PATCH requests when the value has not changed, preventing spurious API errors during updates to other fields.
+- Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
 
 ## [0.10.28] - 2026-01-15
 
