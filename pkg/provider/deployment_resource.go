@@ -867,6 +867,28 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 			return
 		}
 	}
+
+	// Wait for the deployment to be fully removed from the DataRobot backend.
+	// The DELETE API call may return success before the backend has finished cleanup
+	// (e.g. for serverless deployments that need to spin down compute resources).
+	// Prediction environments cannot be deleted while any deployment still references
+	// them, so we must wait here to avoid 409 Conflict errors on PE deletion.
+	expBackoff := getExponentialBackoff()
+	waitForGone := func() error {
+		_, err := r.provider.service.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			if errors.Is(err, &client.NotFoundError{}) {
+				return nil // Deployment is fully gone
+			}
+			return backoff.Permanent(err)
+		}
+		return errors.New("deployment still exists, waiting for removal")
+	}
+	if err := backoff.Retry(waitForGone, expBackoff); err != nil {
+		resp.Diagnostics.AddError("Error waiting for Deployment to be deleted", err.Error())
+		return
+	}
+
 	tflog.Info(ctx, "Deployment deletion completed successfully", map[string]interface{}{
 		"deployment_id": deploymentID,
 	})
