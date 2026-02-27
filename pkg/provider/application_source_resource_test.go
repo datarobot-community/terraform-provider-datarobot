@@ -662,6 +662,8 @@ if __name__ == "__main__":
 	}
 	defer os.Remove(appCodeFileName)
 
+	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -671,10 +673,32 @@ if __name__ == "__main__":
 			// Create with required_key_scope_level set to "admin"
 			{
 				Config: applicationSourceWithScopeLevelConfig("admin"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "admin"),
 					checkApplicationSourceScopeLevel(resourceName, "admin"),
+				),
+			},
+			// Update required_key_scope_level to "viewer" - should trigger replacement
+			{
+				Config: applicationSourceWithScopeLevelConfig("viewer"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					// Verify that the ID changed (indicating replacement)
+					compareValuesDiffer.AddStateValue(
+						resourceName,
+						tfjsonpath.New("id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "required_key_scope_level", "viewer"),
+					checkApplicationSourceScopeLevel(resourceName, "viewer"),
 				),
 			},
 			// Delete is tested automatically

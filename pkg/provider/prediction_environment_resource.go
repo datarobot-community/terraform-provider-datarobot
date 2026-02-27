@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -223,12 +225,26 @@ func (r *PredictionEnvironmentResource) Delete(ctx context.Context, req resource
 	}
 
 	traceAPICall("DeletePredictionEnvironment")
-	err := r.provider.service.DeletePredictionEnvironment(ctx, data.ID.ValueString())
-	if err != nil {
-		if !errors.Is(err, &client.NotFoundError{}) {
-			resp.Diagnostics.AddError("Error deleting Prediction Environment", err.Error())
-			return
+	// Retry with exponential backoff to handle Terraform's non-deterministic deletion order:
+	// the prediction environment may receive a 409 if deployments referencing it are still
+	// being torn down by concurrent resource deletions.
+	expBackoff := getExponentialBackoff()
+	deleteOperation := func() error {
+		err := r.provider.service.DeletePredictionEnvironment(ctx, data.ID.ValueString())
+		if err != nil {
+			if errors.Is(err, &client.NotFoundError{}) {
+				return nil // Already deleted - success
+			}
+			if strings.Contains(err.Error(), "409 Conflict") || strings.Contains(err.Error(), "existing deployments") {
+				return err // Transient - retry until deployments are gone
+			}
+			return backoff.Permanent(err)
 		}
+		return nil
+	}
+
+	if err := backoff.Retry(deleteOperation, expBackoff); err != nil {
+		resp.Diagnostics.AddError("Error deleting Prediction Environment", err.Error())
 	}
 }
 

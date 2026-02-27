@@ -21,6 +21,12 @@ func (e *NotFoundError) Unwrap() error {
 	return e.InnerError
 }
 
+// Is implements errors.Is support for NotFoundError, matching any *NotFoundError target.
+func (e *NotFoundError) Is(target error) bool {
+	_, ok := target.(*NotFoundError)
+	return ok
+}
+
 // NewNotFoundError creates a new NotFoundError.
 func NewNotFoundError(resource string) *NotFoundError {
 	return &NotFoundError{Resource: resource}
@@ -50,6 +56,12 @@ func (e *UnauthorizedError) Unwrap() error {
 	return e.InnerError
 }
 
+// Is implements errors.Is support for UnauthorizedError, matching any *UnauthorizedError target.
+func (e *UnauthorizedError) Is(target error) bool {
+	_, ok := target.(*UnauthorizedError)
+	return ok
+}
+
 // NewUnauthorizedError creates a new UnauthorizedError.
 func NewUnauthorizedError(resource string) *UnauthorizedError {
 	return &UnauthorizedError{Resource: resource}
@@ -77,6 +89,12 @@ func (e *GenericError) Error() string {
 // Unwrap returns the inner error for GenericError.
 func (e *GenericError) Unwrap() error {
 	return e.InnerError
+}
+
+// Is implements errors.Is support for GenericError, matching any *GenericError target.
+func (e *GenericError) Is(target error) bool {
+	_, ok := target.(*GenericError)
+	return ok
 }
 
 // NewGenericError creates a new GenericError.

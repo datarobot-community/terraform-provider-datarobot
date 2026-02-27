@@ -142,6 +142,7 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The API key scope level. The API Key with this level will be added in users' requests to a custom application. If set to None, no API Key will be provided.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 		},
@@ -497,8 +498,10 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	updateVersionRequest.RuntimeParameterValues = string(jsonParams)
 
-	// Only set RequiredKeyScopeLevel when known. For known-null, ValueString()
-	// returns "" (NoRequirements), which marshals as JSON null.
+	// Always include RequiredKeyScopeLevel when known to preserve its current value.
+	// UpdateApplicationSourceVersionRequest serializes the zero-value ScopeLevel as null
+	// (no omitempty), which the API treats as a reset to None. If the value changes,
+	// RequiresReplace() in the schema ensures resource replacement rather than an in-place update.
 	if IsKnown(plan.RequiredKeyScopeLevel) {
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
