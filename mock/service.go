@@ -80,18 +80,18 @@ func (mr *MockServiceMockRecorder) CreateAppOAuthProvider(ctx, req interface{}) 
 }
 
 // CreateApplicationSource mocks base method.
-func (m *MockService) CreateApplicationSource(ctx context.Context) (*client.ApplicationSource, error) {
+func (m *MockService) CreateApplicationSource(ctx context.Context, req *client.CreateApplicationSourceRequest) (*client.ApplicationSource, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateApplicationSource", ctx)
+	ret := m.ctrl.Call(m, "CreateApplicationSource", ctx, req)
 	ret0, _ := ret[0].(*client.ApplicationSource)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateApplicationSource indicates an expected call of CreateApplicationSource.
-func (mr *MockServiceMockRecorder) CreateApplicationSource(ctx interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) CreateApplicationSource(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSource", reflect.TypeOf((*MockService)(nil).CreateApplicationSource), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSource", reflect.TypeOf((*MockService)(nil).CreateApplicationSource), ctx, req)
 }
 
 // CreateApplicationSourceFromTemplate mocks base method.

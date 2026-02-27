@@ -173,28 +173,19 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	createReq := &client.CreateApplicationSourceRequest{}
+	if IsKnown(data.Name) {
+		createReq.Name = data.Name.ValueString()
+	}
+
 	traceAPICall("CreateApplicationSource")
-	createApplicationSourceResp, err := r.provider.service.CreateApplicationSource(ctx)
+	createApplicationSourceResp, err := r.provider.service.CreateApplicationSource(ctx, createReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Application source", err.Error())
 		return
 	}
 	data.ID = types.StringValue(createApplicationSourceResp.ID)
-
-	if IsKnown(data.Name) {
-		traceAPICall("UpdateApplicationSource")
-		_, err := r.provider.service.UpdateApplicationSource(ctx,
-			data.ID.ValueString(),
-			&client.UpdateApplicationSourceRequest{
-				Name: data.Name.ValueString(),
-			})
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Application source", err.Error())
-			return
-		}
-	} else {
-		data.Name = types.StringValue(createApplicationSourceResp.Name)
-	}
+	data.Name = types.StringValue(createApplicationSourceResp.Name)
 
 	createApplicationSourceVersionRequest := &client.CreateApplicationSourceVersionRequest{
 		Label: "v1",

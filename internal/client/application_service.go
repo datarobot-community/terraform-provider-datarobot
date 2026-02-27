@@ -98,6 +98,10 @@ type CreateApplicationSourceFromTemplateRequest struct {
 	CustomTemplateID string `json:"customTemplateId"`
 }
 
+type CreateApplicationSourceRequest struct {
+	Name string `json:"name,omitempty"`
+}
+
 type UpdateApplicationSourceRequest struct {
 	Name string `json:"name"`
 }
