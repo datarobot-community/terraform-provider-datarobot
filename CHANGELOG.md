@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixed
+
+- Fix the two-step create-then-rename race: POST /customApplicationSources/ always gets the default name "CustomApplicationSource", and the rename happens in a separate PATCH call. When two tests run in parallel, both POSTs land before either PATCH, causing the 409.
+
 ## [0.10.29] - 2026-02-27
 
 ### Fixed
