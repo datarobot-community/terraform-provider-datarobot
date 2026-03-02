@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,4 +272,44 @@ func TestGetFileInfoProductionScenarios(t *testing.T) {
 			t.Errorf("Expected 'src/utils/helper.py', got %q", fileInfo.Path)
 		}
 	})
+}
+
+func TestIsNewRuntimeParametersAttrNotSupportedError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "runtimeParameters is not allowed key",
+			err:      errors.New("runtimeParameters is not allowed key"),
+			expected: true,
+		},
+		{
+			name:     "feature flag message",
+			err:      errors.New("field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled"),
+			expected: true,
+		},
+		{
+			name:     "unrelated error",
+			err:      errors.New("some other API error"),
+			expected: false,
+		},
+		{
+			name:     "partial match in longer message",
+			err:      errors.New("400 Bad Request: runtimeParameters is not allowed key in this context"),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isNewRuntimeParametersAttrNotSupportedError(tt.err)
+			if got != tt.expected {
+				t.Errorf("isNewRuntimeParametersAttrNotSupportedError(%q) = %v, want %v", tt.err.Error(), got, tt.expected)
+			}
+		})
+	}
 }

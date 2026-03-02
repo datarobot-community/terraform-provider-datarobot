@@ -106,9 +106,30 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The ID of the base environment version for the Custom Model.",
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
+				Optional:           true,
+				Computed:           true,
+				DeprecationMessage: "The runtime parameter values for the Custom Model. Deprecated: use `runtime_parameters` instead.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"key": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the runtime parameter.",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The type of the runtime parameter.",
+							Validators:          RuntimeParameterTypeValidators(),
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
+						},
+					},
+				},
+			},
+			"runtime_parameters": schema.ListNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The runtime parameter values for the Custom Model.",
+				MarkdownDescription: "The runtime parameters for the Custom Model version. Use instead of `runtime_parameter_values`. Requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature on the DataRobot API.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
@@ -481,7 +502,6 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan CustomModelResourceModel
-	var memoryMB int64
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -495,91 +515,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	var state CustomModelResourceModel
-	var customModelID string
-	var baseEnvironmentID string
-	var baseEnvironmentVersionID string
-	name := plan.Name.ValueString()
-	description := plan.Description.ValueString()
-
-	if IsKnown(plan.SourceLLMBlueprintID) {
-		sourceBlueprintID := plan.SourceLLMBlueprintID.ValueString()
-
-		traceAPICall("CreateCustomModelFromLLMBlueprint")
-		createResp, err := r.provider.service.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
-			LLMBlueprintID: sourceBlueprintID,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model", err.Error())
-			return
-		}
-		customModelID = createResp.CustomModelID
-
-		state.ID = types.StringValue(createResp.CustomModelID)
-		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintID)
-
-		traceAPICall("UpdateCustomModel")
-		_, err = r.provider.service.UpdateCustomModel(ctx,
-			createResp.CustomModelID,
-			&client.UpdateCustomModelRequest{
-				Name:        name,
-				Description: description,
-				TargetName:  plan.TargetName.ValueString(),
-			})
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
-			return
-		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
-		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
-
-		state.Name = types.StringValue(name)
-	} else {
-		classLabels, err := getClassLabels(plan)
-		if err != nil {
-			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
-		}
-
-		tags := convertSetTagsToClientTags(plan.Tags)
-
-		traceAPICall("CreateCustomModel")
-		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
-			Name:                plan.Name.ValueString(),
-			Description:         plan.Description.ValueString(),
-			TargetType:          plan.TargetType.ValueString(),
-			TargetName:          plan.TargetName.ValueString(),
-			CustomModelType:     defaultCustomModelType,
-			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
-			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
-			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
-			Language:            plan.Language.ValueString(),
-			IsProxyModel:        plan.IsProxy.ValueBool(),
-			ClassLabels:         classLabels,
-			IsTrainingDataForVersionsPermanentlyEnabled: true,
-			Tags: tags,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Custom Model",
-				fmt.Sprintf("Unable to create Custom Model, got error: %s", err),
-			)
-			return
-		}
-		customModelID = createResp.ID
-
-		state.ID = types.StringValue(customModelID)
-		state.Name = types.StringValue(name)
-		state.TargetType = types.StringValue(plan.TargetType.ValueString())
-		state.ClassLabels = plan.ClassLabels
-		state.ClassLabelsFile = plan.ClassLabelsFile
-		state.Language = plan.Language
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID, state, err := r.initializeCustomModel(ctx, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model", err.Error())
+		return
 	}
 
 	if IsKnown(plan.BaseEnvironmentID) || IsKnown(plan.BaseEnvironmentVersionID) {
@@ -617,13 +556,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModelID,
-		baseEnvironmentID)
-	if err != nil {
+	if err := r.createCustomModelVersionFromFiles(ctx, plan.FolderPath, plan.Files, customModelID, baseEnvironmentID); err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
 	}
@@ -651,44 +584,34 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
-	if IsKnown(plan.RuntimeParameterValues) {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+	if IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0 {
+		customModel, err = r.createVersionWithRuntimeParameterValues(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
 		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
+			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameter values", err.Error())
 			return
 		}
+		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	}
 
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        baseEnvironmentID,
-			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameterValues:   runtimeParameterValues,
-		})
+	if !plan.RuntimeParameters.IsNull() {
+		customModel, err = r.createVersionWithRuntimeParameters(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
 		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			if isNewRuntimeParametersAttrNotSupportedError(err) {
+				resp.Diagnostics.AddError(
+					"runtime_parameters not supported by this API",
+					"The DataRobot API does not support the `runtime_parameters` attribute. "+
+						"Enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead.",
+				)
+				return
+			}
+			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
 			return
 		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-
 		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	}
 
 	if len(plan.GuardConfigurations) > 0 {
-		if err = r.createCustomModelVersionFromGuards(
-			ctx,
-			plan,
-			customModelID,
-			customModel.LatestVersion.ID,
-			plan.GuardConfigurations,
-			[]GuardConfiguration{},
-		); err != nil {
+		if err = r.createCustomModelVersionFromGuards(ctx, plan, customModelID, customModel.LatestVersion.ID, plan.GuardConfigurations, []GuardConfiguration{}); err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version from Guards", err.Error())
 			return
 		}
@@ -696,15 +619,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 	}
 
-	err = r.assignTrainingDataset(
-		ctx,
-		customModelID,
-		baseEnvironmentID,
-		baseEnvironmentVersionID,
-		plan.TrainingDatasetID,
-		plan.TrainingDataPartitionColumn,
-		&state)
-	if err != nil {
+	if err = r.assignTrainingDataset(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan.TrainingDatasetID, plan.TrainingDataPartitionColumn, &state); err != nil {
 		resp.Diagnostics.AddError("Error assigning training dataset to Custom Model", err.Error())
 		return
 	}
@@ -717,7 +632,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		NetworkEgressPolicy:      plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
-		memoryMB = plan.MemoryMB.ValueInt64()
+		memoryMB := plan.MemoryMB.ValueInt64()
 		state.MemoryMB = types.Int64Value(memoryMB)
 		payload.MaximumMemory = memoryMB * 1024 * 1024
 	}
@@ -734,8 +649,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-	if err != nil {
+	if customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID); err != nil {
 		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
@@ -773,8 +687,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 	// Read the final model state one more time to ensure we have the latest base environment version ID
 	// This is important because dependency builds and other operations might have changed it
-	customModel, err = r.provider.service.GetCustomModel(ctx, customModelID)
-	if err != nil {
+	if customModel, err = r.provider.service.GetCustomModel(ctx, customModelID); err != nil {
 		resp.Diagnostics.AddError("Error getting final Custom Model state", err.Error())
 		return
 	}
@@ -782,10 +695,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		plan.RuntimeParameterValues)
+	if !plan.RuntimeParameters.IsNull() {
+		state.RuntimeParameters = plan.RuntimeParameters
+		state.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	} else {
+		state.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
+		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters, plan.RuntimeParameterValues)
+	}
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
 		return
@@ -829,13 +745,21 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		data.RuntimeParameterValues)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	if !data.RuntimeParameters.IsNull() {
+		data.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+	} else {
+		data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customModel.LatestVersion.RuntimeParameters,
+			data.RuntimeParameterValues)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	loadCustomModelToTerraformState(
@@ -949,6 +873,11 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	if err = r.updateRuntimeParameters(ctx, customModel, state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameters", err.Error())
+		return
+	}
+
 	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating training dataset", err.Error())
 		return
@@ -987,12 +916,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.UseCaseIDs = plan.UseCaseIDs
 
-	if state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		plan.RuntimeParameterValues); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	if !plan.RuntimeParameters.IsNull() {
+		state.RuntimeParameters = plan.RuntimeParameters
+		state.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+	} else {
+		state.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
+		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customModel.LatestVersion.RuntimeParameters,
+			plan.RuntimeParameterValues)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -1069,6 +1009,17 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	if isRuntimeParameterValuesUsed(plan) {
+		resp.Diagnostics.AddWarning(
+			"runtime_parameter_values is deprecated",
+			"The `runtime_parameter_values` attribute is deprecated and will be removed in a future version. Please migrate to `runtime_parameters`.",
+		)
+	}
+
+	if !plan.RuntimeParameters.IsNull() {
+		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
 
 	// compute file content hashes
@@ -1164,6 +1115,10 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
+func isRuntimeParameterValuesUsed(plan CustomModelResourceModel) bool {
+	return IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
+}
+
 func addCannotChangeAttributeError(
 	resp *resource.ModifyPlanResponse,
 	attribute string,
@@ -1195,6 +1150,10 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 		resourcevalidator.Conflicting(
 			path.MatchRoot("resource_bundle_id"),
 			path.MatchRoot("memory_mb"),
+		),
+		resourcevalidator.Conflicting(
+			path.MatchRoot("runtime_parameter_values"),
+			path.MatchRoot("runtime_parameters"),
 		),
 	}
 }
@@ -1746,6 +1705,43 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 	return
 }
 
+func (r *CustomModelResource) updateRuntimeParameters(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if plan.RuntimeParameters.IsNull() {
+		return
+	}
+
+	if plan.RuntimeParameters.Equal(state.RuntimeParameters) {
+		return
+	}
+
+	runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+	if err != nil {
+		return
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParameters")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+		BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+		RuntimeParameters:        runtimeParameters,
+	}); err != nil {
+		if isNewRuntimeParametersAttrNotSupportedError(err) {
+			err = fmt.Errorf("the DataRobot API does not support the `runtime_parameters` attribute; " +
+				"enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead")
+		}
+	}
+
+	return
+}
+
 func (r *CustomModelResource) updateRemoteRepositories(
 	ctx context.Context,
 	customModel *client.CustomModel,
@@ -2175,6 +2171,148 @@ func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.S
 		})
 	}
 	return tagSet
+}
+
+func (r *CustomModelResource) initializeCustomModel(
+	ctx context.Context,
+	plan CustomModelResourceModel,
+) (customModelID, baseEnvironmentID, baseEnvironmentVersionID string, state CustomModelResourceModel, err error) {
+	name := plan.Name.ValueString()
+	description := plan.Description.ValueString()
+
+	if IsKnown(plan.SourceLLMBlueprintID) {
+		sourceBlueprintID := plan.SourceLLMBlueprintID.ValueString()
+
+		traceAPICall("CreateCustomModelFromLLMBlueprint")
+		createResp, createErr := r.provider.service.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
+			LLMBlueprintID: sourceBlueprintID,
+		})
+		if createErr != nil {
+			err = fmt.Errorf("creating Custom Model from LLM blueprint: %w", createErr)
+			return
+		}
+		customModelID = createResp.CustomModelID
+		state.ID = types.StringValue(createResp.CustomModelID)
+		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintID)
+
+		traceAPICall("UpdateCustomModel")
+		if _, err = r.provider.service.UpdateCustomModel(ctx,
+			createResp.CustomModelID,
+			&client.UpdateCustomModelRequest{
+				Name:        name,
+				Description: description,
+				TargetName:  plan.TargetName.ValueString(),
+			}); err != nil {
+			err = fmt.Errorf("updating Custom Model: %w", err)
+			return
+		}
+
+		traceAPICall("WaitForCustomModelToBeReady")
+		customModel, waitErr := r.waitForCustomModelToBeReady(ctx, customModelID)
+		if waitErr != nil {
+			err = fmt.Errorf("waiting for Custom Model to be ready: %w", waitErr)
+			return
+		}
+		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
+		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
+		state.Name = types.StringValue(name)
+		return
+	}
+
+	classLabels, classErr := getClassLabels(plan)
+	if classErr != nil {
+		err = fmt.Errorf("getting class labels from file: %w", classErr)
+		return
+	}
+
+	tags := convertSetTagsToClientTags(plan.Tags)
+
+	traceAPICall("CreateCustomModel")
+	createResp, createErr := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
+		Name:                plan.Name.ValueString(),
+		Description:         plan.Description.ValueString(),
+		TargetType:          plan.TargetType.ValueString(),
+		TargetName:          plan.TargetName.ValueString(),
+		CustomModelType:     defaultCustomModelType,
+		PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
+		NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
+		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+		Language:            plan.Language.ValueString(),
+		IsProxyModel:        plan.IsProxy.ValueBool(),
+		ClassLabels:         classLabels,
+		IsTrainingDataForVersionsPermanentlyEnabled: true,
+		Tags: tags,
+	})
+	if createErr != nil {
+		err = fmt.Errorf("unable to create Custom Model: %w", createErr)
+		return
+	}
+	customModelID = createResp.ID
+	state.ID = types.StringValue(customModelID)
+	state.Name = types.StringValue(name)
+	state.TargetType = types.StringValue(plan.TargetType.ValueString())
+	state.ClassLabels = plan.ClassLabels
+	state.ClassLabelsFile = plan.ClassLabelsFile
+	state.Language = plan.Language
+	return
+}
+
+func (r *CustomModelResource) createVersionWithRuntimeParameterValues(
+	ctx context.Context,
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
+	plan CustomModelResourceModel,
+) (*client.CustomModel, error) {
+	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+	if err != nil {
+		return nil, fmt.Errorf("reading runtime parameter values: %w", err)
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		RuntimeParameterValues:   runtimeParameterValues,
+	}); err != nil {
+		return nil, fmt.Errorf("creating Custom Model version with runtime parameter values: %w", err)
+	}
+
+	traceAPICall("WaitForCustomModelToBeReady")
+	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for Custom Model to be ready: %w", err)
+	}
+
+	return customModel, nil
+}
+
+func (r *CustomModelResource) createVersionWithRuntimeParameters(
+	ctx context.Context,
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
+	plan CustomModelResourceModel,
+) (*client.CustomModel, error) {
+	runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+	if err != nil {
+		return nil, fmt.Errorf("reading runtime parameters: %w", err)
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		RuntimeParameters:        runtimeParameters,
+	}); err != nil {
+		return nil, err // return raw so isNewRuntimeParametersAttrNotSupportedError still applies
+	}
+
+	traceAPICall("WaitForCustomModelToBeReady")
+	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for Custom Model to be ready: %w", err)
+	}
+
+	return customModel, nil
 }
 
 func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err error) {

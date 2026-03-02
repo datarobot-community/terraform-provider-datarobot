@@ -179,6 +179,7 @@ type CustomModelResourceModel struct {
 	BaseEnvironmentID              types.String                    `tfsdk:"base_environment_id"`
 	BaseEnvironmentVersionID       types.String                    `tfsdk:"base_environment_version_id"`
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
+	RuntimeParameters              types.List                      `tfsdk:"runtime_parameters"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	FolderPath                     types.String                    `tfsdk:"folder_path"`
 	FolderPathHash                 types.String                    `tfsdk:"folder_path_hash"`
