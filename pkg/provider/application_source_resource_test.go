@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -768,4 +773,231 @@ type ApplicationSourceResources struct {
 	SessionAffinity              types.Bool
 	ResourceLabel                types.String
 	ServiceWebRequestsOnRootPath types.Bool
+}
+
+func TestIsApplicationSourceRuntimeParameterValuesUsed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	nonEmptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{Key: types.StringValue("FOO"), Type: types.StringValue("string"), Value: types.StringValue("bar")},
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	emptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	tests := []struct {
+		name     string
+		plan     ApplicationSourceResourceModel
+		expected bool
+	}{
+		{
+			name:     "non-empty runtime_parameter_values returns true",
+			plan:     ApplicationSourceResourceModel{RuntimeParameterValues: nonEmptyList},
+			expected: true,
+		},
+		{
+			name:     "empty runtime_parameter_values returns false",
+			plan:     ApplicationSourceResourceModel{RuntimeParameterValues: emptyList},
+			expected: false,
+		},
+		{
+			name:     "null runtime_parameter_values returns false",
+			plan:     ApplicationSourceResourceModel{RuntimeParameterValues: types.ListNull(types.StringType)},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isApplicationSourceRuntimeParameterValuesUsed(tt.plan)
+			if got != tt.expected {
+				t.Errorf("isApplicationSourceRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestApplicationSourceResourceConflictingRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r := NewApplicationSourceResource()
+
+	configValidatable, ok := r.(fwresource.ResourceWithConfigValidators)
+	if !ok {
+		t.Fatal("ApplicationSourceResource does not implement ResourceWithConfigValidators")
+	}
+
+	validators := configValidatable.ConfigValidators(ctx)
+
+	if len(validators) < 2 {
+		t.Fatalf("Expected at least 2 config validators (including runtime_parameter_values/runtime_parameters conflict), got %d", len(validators))
+	}
+}
+
+type hasAppSourceRuntimeParamsMatcher struct{}
+
+func (hasAppSourceRuntimeParamsMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*client.UpdateApplicationSourceVersionRequest)
+	return ok && req.RuntimeParameters != ""
+}
+
+func (hasAppSourceRuntimeParamsMatcher) String() string {
+	return "UpdateApplicationSourceVersionRequest with RuntimeParameters set"
+}
+
+func TestIntegrationApplicationSourceResourceRuntimeParameters(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	sourceID := uuid.NewString()
+	versionID := uuid.NewString()
+	baseEnvID := uuid.NewString()
+
+	appSource := &client.ApplicationSource{
+		ID:   sourceID,
+		Name: "test-app-source",
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:                versionID,
+			BaseEnvironmentID: baseEnvID,
+		},
+	}
+
+	// Create: CreateApplicationSource
+	mockService.EXPECT().
+		CreateApplicationSource(gomock.Any(), gomock.Any()).
+		Return(appSource, nil)
+
+	// Create: CreateApplicationSourceVersion (initial version)
+	mockService.EXPECT().
+		CreateApplicationSourceVersion(gomock.Any(), sourceID, gomock.Any()).
+		Return(&appSource.LatestVersion, nil)
+
+	// Create: addLocalFiles (no files in this config, so UpdateApplicationSourceVersionFiles is not called)
+
+	// Create: UpdateApplicationSourceVersion with RuntimeParameters set
+	mockService.EXPECT().
+		UpdateApplicationSourceVersion(gomock.Any(), sourceID, versionID, hasAppSourceRuntimeParamsMatcher{}).
+		Return(&appSource.LatestVersion, nil)
+
+	// Create: GetApplicationSource (to populate state)
+	mockService.EXPECT().
+		GetApplicationSource(gomock.Any(), sourceID).
+		Return(appSource, nil)
+
+	// Read (post-create refresh by the test framework)
+	mockService.EXPECT().
+		GetApplicationSource(gomock.Any(), sourceID).
+		Return(appSource, nil)
+
+	// Destroy
+	mockService.EXPECT().
+		DeleteApplicationSource(gomock.Any(), sourceID).
+		Return(nil)
+
+	resourceName := "datarobot_application_source.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest: true,
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: applicationSourceWithRuntimeParametersConfig(baseEnvID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.value", "bar"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationApplicationSourceResourceRuntimeParametersOldAPI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	sourceID := uuid.NewString()
+	versionID := uuid.NewString()
+	baseEnvID := uuid.NewString()
+
+	appSource := &client.ApplicationSource{
+		ID:   sourceID,
+		Name: "test-app-source",
+		LatestVersion: client.ApplicationSourceVersion{
+			ID:                versionID,
+			BaseEnvironmentID: baseEnvID,
+		},
+	}
+
+	// Create partially succeeds...
+	mockService.EXPECT().
+		CreateApplicationSource(gomock.Any(), gomock.Any()).
+		Return(appSource, nil)
+	mockService.EXPECT().
+		CreateApplicationSourceVersion(gomock.Any(), sourceID, gomock.Any()).
+		Return(&appSource.LatestVersion, nil)
+
+	// ...then fails with the old-API error when runtime_parameters are applied.
+	mockService.EXPECT().
+		UpdateApplicationSourceVersion(gomock.Any(), sourceID, versionID, hasAppSourceRuntimeParamsMatcher{}).
+		Return(nil, fmt.Errorf("runtimeParameters is not allowed key"))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest: true,
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      applicationSourceWithRuntimeParametersConfig(baseEnvID),
+				ExpectError: regexp.MustCompile("runtime_parameters not supported by this API"),
+			},
+		},
+	})
+}
+
+func applicationSourceWithRuntimeParametersConfig(baseEnvID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_application_source" "test" {
+  base_environment_id = %q
+  runtime_parameters  = [
+    {
+      key   = "FOO"
+      type  = "string"
+      value = "bar"
+    }
+  ]
+}
+`, baseEnvID)
 }
