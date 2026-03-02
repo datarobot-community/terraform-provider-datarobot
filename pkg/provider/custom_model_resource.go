@@ -502,7 +502,6 @@ func (r *CustomModelResource) Configure(ctx context.Context, req resource.Config
 
 func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan CustomModelResourceModel
-	var memoryMB int64
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -638,13 +637,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	err := r.createCustomModelVersionFromFiles(
-		ctx,
-		plan.FolderPath,
-		plan.Files,
-		customModelID,
-		baseEnvironmentID)
-	if err != nil {
+	if err := r.createCustomModelVersionFromFiles(ctx, plan.FolderPath, plan.Files, customModelID, baseEnvironmentID); err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version from files", err.Error())
 		return
 	}
@@ -739,14 +732,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	if len(plan.GuardConfigurations) > 0 {
-		if err = r.createCustomModelVersionFromGuards(
-			ctx,
-			plan,
-			customModelID,
-			customModel.LatestVersion.ID,
-			plan.GuardConfigurations,
-			[]GuardConfiguration{},
-		); err != nil {
+		if err = r.createCustomModelVersionFromGuards(ctx, plan, customModelID, customModel.LatestVersion.ID, plan.GuardConfigurations, []GuardConfiguration{}); err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version from Guards", err.Error())
 			return
 		}
@@ -754,15 +740,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 	}
 
-	err = r.assignTrainingDataset(
-		ctx,
-		customModelID,
-		baseEnvironmentID,
-		baseEnvironmentVersionID,
-		plan.TrainingDatasetID,
-		plan.TrainingDataPartitionColumn,
-		&state)
-	if err != nil {
+	if err = r.assignTrainingDataset(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan.TrainingDatasetID, plan.TrainingDataPartitionColumn, &state); err != nil {
 		resp.Diagnostics.AddError("Error assigning training dataset to Custom Model", err.Error())
 		return
 	}
@@ -775,7 +753,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		NetworkEgressPolicy:      plan.NetworkAccess.ValueString(),
 	}
 	if IsKnown(plan.MemoryMB) {
-		memoryMB = plan.MemoryMB.ValueInt64()
+		memoryMB := plan.MemoryMB.ValueInt64()
 		state.MemoryMB = types.Int64Value(memoryMB)
 		payload.MaximumMemory = memoryMB * 1024 * 1024
 	}
@@ -792,8 +770,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-	if err != nil {
+	if customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID); err != nil {
 		resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
 		return
 	}
@@ -831,8 +808,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 
 	// Read the final model state one more time to ensure we have the latest base environment version ID
 	// This is important because dependency builds and other operations might have changed it
-	customModel, err = r.provider.service.GetCustomModel(ctx, customModelID)
-	if err != nil {
+	if customModel, err = r.provider.service.GetCustomModel(ctx, customModelID); err != nil {
 		resp.Diagnostics.AddError("Error getting final Custom Model state", err.Error())
 		return
 	}
@@ -843,20 +819,13 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	if !plan.RuntimeParameters.IsNull() {
 		state.RuntimeParameters = plan.RuntimeParameters
 		state.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
 	} else {
 		state.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
-		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-			ctx,
-			customModel.LatestVersion.RuntimeParameters,
-			plan.RuntimeParameterValues)
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(ctx, customModel.LatestVersion.RuntimeParameters, plan.RuntimeParameterValues)
+	}
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	// Use the planned tags in the state to avoid inconsistency issues
