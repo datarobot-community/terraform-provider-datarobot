@@ -184,7 +184,7 @@ type Service interface {
 	DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error
 
 	// Application Source
-	CreateApplicationSource(ctx context.Context) (*ApplicationSource, error)
+	CreateApplicationSource(ctx context.Context, req *CreateApplicationSourceRequest) (*ApplicationSource, error)
 	CreateApplicationSourceFromTemplate(ctx context.Context, req *CreateApplicationSourceFromTemplateRequest) (*ApplicationSource, error)
 	GetApplicationSource(ctx context.Context, id string) (*ApplicationSource, error)
 	UpdateApplicationSource(ctx context.Context, id string, req *UpdateApplicationSourceRequest) (*ApplicationSource, error)
@@ -847,8 +847,8 @@ func (s *ServiceImpl) DeleteBatchPredictionJobDefinition(ctx context.Context, id
 }
 
 // Application Service Implementation.
-func (s *ServiceImpl) CreateApplicationSource(ctx context.Context) (*ApplicationSource, error) {
-	return Post[ApplicationSource](s.client, ctx, "/customApplicationSources/", map[string]string{})
+func (s *ServiceImpl) CreateApplicationSource(ctx context.Context, req *CreateApplicationSourceRequest) (*ApplicationSource, error) {
+	return Post[ApplicationSource](s.client, ctx, "/customApplicationSources/", req)
 }
 
 func (s *ServiceImpl) CreateApplicationSourceFromTemplate(ctx context.Context, req *CreateApplicationSourceFromTemplateRequest) (*ApplicationSource, error) {

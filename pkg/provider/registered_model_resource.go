@@ -428,37 +428,36 @@ func getVersionName(plan RegisteredModelResourceModel, versionNum int) string {
 	return fmt.Sprintf("%s (v%d)", plan.Name.ValueString(), versionNum)
 }
 
-func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (customModel client.CustomModel, err error) {
+func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customModelVersionID string) (client.CustomModel, error) {
 	traceAPICall("ListCustomModels")
 	customModels, err := r.provider.service.ListCustomModels(ctx)
 	if err != nil {
-		return
+		return client.CustomModel{}, err
 	}
 
 	for index := range customModels {
-		customModel = customModels[index]
+		customModel := customModels[index]
 		if customModel.LatestVersion.ID == customModelVersionID {
-			return
+			return customModel, nil
 		}
 
-		var customModelVersions []client.CustomModelVersion
-		if customModelVersions, err = r.provider.service.ListCustomModelVersions(ctx, customModel.ID); err != nil {
+		customModelVersions, err := r.provider.service.ListCustomModelVersions(ctx, customModel.ID)
+		if err != nil {
 			// If the custom model was deleted between listing and fetching versions, continue searching
-			if _, ok := err.(*client.NotFoundError); ok {
+			if errors.Is(err, &client.NotFoundError{}) {
 				continue
 			}
-			return
+			return client.CustomModel{}, err
 		}
 
 		for _, customModelVersion := range customModelVersions {
 			if customModelVersion.ID == customModelVersionID {
-				return
+				return customModel, nil
 			}
 		}
 	}
 
-	err = fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
-	return
+	return client.CustomModel{}, fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
 }
 
 func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Context, request *client.CreateRegisteredModelFromCustomModelRequest, customModelVersionID string) error {
