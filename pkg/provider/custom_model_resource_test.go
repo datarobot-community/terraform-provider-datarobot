@@ -1307,9 +1307,6 @@ func TestCustomModelResourceConflictingRuntimeFields(t *testing.T) {
 
 	validators := configValidatable.ConfigValidators(ctx)
 
-	// Verify the conflict validator is registered by checking at least one conflicts validator exists.
-	// The actual enforcement is tested by the Terraform framework, so we just ensure
-	// the resource registers the expected number of validators (baseline 5 + new conflict = 6).
 	if len(validators) < 6 {
 		t.Fatalf("Expected at least 6 config validators (including runtime_parameter_values/runtime_parameters conflict), got %d", len(validators))
 	}
@@ -1913,8 +1910,6 @@ resource "datarobot_custom_model" "test_with_tags" {
 `, resourceBlock, name, targetType, language, customModelBlock)
 }
 
-// hasRuntimeParamsMatcher is a gomock.Matcher that verifies a
-// CreateCustomModelVersionFromLatestRequest has RuntimeParameters set.
 type hasRuntimeParamsMatcher struct{}
 
 func (hasRuntimeParamsMatcher) Matches(x interface{}) bool {
@@ -1926,10 +1921,6 @@ func (hasRuntimeParamsMatcher) String() string {
 	return "CreateCustomModelVersionFromLatestRequest with RuntimeParameters set"
 }
 
-// TestIntegrationCustomModelResourceRuntimeParameters verifies the happy-path
-// for the runtime_parameters attribute: the correct API call is made with
-// RuntimeParameters populated, and the resulting state has runtime_parameters
-// set while runtime_parameter_values is empty.
 func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -2030,9 +2021,6 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	})
 }
 
-// TestIntegrationCustomModelResourceRuntimeParametersOldAPI verifies that when
-// the DataRobot API does not support runtime_parameters (old API), a clear error
-// is surfaced to the user rather than a raw API error.
 func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

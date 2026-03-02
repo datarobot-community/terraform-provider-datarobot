@@ -897,7 +897,6 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	// Do we need to propagate RuntimeParameters?
 	if !data.RuntimeParameters.IsNull() {
 		data.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 		if diags.HasError() {
