@@ -5,9 +5,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -537,4 +544,233 @@ func checkCustomJobResourceExists() resource.TestCheckFunc {
 
 		return fmt.Errorf("Custom Job not found")
 	}
+}
+
+// hasCustomJobRuntimeParamsMatcher asserts that the UpdateCustomJobRequest has RuntimeParameters set.
+type hasCustomJobRuntimeParamsMatcher struct{}
+
+func (hasCustomJobRuntimeParamsMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*client.UpdateCustomJobRequest)
+	return ok && req.RuntimeParameters != ""
+}
+
+func (hasCustomJobRuntimeParamsMatcher) String() string {
+	return "UpdateCustomJobRequest with RuntimeParameters set"
+}
+
+func TestIsCustomJobRuntimeParameterValuesUsed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	nonEmptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
+		{Key: types.StringValue("FOO"), Type: types.StringValue("string"), Value: types.StringValue("bar")},
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	emptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	tests := []struct {
+		name     string
+		plan     CustomJobResourceModel
+		expected bool
+	}{
+		{
+			name:     "non-empty runtime_parameter_values returns true",
+			plan:     CustomJobResourceModel{RuntimeParameterValues: nonEmptyList},
+			expected: true,
+		},
+		{
+			name:     "empty runtime_parameter_values returns false",
+			plan:     CustomJobResourceModel{RuntimeParameterValues: emptyList},
+			expected: false,
+		},
+		{
+			name:     "null runtime_parameter_values returns false",
+			plan:     CustomJobResourceModel{RuntimeParameterValues: types.ListNull(types.StringType)},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isCustomJobRuntimeParameterValuesUsed(tt.plan)
+			if got != tt.expected {
+				t.Errorf("isCustomJobRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCustomJobResourceConflictingRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r := NewCustomJobResource()
+
+	configValidatable, ok := r.(fwresource.ResourceWithConfigValidators)
+	if !ok {
+		t.Fatal("CustomJobResource does not implement ResourceWithConfigValidators")
+	}
+
+	validators := configValidatable.ConfigValidators(ctx)
+
+	if len(validators) < 2 {
+		t.Fatalf("Expected at least 2 config validators (including runtime_parameter_values/runtime_parameters conflict), got %d", len(validators))
+	}
+}
+
+func TestIntegrationCustomJobResourceRuntimeParameters(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	jobID := uuid.NewString()
+	name := uuid.NewString()
+	envID := uuid.NewString()
+
+	customJob := &client.CustomJob{
+		ID:                   jobID,
+		Name:                 name,
+		JobType:              defaultJobType,
+		EnvironmentID:        envID,
+		EnvironmentVersionID: uuid.NewString(),
+		Resources: client.CustomJobResources{
+			EgressNetworkPolicy: "public",
+		},
+	}
+
+	// Create: job creation
+	mockService.EXPECT().
+		CreateCustomJob(gomock.Any(), gomock.Any()).
+		Return(customJob, nil)
+
+	// Create: files upload
+	mockService.EXPECT().
+		UpdateCustomJobFiles(gomock.Any(), jobID, gomock.Any()).
+		Return(customJob, nil)
+
+	// Create: runtime_parameters call (key assertion – must have RuntimeParameters set)
+	mockService.EXPECT().
+		UpdateCustomJob(gomock.Any(), jobID, hasCustomJobRuntimeParamsMatcher{}).
+		Return(customJob, nil)
+
+	// Post-create Read
+	mockService.EXPECT().
+		GetCustomJob(gomock.Any(), jobID).
+		Return(customJob, nil)
+	mockService.EXPECT().
+		ListCustomJobSchedules(gomock.Any(), jobID).
+		Return([]client.CustomJobScheduleResponse{}, nil)
+
+	// Destroy
+	mockService.EXPECT().
+		DeleteCustomJob(gomock.Any(), jobID).
+		Return(nil)
+
+	resourceName := "datarobot_custom_job.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest: true,
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: customJobWithRuntimeParametersConfig(name, envID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.value", "bar"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationCustomJobResourceRuntimeParametersOldAPI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	jobID := uuid.NewString()
+	name := uuid.NewString()
+	envID := uuid.NewString()
+
+	customJob := &client.CustomJob{
+		ID:                   jobID,
+		Name:                 name,
+		JobType:              defaultJobType,
+		EnvironmentID:        envID,
+		EnvironmentVersionID: uuid.NewString(),
+		Resources: client.CustomJobResources{
+			EgressNetworkPolicy: "public",
+		},
+	}
+
+	// Create: job creation and files succeed...
+	mockService.EXPECT().
+		CreateCustomJob(gomock.Any(), gomock.Any()).
+		Return(customJob, nil)
+	mockService.EXPECT().
+		UpdateCustomJobFiles(gomock.Any(), jobID, gomock.Any()).
+		Return(customJob, nil)
+
+	// ...then fails with old-API error when runtime_parameters are applied.
+	mockService.EXPECT().
+		UpdateCustomJob(gomock.Any(), jobID, hasCustomJobRuntimeParamsMatcher{}).
+		Return(nil, fmt.Errorf("runtimeParameters is not allowed key"))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest: true,
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      customJobWithRuntimeParametersConfig(name, envID),
+				ExpectError: regexp.MustCompile("runtime_parameters not supported by this API"),
+			},
+		},
+	})
+}
+
+func customJobWithRuntimeParametersConfig(name, envID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_custom_job" "test" {
+  name           = %q
+  environment_id = %q
+  runtime_parameters = [
+    {
+      key   = "FOO"
+      type  = "string"
+      value = "bar"
+    }
+  ]
+}
+`, name, envID)
 }

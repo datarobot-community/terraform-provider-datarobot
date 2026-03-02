@@ -7,7 +7,14 @@ type CreateCustomJobRequest struct {
 	EnvironmentID          *string            `json:"environmentId,omitempty"`
 	EnvironmentVersionID   *string            `json:"environmentVersionId,omitempty"`
 	RuntimeParameterValues string             `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters      string             `json:"runtimeParameters,omitempty"`
 	Resources              CustomJobResources `json:"resources"`
+}
+
+type RuntimeParameterRequest struct {
+	FieldName    string `json:"fieldName"`
+	Type         string `json:"type,omitempty"`
+	CurrentValue *any   `json:"currentValue"`
 }
 
 type CustomJobResources struct {
@@ -33,6 +40,7 @@ type UpdateCustomJobRequest struct {
 	EnvironmentID          *string             `json:"environmentId,omitempty"`
 	EnvironmentVersionID   *string             `json:"environmentVersionId,omitempty"`
 	RuntimeParameterValues string              `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters      string              `json:"runtimeParameters,omitempty"`
 	Resources              *CustomJobResources `json:"resources,omitempty"`
 }
 
