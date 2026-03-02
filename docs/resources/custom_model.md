@@ -111,7 +111,8 @@ output "example_id" {
 - `prediction_threshold` (Number) The prediction threshold of the Custom Model.
 - `replicas` (Number) The replicas for the Custom Model.
 - `resource_bundle_id` (String) A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.
-- `runtime_parameter_values` (Attributes List) The runtime parameter values for the Custom Model. (see [below for nested schema](#nestedatt--runtime_parameter_values))
+- `runtime_parameter_values` (Attributes List, Deprecated) (see [below for nested schema](#nestedatt--runtime_parameter_values))
+- `runtime_parameters` (Attributes List) The runtime parameters for the Custom Model version. Use instead of `runtime_parameter_values`. Requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature on the DataRobot API. (see [below for nested schema](#nestedatt--runtime_parameters))
 - `source_llm_blueprint_id` (String) The ID of the source LLM Blueprint for the Custom Model.
 - `source_remote_repositories` (Attributes List) The source remote repositories for the Custom Model. (see [below for nested schema](#nestedatt--source_remote_repositories))
 - `tags` (Attributes Set) The list of tags to assign to the Custom Model. (see [below for nested schema](#nestedatt--tags))
@@ -210,6 +211,16 @@ Optional:
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`
+
+Required:
+
+- `key` (String) The name of the runtime parameter.
+- `type` (String) The type of the runtime parameter.
+- `value` (String) The value of the runtime parameter (type conversion is handled internally).
+
+
+<a id="nestedatt--runtime_parameters"></a>
+### Nested Schema for `runtime_parameters`
 
 Required:
 
