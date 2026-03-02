@@ -1717,6 +1717,10 @@ func (r *CustomModelResource) updateRuntimeParameters(
 		return
 	}
 
+	if plan.RuntimeParameters.Equal(state.RuntimeParameters) {
+		return
+	}
+
 	runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
 	if err != nil {
 		return
