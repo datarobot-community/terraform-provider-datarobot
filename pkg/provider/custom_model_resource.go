@@ -1713,7 +1713,7 @@ func (r *CustomModelResource) updateRuntimeParameters(
 ) (
 	err error,
 ) {
-	if plan.RuntimeParameters.IsNull() && state.RuntimeParameters.IsNull() {
+	if plan.RuntimeParameters.IsNull() {
 		return
 	}
 
