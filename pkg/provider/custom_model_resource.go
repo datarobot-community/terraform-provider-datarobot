@@ -515,91 +515,10 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	var state CustomModelResourceModel
-	var customModelID string
-	var baseEnvironmentID string
-	var baseEnvironmentVersionID string
-	name := plan.Name.ValueString()
-	description := plan.Description.ValueString()
-
-	if IsKnown(plan.SourceLLMBlueprintID) {
-		sourceBlueprintID := plan.SourceLLMBlueprintID.ValueString()
-
-		traceAPICall("CreateCustomModelFromLLMBlueprint")
-		createResp, err := r.provider.service.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
-			LLMBlueprintID: sourceBlueprintID,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model", err.Error())
-			return
-		}
-		customModelID = createResp.CustomModelID
-
-		state.ID = types.StringValue(createResp.CustomModelID)
-		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintID)
-
-		traceAPICall("UpdateCustomModel")
-		_, err = r.provider.service.UpdateCustomModel(ctx,
-			createResp.CustomModelID,
-			&client.UpdateCustomModelRequest{
-				Name:        name,
-				Description: description,
-				TargetName:  plan.TargetName.ValueString(),
-			})
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
-			return
-		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
-		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
-
-		state.Name = types.StringValue(name)
-	} else {
-		classLabels, err := getClassLabels(plan)
-		if err != nil {
-			resp.Diagnostics.AddError("Error getting class labels from file", err.Error())
-		}
-
-		tags := convertSetTagsToClientTags(plan.Tags)
-
-		traceAPICall("CreateCustomModel")
-		createResp, err := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
-			Name:                plan.Name.ValueString(),
-			Description:         plan.Description.ValueString(),
-			TargetType:          plan.TargetType.ValueString(),
-			TargetName:          plan.TargetName.ValueString(),
-			CustomModelType:     defaultCustomModelType,
-			PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
-			NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
-			PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
-			Language:            plan.Language.ValueString(),
-			IsProxyModel:        plan.IsProxy.ValueBool(),
-			ClassLabels:         classLabels,
-			IsTrainingDataForVersionsPermanentlyEnabled: true,
-			Tags: tags,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error creating Custom Model",
-				fmt.Sprintf("Unable to create Custom Model, got error: %s", err),
-			)
-			return
-		}
-		customModelID = createResp.ID
-
-		state.ID = types.StringValue(customModelID)
-		state.Name = types.StringValue(name)
-		state.TargetType = types.StringValue(plan.TargetType.ValueString())
-		state.ClassLabels = plan.ClassLabels
-		state.ClassLabelsFile = plan.ClassLabelsFile
-		state.Language = plan.Language
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID, state, err := r.initializeCustomModel(ctx, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating Custom Model", err.Error())
+		return
 	}
 
 	if IsKnown(plan.BaseEnvironmentID) || IsKnown(plan.BaseEnvironmentVersionID) {
@@ -666,48 +585,16 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0 {
-		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+		customModel, err = r.createVersionWithRuntimeParameterValues(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
 		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
+			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameter values", err.Error())
 			return
 		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        baseEnvironmentID,
-			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameterValues:   runtimeParameterValues,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
-			return
-		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-
 		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	}
 
 	if !plan.RuntimeParameters.IsNull() {
-		runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameters", err.Error())
-			return
-		}
-
-		traceAPICall("CreateCustomModelVersionCreateFromLatest")
-		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
-			IsMajorUpdate:            "false",
-			BaseEnvironmentID:        baseEnvironmentID,
-			BaseEnvironmentVersionID: baseEnvironmentVersionID,
-			RuntimeParameters:        runtimeParameters,
-		})
+		customModel, err = r.createVersionWithRuntimeParameters(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
 		if err != nil {
 			if isNewRuntimeParametersAttrNotSupportedError(err) {
 				resp.Diagnostics.AddError(
@@ -720,14 +607,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
 			return
 		}
-
-		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
-			return
-		}
-
 		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
 	}
 
@@ -2288,6 +2167,148 @@ func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.S
 		})
 	}
 	return tagSet
+}
+
+func (r *CustomModelResource) initializeCustomModel(
+	ctx context.Context,
+	plan CustomModelResourceModel,
+) (customModelID, baseEnvironmentID, baseEnvironmentVersionID string, state CustomModelResourceModel, err error) {
+	name := plan.Name.ValueString()
+	description := plan.Description.ValueString()
+
+	if IsKnown(plan.SourceLLMBlueprintID) {
+		sourceBlueprintID := plan.SourceLLMBlueprintID.ValueString()
+
+		traceAPICall("CreateCustomModelFromLLMBlueprint")
+		createResp, createErr := r.provider.service.CreateCustomModelFromLLMBlueprint(ctx, &client.CreateCustomModelFromLLMBlueprintRequest{
+			LLMBlueprintID: sourceBlueprintID,
+		})
+		if createErr != nil {
+			err = fmt.Errorf("creating Custom Model from LLM blueprint: %w", createErr)
+			return
+		}
+		customModelID = createResp.CustomModelID
+		state.ID = types.StringValue(createResp.CustomModelID)
+		state.SourceLLMBlueprintID = types.StringValue(sourceBlueprintID)
+
+		traceAPICall("UpdateCustomModel")
+		if _, err = r.provider.service.UpdateCustomModel(ctx,
+			createResp.CustomModelID,
+			&client.UpdateCustomModelRequest{
+				Name:        name,
+				Description: description,
+				TargetName:  plan.TargetName.ValueString(),
+			}); err != nil {
+			err = fmt.Errorf("updating Custom Model: %w", err)
+			return
+		}
+
+		traceAPICall("WaitForCustomModelToBeReady")
+		customModel, waitErr := r.waitForCustomModelToBeReady(ctx, customModelID)
+		if waitErr != nil {
+			err = fmt.Errorf("waiting for Custom Model to be ready: %w", waitErr)
+			return
+		}
+		baseEnvironmentID = customModel.LatestVersion.BaseEnvironmentID
+		baseEnvironmentVersionID = customModel.LatestVersion.BaseEnvironmentVersionID
+		state.Name = types.StringValue(name)
+		return
+	}
+
+	classLabels, classErr := getClassLabels(plan)
+	if classErr != nil {
+		err = fmt.Errorf("getting class labels from file: %w", classErr)
+		return
+	}
+
+	tags := convertSetTagsToClientTags(plan.Tags)
+
+	traceAPICall("CreateCustomModel")
+	createResp, createErr := r.provider.service.CreateCustomModel(ctx, &client.CreateCustomModelRequest{
+		Name:                plan.Name.ValueString(),
+		Description:         plan.Description.ValueString(),
+		TargetType:          plan.TargetType.ValueString(),
+		TargetName:          plan.TargetName.ValueString(),
+		CustomModelType:     defaultCustomModelType,
+		PositiveClassLabel:  plan.PositiveClassLabel.ValueString(),
+		NegativeClassLabel:  plan.NegativeClassLabel.ValueString(),
+		PredictionThreshold: plan.PredictionThreshold.ValueFloat64(),
+		Language:            plan.Language.ValueString(),
+		IsProxyModel:        plan.IsProxy.ValueBool(),
+		ClassLabels:         classLabels,
+		IsTrainingDataForVersionsPermanentlyEnabled: true,
+		Tags: tags,
+	})
+	if createErr != nil {
+		err = fmt.Errorf("unable to create Custom Model: %w", createErr)
+		return
+	}
+	customModelID = createResp.ID
+	state.ID = types.StringValue(customModelID)
+	state.Name = types.StringValue(name)
+	state.TargetType = types.StringValue(plan.TargetType.ValueString())
+	state.ClassLabels = plan.ClassLabels
+	state.ClassLabelsFile = plan.ClassLabelsFile
+	state.Language = plan.Language
+	return
+}
+
+func (r *CustomModelResource) createVersionWithRuntimeParameterValues(
+	ctx context.Context,
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
+	plan CustomModelResourceModel,
+) (*client.CustomModel, error) {
+	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+	if err != nil {
+		return nil, fmt.Errorf("reading runtime parameter values: %w", err)
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		RuntimeParameterValues:   runtimeParameterValues,
+	}); err != nil {
+		return nil, fmt.Errorf("creating Custom Model version with runtime parameter values: %w", err)
+	}
+
+	traceAPICall("WaitForCustomModelToBeReady")
+	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for Custom Model to be ready: %w", err)
+	}
+
+	return customModel, nil
+}
+
+func (r *CustomModelResource) createVersionWithRuntimeParameters(
+	ctx context.Context,
+	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
+	plan CustomModelResourceModel,
+) (*client.CustomModel, error) {
+	runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+	if err != nil {
+		return nil, fmt.Errorf("reading runtime parameters: %w", err)
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatest")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        baseEnvironmentID,
+		BaseEnvironmentVersionID: baseEnvironmentVersionID,
+		RuntimeParameters:        runtimeParameters,
+	}); err != nil {
+		return nil, err // return raw so isNewRuntimeParametersAttrNotSupportedError still applies
+	}
+
+	traceAPICall("WaitForCustomModelToBeReady")
+	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for Custom Model to be ready: %w", err)
+	}
+
+	return customModel, nil
 }
 
 func getClassLabels(plan CustomModelResourceModel) (classLabels []string, err error) {
