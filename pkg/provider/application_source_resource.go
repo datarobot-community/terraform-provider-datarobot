@@ -412,6 +412,34 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+func (r *ApplicationSourceResource) updateApplicationSourceNameIfChanged(
+	ctx context.Context,
+	plan, state ApplicationSourceResourceModel,
+	resp *resource.UpdateResponse,
+) bool {
+	if plan.Name.ValueString() == state.Name.ValueString() {
+		return true
+	}
+	traceAPICall("UpdateApplicationSource")
+	_, err := r.provider.service.UpdateApplicationSource(ctx,
+		plan.ID.ValueString(),
+		&client.UpdateApplicationSourceRequest{
+			Name: plan.Name.ValueString(),
+		})
+	if err != nil {
+		if errors.Is(err, &client.NotFoundError{}) {
+			resp.Diagnostics.AddWarning(
+				"Application Source not found",
+				fmt.Sprintf("Application Source with ID %s is not found. Removing from state.", plan.ID.ValueString()))
+			resp.State.RemoveResource(ctx)
+		} else {
+			resp.Diagnostics.AddError("Error updating Application Source", err.Error())
+		}
+		return false
+	}
+	return true
+}
+
 func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan ApplicationSourceResourceModel
 
@@ -428,24 +456,8 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	if plan.Name.ValueString() != state.Name.ValueString() {
-		traceAPICall("UpdateApplicationSource")
-		_, err := r.provider.service.UpdateApplicationSource(ctx,
-			plan.ID.ValueString(),
-			&client.UpdateApplicationSourceRequest{
-				Name: plan.Name.ValueString(),
-			})
-		if err != nil {
-			if errors.Is(err, &client.NotFoundError{}) {
-				resp.Diagnostics.AddWarning(
-					"Application Source not found",
-					fmt.Sprintf("Application Source with ID %s is not found. Removing from state.", plan.ID.ValueString()))
-				resp.State.RemoveResource(ctx)
-			} else {
-				resp.Diagnostics.AddError("Error updating Application Source", err.Error())
-			}
-			return
-		}
+	if !r.updateApplicationSourceNameIfChanged(ctx, plan, state, resp) {
+		return
 	}
 
 	applicationSource, err := r.provider.service.GetApplicationSource(ctx, plan.ID.ValueString())
