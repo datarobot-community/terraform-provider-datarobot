@@ -504,21 +504,42 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		updateVersionRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
 	}
 
-	// Always include RequiredKeyScopeLevel when known to preserve its current value.
-	// UpdateApplicationSourceVersionRequest serializes the zero-value ScopeLevel as null
-	// (no omitempty), which the API treats as a reset to None. If the value changes,
-	// RequiresReplace() in the schema ensures resource replacement rather than an in-place update.
 	if IsKnown(plan.RequiredKeyScopeLevel) {
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 
 	if !plan.RuntimeParameters.IsNull() {
-		runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+		runtimeParameters, err := convertRuntimeParametersToList(ctx, plan.RuntimeParameters)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading runtime parameters", err.Error())
 			return
 		}
-		updateVersionRequest.RuntimeParameters = runtimeParameters
+
+		stateRuntimeParameters, err := convertRuntimeParametersToList(ctx, state.RuntimeParameters)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading state runtime parameters", err.Error())
+			return
+		}
+		planKeys := make(map[string]struct{}, len(runtimeParameters))
+		for _, p := range runtimeParameters {
+			planKeys[p.FieldName] = struct{}{}
+		}
+		for _, stateParam := range stateRuntimeParameters {
+			if _, found := planKeys[stateParam.FieldName]; !found {
+				runtimeParameters = append(runtimeParameters, client.RuntimeParameterRequest{
+					FieldName:    stateParam.FieldName,
+					Type:         stateParam.Type,
+					CurrentValue: nil,
+				})
+			}
+		}
+
+		jsonParams, jsonErr := json.Marshal(runtimeParameters)
+		if jsonErr != nil {
+			resp.Diagnostics.AddError("Error creating runtime parameters", jsonErr.Error())
+			return
+		}
+		updateVersionRequest.RuntimeParameters = string(jsonParams)
 	} else {
 		runtimeParameterValues := make([]RuntimeParameterValue, 0)
 		if IsKnown(plan.RuntimeParameterValues) {
@@ -542,7 +563,6 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 			})
 		}
 
-		// compute the runtime parameter values to reset
 		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
 		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
 			resp.Diagnostics.Append(diags...)
