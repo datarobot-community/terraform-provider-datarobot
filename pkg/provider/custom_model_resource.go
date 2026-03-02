@@ -106,9 +106,30 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "The ID of the base environment version for the Custom Model.",
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
+				Optional:           true,
+				Computed:           true,
+				DeprecationMessage: "The runtime parameter values for the Custom Model. Deprecated: use `runtime_parameters` instead.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"key": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the runtime parameter.",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The type of the runtime parameter.",
+							Validators:          RuntimeParameterTypeValidators(),
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
+						},
+					},
+				},
+			},
+			"runtime_parameters": schema.ListNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The runtime parameter values for the Custom Model.",
+				MarkdownDescription: "The runtime parameters for the Custom Model version. Use instead of `runtime_parameter_values`. Requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature on the DataRobot API.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
@@ -651,7 +672,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
-	if IsKnown(plan.RuntimeParameterValues) {
+	if IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0 {
 		runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
@@ -667,6 +688,43 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
+			return
+		}
+
+		traceAPICall("WaitForCustomModelToBeReady")
+		customModel, err = r.waitForCustomModelToBeReady(ctx, customModelID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error waiting for Custom Model to be ready", err.Error())
+			return
+		}
+
+		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	}
+
+	if !plan.RuntimeParameters.IsNull() {
+		runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading runtime parameters", err.Error())
+			return
+		}
+
+		traceAPICall("CreateCustomModelVersionCreateFromLatest")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        baseEnvironmentID,
+			BaseEnvironmentVersionID: baseEnvironmentVersionID,
+			RuntimeParameters:        runtimeParameters,
+		})
+		if err != nil {
+			if isNewRuntimeParametersAttrNotSupportedError(err) {
+				resp.Diagnostics.AddError(
+					"runtime_parameters not supported by this API",
+					"The DataRobot API does not support the `runtime_parameters` attribute. "+
+						"Enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead.",
+				)
+				return
+			}
+			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
 			return
 		}
 
@@ -782,13 +840,23 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
-	state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		plan.RuntimeParameterValues)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	if !plan.RuntimeParameters.IsNull() {
+		state.RuntimeParameters = plan.RuntimeParameters
+		state.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+	} else {
+		state.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
+		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customModel.LatestVersion.RuntimeParameters,
+			plan.RuntimeParameterValues)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	// Use the planned tags in the state to avoid inconsistency issues
@@ -829,13 +897,22 @@ func (r *CustomModelResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		data.RuntimeParameterValues)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	// Do we need to propagate RuntimeParameters?
+	if !data.RuntimeParameters.IsNull() {
+		data.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+	} else {
+		data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customModel.LatestVersion.RuntimeParameters,
+			data.RuntimeParameterValues)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	loadCustomModelToTerraformState(
@@ -949,6 +1026,11 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	if err = r.updateRuntimeParameters(ctx, customModel, state, plan); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameters", err.Error())
+		return
+	}
+
 	if err = r.updateTrainingDataset(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating training dataset", err.Error())
 		return
@@ -987,12 +1069,23 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	state.UseCaseIDs = plan.UseCaseIDs
 
-	if state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-		ctx,
-		customModel.LatestVersion.RuntimeParameters,
-		plan.RuntimeParameterValues); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	if !plan.RuntimeParameters.IsNull() {
+		state.RuntimeParameters = plan.RuntimeParameters
+		state.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+	} else {
+		state.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
+		state.RuntimeParameterValues, diags = formatRuntimeParameterValues(
+			ctx,
+			customModel.LatestVersion.RuntimeParameters,
+			plan.RuntimeParameterValues)
+		if diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -1069,6 +1162,17 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	if isRuntimeParameterValuesUsed(plan) {
+		resp.Diagnostics.AddWarning(
+			"runtime_parameter_values is deprecated",
+			"The `runtime_parameter_values` attribute is deprecated and will be removed in a future version. Please migrate to `runtime_parameters`.",
+		)
+	}
+
+	if !plan.RuntimeParameters.IsNull() {
+		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
 
 	// compute file content hashes
@@ -1164,6 +1268,10 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
+func isRuntimeParameterValuesUsed(plan CustomModelResourceModel) bool {
+	return IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
+}
+
 func addCannotChangeAttributeError(
 	resp *resource.ModifyPlanResponse,
 	attribute string,
@@ -1195,6 +1303,10 @@ func (r CustomModelResource) ConfigValidators(ctx context.Context) []resource.Co
 		resourcevalidator.Conflicting(
 			path.MatchRoot("resource_bundle_id"),
 			path.MatchRoot("memory_mb"),
+		),
+		resourcevalidator.Conflicting(
+			path.MatchRoot("runtime_parameter_values"),
+			path.MatchRoot("runtime_parameters"),
 		),
 	}
 }
@@ -1740,6 +1852,39 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 			RuntimeParameterValues:   string(jsonParams),
 		}); err != nil {
 			return
+		}
+	}
+
+	return
+}
+
+func (r *CustomModelResource) updateRuntimeParameters(
+	ctx context.Context,
+	customModel *client.CustomModel,
+	state CustomModelResourceModel,
+	plan CustomModelResourceModel,
+) (
+	err error,
+) {
+	if plan.RuntimeParameters.IsNull() && state.RuntimeParameters.IsNull() {
+		return
+	}
+
+	runtimeParameters, err := convertRuntimeParameters(ctx, plan.RuntimeParameters)
+	if err != nil {
+		return
+	}
+
+	traceAPICall("CreateCustomModelVersionCreateFromLatestRuntimeParameters")
+	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+		BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+		RuntimeParameters:        runtimeParameters,
+	}); err != nil {
+		if isNewRuntimeParametersAttrNotSupportedError(err) {
+			err = fmt.Errorf("the DataRobot API does not support the `runtime_parameters` attribute; " +
+				"enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead")
 		}
 	}
 

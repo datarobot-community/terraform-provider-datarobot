@@ -290,6 +290,12 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 	return errMessage
 }
 
+func isNewRuntimeParametersAttrNotSupportedError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "runtimeParameters is not allowed key") ||
+		strings.Contains(msg, "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled")
+}
+
 func formatRuntimeParameterValues(
 	ctx context.Context,
 	runtimeParameterValues []client.RuntimeParameter,
@@ -456,15 +462,69 @@ func convertRuntimeParameterValuesToList(
 	return
 }
 
+func convertRuntimeParameters(
+	ctx context.Context,
+	tfRuntimeParameters basetypes.ListValue,
+) (
+	jsonParamsStr string,
+	err error,
+) {
+	params, err := convertRuntimeParametersToList(ctx, tfRuntimeParameters)
+	if err != nil {
+		return
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	jsonParamsStr = string(jsonParams)
+	return
+}
+
+func convertRuntimeParametersToList(
+	ctx context.Context,
+	tfRuntimeParameters basetypes.ListValue,
+) (
+	params []client.RuntimeParameterRequest,
+	err error,
+) {
+	runtimeParameters := make([]RuntimeParameterValue, 0)
+	if !tfRuntimeParameters.IsNull() {
+		if diags := tfRuntimeParameters.ElementsAs(ctx, &runtimeParameters, false); diags.HasError() {
+			err = errors.New("Error converting runtime parameters")
+			return
+		}
+	}
+
+	params = make([]client.RuntimeParameterRequest, len(runtimeParameters))
+	for i, param := range runtimeParameters {
+		var value any
+		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
+		if err != nil {
+			return
+		}
+		params[i] = client.RuntimeParameterRequest{
+			FieldName:    param.Key.ValueString(),
+			Type:         param.Type.ValueString(),
+			CurrentValue: &value,
+		}
+	}
+	return
+}
+
+func runtimeParameterListElemType() types.ObjectType {
+	return types.ObjectType{
+		AttrTypes: map[string]attr.Type{
+			"key":   types.StringType,
+			"type":  types.StringType,
+			"value": types.StringType,
+		},
+	}
+}
+
 func listValueFromRuntimParameters(ctx context.Context, runtimeParameterValues []RuntimeParameterValue) (basetypes.ListValue, diag.Diagnostics) {
-	return types.ListValueFrom(
-		ctx, types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"key":   types.StringType,
-				"type":  types.StringType,
-				"value": types.StringType,
-			},
-		}, runtimeParameterValues)
+	return types.ListValueFrom(ctx, runtimeParameterListElemType(), runtimeParameterValues)
 }
 
 func prepareLocalFiles(folderPath types.String, files types.Dynamic) (localFiles []client.FileInfo, err error) {

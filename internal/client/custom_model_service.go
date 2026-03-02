@@ -114,6 +114,7 @@ type CreateCustomModelVersionFromLatestRequest struct {
 	BaseEnvironmentID        string   `json:"baseEnvironmentId,omitempty"`
 	BaseEnvironmentVersionID string   `json:"baseEnvironmentVersionId,omitempty"`
 	RuntimeParameterValues   string   `json:"runtimeParameterValues,omitempty"`
+	RuntimeParameters        string   `json:"runtimeParameters,omitempty"`
 	FilesToDelete            []string `json:"filesToDelete,omitempty"`
 	Replicas                 int64    `json:"replicas,omitempty"`
 	MaximumMemory            int64    `json:"maximumMemory,omitempty"`
@@ -157,6 +158,12 @@ type RuntimeParameterValueRequest struct {
 	FieldName string `json:"fieldName"`
 	Type      string `json:"type,omitempty"`
 	Value     *any   `json:"value"`
+}
+
+type RuntimeParameterRequest struct {
+	FieldName    string `json:"fieldName"`
+	Type         string `json:"type,omitempty"`
+	CurrentValue *any   `json:"currentValue"`
 }
 
 type GuardTemplate struct {
