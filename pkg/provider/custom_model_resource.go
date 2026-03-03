@@ -1115,7 +1115,6 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
-
 func addCannotChangeAttributeError(
 	resp *resource.ModifyPlanResponse,
 	attribute string,

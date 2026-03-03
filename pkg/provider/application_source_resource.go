@@ -805,7 +805,6 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 	}
 }
 
-
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	ctx context.Context,
 	id string,

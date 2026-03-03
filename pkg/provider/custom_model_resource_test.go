@@ -1263,24 +1263,24 @@ func TestIsRuntimeParameterValuesUsed(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
+		name                   string
 		runtimeParameterValues types.List
-		expected              bool
+		expected               bool
 	}{
 		{
-			name:                  "non-empty runtime_parameter_values returns true",
+			name:                   "non-empty runtime_parameter_values returns true",
 			runtimeParameterValues: nonEmptyList,
-			expected:              true,
+			expected:               true,
 		},
 		{
-			name:                  "empty runtime_parameter_values returns false",
+			name:                   "empty runtime_parameter_values returns false",
 			runtimeParameterValues: emptyList,
-			expected:              false,
+			expected:               false,
 		},
 		{
-			name:                  "null runtime_parameter_values returns false",
+			name:                   "null runtime_parameter_values returns false",
 			runtimeParameterValues: types.ListNull(types.StringType),
-			expected:              false,
+			expected:               false,
 		},
 	}
 
