@@ -703,7 +703,7 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		"resources_is_null": plan.Resources.IsNull(),
 	})
 
-	if isApplicationSourceRuntimeParameterValuesUsed(plan) {
+	if IsRuntimeParameterValuesUsed(plan.RuntimeParameterValues) {
 		resp.Diagnostics.AddWarning(
 			"runtime_parameter_values is deprecated",
 			"The `runtime_parameter_values` attribute is deprecated and will be removed in a future version. Please migrate to `runtime_parameters`.",
@@ -805,9 +805,6 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 	}
 }
 
-func isApplicationSourceRuntimeParameterValuesUsed(plan ApplicationSourceResourceModel) bool {
-	return IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
-}
 
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(
 	ctx context.Context,
