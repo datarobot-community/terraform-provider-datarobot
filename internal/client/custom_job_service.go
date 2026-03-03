@@ -11,12 +11,6 @@ type CreateCustomJobRequest struct {
 	Resources              CustomJobResources `json:"resources"`
 }
 
-type RuntimeParameterRequest struct {
-	FieldName    string `json:"fieldName"`
-	Type         string `json:"type,omitempty"`
-	CurrentValue *any   `json:"currentValue"`
-}
-
 type CustomJobResources struct {
 	EgressNetworkPolicy string  `json:"egressNetworkPolicy"`
 	ResourceBundleID    *string `json:"resourceBundleId,omitempty"`
