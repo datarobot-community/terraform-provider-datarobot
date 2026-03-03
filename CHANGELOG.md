@@ -3,8 +3,8 @@
 ### Fixed
 
 - Fix the two-step create-then-rename race: POST /customApplicationSources/ always gets the default name "CustomApplicationSource", and the rename happens in a separate PATCH call. When two tests run in parallel, both POSTs land before either PATCH, causing the 409.
-- added support of `runtime_parameters` attribute on custom model resource. Now this field allows runtime parameters creation without providing runtime parameters definitions in the model-metadata.yaml file;
-- `runtime_parameter_values` attribute on custom model resource is marked as deprecated.
+- added support of `runtime_parameters` attribute on custom model, application source resources. Now this field allows runtime parameters creation without providing runtime parameters definitions in the model-metadata.yaml file;
+- `runtime_parameter_values` attribute on custom model, application source resources is marked as deprecated.
 
 ## [0.10.29] - 2026-02-27
 

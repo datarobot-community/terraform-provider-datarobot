@@ -1263,32 +1263,32 @@ func TestIsRuntimeParameterValuesUsed(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		plan     CustomModelResourceModel
-		expected bool
+		name                   string
+		runtimeParameterValues types.List
+		expected               bool
 	}{
 		{
-			name:     "non-empty runtime_parameter_values returns true",
-			plan:     CustomModelResourceModel{RuntimeParameterValues: nonEmptyList},
-			expected: true,
+			name:                   "non-empty runtime_parameter_values returns true",
+			runtimeParameterValues: nonEmptyList,
+			expected:               true,
 		},
 		{
-			name:     "empty runtime_parameter_values returns false",
-			plan:     CustomModelResourceModel{RuntimeParameterValues: emptyList},
-			expected: false,
+			name:                   "empty runtime_parameter_values returns false",
+			runtimeParameterValues: emptyList,
+			expected:               false,
 		},
 		{
-			name:     "null runtime_parameter_values returns false",
-			plan:     CustomModelResourceModel{RuntimeParameterValues: types.ListNull(types.StringType)},
-			expected: false,
+			name:                   "null runtime_parameter_values returns false",
+			runtimeParameterValues: types.ListNull(types.StringType),
+			expected:               false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isRuntimeParameterValuesUsed(tt.plan)
+			got := IsRuntimeParameterValuesUsed(tt.runtimeParameterValues)
 			if got != tt.expected {
-				t.Errorf("isRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
+				t.Errorf("IsRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

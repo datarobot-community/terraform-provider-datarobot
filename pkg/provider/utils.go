@@ -46,6 +46,10 @@ func IsKnown[T Knowable](t T) bool {
 	return !t.IsUnknown() && !t.IsNull()
 }
 
+func IsRuntimeParameterValuesUsed(runtimeParameterValues types.List) bool {
+	return IsKnown(runtimeParameterValues) && len(runtimeParameterValues.Elements()) > 0
+}
+
 // retryGetRequests implements the retryable-http CheckRetry type.
 func retryGetRequestsOnly(ctx context.Context, resp *http.Response, err error) (bool, error) {
 	if resp != nil && resp.Request != nil && resp.Request.Method != http.MethodGet {

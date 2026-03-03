@@ -1011,7 +1011,7 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	if isRuntimeParameterValuesUsed(plan) {
+	if IsRuntimeParameterValuesUsed(plan.RuntimeParameterValues) {
 		resp.Diagnostics.AddWarning(
 			"runtime_parameter_values is deprecated",
 			"The `runtime_parameter_values` attribute is deprecated and will be removed in a future version. Please migrate to `runtime_parameters`.",
@@ -1113,10 +1113,6 @@ func (r CustomModelResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-}
-
-func isRuntimeParameterValuesUsed(plan CustomModelResourceModel) bool {
-	return IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
 }
 
 func addCannotChangeAttributeError(
