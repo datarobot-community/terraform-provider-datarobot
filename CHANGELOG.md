@@ -1,12 +1,4 @@
-## Unreleased
-
-### Fixed
-
-- Fix the two-step create-then-rename race: POST /customApplicationSources/ always gets the default name "CustomApplicationSource", and the rename happens in a separate PATCH call. When two tests run in parallel, both POSTs land before either PATCH, causing the 409.
-- added support of `runtime_parameters` attribute on custom model, application source & job resources. Now this field allows runtime parameters creation without providing runtime parameters definitions in the model-metadata.yaml file;
-- `runtime_parameter_values` attribute on custom model, application source & job resources is marked as deprecated.
-
-## [0.10.29] - 2026-02-27
+## [0.10.29] - 2026-03-04
 
 ### Fixed
 
@@ -20,6 +12,9 @@
 - Fixed test isolation issues by adding timestamp-based unique identifiers to prevent name collisions in parallel test runs
 - Fixed `required_key_scope_level` field to trigger resource replacement instead of in-place update when changed, since the DataRobot API does not support PATCH operations on this field (affects Application Source and Custom Application resources). Also fixed Update functions to skip sending this field in PATCH requests when the value has not changed, preventing spurious API errors during updates to other fields.
 - Fixed runtime parameter removal for custom models - parameters removed from config are now properly reset to default values
+- Fix the two-step create-then-rename race: POST /customApplicationSources/ always gets the default name "CustomApplicationSource", and the rename happens in a separate PATCH call. When two tests run in parallel, both POSTs land before either PATCH, causing the 409.
+- added support of `runtime_parameters` attribute on custom model, application source & job resources. Now this field allows runtime parameters creation without providing runtime parameters definitions in the model-metadata.yaml file;
+- `runtime_parameter_values` attribute on custom model, application source & job resources is marked as deprecated.
 
 ## [0.10.28] - 2026-01-15
 
