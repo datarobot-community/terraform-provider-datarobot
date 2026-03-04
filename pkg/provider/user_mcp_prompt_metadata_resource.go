@@ -137,6 +137,8 @@ func (r *UserMCPPromptMetadataResource) Read(ctx context.Context, req resource.R
 	}
 
 	traceAPICall("GetUserMCPPromptMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPPromptMetadataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -159,6 +161,8 @@ func (r *UserMCPPromptMetadataResource) Update(ctx context.Context, req resource
 	}
 
 	traceAPICall("UpdateUserMCPPromptMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPPromptMetadataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

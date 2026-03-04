@@ -137,6 +137,8 @@ func (r *UserMCPToolMetadataResource) Read(ctx context.Context, req resource.Rea
 	}
 
 	traceAPICall("GetUserMCPToolMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPToolMetadataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -159,6 +161,8 @@ func (r *UserMCPToolMetadataResource) Update(ctx context.Context, req resource.U
 	}
 
 	traceAPICall("UpdateUserMCPToolMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPToolMetadataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

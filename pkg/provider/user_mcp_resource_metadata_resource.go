@@ -143,6 +143,8 @@ func (r *UserMCPResourceMetadataResource) Read(ctx context.Context, req resource
 	}
 
 	traceAPICall("GetUserMCPResourceMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPResourceMetadataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -165,6 +167,8 @@ func (r *UserMCPResourceMetadataResource) Update(ctx context.Context, req resour
 	}
 
 	traceAPICall("UpdateUserMCPResourceMetadata is not supported")
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *UserMCPResourceMetadataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
