@@ -148,40 +148,17 @@ func (r *UserMCPResourceMetadataResource) Create(ctx context.Context, req resour
 
 func (r *UserMCPResourceMetadataResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data UserMCPResourceMetadataResourceModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("GetUserMCPResourceMetadata is not supported")
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	NoOpRead(ctx, req, resp, userMCPReadNoOpMsg, &data)
 }
 
 func (r *UserMCPResourceMetadataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data UserMCPResourceMetadataResourceModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("DeleteUserMCPResourceMetadata is not supported")
+	NoOpDelete(ctx, req, resp, userMCPDeleteNoOpMsg, &data)
 }
 
 func (r *UserMCPResourceMetadataResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data UserMCPResourceMetadataResourceModel
-
-	// Resource is immutable; no API update. Echo state back so Terraform sees no change.
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("UpdateUserMCPResourceMetadata is not supported")
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	NoOpUpdate(ctx, req, resp, userMCPUpdateNoOpMsg, &data)
 }
 
 func (r *UserMCPResourceMetadataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

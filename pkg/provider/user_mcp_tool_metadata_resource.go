@@ -139,40 +139,17 @@ func (r *UserMCPToolMetadataResource) Create(ctx context.Context, req resource.C
 
 func (r *UserMCPToolMetadataResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data UserMCPToolMetadataResourceModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("GetUserMCPToolMetadata is not supported")
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	NoOpRead(ctx, req, resp, userMCPReadNoOpMsg, &data)
 }
 
 func (r *UserMCPToolMetadataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data UserMCPToolMetadataResourceModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("DeleteUserMCPToolMetadata is not supported")
+	NoOpDelete(ctx, req, resp, userMCPDeleteNoOpMsg, &data)
 }
 
 func (r *UserMCPToolMetadataResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data UserMCPToolMetadataResourceModel
-
-	// Resource is immutable; no API update. Echo state back so Terraform sees no change.
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	traceAPICall("UpdateUserMCPToolMetadata is not supported")
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	NoOpUpdate(ctx, req, resp, userMCPUpdateNoOpMsg, &data)
 }
 
 func (r *UserMCPToolMetadataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
