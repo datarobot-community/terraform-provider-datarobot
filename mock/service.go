@@ -667,6 +667,51 @@ func (mr *MockServiceMockRecorder) CreateUseCase(ctx, req interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUseCase", reflect.TypeOf((*MockService)(nil).CreateUseCase), ctx, req)
 }
 
+// CreateUserMCPToolMetadata mocks base method.
+func (m *MockService) CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *client.UserMCPToolMetadataRequest) (*client.UserMCPToolMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUserMCPToolMetadata", ctx, mcpServerVersionID, req)
+	ret0, _ := ret[0].(*client.UserMCPToolMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateUserMCPToolMetadata indicates an expected call of CreateUserMCPToolMetadata.
+func (mr *MockServiceMockRecorder) CreateUserMCPToolMetadata(ctx, mcpServerVersionID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUserMCPToolMetadata", reflect.TypeOf((*MockService)(nil).CreateUserMCPToolMetadata), ctx, mcpServerVersionID, req)
+}
+
+// CreateUserMCPPromptMetadata mocks base method.
+func (m *MockService) CreateUserMCPPromptMetadata(ctx context.Context, mcpServerVersionID string, req *client.UserMCPPromptMetadataRequest) (*client.UserMCPPromptMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUserMCPPromptMetadata", ctx, mcpServerVersionID, req)
+	ret0, _ := ret[0].(*client.UserMCPPromptMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateUserMCPPromptMetadata indicates an expected call of CreateUserMCPPromptMetadata.
+func (mr *MockServiceMockRecorder) CreateUserMCPPromptMetadata(ctx, mcpServerVersionID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUserMCPPromptMetadata", reflect.TypeOf((*MockService)(nil).CreateUserMCPPromptMetadata), ctx, mcpServerVersionID, req)
+}
+
+// CreateUserMCPResourceMetadata mocks base method.
+func (m *MockService) CreateUserMCPResourceMetadata(ctx context.Context, mcpServerVersionID string, req *client.UserMCPResourceMetadataRequest) (*client.UserMCPResourceMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUserMCPResourceMetadata", ctx, mcpServerVersionID, req)
+	ret0, _ := ret[0].(*client.UserMCPResourceMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateUserMCPResourceMetadata indicates an expected call of CreateUserMCPResourceMetadata.
+func (mr *MockServiceMockRecorder) CreateUserMCPResourceMetadata(ctx, mcpServerVersionID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUserMCPResourceMetadata", reflect.TypeOf((*MockService)(nil).CreateUserMCPResourceMetadata), ctx, mcpServerVersionID, req)
+}
+
 // CreateVectorDatabase mocks base method.
 func (m *MockService) CreateVectorDatabase(ctx context.Context, req *client.CreateVectorDatabaseRequest) (*client.VectorDatabase, error) {
 	m.ctrl.T.Helper()

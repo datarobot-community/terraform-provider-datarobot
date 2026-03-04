@@ -940,3 +940,37 @@ type AppOAuthResourceModel struct {
 	SecureConfigID types.String `tfsdk:"secure_config_id"`
 	Status         types.String `tfsdk:"status"`
 }
+
+// UserMCPToolMetadataResourceModel describes the user MCP tool metadata resource.
+type UserMCPToolMetadataResourceModel struct {
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Type               types.String `tfsdk:"type"`
+	CreatedAt          types.String `tfsdk:"created_at"`
+	UserId             types.String `tfsdk:"user_id"`
+	UserName           types.String `tfsdk:"user_name"`
+	MCPServerVersionID types.String `tfsdk:"mcp_server_version_id"`
+}
+
+// UserMCPPromptMetadataResourceModel describes the user MCP prompt metadata resource.
+type UserMCPPromptMetadataResourceModel struct {
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Type               types.String `tfsdk:"type"`
+	CreatedAt          types.String `tfsdk:"created_at"`
+	UserId             types.String `tfsdk:"user_id"`
+	UserName           types.String `tfsdk:"user_name"`
+	MCPServerVersionID types.String `tfsdk:"mcp_server_version_id"`
+}
+
+// UserMCPResourceMetadataResourceModel describes the user MCP prompt metadata resource.
+type UserMCPResourceMetadataResourceModel struct {
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Type               types.String `tfsdk:"type"`
+	Uri                types.String `tfsdk:"uri"`
+	CreatedAt          types.String `tfsdk:"created_at"`
+	UserId             types.String `tfsdk:"user_id"`
+	UserName           types.String `tfsdk:"user_name"`
+	MCPServerVersionID types.String `tfsdk:"mcp_server_version_id"`
+}

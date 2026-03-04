@@ -228,6 +228,15 @@ type Service interface {
 	// User Info
 	GetUserInfo(ctx context.Context) (*UserInfo, error)
 
+	// User MCP Tool Metadata
+	CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPToolMetadataRequest) (*UserMCPToolMetadataResponse, error)
+
+	// User MCP Tool Metadata
+	CreateUserMCPPromptMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPPromptMetadataRequest) (*UserMCPPromptMetadataResponse, error)
+
+	// User MCP Tool Metadata
+	CreateUserMCPResourceMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPResourceMetadataRequest) (*UserMCPResourceMetadataResponse, error)
+
 	// API Gateway methods
 
 	// Notebook
@@ -986,6 +995,21 @@ func (s *ServiceImpl) GetGenAITaskStatus(ctx context.Context, id string) (*TaskS
 
 func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
 	return Get[UserInfo](s.client, ctx, "/account/info/")
+}
+
+// User MCP Tool Metadata Service Implementation.
+func (s *ServiceImpl) CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPToolMetadataRequest) (*UserMCPToolMetadataResponse, error) {
+	return Post[UserMCPToolMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/tools/", mcpServerVersionID), req)
+}
+
+// User MCP Prompt Metadata Service Implementation.
+func (s *ServiceImpl) CreateUserMCPPromptMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPPromptMetadataRequest) (*UserMCPPromptMetadataResponse, error) {
+	return Post[UserMCPPromptMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/prompts/", mcpServerVersionID), req)
+}
+
+// User MCP Resource Metadata Service Implementation.
+func (s *ServiceImpl) CreateUserMCPResourceMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPResourceMetadataRequest) (*UserMCPResourceMetadataResponse, error) {
+	return Post[UserMCPResourceMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/resources/", mcpServerVersionID), req)
 }
 
 // API Gateway Service Implementations
