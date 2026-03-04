@@ -45,18 +45,30 @@ func (r *UserMCPResourceMetadataResource) Schema(ctx context.Context, req resour
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the MCP resource.",
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"type": schema.StringAttribute{
 				MarkdownDescription: "The type of the MCP resource.",
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				MarkdownDescription: "The URI of the MCP resource.",
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"mcp_server_version_id": schema.StringAttribute{
 				MarkdownDescription: "The ID of the MCP server version this resource belongs to.",
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "When the MCP resource is created.",
@@ -161,7 +173,8 @@ func (r *UserMCPResourceMetadataResource) Delete(ctx context.Context, req resour
 func (r *UserMCPResourceMetadataResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data UserMCPResourceMetadataResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	// Resource is immutable; no API update. Echo state back so Terraform sees no change.
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
