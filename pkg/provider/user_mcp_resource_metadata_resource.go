@@ -72,7 +72,6 @@ func (r *UserMCPResourceMetadataResource) Schema(ctx context.Context, req resour
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "When the MCP resource is created.",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -80,7 +79,6 @@ func (r *UserMCPResourceMetadataResource) Schema(ctx context.Context, req resour
 			},
 			"user_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the user who created the MCP resource.",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -88,7 +86,6 @@ func (r *UserMCPResourceMetadataResource) Schema(ctx context.Context, req resour
 			},
 			"user_name": schema.StringAttribute{
 				MarkdownDescription: "The name of the user who created the MCP resource",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),

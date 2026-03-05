@@ -65,7 +65,6 @@ func (r *UserMCPPromptMetadataResource) Schema(ctx context.Context, req resource
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "When the MCP prompt is created.",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -73,7 +72,6 @@ func (r *UserMCPPromptMetadataResource) Schema(ctx context.Context, req resource
 			},
 			"user_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the user who created the MCP prompt.",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -81,7 +79,6 @@ func (r *UserMCPPromptMetadataResource) Schema(ctx context.Context, req resource
 			},
 			"user_name": schema.StringAttribute{
 				MarkdownDescription: "The name of the user who created the MCP prompt",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
