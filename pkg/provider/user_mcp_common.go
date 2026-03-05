@@ -10,12 +10,12 @@ import (
 // No-op trace messages for User MCP metadata resources (Read/Update/Delete are intentional no-ops).
 const (
 	userMCPReadNoOpMsg = "Read is a no-op. This is by design. " +
-		"Once this resource is created, it can't be updated outside the pulumi (No public API/UI support) and causes " +
+		"Once this resource is created, it can't be updated outside the Terraform (No public API/UI support) and causes " +
 		"resource drift."
 
 	userMCPUpdateNoOpMsg = "Update is a no-op. This is by design. " +
 		"All non RequiresReplace attributes are attributes with computed=True. And they can't be updated outside the " +
-		"pulumi. So on Update will be triggered."
+		"Terraform. So no Update will be triggered."
 
 	userMCPDeleteNoOpMsg = "Delete is a no-op. This is by design. " +
 		"This resource is associated with custom model version resource (custom_model_resource.go). It will be " +
