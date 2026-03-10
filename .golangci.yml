@@ -60,6 +60,10 @@ linters:
       - linters:
           - dupl
         path: _credential_resource\.go$
+      # User MCP * metadata resources share structure (Create, Configure, helpers); dupl flags them.
+      - linters:
+          - dupl
+        path: user_mcp_.*_metadata_resource\.go$
 issues:
   max-same-issues: 0
 formatters:

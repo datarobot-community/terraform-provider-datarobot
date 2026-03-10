@@ -1,3 +1,11 @@
+## [0.10.30] - 2026-03-10
+
+### Added
+
+- Add Terraform support of saving user MCP tool metadata: pkg/provider/user_mcp_tool_metadata_resource.go
+- Add Terraform support of saving user MCP prompt metadata: pkg/provider/user_mcp_prompt_metadata_resource.go
+- Add Terraform support of saving user MCP resource metadata: pkg/provider/user_mcp_resource_metadata_resource.go
+
 ## [0.10.29] - 2026-03-04
 
 ### Fixed
