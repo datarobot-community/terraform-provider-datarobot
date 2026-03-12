@@ -122,11 +122,11 @@ func notificationPolicyResourceConfig(
 ) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_model" "test_notification_policy" {
-	name = "test deployment"
+	name = "test notification policy %s"
 	description = "test"
 	target_type = "Binary"
 	target_name = "target"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "` + testGenAIBaseEnvID + `"
 	folder_path = "notification_policy"
 }
 resource "datarobot_registered_model" "test_notification_policy" {
@@ -134,18 +134,18 @@ resource "datarobot_registered_model" "test_notification_policy" {
 	custom_model_version_id = "${datarobot_custom_model.test_notification_policy.version_id}"
 }
 resource "datarobot_prediction_environment" "test_notification_policy" {
-	name = "test notification policy"
+	name = "test notification policy %s"
 	description = "test"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "test_notification_policy" {
-	label = "test notification policy"
+	label = "test notification policy %s"
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_notification_policy.id
 	registered_model_version_id = datarobot_registered_model.test_notification_policy.version_id
 }
 resource "datarobot_notification_channel" "test_notification_policy" {
-	name = "test notification policy"
+	name = "test notification policy %s"
 	channel_type = "DataRobotUser"
 	related_entity_id = datarobot_deployment.test_notification_policy.id
 	related_entity_type = "deployment"
@@ -163,6 +163,10 @@ resource "datarobot_notification_policy" "test" {
 	event_group         = "%s"
 }
 `, nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
 		globalTestCfg.UserID,
 		globalTestCfg.UserName,
 		name,

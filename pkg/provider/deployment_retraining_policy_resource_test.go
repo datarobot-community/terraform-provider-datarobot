@@ -172,14 +172,14 @@ func deploymentRetrainingPolicyResourceConfig(
 resource "datarobot_custom_job" "deployment_retraining_policy" {
 	name = "%s"
 	job_type = "retraining"
-	environment_id = "66d07fae0513a1edf18595bb"
+	environment_id = "` + testCustomJobEnvID + `"
 	folder_path = "retraining_policy_custom_job"
 }
 resource "datarobot_custom_model" "deployment_retraining_policy" {
-    name = "test deployment retraining policy"
+    name = "test deployment retraining policy %s"
     target_type = "Binary"
     target_name = "t"
-    base_environment_id = "65f9b27eab986d30d4c64268"
+    base_environment_id = "` + testGenAIBaseEnvID + `"
     folder_path = "retraining_policy"
 }
 resource "datarobot_registered_model" "deployment_retraining_policy" {
@@ -187,7 +187,7 @@ resource "datarobot_registered_model" "deployment_retraining_policy" {
     custom_model_version_id = "${datarobot_custom_model.deployment_retraining_policy.version_id}"
 }
 resource "datarobot_prediction_environment" "deployment_retraining_policy" {
-    name = "test deployment retraining policy"
+    name = "test deployment retraining policy %s"
     platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "deployment_retraining_policy" {
@@ -197,7 +197,7 @@ resource "datarobot_deployment" "deployment_retraining_policy" {
     registered_model_version_id = datarobot_registered_model.deployment_retraining_policy.version_id
 }
 resource "datarobot_use_case" "deployment_retraining_policy" {
-	name = "sample salt use case"
+	name = "sample retraining policy use case %s"
 	description = "sample retraining policy use case"
 }
 resource "datarobot_deployment_retraining_policy" "test" {
@@ -220,7 +220,7 @@ resource "datarobot_deployment_retraining_policy" "test" {
 	}
 	use_case_id = datarobot_use_case.deployment_retraining_policy.id
 }
-`, name, name, name, name, description, action, modelSelectionStrategy)
+`, name, nameSalt, name, nameSalt, name, nameSalt, name, description, action, modelSelectionStrategy)
 }
 
 func checkDeploymentRetrainingPolicyResourceExists() resource.TestCheckFunc {

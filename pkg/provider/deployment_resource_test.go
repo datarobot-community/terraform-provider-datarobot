@@ -439,17 +439,17 @@ func deploymentResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_deployment" {
-	name = "test deployment"
+	name = "test deployment %s"
 }
 resource "datarobot_use_case" "test_new_deployment" {
-	name = "test new deployment"
+	name = "test new deployment %s"
 }
 resource "datarobot_custom_model" "test_deployment" {
-	name = "test deployment"
+	name = "test deployment %s"
 	description = "test"
 	target_type = "Binary"
 	target_name = "%s"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "` + testGenAIBaseEnvID + `"
 	folder_path = "deployment"
 }
 resource "datarobot_registered_model" "test_deployment" {
@@ -458,7 +458,7 @@ resource "datarobot_registered_model" "test_deployment" {
 	custom_model_version_id = "${datarobot_custom_model.test_deployment.version_id}"
 }
 resource "datarobot_prediction_environment" "test_deployment" {
-	name = "test deployment"
+	name = "test deployment %s"
 	description = "test"
 	platform = "datarobotServerless"
 }
@@ -471,7 +471,7 @@ resource "datarobot_deployment" "test" {
 	%s
 	%s
 }
-`, customModelTargetName, nameSalt, label, importance, useCaseIDsStr, deploymentSettings, runtimeParameterValuesStr)
+`, nameSalt, nameSalt, nameSalt, customModelTargetName, nameSalt, nameSalt, label, importance, useCaseIDsStr, deploymentSettings, runtimeParameterValuesStr)
 }
 
 func checkDeploymentResourceExists() resource.TestCheckFunc {

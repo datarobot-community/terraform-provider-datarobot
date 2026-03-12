@@ -16,7 +16,7 @@ func TestAccUserMcpToolMetadataResource(t *testing.T) {
 	resourceName := "datarobot_user_mcp_tool_metadata." + toolResourceId
 	toolName := "test-tool-" + uuid.NewString()[:8]
 	toolType := "userTool"
-	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+	baseEnvironmentID := testGenAIBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {

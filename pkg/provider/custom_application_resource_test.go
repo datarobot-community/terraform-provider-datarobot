@@ -205,14 +205,14 @@ func customApplicationResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_application" {
-	name = "test custom application"
+	name = "test custom application %s"
 }
 resource "datarobot_use_case" "test_new_custom_application" {
-	name = "test new custom application"
+	name = "test new custom application %s"
 }
 
 resource "datarobot_application_source" "test" {
-	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	base_environment_id = "` + testStreamlitBaseEnvID + `"
 	folder_path = "custom_application"
 	resources = {
 		replicas = %d
@@ -227,7 +227,7 @@ resource "datarobot_custom_application" "test" {
 	%s
 	%s
 }
-`, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
+`, nameSalt, nameSalt, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {
@@ -356,7 +356,7 @@ numpy
 		}
 	}
 
-	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+	baseEnvironmentID := testStreamlitBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -567,7 +567,7 @@ numpy
 		}
 	}
 
-	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
+	baseEnvironmentID := testStreamlitBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -768,7 +768,7 @@ func customApplicationWithResourcesFromSourceConfig(folderPath string) string {
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
 	name = "Resources Test Source %s"
-	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	base_environment_id = "` + testStreamlitBaseEnvID + `"
 	folder_path = "%s"
 	resources = {
 		replicas = 2
@@ -882,7 +882,7 @@ func customApplicationWithScopeLevelConfig(folderPath, scopeLevel, nameSalt stri
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test_scope" {
-	base_environment_id = "6542cd582a9d3d51bf4ac71e"
+	base_environment_id = "` + testStreamlitBaseEnvID + `"
 	folder_path = "%s"
 }
 

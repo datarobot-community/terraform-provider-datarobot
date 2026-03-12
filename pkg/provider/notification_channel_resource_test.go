@@ -53,7 +53,7 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	newChannelType := "DataRobotGroup"
 
 	drEntityID := globalTestCfg.UserID
-	newDrEntityID := "6036d237608973bf082aba1e"
+	newDrEntityID := testDRGroupEntityID
 
 	drEntityName := globalTestCfg.UserName
 	newDrEntityName := "test_group"
@@ -135,11 +135,11 @@ func notificationChannelResourceConfig(
 ) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_model" "test_notification_channel" {
-	name = "test deployment"
+	name = "test notification channel %s"
 	description = "test"
 	target_type = "Binary"
 	target_name = "target"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "` + testGenAIBaseEnvID + `"
 	folder_path = "notification_channel"
 }
 resource "datarobot_registered_model" "test_notification_channel" {
@@ -147,12 +147,12 @@ resource "datarobot_registered_model" "test_notification_channel" {
 	custom_model_version_id = "${datarobot_custom_model.test_notification_channel.version_id}"
 }
 resource "datarobot_prediction_environment" "test_notification_channel" {
-	name = "test notification channel"
+	name = "test notification channel %s"
 	description = "test"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "test_notification_channel" {
-	label = "test notification channel"
+	label = "test notification channel %s"
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_notification_channel.id
 	registered_model_version_id = datarobot_registered_model.test_notification_channel.version_id
@@ -171,6 +171,9 @@ resource "datarobot_notification_channel" "test" {
 	}]
 }
 `, nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
 		name,
 		channelType,
 		drEntityID,

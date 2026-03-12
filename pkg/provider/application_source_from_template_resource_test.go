@@ -45,8 +45,8 @@ func testApplicationSourceFromTemplateResource(t *testing.T, isMock bool) {
 
 	newName := "new_from_template " + nameSalt
 
-	baseEnvironmentID := "6542cd582a9d3d51bf4ac71e"
-	baseEnvironmentVersionID := "668548c1b8e086572a96fbf5"
+	baseEnvironmentID := testStreamlitBaseEnvID
+	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID
 
 	appCodeFileName := "flask_app.py"
 	appCode := `import streamlit as st
@@ -81,10 +81,10 @@ if __name__ == "__main__":
 	resourceLabel := "cpu.medium"
 	resourceLabel2 := "cpu.small"
 
-	slackbotTemplateID := "67126757e7819551baceb22b"
-	qaTemplateID := "670fb324bf9bbb1081114333"
-	streamlitTemplateID := "671267597665e0b33f7acdb7"
-	flaskTemplateID := "67126750e8342440587acd74"
+	slackbotTemplateID := testSlackbotTemplateID
+	qaTemplateID := testQATemplateID
+	streamlitTemplateID := testStreamlitTemplateID
+	flaskTemplateID := testFlaskTemplateID
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: isMock,

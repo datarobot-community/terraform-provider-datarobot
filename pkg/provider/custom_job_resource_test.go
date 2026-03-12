@@ -478,7 +478,7 @@ resource "datarobot_custom_job" "test" {
 	name = "%s"
 	description = "%s"
 	job_type = "%s"
-	environment_id = "66d07fae0513a1edf18595bb"
+	environment_id = "` + testCustomJobEnvID + `"
 	egress_network_policy = "%s"
 	%s
 	%s

@@ -16,7 +16,7 @@ func TestAccUserMcpPromptMetadataResource(t *testing.T) {
 	resourceName := "datarobot_user_mcp_prompt_metadata." + promptResourceId
 	promptName := "test-prompt-" + uuid.NewString()[:8]
 	promptType := "userPromptTemplate"
-	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+	baseEnvironmentID := testGenAIBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {

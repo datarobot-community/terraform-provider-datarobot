@@ -62,6 +62,21 @@ func TestAccCustomMetricFromJobResource(t *testing.T) {
 	if err := os.Mkdir(folderPath, 0755); err != nil {
 		t.Fatal(err)
 	}
+
+	metadataFileName := "metadata.yaml"
+	metadataFilePath := folderPath + "/" + metadataFileName
+	metadataFileContents := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: OPENAI_API_BASE
+    type: string
+    description: OpenAI API Base URL
+    defaultValue: null`
+
+	err := os.WriteFile(metadataFilePath, []byte(metadataFileContents), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(folderPath)
 
 	modelContents := `from typing import Any, Dict
@@ -252,13 +267,14 @@ func customMetricFromJobResourceConfig(
 	return fmt.Sprintf(`
 resource "datarobot_custom_metric_job" "datarobot_custom_metric_from_job" {
 	name = "%s"
-	environment_id = "66d07fae0513a1edf18595bb"
+	environment_id = "` + testCustomJobEnvID + `"
+	folder_path = "custom_metric_from_job"
 }
 resource "datarobot_custom_model" "datarobot_custom_metric_from_job" {
-	name = "test custom metric from job"
+	name = "test custom metric from job %s"
 	target_type = "Binary"
 	target_name = "t"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "` + testGenAIBaseEnvID + `"
 	folder_path = "custom_metric_from_job"
 }
 resource "datarobot_registered_model" "datarobot_custom_metric_from_job" {
@@ -266,7 +282,7 @@ resource "datarobot_registered_model" "datarobot_custom_metric_from_job" {
 	custom_model_version_id = "${datarobot_custom_model.datarobot_custom_metric_from_job.version_id}"
 }
 resource "datarobot_prediction_environment" "datarobot_custom_metric_from_job" {
-	name = "test custom metric from job"
+	name = "test custom metric from job %s"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "datarobot_custom_metric_from_job" {
@@ -303,7 +319,9 @@ resource "datarobot_custom_metric_from_job" "test" {
 	parameter_overrides = %s
 }
 `, name,
+		nameSalt,
 		name,
+		nameSalt,
 		name,
 		name,
 		baselineValue,

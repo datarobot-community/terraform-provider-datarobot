@@ -1887,6 +1887,11 @@ func (r *CustomModelResource) updateGuardConfigurations(
 ) (
 	err error,
 ) {
+	if reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) &&
+		reflect.DeepEqual(plan.OverallModerationConfiguration, state.OverallModerationConfiguration) {
+		return
+	}
+
 	var customModel *client.CustomModel
 	customModel, err = r.provider.service.GetCustomModel(ctx, plan.ID.ValueString())
 	if err != nil {

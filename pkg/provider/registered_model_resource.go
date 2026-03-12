@@ -374,6 +374,42 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 		}
 		plan.VersionID = types.StringValue(registeredModelVersion.ID)
 		plan.VersionName = types.StringValue(registeredModelVersion.Name)
+	} else if !plan.Tags.Equal(state.Tags) {
+		// Tags changed but custom model version didn't change - must create a new registered model
+		// version (same custom model version) because the PATCH endpoint does not support tags.
+		traceAPICall("GetRegisteredModel")
+		registeredModel, err := r.provider.service.GetRegisteredModel(ctx, plan.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error getting Registered Model info", err.Error())
+			return
+		}
+
+		createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
+			RegisteredModelID:    registeredModel.ID,
+			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
+			Name:                 versionName,
+			Tags:                 convertSetTagsToClientTags(plan.Tags),
+		}
+
+		if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, plan.CustomModelVersionId.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Error populating prompt from Custom Model", err.Error())
+			return
+		}
+
+		traceAPICall("CreateRegisteredModelVersion")
+		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, createRegisteredModelRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Registered Model Version", err.Error())
+			return
+		}
+
+		err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+		if err != nil {
+			resp.Diagnostics.AddError("Registered model version not ready", err.Error())
+			return
+		}
+		plan.VersionID = types.StringValue(registeredModelVersion.ID)
+		plan.VersionName = types.StringValue(registeredModelVersion.Name)
 	}
 
 	// check if we created a new version

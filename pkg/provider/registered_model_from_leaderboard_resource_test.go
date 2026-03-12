@@ -19,11 +19,11 @@ import (
 func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	t.Parallel()
 	t.Skip("Skipping TestAccRegisteredModelFromLeaderboardResource until we can get a model id that works in all environments")
-	modelID := "673b722dfd279fd86944d088"
-	modelID2 := "673b6fd8e060b90658aebe66"
+	modelID := testLeaderboardModelID
+	modelID2 := testLeaderboardModelID2
 	if strings.Contains(globalTestCfg.Endpoint, "staging") {
-		modelID = "673b75ec97f1021bbfb61d3b"
-		modelID2 = "673b75ec97f1021bbfb61d34"
+		modelID = testLeaderboardStagingModelID
+		modelID2 = testLeaderboardStagingModelID2
 	} else if strings.Contains(globalTestCfg.Endpoint, "dr-app-charts") {
 		t.Skip("Skipping registered model from leaderboard test for environment")
 	}

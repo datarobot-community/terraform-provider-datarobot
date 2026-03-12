@@ -165,19 +165,19 @@ func customModelLLMValidationResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model_llm_validation" {
-	name = "test custom model llm validation"
+	name = "test custom model llm validation %s"
 }
 resource "datarobot_playground" "test_custom_model_llm_validation" {
-	name = "llm validation test"
+	name = "llm validation test %s"
 	description = "test"
 	use_case_id = "${datarobot_use_case.test_custom_model_llm_validation.id}"
 }
 resource "datarobot_custom_model" "test_custom_model_llm_validation" {
-	name = "test custom model llm validation"
+	name = "test custom model llm validation %s"
 	description = "test"
 	target_type = "TextGeneration"
 	target_name = "resultText"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "` + testGenAIBaseEnvID + `"
 	folder_path = "custom_model_llm_validation"
 }
 resource "datarobot_registered_model" "test_custom_model_llm_validation" {
@@ -185,12 +185,12 @@ resource "datarobot_registered_model" "test_custom_model_llm_validation" {
 	custom_model_version_id = "${datarobot_custom_model.test_custom_model_llm_validation.version_id}"
 }
 resource "datarobot_prediction_environment" "test_custom_model_llm_validation" {
-	name = "test custom model llm validation"
+	name = "test custom model llm validation %s"
 	description = "test"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "test_custom_model_llm_validation" {
-	label = "test custom model llm validation"
+	label = "test custom model llm validation %s"
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_custom_model_llm_validation.id
 	registered_model_version_id = datarobot_registered_model.test_custom_model_llm_validation.version_id
@@ -205,16 +205,22 @@ resource "datarobot_custom_model_llm_validation" "test" {
 	use_case_id = datarobot_use_case.test_custom_model_llm_validation.id
 }
 resource "datarobot_llm_blueprint" "test_custom_model_llm_validation" {
-	name = "test custom model llm validation"
+	name = "test custom model llm validation %s"
 	playground_id = "${datarobot_playground.test_custom_model_llm_validation.id}"
 	llm_id = "custom-model"
 }
 `, nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
 		name,
 		chatModelIDStr,
 		promptColumnNameStr,
 		targetColumnNameStr,
-		predictionTimeout)
+		predictionTimeout,
+		nameSalt)
 }
 
 func checkCustomModelLLMValidationResourceExists() resource.TestCheckFunc {
