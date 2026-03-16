@@ -129,6 +129,10 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 						Optional:            true,
 						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application. Computed by API if not specified.",
 					},
+					"health_endpoint_path": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Path used by the Kubernetes liveness and readiness probes. When set, takes precedence over the path derived from `service_web_requests_on_root_path`. Use this to expose a dedicated health endpoint (e.g. `/healthz`) instead of probing the root path.",
+					},
 				},
 			},
 			"use_case_ids": schema.ListAttribute{

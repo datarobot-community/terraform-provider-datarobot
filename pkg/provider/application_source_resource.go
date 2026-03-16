@@ -112,6 +112,11 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 						Computed:            true,
 						MarkdownDescription: "Whether to service web requests on the root path for the Application Source. Computed by API if not specified.",
 					},
+					"health_endpoint_path": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Path used by the Kubernetes liveness and readiness probes. When set, takes precedence over the path derived from `service_web_requests_on_root_path`. Use this to expose a dedicated health endpoint (e.g. `/healthz`) instead of probing the root path.",
+					},
 				},
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
