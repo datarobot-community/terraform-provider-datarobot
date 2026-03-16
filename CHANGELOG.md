@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- Added `health_endpoint_path` field to Application Source, Application Source From Template, Custom Application, and Custom Application From Environment resources. When set, this path is used for Kubernetes liveness and readiness probes instead of the path derived from `service_web_requests_on_root_path`.
+
 ### Fixed
 
 - Fixed deployment creation task status polling getting stuck when the status API returns `INITIALIZED` indefinitely. After 2 minutes of `INITIALIZED` with no progress, the provider now skips the status check and verifies the deployment readiness directly

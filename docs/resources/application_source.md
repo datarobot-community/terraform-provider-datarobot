@@ -80,6 +80,7 @@ output "datarobot_application_source_resources" {
 
 Optional:
 
+- `health_endpoint_path` (String) Path used by the Kubernetes liveness and readiness probes. When set, takes precedence over the path derived from `service_web_requests_on_root_path`. Use this to expose a dedicated health endpoint (e.g. `/healthz`) instead of probing the root path.
 - `replicas` (Number) The number of replicas for the Application Source. Computed by API if not specified.
 - `resource_label` (String) The resource label for the Application Source (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.
 - `service_web_requests_on_root_path` (Boolean) Whether to service web requests on the root path for the Application Source. Computed by API if not specified.
