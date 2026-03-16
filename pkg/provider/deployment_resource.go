@@ -740,6 +740,14 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	// Update runtime parameters before model replacement because
+	// PUT /runtimeParameters/ returns 500 immediately after model replacement.
+	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
+		return
+	}
+
 	if plan.RegisteredModelVersionID != state.RegisteredModelVersionID {
 		traceAPICall("ValidateDeploymentModelReplacement")
 		validateModelReplacementResp, err := r.provider.service.ValidateDeploymentModelReplacement(ctx, id, &client.ValidateDeployemntModelReplacementRequest{
@@ -818,12 +826,6 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	err = r.updateDeploymentSettings(ctx, id, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings", err.Error())
-		return
-	}
-
-	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
 		return
 	}
 

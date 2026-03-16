@@ -44,7 +44,11 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 	}
 
 	metadataContents := `name: test-model
-runtimeParameterDefinitions: []
+runtimeParameterDefinitions:
+  - fieldName: GUARD_CONFIG_PLACEHOLDER
+    type: string
+    description: Placeholder for guard configuration schema
+    defaultValue: null
 `
 	if err := os.WriteFile(folderPath+"/model-metadata.yaml", []byte(metadataContents), 0644); err != nil {
 		t.Fatal(err)
