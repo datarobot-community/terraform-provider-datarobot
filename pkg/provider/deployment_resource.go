@@ -734,9 +734,10 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	_, err = r.waitForDeploymentToBeReady(ctx, id)
-	if err != nil {
-		resp.Diagnostics.AddError("Deployment not ready", err.Error())
+	// Ensure the deployment is active before any updates.
+	// If the deployment was deactivated externally, activate it instead of hanging.
+	if err = r.ensureDeploymentActive(ctx, id); err != nil {
+		resp.Diagnostics.AddError("Error ensuring Deployment is active", err.Error())
 		return
 	}
 
@@ -749,6 +750,13 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if plan.RegisteredModelVersionID != state.RegisteredModelVersionID {
+		// Ensure the deployment is active before model replacement,
+		// otherwise the replacement may hang or fail.
+		if err = r.ensureDeploymentActive(ctx, id); err != nil {
+			resp.Diagnostics.AddError("Error activating Deployment for model replacement", err.Error())
+			return
+		}
+
 		traceAPICall("ValidateDeploymentModelReplacement")
 		validateModelReplacementResp, err := r.provider.service.ValidateDeploymentModelReplacement(ctx, id, &client.ValidateDeployemntModelReplacementRequest{
 			ModelPackageID: plan.RegisteredModelVersionID.ValueString(),
@@ -973,6 +981,10 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 			return nil
 		} else if strings.Contains(deployment.Status, "error") {
 			return backoff.Permanent(errors.New("deployment has errored"))
+		} else if deployment.Status == "inactive" && status == "active" {
+			// Don't keep retrying if the deployment is stable in inactive state;
+			// it won't become active on its own.
+			return backoff.Permanent(fmt.Errorf("deployment is inactive but expected active"))
 		}
 
 		return errors.New("deployment is not ready")
@@ -1369,4 +1381,23 @@ func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) 
 	}
 
 	return
+}
+
+// ensureDeploymentActive checks if the deployment is active and activates it if not.
+func (r *DeploymentResource) ensureDeploymentActive(ctx context.Context, id string) error {
+	traceAPICall("GetDeployment")
+	deployment, err := r.provider.service.GetDeployment(ctx, id)
+	if err != nil {
+		return fmt.Errorf("Error getting deployment status: %w", err)
+	}
+
+	if deployment.Status == "active" {
+		return nil
+	}
+
+	if strings.Contains(deployment.Status, "error") {
+		return fmt.Errorf("deployment is in error state: %s", deployment.Status)
+	}
+
+	return r.activateDeployment(ctx, id)
 }
