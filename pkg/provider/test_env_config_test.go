@@ -26,7 +26,7 @@ import "os"
 //	DR_TEST_LEADERBOARD_STAGING_MODEL_ID_2=673b75ec97f1021bbfb61d34
 //	DR_TEST_DR_GROUP_ENTITY_ID=6036d237608973bf082aba1e
 var (
-	// Base environment IDs
+	// Base environment IDs.
 
 	// testGenAIBaseEnvID is the [GenAI] Python 3.11 base environment.
 	// Used for custom models (Binary, Regression, TextGeneration, MCP, etc.).
@@ -39,13 +39,13 @@ var (
 	// testCustomJobEnvID is the base environment for custom jobs and metric jobs.
 	testCustomJobEnvID string
 
-	// Base environment version IDs
+	// Base environment version IDs.
 
 	// testAppSourceBaseEnvVersionID is a specific version of the Streamlit base environment.
 	// Used in application source and application source from template tests.
 	testAppSourceBaseEnvVersionID string
 
-	// Custom application execution environment IDs
+	// Custom application execution environment IDs.
 
 	// testCustomAppEnvID is an execution environment for custom applications from environment.
 	testCustomAppEnvID string
@@ -53,7 +53,7 @@ var (
 	// testCustomAppEnvID2 is a second execution environment for custom applications from environment.
 	testCustomAppEnvID2 string
 
-	// Template IDs
+	// Template IDs.
 
 	// testSlackbotTemplateID is the Slackbot application template.
 	testSlackbotTemplateID string
@@ -67,7 +67,7 @@ var (
 	// testFlaskTemplateID is the Flask application template.
 	testFlaskTemplateID string
 
-	// Leaderboard / registered model IDs
+	// Leaderboard / registered model IDs.
 
 	// testLeaderboardModelID is a model from a project leaderboard (production).
 	testLeaderboardModelID string
@@ -81,7 +81,7 @@ var (
 	// testLeaderboardStagingModelID2 is a second model from a project leaderboard (staging).
 	testLeaderboardStagingModelID2 string
 
-	// Other entity IDs
+	// Other entity IDs.
 
 	// testDRGroupEntityID is a DataRobot group entity ID for notification channel tests.
 	testDRGroupEntityID string

@@ -172,14 +172,14 @@ func deploymentRetrainingPolicyResourceConfig(
 resource "datarobot_custom_job" "deployment_retraining_policy" {
 	name = "%s"
 	job_type = "retraining"
-	environment_id = "` + testCustomJobEnvID + `"
+	environment_id = "`+testCustomJobEnvID+`"
 	folder_path = "retraining_policy_custom_job"
 }
 resource "datarobot_custom_model" "deployment_retraining_policy" {
     name = "test deployment retraining policy %s"
     target_type = "Binary"
     target_name = "t"
-    base_environment_id = "` + testGenAIBaseEnvID + `"
+    base_environment_id = "`+testGenAIBaseEnvID+`"
     folder_path = "retraining_policy"
 }
 resource "datarobot_registered_model" "deployment_retraining_policy" {

@@ -139,7 +139,7 @@ resource "datarobot_custom_model" "test_notification_channel" {
 	description = "test"
 	target_type = "Binary"
 	target_name = "target"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "notification_channel"
 }
 resource "datarobot_registered_model" "test_notification_channel" {

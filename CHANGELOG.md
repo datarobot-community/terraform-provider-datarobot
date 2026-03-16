@@ -5,6 +5,7 @@
 - Fixed deployment runtime parameter updates failing with 500 after model replacement by reordering Update operations to apply runtime parameters before triggering model replacement
 - Fixed deployment updates hanging indefinitely when the deployment is inactive. The provider now detects inactive deployments and automatically activates them before proceeding with updates or model replacements
 - Fixed `waitForDeploymentStatus` to fail fast when a deployment is stable in inactive state instead of retrying for up to 30 minutes
+- Fixed custom metric job runtime parameter values not being cleared when removed from configuration. The Update path was skipping empty lists instead of sending `"[]"` to the API
 
 ## [0.10.30] - 2026-03-10
 

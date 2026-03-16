@@ -212,7 +212,7 @@ resource "datarobot_use_case" "test_new_custom_application" {
 }
 
 resource "datarobot_application_source" "test" {
-	base_environment_id = "` + testStreamlitBaseEnvID + `"
+	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	folder_path = "custom_application"
 	resources = {
 		replicas = %d
@@ -768,7 +768,7 @@ func customApplicationWithResourcesFromSourceConfig(folderPath string) string {
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
 	name = "Resources Test Source %s"
-	base_environment_id = "` + testStreamlitBaseEnvID + `"
+	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	folder_path = "%s"
 	resources = {
 		replicas = 2
@@ -882,7 +882,7 @@ func customApplicationWithScopeLevelConfig(folderPath, scopeLevel, nameSalt stri
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test_scope" {
-	base_environment_id = "` + testStreamlitBaseEnvID + `"
+	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	folder_path = "%s"
 }
 

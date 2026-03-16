@@ -619,7 +619,7 @@ resource "datarobot_custom_model" "test_registered_model" {
 	description = "test"
 	target_type = "Binary"
 	target_name = "my_label"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "registered_model_test"
 	guard_configurations = [
 		{
@@ -654,7 +654,7 @@ resource "datarobot_custom_model" "test_registered_model" {
 	description = "test"
 	target_type = "Binary"
 	target_name = "my_label"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "registered_model_test"
 	guard_configurations = [
 		{
@@ -722,7 +722,7 @@ func textGenerationRegisteredModelResourceConfig(
 		target_type         	 = "TextGeneration"
 		target_name         	 = "target"
 		language 				 = "python"
-		base_environment_id 	 = "` + testGenAIBaseEnvID + `"
+		base_environment_id 	 = "`+testGenAIBaseEnvID+`"
 		is_proxy 				 = true
 		folder_path 			 = "registered_model_text_generation"
 		%s
@@ -758,7 +758,7 @@ func textGenerationRegisteredModelUpdateResourceConfig(
 		target_type         	 = "TextGeneration"
 		target_name         	 = "target"
 		language 				 = "python"
-		base_environment_id 	 = "` + testGenAIBaseEnvID + `"
+		base_environment_id 	 = "`+testGenAIBaseEnvID+`"
 		is_proxy 				 = true
 		folder_path 			 = "registered_model_text_generation_update"
 		%s

@@ -194,7 +194,7 @@ resource "datarobot_custom_model" "batch_prediction_job_definition" {
 	name = "test batch prediction job %s"
 	target_type = "Binary"
 	target_name = "t"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "batch_prediction_job_definition"
 }
 resource "datarobot_registered_model" "batch_prediction_job_definition" {

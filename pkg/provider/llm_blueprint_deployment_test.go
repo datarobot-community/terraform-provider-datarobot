@@ -84,7 +84,7 @@ resource "datarobot_custom_model" "llm_test" {
 	target_type = "TextGeneration"
 	target_name = "resultText"
 	source_llm_blueprint_id = datarobot_llm_blueprint.llm_test.id
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 }
 
 resource "datarobot_registered_model" "llm_test" {

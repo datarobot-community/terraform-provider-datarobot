@@ -93,7 +93,7 @@ resource "datarobot_custom_model" "test_qa_application" {
 	name = "test qa application %s"
 	target_type = "TextGeneration"
 	target_name = "target"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "qa_application"
 }
 resource "datarobot_registered_model" "test_qa_application" {

@@ -267,14 +267,14 @@ func customMetricFromJobResourceConfig(
 	return fmt.Sprintf(`
 resource "datarobot_custom_metric_job" "datarobot_custom_metric_from_job" {
 	name = "%s"
-	environment_id = "` + testCustomJobEnvID + `"
+	environment_id = "`+testCustomJobEnvID+`"
 	folder_path = "custom_metric_from_job"
 }
 resource "datarobot_custom_model" "datarobot_custom_metric_from_job" {
 	name = "test custom metric from job %s"
 	target_type = "Binary"
 	target_name = "t"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "custom_metric_from_job"
 }
 resource "datarobot_registered_model" "datarobot_custom_metric_from_job" {

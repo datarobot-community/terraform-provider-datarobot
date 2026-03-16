@@ -201,7 +201,7 @@ resource "datarobot_custom_model" "test_custom_metric" {
 	description = "test"
 	target_type = "Binary"
 	target_name = "target"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "custom_metric"
 }
 resource "datarobot_registered_model" "test_custom_metric" {

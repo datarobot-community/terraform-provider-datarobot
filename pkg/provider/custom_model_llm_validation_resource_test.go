@@ -177,7 +177,7 @@ resource "datarobot_custom_model" "test_custom_model_llm_validation" {
 	description = "test"
 	target_type = "TextGeneration"
 	target_name = "resultText"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "custom_model_llm_validation"
 }
 resource "datarobot_registered_model" "test_custom_model_llm_validation" {

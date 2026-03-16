@@ -1379,7 +1379,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	name = "%s"
 	description = "%s"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	runtime_parameter_values = [
 	  {
 		  key="OPENAI_API_BASE",
@@ -1596,7 +1596,7 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		name        		     = "with runtime params"
 		target_type              = "TextGeneration"
 		target_name              = "target"
-		base_environment_id      = "` + testGenAIBaseEnvID + `"
+		base_environment_id      = "`+testGenAIBaseEnvID+`"
 		folder_path 			 = "custom_model_with_runtime_params"
 		runtime_parameter_values = [
 			{
@@ -1659,7 +1659,7 @@ resource "datarobot_custom_model" "test_binary" {
 	positive_class_label  = "%s"
 	negative_class_label  = "%s"
 	prediction_threshold  = %f
-	base_environment_id   = "` + testGenAIBaseEnvID + `"
+	base_environment_id   = "`+testGenAIBaseEnvID+`"
 	%s
 	%s
 	%s
@@ -1693,7 +1693,7 @@ resource "datarobot_custom_model" "test_multiclass" {
 	target_name           							  = "%s"
 	language 			  							  = "%s"
 	class_labels  		  							  = [%s]
-	base_environment_id 							  = "` + testGenAIBaseEnvID + `"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	is_proxy 										  = true
 	%s
 	%s
@@ -1724,7 +1724,7 @@ resource "datarobot_custom_model" "test_regression" {
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 					  		  = "` + testGenAIBaseEnvID + `"
+	base_environment_id 					  		  = "`+testGenAIBaseEnvID+`"
 	%s
 	%s
 }
@@ -1757,7 +1757,7 @@ resource "datarobot_custom_model" "test_text_generation" {
 	target_type         = "TextGeneration"
 	target_name         = "%s"
 	language 			= "%s"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	is_proxy 			= true
 	%s
 	%s
@@ -1791,7 +1791,7 @@ resource "datarobot_custom_model" "test_mcp_server" {
 	target_type         = "MCP"
 	target_name         = "%s"
 	language 			= "%s"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	is_proxy 			= true
 	%s
 	%s
@@ -1812,7 +1812,7 @@ resource "datarobot_custom_model" "test_%s" {
 	name        		  							  = "%s"
 	target_type           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 							  = "` + testGenAIBaseEnvID + `"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	%s
 }
 `, resourceBlock, strings.ToLower(targetType), name, targetType, language, customModelBlock)
@@ -1926,7 +1926,7 @@ resource "datarobot_custom_model" "test_with_tags" {
 	name        		  							  = "%s"
 	target_type           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 							  = "` + testGenAIBaseEnvID + `"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	%s
 
 	tags = [

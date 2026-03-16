@@ -342,7 +342,7 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 
 	var runtimeParameterValues string
 	var err error
-	if len(plan.RuntimeParameterValues.Elements()) > 0 {
+	if IsKnown(plan.RuntimeParameterValues) {
 		runtimeParameterValues, err = convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())

@@ -720,7 +720,7 @@ func applicationSourceWithScopeLevelConfig(scopeLevel string) string {
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test_scope" {
-	base_environment_id = "` + testStreamlitBaseEnvID + `"
+	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	files = [
 		["start-app.sh"],
 		["streamlit-app.py"]

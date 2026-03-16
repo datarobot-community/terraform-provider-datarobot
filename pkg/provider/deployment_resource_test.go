@@ -449,7 +449,7 @@ resource "datarobot_custom_model" "test_deployment" {
 	description = "test"
 	target_type = "Binary"
 	target_name = "%s"
-	base_environment_id = "` + testGenAIBaseEnvID + `"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "deployment"
 }
 resource "datarobot_registered_model" "test_deployment" {
