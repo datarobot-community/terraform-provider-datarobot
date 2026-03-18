@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -610,10 +611,10 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
 	if err != nil {
-		traceAPICall("DeleteDeployment")
-		_ = r.provider.service.DeleteDeployment(ctx, createResp.ID)
-		resp.Diagnostics.AddError("Deployment creation failed", err.Error())
-		return
+		tflog.Warn(ctx, "Task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
+			"status_id": statusID,
+			"error":     err.Error(),
+		})
 	}
 
 	deployment, err := r.waitForDeploymentToBeReady(ctx, createResp.ID)
@@ -787,8 +788,10 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		// model replacement is an async operation, separate from waiting for the deployment to be ready
 		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
-			return
+			tflog.Warn(ctx, "Model replacement task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
+				"status_id": statusId,
+				"error":     err.Error(),
+			})
 		}
 
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
@@ -971,6 +974,9 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id string, status string) (*client.Deployment, error) {
 	expBackoff := getExponentialBackoff()
 
+	startTime := time.Now()
+	lastStatus := ""
+
 	operation := func() error {
 		deployment, err := r.provider.service.GetDeployment(ctx, id)
 		if err != nil {
@@ -981,11 +987,9 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 			return nil
 		} else if strings.Contains(deployment.Status, "error") {
 			return backoff.Permanent(errors.New("deployment has errored"))
-		} else if deployment.Status == "inactive" && status == "active" {
-			// Don't keep retrying if the deployment is stable in inactive state;
-			// it won't become active on its own.
-			return backoff.Permanent(fmt.Errorf("deployment is inactive but expected active"))
 		}
+
+		lastStatus = deployment.Status
 
 		return errors.New("deployment is not ready")
 	}
@@ -993,7 +997,7 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 	// Retry the operation using the backoff strategy
 	err := backoff.Retry(operation, expBackoff)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w (last status: %s, elapsed: %s)", err, lastStatus, time.Since(startTime).Round(time.Second))
 	}
 
 	traceAPICall("GetDeployment")

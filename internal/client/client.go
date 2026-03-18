@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/go-querystring/query"
@@ -188,6 +189,9 @@ func Put[T any](c *Client, ctx context.Context, path string, body any) (*T, erro
 }
 
 func Delete(c *Client, ctx context.Context, path string) (err error) {
+	if os.Getenv("SKIP_RESOURCE_DESTROY") == "1" {
+		return nil
+	}
 	_, err = doRequest[CreateVoidResponse](c, ctx, http.MethodDelete, path, nil)
 	return
 }

@@ -110,6 +110,13 @@ resource "datarobot_deployment" "test_qa_application" {
 	label = "test Q&A application %s"
 	prediction_environment_id = datarobot_prediction_environment.test_qa_application.id
 	registered_model_version_id = datarobot_registered_model.test_qa_application.version_id
+	runtime_parameter_values = [
+		{
+			key = "GUARD_CONFIG_PLACEHOLDER"
+			type = "string"
+			value = "{\"max_tokens\": 100, \"temperature\": 0.7}"
+		},
+	]
 }
 resource "datarobot_qa_application" "test" {
 	name = "%s"
