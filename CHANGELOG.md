@@ -2,9 +2,14 @@
 
 ### Fixed
 
+- Fixed deployment creation task status polling getting stuck when the status API returns `INITIALIZED` indefinitely. After 2 minutes of `INITIALIZED` with no progress, the provider now skips the status check and verifies the deployment readiness directly
+- Added detailed logging to task status polling — each poll now logs the task ID, current status, and elapsed time via `tflog.Info` for easier debugging
+- Fixed `waitForDeploymentStatus` race condition where the fail-fast check on `inactive` status could race with `activateDeployment`, causing spurious permanent errors. Removed the fail-fast and added status/elapsed info to timeout errors instead
+- Fixed deployment creation/model replacement to proceed to deployment readiness check even if task status polling fails, preventing unnecessary resource deletion on transient status API issues
+- Deduplicated registered model version creation logic in Update — extracted `createNewRegisteredModelVersion` helper to eliminate near-identical code blocks for custom model version changes and tag-only changes
+- Fixed QA Application acceptance test to set `GUARD_CONFIG_PLACEHOLDER` runtime parameter on the deployment, required by the updated `POST /customApplications/qanda/` API
 - Fixed deployment runtime parameter updates failing with 500 after model replacement by reordering Update operations to apply runtime parameters before triggering model replacement
 - Fixed deployment updates hanging indefinitely when the deployment is inactive. The provider now detects inactive deployments and automatically activates them before proceeding with updates or model replacements
-- Fixed `waitForDeploymentStatus` to fail fast when a deployment is stable in inactive state instead of retrying for up to 30 minutes
 - Fixed custom metric job runtime parameter values not being cleared when removed from configuration. The Update path was skipping empty lists instead of sending `"[]"` to the API
 
 ## [0.10.30] - 2026-03-10
