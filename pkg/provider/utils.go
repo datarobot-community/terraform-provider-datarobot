@@ -162,7 +162,6 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 	expBackoff := getExponentialBackoff()
 
 	startTime := time.Now()
-	initialStatus := ""
 
 	operation := func() error {
 		var task *client.TaskStatusResponse
@@ -192,18 +191,13 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 
 		elapsed := time.Since(startTime).Round(time.Second)
 
-		// Track if the status has never changed from its initial value
-		if initialStatus == "" {
-			initialStatus = task.Status
-		}
-
-		// If the status has been stuck in the same non-progressing state for over 2 minutes,
-		// log a warning and return nil so the caller can check the resource directly
-		if task.Status == initialStatus && elapsed > 2*time.Minute {
-			tflog.Warn(ctx, "Task status appears stuck, proceeding to check resource directly", map[string]interface{}{
-				"task_id":        id,
-				"current_status": task.Status,
-				"elapsed":        elapsed.String(),
+		// If the task has been stuck in INITIALIZED for over 2 minutes,
+		// the status endpoint is likely not updating — proceed so the caller
+		// can check the resource directly.
+		if task.Status == "INITIALIZED" && elapsed > 2*time.Minute {
+			tflog.Warn(ctx, "Task stuck in INITIALIZED, proceeding to check resource directly", map[string]interface{}{
+				"task_id": id,
+				"elapsed": elapsed.String(),
 			})
 			return nil
 		}
