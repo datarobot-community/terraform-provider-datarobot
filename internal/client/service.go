@@ -258,9 +258,8 @@ type Service interface {
 
 // Service for the DataRobot API.
 type ServiceImpl struct {
-	client        *Client
-	apiGWClient   *Client
-	profileClient *Client
+	client      *Client
+	apiGWClient *Client
 }
 
 // NewService creates a new API service.
@@ -273,15 +272,9 @@ func NewService(c *Client) Service {
 	apiGWConfig.Endpoint = apiGWConfig.BaseURL() + "/api-gw"
 	apiGWClient := NewClient(&apiGWConfig)
 
-	// Construct the profile client for non-API-v2 endpoints
-	profileConfig := *c.cfg
-	profileConfig.Endpoint = profileConfig.BaseURL()
-	profileClient := NewClient(&profileConfig)
-
 	return &ServiceImpl{
-		client:        c,
-		apiGWClient:   apiGWClient,
-		profileClient: profileClient,
+		client:      c,
+		apiGWClient: apiGWClient,
 	}
 }
 
