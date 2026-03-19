@@ -228,6 +228,9 @@ type Service interface {
 	// User Info
 	GetUserInfo(ctx context.Context) (*UserInfo, error)
 
+	// Feature Flags
+	IsFeatureFlagEnabled(ctx context.Context, flagName string) (bool, error)
+
 	// User MCP Tool Metadata
 	CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPToolMetadataRequest) (*UserMCPToolMetadataResponse, error)
 
@@ -255,8 +258,9 @@ type Service interface {
 
 // Service for the DataRobot API.
 type ServiceImpl struct {
-	client      *Client
-	apiGWClient *Client
+	client        *Client
+	apiGWClient   *Client
+	profileClient *Client
 }
 
 // NewService creates a new API service.
@@ -269,9 +273,15 @@ func NewService(c *Client) Service {
 	apiGWConfig.Endpoint = apiGWConfig.BaseURL() + "/api-gw"
 	apiGWClient := NewClient(&apiGWConfig)
 
+	// Construct the profile client for non-API-v2 endpoints
+	profileConfig := *c.cfg
+	profileConfig.Endpoint = profileConfig.BaseURL()
+	profileClient := NewClient(&profileConfig)
+
 	return &ServiceImpl{
-		client:      c,
-		apiGWClient: apiGWClient,
+		client:        c,
+		apiGWClient:   apiGWClient,
+		profileClient: profileClient,
 	}
 }
 
@@ -997,11 +1007,19 @@ func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
 	return Get[UserInfo](s.client, ctx, "/account/info/")
 }
 
+func (s *ServiceImpl) IsFeatureFlagEnabled(ctx context.Context, flagName string) (bool, error) {
+	userInfo, err := s.GetUserInfo(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch user info for feature flag %q: %w", flagName, err)
+	}
+	return userInfo.Permissions[flagName], nil
+}
+
 // User MCP Tool Metadata Service Implementation.
 func (s *ServiceImpl) CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPToolMetadataRequest) (*UserMCPToolMetadataResponse, error) {
 	return Post[UserMCPToolMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/tools/", mcpServerVersionID), req)
-}
 
+}
 // User MCP Prompt Metadata Service Implementation.
 func (s *ServiceImpl) CreateUserMCPPromptMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPPromptMetadataRequest) (*UserMCPPromptMetadataResponse, error) {
 	return Post[UserMCPPromptMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/prompts/", mcpServerVersionID), req)

@@ -20,7 +20,7 @@ func TestAccUserMcpPromptMetadataResource(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheck(t)
+			testAccFeatureFlagPreCheck(t, "ENABLE_MCP_TOOLS_GALLERY_SUPPORT")
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
