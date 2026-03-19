@@ -1018,8 +1018,8 @@ func (s *ServiceImpl) IsFeatureFlagEnabled(ctx context.Context, flagName string)
 // User MCP Tool Metadata Service Implementation.
 func (s *ServiceImpl) CreateUserMCPToolMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPToolMetadataRequest) (*UserMCPToolMetadataResponse, error) {
 	return Post[UserMCPToolMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/tools/", mcpServerVersionID), req)
-
 }
+
 // User MCP Prompt Metadata Service Implementation.
 func (s *ServiceImpl) CreateUserMCPPromptMetadata(ctx context.Context, mcpServerVersionID string, req *UserMCPPromptMetadataRequest) (*UserMCPPromptMetadataResponse, error) {
 	return Post[UserMCPPromptMetadataResponse](s.client, ctx, fmt.Sprintf("/userMCPServerVersions/%s/prompts/", mcpServerVersionID), req)
