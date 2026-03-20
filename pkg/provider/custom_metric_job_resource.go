@@ -340,10 +340,14 @@ func (r *CustomMetricJobResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	runtimeParameterValues, err := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
-	if err != nil {
-		resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
-		return
+	var runtimeParameterValues string
+	var err error
+	if IsKnown(plan.RuntimeParameterValues) {
+		runtimeParameterValues, err = convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading runtime parameter values", err.Error())
+			return
+		}
 	}
 
 	// then update the rest of the Custom Job fields

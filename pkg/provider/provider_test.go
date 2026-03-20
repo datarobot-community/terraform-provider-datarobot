@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"log"
 	"os"
 	"testing"
@@ -79,5 +80,28 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 func testAccPreCheck(t *testing.T) {
 	if globalTestCfg.ApiKey == "" {
 		t.Fatalf("%s must be set for acceptance testing", DataRobotApiKeyEnvVar)
+	}
+}
+
+func testAccFeatureFlagPreCheck(t *testing.T, flagName string) {
+	t.Helper()
+	testAccPreCheck(t)
+	svc := client.NewService(cl)
+
+	userInfo, infoErr := svc.GetUserInfo(context.Background())
+	if infoErr != nil {
+		t.Logf("GetUserInfo error: %v", infoErr)
+	} else {
+		t.Logf("permissions: %v", userInfo.Permissions)
+	}
+
+	enabled, err := svc.IsFeatureFlagEnabled(context.Background(), flagName)
+	if err != nil {
+		t.Logf("Feature flag check error for %q: %v", flagName, err)
+		t.Skipf("Skipping test: unable to check feature flag %q: %v", flagName, err)
+	}
+	t.Logf("Feature flag %q = %v", flagName, enabled)
+	if !enabled {
+		t.Skipf("Skipping test: feature flag %q is not enabled on this server", flagName)
 	}
 }

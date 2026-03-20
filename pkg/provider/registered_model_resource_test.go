@@ -34,6 +34,41 @@ func TestAccRegisteredModelResource(t *testing.T) {
 	useCaseResourceName := "test_registered_model"
 	useCaseResourceName2 := "test_new_registered_model"
 
+	metadataFileName := "model-metadata.yaml"
+	metadataContents := `name: runtime-params
+
+runtimeParameterDefinitions:
+  - fieldName: GUARD_CONFIG_PLACEHOLDER
+    type: string
+    description: Placeholder for guard configuration schema
+    defaultValue: null`
+
+	folderPath := "registered_model_test"
+	os.RemoveAll(folderPath)
+	if err := os.Mkdir(folderPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	modelContents := `from typing import Any, Dict
+import pandas as pd
+
+def load_model(code_dir: str) -> Any:
+	return "dummy"
+
+def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
+	positive_label = kwargs["positive_class_label"]
+	negative_label = kwargs["negative_class_label"]
+	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
+	return preds
+`
+	if err := os.WriteFile(folderPath+"/custom.py", []byte(modelContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(folderPath+"/"+metadataFileName, []byte(metadataContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -579,27 +614,13 @@ resource "datarobot_use_case" "test_registered_model" {
 resource "datarobot_use_case" "test_new_registered_model" {
 	name = "test new registered model"
 }
-resource "datarobot_remote_repository" "test_registered_model" {
-	name        = "Test Registered Model"
-	description = "test"
-	location    = "https://github.com/datarobot-community/custom-models"
-	source_type = "github"
-	}
 resource "datarobot_custom_model" "test_registered_model" {
 	name = "test registered model"
 	description = "test"
 	target_type = "Binary"
 	target_name = "my_label"
-	base_environment_id = "65f9b27eab986d30d4c64268"
-	source_remote_repositories = [
-		{
-			id = datarobot_remote_repository.test_registered_model.id
-			ref = "master"
-			source_paths = [
-				"custom_inference/python/gan_mnist/custom.py",
-			]
-		},
-	]
+	base_environment_id = "`+testGenAIBaseEnvID+`"
+	folder_path = "registered_model_test"
 	guard_configurations = [
 		{
 			template_name = "Rouge 1"
@@ -628,29 +649,13 @@ func registeredModelResourceConfigWithTags(name, description string, guardName s
 resource "datarobot_use_case" "test_registered_model" {
 	name = "test registered model"
 }
-resource "datarobot_remote_repository" "test_registered_model" {
-	name        = "Test Registered Model"
-	description = "test"
-	location    = "https://github.com/datarobot-community/custom-models"
-	source_type = "github"
-	}
 resource "datarobot_custom_model" "test_registered_model" {
 	name = "test registered model"
 	description = "test"
 	target_type = "Binary"
 	target_name = "my_label"
-	base_environment_id = "65f9b27eab986d30d4c64268"
-	source_remote_repositories = [
-		{
-			id = datarobot_remote_repository.test_registered_model.id
-			ref = "master"
-			source_paths = [
-				"custom_inference/python/gan_mnist/custom.py",
-				"custom_inference/python/gan_mnist/gan_weights.h5",
-			]
-		}
-	]
-
+	base_environment_id = "`+testGenAIBaseEnvID+`"
+	folder_path = "registered_model_test"
 	guard_configurations = [
 		{
 			template_name = "Rouge 1"
@@ -717,7 +722,7 @@ func textGenerationRegisteredModelResourceConfig(
 		target_type         	 = "TextGeneration"
 		target_name         	 = "target"
 		language 				 = "python"
-		base_environment_id 	 = "65f9b27eab986d30d4c64268"
+		base_environment_id 	 = "`+testGenAIBaseEnvID+`"
 		is_proxy 				 = true
 		folder_path 			 = "registered_model_text_generation"
 		%s
@@ -753,7 +758,7 @@ func textGenerationRegisteredModelUpdateResourceConfig(
 		target_type         	 = "TextGeneration"
 		target_name         	 = "target"
 		language 				 = "python"
-		base_environment_id 	 = "65f9b27eab986d30d4c64268"
+		base_environment_id 	 = "`+testGenAIBaseEnvID+`"
 		is_proxy 				 = true
 		folder_path 			 = "registered_model_text_generation_update"
 		%s

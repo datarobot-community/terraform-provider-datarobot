@@ -287,7 +287,7 @@ func TestCustomModelFromGitHub(t *testing.T) {
 	require.NotEmpty(customModel.ID)
 
 	_, _, err = s.CreateCustomModelVersionFromRemoteRepository(ctx, customModel.ID, &client.CreateCustomModelVersionFromRemoteRepositoryRequest{
-		BaseEnvironmentID: "65f9b27eab986d30d4c64268",
+		BaseEnvironmentID: getEnvOrDefault("DR_TEST_GENAI_BASE_ENV_ID", "67ab469cecdca772287de644"),
 		IsMajorUpdate:     true,
 		RepositoryID:      remoteRepository.ID,
 		Ref:               "master",
@@ -1269,4 +1269,11 @@ func initializeTest(t *testing.T) client.Service {
 	s := client.NewService(c)
 
 	return s
+}
+
+func getEnvOrDefault(envVar, defaultValue string) string {
+	if v := os.Getenv(envVar); v != "" {
+		return v
+	}
+	return defaultValue
 }

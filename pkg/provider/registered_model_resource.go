@@ -340,36 +340,11 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	if state.CustomModelVersionId.ValueString() != plan.CustomModelVersionId.ValueString() {
-		traceAPICall("GetRegisteredModel")
-		registeredModel, err := r.provider.service.GetRegisteredModel(ctx, plan.ID.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError("Error getting Registered Model info", err.Error())
-			return
-		}
-
-		createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
-			RegisteredModelID:    registeredModel.ID,
-			CustomModelVersionID: plan.CustomModelVersionId.ValueString(),
-			Name:                 versionName,
-			Tags:                 convertSetTagsToClientTags(plan.Tags),
-		}
-
-		if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, plan.CustomModelVersionId.ValueString()); err != nil {
-			resp.Diagnostics.AddError("Error populating prompt from Custom Model", err.Error())
-			return
-		}
-
-		traceAPICall("CreateRegisteredModelVersion")
-		registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, createRegisteredModelRequest)
+	if state.CustomModelVersionId.ValueString() != plan.CustomModelVersionId.ValueString() ||
+		!plan.Tags.Equal(state.Tags) {
+		registeredModelVersion, err := r.createNewRegisteredModelVersion(ctx, plan.ID.ValueString(), plan.CustomModelVersionId.ValueString(), versionName, plan.Tags)
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Registered Model Version", err.Error())
-			return
-		}
-
-		err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
-		if err != nil {
-			resp.Diagnostics.AddError("Registered model version not ready", err.Error())
 			return
 		}
 		plan.VersionID = types.StringValue(registeredModelVersion.ID)
@@ -458,6 +433,38 @@ func (r *RegisteredModelResource) findCustomModel(ctx context.Context, customMod
 	}
 
 	return client.CustomModel{}, fmt.Errorf("custom model with version ID %s not found", customModelVersionID)
+}
+
+func (r *RegisteredModelResource) createNewRegisteredModelVersion(ctx context.Context, registeredModelID, customModelVersionID, versionName string, tags types.Set) (*client.RegisteredModelVersion, error) {
+	traceAPICall("GetRegisteredModel")
+	registeredModel, err := r.provider.service.GetRegisteredModel(ctx, registeredModelID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting Registered Model info: %w", err)
+	}
+
+	createRegisteredModelRequest := &client.CreateRegisteredModelFromCustomModelRequest{
+		RegisteredModelID:    registeredModel.ID,
+		CustomModelVersionID: customModelVersionID,
+		Name:                 versionName,
+		Tags:                 convertSetTagsToClientTags(tags),
+	}
+
+	if err := r.populatePromptFromCustomModel(ctx, createRegisteredModelRequest, customModelVersionID); err != nil {
+		return nil, fmt.Errorf("error populating prompt from Custom Model: %w", err)
+	}
+
+	traceAPICall("CreateRegisteredModelVersion")
+	registeredModelVersion, err := r.provider.service.CreateRegisteredModelFromCustomModelVersion(ctx, createRegisteredModelRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error creating Registered Model Version: %w", err)
+	}
+
+	err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, registeredModelVersion.RegisteredModelID, registeredModelVersion.ID)
+	if err != nil {
+		return nil, fmt.Errorf("registered model version not ready: %w", err)
+	}
+
+	return registeredModelVersion, nil
 }
 
 func (r *RegisteredModelResource) populatePromptFromCustomModel(ctx context.Context, request *client.CreateRegisteredModelFromCustomModelRequest, customModelVersionID string) error {

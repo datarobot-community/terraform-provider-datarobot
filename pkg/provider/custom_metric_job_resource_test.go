@@ -362,7 +362,7 @@ func customMetricJobResourceConfig(
 resource "datarobot_custom_metric_job" "test" {
 	name = "%s"
 	description = "%s"
-	environment_id = "66d07fae0513a1edf18595bb"
+	environment_id = "`+testCustomJobEnvID+`"
 	egress_network_policy = "%s"
 	type = "%s"
 	directionality = "%s"

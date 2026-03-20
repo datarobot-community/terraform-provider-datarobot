@@ -31,8 +31,8 @@ func TestAccCustomApplicationFromEnvironmentResource(t *testing.T) {
 	name := "custom_app_from_env" + nameSalt
 	newName := "new_custom_app_from_env " + nameSalt
 
-	environmentID := "67987589391fe8fa0a2275b8"
-	environmentID2 := "67987b1a90dbd55389b699c2"
+	environmentID := testCustomAppEnvID
+	environmentID2 := testCustomAppEnvID2
 
 	useCaseResourceName := "test_custom_application"
 	useCaseResourceName2 := "test_new_custom_application"

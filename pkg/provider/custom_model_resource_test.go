@@ -75,8 +75,8 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	baseEnvironmentID := "65f9b27eab986d30d4c64268"  // [GenAI] Python 3.11 with Moderations
-	baseEnvironmentID2 := "6542cd582a9d3d51bf4ac71e" // [Experimental] Python 3.9 Streamlit
+	baseEnvironmentID := testGenAIBaseEnvID
+	baseEnvironmentID2 := testStreamlitBaseEnvID
 
 	fileName := "requirements.txt"
 	folderPath := "custom_model_without_llm_blueprint"
@@ -86,6 +86,32 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	}
 	defer os.Remove(fileName)
 
+	metadataFileName := "model-metadata.yaml"
+	metadataContents := `name: test-model
+runtimeParameterDefinitions:
+  - fieldName: GUARD_CONFIG_PLACEHOLDER
+    type: string
+    description: Placeholder for guard configuration schema
+    defaultValue: null
+  - fieldName: MODERATION_OOTB_RESPONSE_FAITHFULNESS_AZURE_OPENAI_API_KEY
+    type: credential
+    description: Azure OpenAI API key for Faithfulness guard
+    defaultValue: null
+  - fieldName: MODERATION_NEMO_GUARDRAILS_PROMPT_AZURE_OPENAI_API_KEY
+    type: credential
+    description: Azure OpenAI API key for NeMo guard
+    defaultValue: null
+  - fieldName: MODERATION_OOTB_RESPONSE_FAITHFULNESS_OPENAI_API_KEY
+    type: credential
+    description: OpenAI API key for Faithfulness guard
+    defaultValue: null
+`
+	err = os.WriteFile(metadataFileName, []byte(metadataContents), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(metadataFileName)
+
 	os.RemoveAll(folderPath)
 	err = os.Mkdir(folderPath, 0755)
 	if err != nil {
@@ -94,6 +120,11 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	defer os.RemoveAll(folderPath)
 
 	err = os.WriteFile(folderPath+"/"+fileName, []byte(`langchain == 0.2.9`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(folderPath+"/"+metadataFileName, []byte(metadataContents), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +150,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID,
 					sourceRemoteRepositories,
 					nil,
-					[]FileTuple{{LocalPath: fileName}},
+					[]FileTuple{{LocalPath: fileName}, {LocalPath: metadataFileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Rouge 1"),
@@ -225,7 +256,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 					baseEnvironmentID2,
 					sourceRemoteRepositories,
 					nil,
-					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}},
+					[]FileTuple{{LocalPath: fileName, PathInModel: "new_dir/" + fileName}, {LocalPath: metadataFileName}},
 					[]GuardConfiguration{
 						{
 							TemplateName: basetypes.NewStringValue("Faithfulness"),
@@ -567,7 +598,7 @@ func TestAccCustomModelWithTrainingDatasetResource(t *testing.T) {
 	resourceTestName := "test_with_training_dataset"
 	resourceName := resourceType + "." + resourceTestName
 
-	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+	baseEnvironmentID := testGenAIBaseEnvID
 
 	sourceRemoteRepositories := []SourceRemoteRepository{
 		{
@@ -612,7 +643,7 @@ func TestAccCustomModelWithRuntimeParamsResource(t *testing.T) {
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
-	baseEnvironmentID := "65f9b27eab986d30d4c64268" // [GenAI] Python 3.11 with Moderations
+	baseEnvironmentID := testGenAIBaseEnvID
 
 	folderPath := "custom_model_with_runtime_params"
 	fileName := "model-metadata.yaml"
@@ -1315,7 +1346,7 @@ func TestCustomModelResourceConflictingRuntimeFields(t *testing.T) {
 func customModelFromLlmBlueprintResourceConfig(name, description, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model" {
-	name = "test custom model"
+	name = "test custom model %s"
 	description = "test"
 }
 resource "datarobot_dataset_from_file" "test_custom_model" {
@@ -1323,17 +1354,17 @@ resource "datarobot_dataset_from_file" "test_custom_model" {
 	use_case_ids = ["${datarobot_use_case.test_custom_model.id}"]
 }
 resource "datarobot_vector_database" "test_custom_model" {
-	  name = "test custom model"
+	  name = "test custom model %s"
 	  dataset_id = "${datarobot_dataset_from_file.test_custom_model.id}"
 	  use_case_id = "${datarobot_use_case.test_custom_model.id}"
 }
 resource "datarobot_playground" "test_custom_model" {
-	name = "test custom model"
+	name = "test custom model %s"
 	description = "test"
 	use_case_id = "${datarobot_use_case.test_custom_model.id}"
 }
 resource "datarobot_llm_blueprint" "test_custom_model" {
-	name = "test custom model"
+	name = "test custom model %s"
 	description = "test"
 	vector_database_id = "${datarobot_vector_database.test_custom_model.id}"
 	playground_id = "${datarobot_playground.test_custom_model.id}"
@@ -1348,7 +1379,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	name = "%s"
 	description = "%s"
 	source_llm_blueprint_id = "${datarobot_llm_blueprint.test_custom_model.id}"
-	base_environment_id = "67ab469cecdca772287de644"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	runtime_parameter_values = [
 	  {
 		  key="OPENAI_API_BASE",
@@ -1362,7 +1393,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	  }
 	]
 }
-`, nameSalt, name, description)
+`, nameSalt, nameSalt, nameSalt, nameSalt, nameSalt, name, description)
 }
 
 func customModelWithoutLlmBlueprintResourceConfig(
@@ -1504,7 +1535,7 @@ func customModelWithoutLlmBlueprintResourceConfig(
 
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "%s" {
-	name = "test custom model without llm blueprint"
+	name = "test custom model without llm blueprint %s"
 }
 
 resource "datarobot_dataset_from_file" "%s" {
@@ -1513,7 +1544,7 @@ resource "datarobot_dataset_from_file" "%s" {
 }
 
 resource "datarobot_remote_repository" "%s" {
-	name        = "Test Custom Model from Remote Repository"
+	name        = "Test Custom Model from Remote Repository %s"
 	description = "test"
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
@@ -1539,9 +1570,11 @@ resource "datarobot_custom_model" "%s" {
 	%s
 }
 `, resourceName,
+		nameSalt,
 		resourceName,
 		resourceName,
 		resourceName,
+		nameSalt,
 		resourceName,
 		resourceName,
 		nameSalt,
@@ -1563,7 +1596,7 @@ func customModelWithRuntimeParamsConfig(value string) string {
 		name        		     = "with runtime params"
 		target_type              = "TextGeneration"
 		target_name              = "target"
-		base_environment_id      = "65f9b27eab986d30d4c64268"
+		base_environment_id      = "`+testGenAIBaseEnvID+`"
 		folder_path 			 = "custom_model_with_runtime_params"
 		runtime_parameter_values = [
 			{
@@ -1582,7 +1615,7 @@ func customModelWithoutRuntimeParamsConfig() string {
 		name        		     = "with runtime params"
 		target_type              = "TextGeneration"
 		target_name              = "target"
-		base_environment_id      = "65f9b27eab986d30d4c64268"
+		base_environment_id      = "` + testGenAIBaseEnvID + `"
 		folder_path 			 = "custom_model_with_runtime_params"
 	}
 	`
@@ -1626,7 +1659,7 @@ resource "datarobot_custom_model" "test_binary" {
 	positive_class_label  = "%s"
 	negative_class_label  = "%s"
 	prediction_threshold  = %f
-	base_environment_id   = "65f9b27eab986d30d4c64268"
+	base_environment_id   = "`+testGenAIBaseEnvID+`"
 	%s
 	%s
 	%s
@@ -1660,7 +1693,7 @@ resource "datarobot_custom_model" "test_multiclass" {
 	target_name           							  = "%s"
 	language 			  							  = "%s"
 	class_labels  		  							  = [%s]
-	base_environment_id 							  = "65f9b27eab986d30d4c64268"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	is_proxy 										  = true
 	%s
 	%s
@@ -1683,7 +1716,7 @@ func regressionCustomModelResourceConfig(
 	return fmt.Sprintf(`
 %s
 resource "datarobot_use_case" "test_regression" {
-	name = "test custom model regression"
+	name = "test custom model regression %s"
 }
 
 resource "datarobot_custom_model" "test_regression" {
@@ -1691,11 +1724,11 @@ resource "datarobot_custom_model" "test_regression" {
 	target_type           							  = "Regression"
 	target_name           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 					  		  = "65f9b27eab986d30d4c64268"
+	base_environment_id 					  		  = "`+testGenAIBaseEnvID+`"
 	%s
 	%s
 }
-`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
+`, resourceBlock, nameSalt, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
 func textGenerationCustomModelResourceConfig(
@@ -1713,10 +1746,10 @@ func textGenerationCustomModelResourceConfig(
 	return fmt.Sprintf(`
 %s
 resource "datarobot_use_case" "test_text_generation" {
-	name = "test custom model text generation"
+	name = "test custom model text generation %s"
 }
 resource "datarobot_use_case" "test_new_text_generation" {
-	name = "test new custom model text generation"
+	name = "test new custom model text generation %s"
 }
 
 resource "datarobot_custom_model" "test_text_generation" {
@@ -1724,12 +1757,12 @@ resource "datarobot_custom_model" "test_text_generation" {
 	target_type         = "TextGeneration"
 	target_name         = "%s"
 	language 			= "%s"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	is_proxy 			= true
 	%s
 	%s
 }
-`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
+`, resourceBlock, nameSalt, nameSalt, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
 func mcpServerCustomModelResourceConfig(
@@ -1747,10 +1780,10 @@ func mcpServerCustomModelResourceConfig(
 	return fmt.Sprintf(`
 %s
 resource "datarobot_use_case" "test_mcp_server" {
-	name = "test custom model mcp server"
+	name = "test custom model mcp server %s"
 }
 resource "datarobot_use_case" "test_new_mcp_server" {
-	name = "test new custom model mcp server"
+	name = "test new custom model mcp server %s"
 }
 
 resource "datarobot_custom_model" "test_mcp_server" {
@@ -1758,12 +1791,12 @@ resource "datarobot_custom_model" "test_mcp_server" {
 	target_type         = "MCP"
 	target_name         = "%s"
 	language 			= "%s"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	is_proxy 			= true
 	%s
 	%s
 }
-`, resourceBlock, name, targetName, language, useCaseIDsStr, customModelBlock)
+`, resourceBlock, nameSalt, nameSalt, name, targetName, language, useCaseIDsStr, customModelBlock)
 }
 
 func basicCustomModelResourceConfig(
@@ -1779,7 +1812,7 @@ resource "datarobot_custom_model" "test_%s" {
 	name        		  							  = "%s"
 	target_type           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 							  = "65f9b27eab986d30d4c64268"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	%s
 }
 `, resourceBlock, strings.ToLower(targetType), name, targetType, language, customModelBlock)
@@ -1788,12 +1821,12 @@ resource "datarobot_custom_model" "test_%s" {
 func remoteRepositoryResource(resourceName string) (string, string) {
 	resourceBlock := fmt.Sprintf(`
 resource "datarobot_remote_repository" "%s" {
-	name        = "Test Custom Model from Remote Repository"
+	name        = "Test Custom Model from Remote Repository %s"
 	description = "test"
 	location    = "https://github.com/datarobot-community/custom-models"
 	source_type = "github"
 }
-		`, resourceName)
+		`, resourceName, nameSalt)
 
 	customModelBlock := fmt.Sprintf(`
 	source_remote_repositories = [
@@ -1893,7 +1926,7 @@ resource "datarobot_custom_model" "test_with_tags" {
 	name        		  							  = "%s"
 	target_type           							  = "%s"
 	language 			  							  = "%s"
-	base_environment_id 							  = "65f9b27eab986d30d4c64268"
+	base_environment_id 							  = "`+testGenAIBaseEnvID+`"
 	%s
 
 	tags = [

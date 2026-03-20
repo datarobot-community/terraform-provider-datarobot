@@ -197,11 +197,11 @@ func customMetricResourceConfig(
 	timeFormat := "%Y-%m-%dT%H:%M:%SZ"
 	return fmt.Sprintf(`
 resource "datarobot_custom_model" "test_custom_metric" {
-	name = "test custom metric"
+	name = "test custom metric %s"
 	description = "test"
 	target_type = "Binary"
 	target_name = "target"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "custom_metric"
 }
 resource "datarobot_registered_model" "test_custom_metric" {
@@ -210,12 +210,12 @@ resource "datarobot_registered_model" "test_custom_metric" {
 	custom_model_version_id = "${datarobot_custom_model.test_custom_metric.version_id}"
 }
 resource "datarobot_prediction_environment" "test_custom_metric" {
-	name = "test deployment"
+	name = "test custom metric %s"
 	description = "test"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "test_custom_metric" {
-	label = "test custom metric"
+	label = "test custom metric %s"
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_custom_metric.id
 	registered_model_version_id = datarobot_registered_model.test_custom_metric.version_id
@@ -245,6 +245,9 @@ resource "datarobot_custom_metric" "test" {
 	}
 }
 `, nameSalt,
+		nameSalt,
+		nameSalt,
+		nameSalt,
 		name,
 		description,
 		untis,

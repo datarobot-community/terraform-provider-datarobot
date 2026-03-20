@@ -191,10 +191,10 @@ resource "datarobot_basic_credential" "batch_prediction_job_definition" {
 	password = "b@tch_prediction_Job"
 }
 resource "datarobot_custom_model" "batch_prediction_job_definition" {
-	name = "test batch prediction job"
+	name = "test batch prediction job %s"
 	target_type = "Binary"
 	target_name = "t"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "batch_prediction_job_definition"
 }
 resource "datarobot_registered_model" "batch_prediction_job_definition" {
@@ -203,7 +203,7 @@ resource "datarobot_registered_model" "batch_prediction_job_definition" {
 	custom_model_version_id = "${datarobot_custom_model.batch_prediction_job_definition.version_id}"
 }
 resource "datarobot_prediction_environment" "batch_prediction_job_definition" {
-	name = "test batch prediction job"
+	name = "test batch prediction job %s"
 	platform = "datarobotServerless"
 }
 resource "datarobot_deployment" "batch_prediction_job_definition" {
@@ -247,7 +247,9 @@ resource "datarobot_batch_prediction_job_definition" "test" {
 		day_of_week 	= ["*"]
 	}
 }`, name,
+		nameSalt,
 		name,
+		nameSalt,
 		name,
 		name,
 		numConcurrent,

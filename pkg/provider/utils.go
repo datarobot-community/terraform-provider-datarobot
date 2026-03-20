@@ -161,6 +161,8 @@ func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id strin
 func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, id string, isGenAI bool) error {
 	expBackoff := getExponentialBackoff()
 
+	startTime := time.Now()
+
 	operation := func() error {
 		var task *client.TaskStatusResponse
 		var err error
@@ -183,11 +185,29 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 			return backoff.Permanent(errors.New(task.Message))
 		}
 
-		if task.Status != "COMPLETED" {
-			return errors.New("task is not completed")
+		if task.Status == "COMPLETED" {
+			return nil
 		}
 
-		return nil
+		elapsed := time.Since(startTime).Round(time.Second)
+
+		// If the task has been stuck in INITIALIZED for over 2 minutes,
+		// the status endpoint is likely not updating — proceed so the caller
+		// can check the resource directly.
+		if task.Status == "INITIALIZED" && elapsed > 2*time.Minute {
+			tflog.Warn(ctx, "Task stuck in INITIALIZED, proceeding to check resource directly", map[string]interface{}{
+				"task_id": id,
+				"elapsed": elapsed.String(),
+			})
+			return nil
+		}
+
+		tflog.Info(ctx, "Waiting for task to complete", map[string]interface{}{
+			"task_id":        id,
+			"current_status": task.Status,
+			"elapsed":        elapsed.String(),
+		})
+		return fmt.Errorf("task %s is not completed (current status: %s, elapsed: %s)", id, task.Status, elapsed)
 	}
 
 	// Retry the operation using the backoff strategy

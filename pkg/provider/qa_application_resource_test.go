@@ -43,6 +43,17 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 		t.Fatal(err)
 	}
 
+	metadataContents := `name: test-model
+runtimeParameterDefinitions:
+  - fieldName: GUARD_CONFIG_PLACEHOLDER
+    type: string
+    description: Placeholder for guard configuration schema
+    defaultValue: null
+`
+	if err := os.WriteFile(folderPath+"/model-metadata.yaml", []byte(metadataContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -79,10 +90,10 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 func qaApplicationResourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_model" "test_qa_application" {
-	name = "test qa application"
+	name = "test qa application %s"
 	target_type = "TextGeneration"
 	target_name = "target"
-	base_environment_id = "65f9b27eab986d30d4c64268"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
 	folder_path = "qa_application"
 }
 resource "datarobot_registered_model" "test_qa_application" {
@@ -91,20 +102,27 @@ resource "datarobot_registered_model" "test_qa_application" {
 	custom_model_version_id = "${datarobot_custom_model.test_qa_application.version_id}"
 }
 resource "datarobot_prediction_environment" "test_qa_application" {
-	name = "test Q&A application"
+	name = "test Q&A application %s"
 	description = "test"
 	platform = "aws"
 }
 resource "datarobot_deployment" "test_qa_application" {
-	label = "test Q&A application"
+	label = "test Q&A application %s"
 	prediction_environment_id = datarobot_prediction_environment.test_qa_application.id
 	registered_model_version_id = datarobot_registered_model.test_qa_application.version_id
+	runtime_parameter_values = [
+		{
+			key = "GUARD_CONFIG_PLACEHOLDER"
+			type = "string"
+			value = "{\"max_tokens\": 100, \"temperature\": 0.7}"
+		},
+	]
 }
 resource "datarobot_qa_application" "test" {
 	name = "%s"
 	deployment_id = datarobot_deployment.test_qa_application.id
   }
-`, nameSalt, name)
+`, nameSalt, nameSalt, nameSalt, nameSalt, name)
 }
 
 func checkQAApplicationResourceExists(resourceName string) resource.TestCheckFunc {
