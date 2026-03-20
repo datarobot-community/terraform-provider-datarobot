@@ -35,6 +35,10 @@ SHARED_HELPERS=(
   "path_utils.go"
   "version_label.go"
   "user_mcp_common.go"
+  # Shared test infrastructure: init(), testAccProtoV6ProviderFactories,
+  # testAccPreCheck, env config variables — used by every acceptance test.
+  "provider_test.go"
+  "test_env_config_test.go"
 )
 
 ###############################################################################
@@ -192,12 +196,12 @@ fi
 ###############################################################################
 # 4. Run tests
 ###############################################################################
-echo "==> Executing: TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout ${TEST_TIMEOUT} -p ${TEST_PARALLEL} ./pkg/provider/"
+echo "==> Executing: TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout ${TEST_TIMEOUT} -parallel ${TEST_PARALLEL} ./pkg/provider/"
 echo ""
 
 set +e
 # shellcheck disable=SC2086
-TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout "${TEST_TIMEOUT}" -p "${TEST_PARALLEL}" ./pkg/provider/ 2>&1 | tee report.out
+TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout "${TEST_TIMEOUT}" -parallel "${TEST_PARALLEL}" ./pkg/provider/ 2>&1 | tee report.out
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
