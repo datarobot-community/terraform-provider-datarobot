@@ -1317,6 +1317,7 @@ func applicationResourcesAttrTypes() map[string]attr.Type {
 		"resource_label":                    types.StringType,
 		"session_affinity":                  types.BoolType,
 		"service_web_requests_on_root_path": types.BoolType,
+		"health_endpoint_path":              types.StringType,
 	}
 }
 
@@ -1329,6 +1330,7 @@ func ApplicationResourcesFromAPI(ctx context.Context, apiResources client.Applic
 		"resource_label":                    StringPointerValue(apiResources.ResourceLabel),
 		"session_affinity":                  BoolPointerValue(apiResources.SessionAffinity),
 		"service_web_requests_on_root_path": BoolPointerValue(apiResources.ServiceWebRequestsOnRootPath),
+		"health_endpoint_path":              StringPointerValue(apiResources.HealthEndpointPath),
 	}
 
 	objValue, diags := types.ObjectValue(attrTypes, attrValues)
@@ -1385,6 +1387,14 @@ func ApplicationResourcesToAPI(ctx context.Context, resources basetypes.ObjectVa
 		if rootPathVal, ok := rootPathAttr.(types.Bool); ok && !rootPathVal.IsNull() && !rootPathVal.IsUnknown() {
 			val := rootPathVal.ValueBool()
 			apiResources.ServiceWebRequestsOnRootPath = &val
+		}
+	}
+
+	// Extract health_endpoint_path
+	if healthPathAttr, ok := attrs["health_endpoint_path"]; ok {
+		if healthPathVal, ok := healthPathAttr.(types.String); ok && !healthPathVal.IsNull() && !healthPathVal.IsUnknown() {
+			val := healthPathVal.ValueString()
+			apiResources.HealthEndpointPath = &val
 		}
 	}
 

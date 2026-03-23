@@ -150,6 +150,7 @@ type ApplicationResources struct {
 	ResourceLabel                *string `json:"resourceLabel,omitempty"`
 	SessionAffinity              *bool   `json:"sessionAffinity,omitempty"`
 	ServiceWebRequestsOnRootPath *bool   `json:"serviceWebRequestsOnRootPath,omitempty"`
+	HealthEndpointPath           *string `json:"healthEndpointPath,omitempty"`
 }
 
 type CustomTemplate struct {
