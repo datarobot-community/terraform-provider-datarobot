@@ -48,6 +48,9 @@ test-coverage:
 testacc:
 	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -parallel=4
 
+test-changed:
+	bash scripts/run-changed-tests.sh
+
 lint:
 	echo "Running checks for service"
 	golangci-lint run ./...
