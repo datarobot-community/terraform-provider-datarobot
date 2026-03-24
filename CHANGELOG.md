@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.10.31] - 2026-03-24
+
 ### Added
 
 - Added `health_endpoint_path` field to Application Source, Application Source From Template, Custom Application, and Custom Application From Environment resources. When set, this path is used for Kubernetes liveness and readiness probes instead of the path derived from `service_web_requests_on_root_path`.
