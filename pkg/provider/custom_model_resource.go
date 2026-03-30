@@ -563,21 +563,12 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
 	if IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0 {
-		var apiVersion runtimeParamAPIVersion
-		apiVersion, customModel, err = r.applyRuntimeParameterValues(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
+		customModel, err = r.applyRuntimeParameterValues(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
 			return
 		}
 		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
-
-		if err = saveRuntimeParamPrivateState(ctx, resp.Private, runtimeParamPrivateState{
-			APIVersion:  apiVersion,
-			ManagedKeys: managedKeysFromPlan(ctx, plan),
-		}); err != nil {
-			resp.Diagnostics.AddError("Error saving runtime param private state", err.Error())
-			return
-		}
 	}
 
 	if len(plan.GuardConfigurations) > 0 {
@@ -829,7 +820,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, req.Private, resp.Private, state, plan); err != nil {
+	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -1629,12 +1620,10 @@ func (r *CustomModelResource) updateRuntimeParameterValues(
 }
 
 // updateRuntimeParameterValuesUnified updates runtime parameters, always
-// probing v2 first and fallbacking to v1
+// probing v2 first and falling back to v1.
 func (r *CustomModelResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	customModel *client.CustomModel,
-	readPrivate privateStateReader,
-	writePrivate privateStateWriter,
 	state, plan CustomModelResourceModel,
 ) error {
 	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
@@ -1654,24 +1643,13 @@ func (r *CustomModelResource) updateRuntimeParameterValuesUnified(
 		RuntimeParameters:        v2Payload,
 	})
 
-	var apiVersion runtimeParamAPIVersion
-
 	if err != nil && isNewRuntimeParametersAttrNotSupportedError(err) {
 		// v2 unavailable — fall back to v1
-		if err = r.updateRuntimeParameterValues(ctx, customModel, state, plan); err != nil {
-			return err
-		}
-		apiVersion = runtimeParamAPIV1
+		return r.updateRuntimeParameterValues(ctx, customModel, state, plan)
 	} else if err != nil {
 		return fmt.Errorf("creating Custom Model version with runtime parameters: %w", err)
-	} else {
-		apiVersion = runtimeParamAPIV2
 	}
-
-	return saveRuntimeParamPrivateState(ctx, writePrivate, runtimeParamPrivateState{
-		APIVersion:  apiVersion,
-		ManagedKeys: managedKeysFromPlan(ctx, plan),
-	})
+	return nil
 }
 
 // used during custom model creation
@@ -1679,10 +1657,10 @@ func (r *CustomModelResource) applyRuntimeParameterValues(
 	ctx context.Context,
 	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
 	plan CustomModelResourceModel,
-) (runtimeParamAPIVersion, *client.CustomModel, error) {
+) (*client.CustomModel, error) {
 	v2Payload, err := convertRuntimeParameters(ctx, plan.RuntimeParameterValues)
 	if err != nil {
-		return "", nil, fmt.Errorf("converting runtime parameters (v2 format): %w", err)
+		return nil, fmt.Errorf("converting runtime parameters (v2 format): %w", err)
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
@@ -1697,7 +1675,7 @@ func (r *CustomModelResource) applyRuntimeParameterValues(
 		// Fall back to v1.
 		v1Payload, err2 := convertRuntimeParameterValues(ctx, plan.RuntimeParameterValues)
 		if err2 != nil {
-			return "", nil, fmt.Errorf("converting runtime parameter values (v1 format): %w", err2)
+			return nil, fmt.Errorf("converting runtime parameter values (v1 format): %w", err2)
 		}
 		traceAPICall("CreateCustomModelVersionCreateFromLatest")
 		if _, err2 = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModelID, &client.CreateCustomModelVersionFromLatestRequest{
@@ -1706,20 +1684,18 @@ func (r *CustomModelResource) applyRuntimeParameterValues(
 			BaseEnvironmentVersionID: baseEnvironmentVersionID,
 			RuntimeParameterValues:   v1Payload,
 		}); err2 != nil {
-			return "", nil, fmt.Errorf("creating Custom Model version (v1 fallback): %w", err2)
+			return nil, fmt.Errorf("creating Custom Model version (v1 fallback): %w", err2)
 		}
 		traceAPICall("WaitForCustomModelToBeReady")
-		customModel, err2 := r.waitForCustomModelToBeReady(ctx, customModelID)
-		return runtimeParamAPIV1, customModel, err2
+		return r.waitForCustomModelToBeReady(ctx, customModelID)
 	}
 
 	if err != nil {
-		return "", nil, fmt.Errorf("creating Custom Model version (v2): %w", err)
+		return nil, fmt.Errorf("creating Custom Model version (v2): %w", err)
 	}
 
 	traceAPICall("WaitForCustomModelToBeReady")
-	customModel, err := r.waitForCustomModelToBeReady(ctx, customModelID)
-	return runtimeParamAPIV2, customModel, err
+	return r.waitForCustomModelToBeReady(ctx, customModelID)
 }
 
 func (r *CustomModelResource) updateRemoteRepositories(
