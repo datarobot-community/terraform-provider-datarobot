@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -229,7 +228,7 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	if IsKnown(data.RuntimeParameterValues) && len(data.RuntimeParameterValues.Elements()) > 0 {
-		if err = r.updateRuntimeParameterValuesUnifiedForJob(
+		if err = r.updateRuntimeParameterValuesUnified(
 			ctx,
 			customJob.ID,
 			customJob.Name,
@@ -399,7 +398,7 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if err = r.updateRuntimeParameterValuesUnifiedForJob(ctx, plan.ID.ValueString(), plan.Name.ValueString(), state, plan); err != nil {
+	if err = r.updateRuntimeParameterValuesUnified(ctx, plan.ID.ValueString(), plan.Name.ValueString(), state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -588,11 +587,9 @@ func convertStringSlice(input []types.String) []any {
 	return result
 }
 
-// updateRuntimeParameterValuesUnifiedForJob updates runtime parameters for a
-// Custom Job. It always probes v2 first so that a DR flag-enable is picked up
-// on the next apply, and falls back to v1 (sending nil entries for removed
-// params) when the v2 API is unavailable.
-func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
+// updateRuntimeParameterValuesUnified probes the v2 API first and falls back
+// to v1 (with nil entries for removed params) when v2 is unavailable.
+func (r *CustomJobResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	jobID string,
 	jobName string,
@@ -614,8 +611,8 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
 	})
 
 	if err != nil && isNewRuntimeParametersAttrNotSupportedError(err) {
-		// v2 unavailable — fall back to v1 with nil entries for removed params.
-		v1Payload, err := buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
+		var v1Payload string
+		v1Payload, err = buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
 		if err != nil {
 			return err
 		}
@@ -633,62 +630,5 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
 	}
 
 	return nil
-}
-
-// buildV1RuntimeParamPayload builds the JSON payload for a v1 runtime parameter
-// update. It includes all params from the plan and nil entries for any params
-// present in the previous state but absent from the plan (so the API clears them).
-// Returns an empty string when there is nothing to send.
-func buildV1RuntimeParamPayload(ctx context.Context, stateVals, planVals types.List) (string, error) {
-	planParams := make([]RuntimeParameterValue, 0)
-	if IsKnown(planVals) {
-		if diags := planVals.ElementsAs(ctx, &planParams, false); diags.HasError() {
-			return "", fmt.Errorf("reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
-		}
-	}
-
-	stateParams := make([]RuntimeParameterValue, 0)
-	if IsKnown(stateVals) {
-		if diags := stateVals.ElementsAs(ctx, &stateParams, false); diags.HasError() {
-			return "", fmt.Errorf("reading state runtime parameter values: %s", diags.Errors()[0].Detail())
-		}
-	}
-
-	planKeys := make(map[string]bool)
-	for _, p := range planParams {
-		planKeys[p.Key.ValueString()] = true
-	}
-
-	params := make([]client.RuntimeParameterValueRequest, 0)
-	for _, p := range planParams {
-		value, err := formatRuntimeParameterValue(p.Type.ValueString(), p.Value.ValueString())
-		if err != nil {
-			return "", err
-		}
-		params = append(params, client.RuntimeParameterValueRequest{
-			FieldName: p.Key.ValueString(),
-			Type:      p.Type.ValueString(),
-			Value:     &value,
-		})
-	}
-	for _, sp := range stateParams {
-		if !planKeys[sp.Key.ValueString()] {
-			params = append(params, client.RuntimeParameterValueRequest{
-				FieldName: sp.Key.ValueString(),
-				Type:      sp.Type.ValueString(),
-				Value:     nil,
-			})
-		}
-	}
-
-	if len(params) == 0 {
-		return "", nil
-	}
-
-	jsonParams, err := json.Marshal(params)
-	if err != nil {
-		return "", err
-	}
-	return string(jsonParams), nil
 }
 
