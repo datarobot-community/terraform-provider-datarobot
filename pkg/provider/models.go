@@ -704,7 +704,6 @@ type ApplicationSourceResourceModel struct {
 	FilesHashes              types.List            `tfsdk:"files_hashes"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	RuntimeParameterValues   types.List            `tfsdk:"runtime_parameter_values"`
-	RuntimeParameters        types.List            `tfsdk:"runtime_parameters"`
 	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
