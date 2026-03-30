@@ -317,7 +317,7 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 func isNewRuntimeParametersAttrNotSupportedError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "runtimeParameters is not allowed key") ||
-		strings.Contains(msg, "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled")
+		strings.Contains(msg, "requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled")
 }
 
 func formatRuntimeParameterValues(
