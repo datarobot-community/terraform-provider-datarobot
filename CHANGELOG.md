@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- `runtime_parameters` added in `0.10.29` was removed in a favour of `runtime_parameter_values`. Now this parameter handles API changes internally in the provider code. This will make no need in updating existing terraform declarations.
+
 ## [0.10.31] - 2026-03-24
 
 ### Added
