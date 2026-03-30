@@ -580,6 +580,7 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 }
 
 // updateRuntimeParameterValuesUnified updates runtime parameters on an Application Source version.
+// It probes the v2 API first and falls back to v1 (with nil entries for removed params) when v2 is unavailable.
 func (r *ApplicationSourceResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	sourceID, versionID string,
@@ -589,18 +590,36 @@ func (r *ApplicationSourceResource) updateRuntimeParameterValuesUnified(
 	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
 		return nil
 	}
-	v1Payload, err := buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
+
+	v2Payload, err := convertRuntimeParameters(ctx, plan.RuntimeParameterValues)
 	if err != nil {
-		return err
+		return fmt.Errorf("converting runtime parameters (v2 format): %w", err)
 	}
-	if v1Payload == "" {
-		return nil
-	}
+
 	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, sourceID, versionID, &client.UpdateApplicationSourceVersionRequest{
-		RuntimeParameterValues: v1Payload,
-		RequiredKeyScopeLevel:  requiredKeyScopeLevel,
+		RuntimeParameters:     v2Payload,
+		RequiredKeyScopeLevel: requiredKeyScopeLevel,
 	})
+
+	if err != nil && isNewRuntimeParametersAttrNotSupportedError(err) {
+		v1Payload, err := buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
+		if err != nil {
+			return err
+		}
+		if v1Payload == "" {
+			return nil
+		}
+		traceAPICall("UpdateApplicationSourceVersion")
+		if _, err = r.provider.service.UpdateApplicationSourceVersion(ctx, sourceID, versionID, &client.UpdateApplicationSourceVersionRequest{
+			RuntimeParameterValues: v1Payload,
+			RequiredKeyScopeLevel:  requiredKeyScopeLevel,
+		}); err != nil {
+			return fmt.Errorf("setting Application Source runtime parameter values (v1 fallback): %w", err)
+		}
+		return nil
+	}
+
 	if err != nil {
 		return fmt.Errorf("setting Application Source runtime parameter values: %w", err)
 	}
