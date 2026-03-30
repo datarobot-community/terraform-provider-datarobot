@@ -498,14 +498,8 @@ func (r *ApplicationSourceResource) ImportState(ctx context.Context, req resourc
 }
 
 func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	tflog.Debug(ctx, "ModifyPlan called", map[string]any{
-		"plan_raw_is_null":  req.Plan.Raw.IsNull(),
-		"state_raw_is_null": req.State.Raw.IsNull(),
-	})
-
 	if req.Plan.Raw.IsNull() {
 		// Resource is being destroyed
-		tflog.Debug(ctx, "ModifyPlan: Resource being destroyed")
 		return
 	}
 
@@ -516,19 +510,12 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		return
 	}
 
-	tflog.Debug(ctx, "ModifyPlan: Got plan", map[string]any{
-		"resources_is_null": plan.Resources.IsNull(),
-	})
-
-	// compute file content hashes
 	filesHashes, err := computeFilesHashes(ctx, plan.Files)
 	if err != nil {
 		resp.Diagnostics.AddError("Error calculating files hashes", err.Error())
 		return
 	}
 	plan.FilesHashes = filesHashes
-
-	tflog.Debug(ctx, "ModifyPlan: Computed file hashes")
 
 	folderPathHash, err := computeFolderHash(plan.FolderPath)
 	if err != nil {
@@ -537,19 +524,13 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 	}
 	plan.FolderPathHash = folderPathHash
 
-	tflog.Debug(ctx, "ModifyPlan: Computed folder hash")
-
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
-		tflog.Debug(ctx, "ModifyPlan: Error setting plan after hashes")
 		return
 	}
 
-	tflog.Debug(ctx, "ModifyPlan: Set plan after hashes")
-
 	if req.State.Raw.IsNull() {
 		// resource is being created
-		tflog.Debug(ctx, "ModifyPlan: Resource being created, setting final plan")
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
@@ -563,37 +544,28 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 
 	if !IsKnown(plan.BaseEnvironmentID) {
 		if plan.BaseEnvironmentVersionID == state.BaseEnvironmentVersionID {
-			// use state base environment id if base environment version id is not changed
 			plan.BaseEnvironmentID = state.BaseEnvironmentID
 		}
 	}
 
 	if !IsKnown(plan.BaseEnvironmentVersionID) {
 		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
-			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
 		}
 	}
 
-	// reset unknown version id if if hashess have been changed
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
 		plan.VersionID = types.StringUnknown()
 	}
 
-	// use RequiredKeyScopeLevel from state if not set for plan
 	if plan.RequiredKeyScopeLevel.IsUnknown() {
 		plan.RequiredKeyScopeLevel = state.RequiredKeyScopeLevel
 	}
 
 	if !IsKnown(plan.RuntimeParameterValues) {
-		// use empty list if runtime parameter values are unknown
 		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
-
-	tflog.Debug(ctx, "ModifyPlan: Final plan state", map[string]any{
-		"resources_is_null": plan.Resources.IsNull(),
-	})
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
@@ -607,7 +579,7 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 	}
 }
 
-// updateRuntimeParameterValuesUnified updates runtime parameters on an
+// updateRuntimeParameterValuesUnified updates runtime parameters on an Application Source version.
 func (r *ApplicationSourceResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	sourceID, versionID string,
