@@ -413,6 +413,51 @@ func formatRuntimeParameterValuesInternal(
 	return listValueFromRuntimParameters(ctx, parameters)
 }
 
+// formatRuntimeParameterValuesByManagedKeys returns a list containing only the
+// parameters declared in parametersInPlan, refreshed with the current value
+// from the API response. Parameters injected by model-metadata.yaml that the
+// user did not declare are intentionally excluded — this keeps state stable
+// regardless of which API version was used and prevents phantom drift from
+// metadata-file-defined params at non-default values.
+func formatRuntimeParameterValuesByManagedKeys(
+	ctx context.Context,
+	apiParams []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (basetypes.ListValue, diag.Diagnostics) {
+	declared := make([]RuntimeParameterValue, 0)
+	if IsKnown(parametersInPlan) {
+		if diags := parametersInPlan.ElementsAs(ctx, &declared, false); diags.HasError() {
+			return basetypes.ListValue{}, diags
+		}
+	}
+
+	// Build lookup of API current values by key.
+	apiByKey := make(map[string]client.RuntimeParameter, len(apiParams))
+	for _, p := range apiParams {
+		apiByKey[p.FieldName] = p
+	}
+
+	// Walk declared params in their original order, refreshing values from the
+	// API response so that drift is detected on the next plan.
+	result := make([]RuntimeParameterValue, 0, len(declared))
+	for _, d := range declared {
+		key := d.Key.ValueString()
+		if apiParam, ok := apiByKey[key]; ok && apiParam.CurrentValue != nil {
+			result = append(result, RuntimeParameterValue{
+				Key:   d.Key,
+				Type:  d.Type,
+				Value: types.StringValue(fmt.Sprintf("%v", apiParam.CurrentValue)),
+			})
+		} else {
+			// Key not yet visible from the API (e.g. pending version) — keep
+			// the plan value to avoid a spurious diff.
+			result = append(result, d)
+		}
+	}
+
+	return listValueFromRuntimParameters(ctx, result)
+}
+
 func isManagedByGuards(param client.RuntimeParameter) bool {
 	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
 		param.FieldName == faithfulnessAzureOpenAiRuntimeParam ||
