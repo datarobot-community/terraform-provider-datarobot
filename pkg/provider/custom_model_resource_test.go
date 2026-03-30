@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -1325,24 +1324,6 @@ func TestIsRuntimeParameterValuesUsed(t *testing.T) {
 	}
 }
 
-func TestCustomModelResourceConflictingRuntimeFields(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	r := NewCustomModelResource()
-
-	configValidatable, ok := r.(fwresource.ResourceWithConfigValidators)
-	if !ok {
-		t.Fatal("CustomModelResource does not implement ResourceWithConfigValidators")
-	}
-
-	validators := configValidatable.ConfigValidators(ctx)
-
-	if len(validators) < 6 {
-		t.Fatalf("Expected at least 6 config validators (including runtime_parameter_values/runtime_parameters conflict), got %d", len(validators))
-	}
-}
-
 func customModelFromLlmBlueprintResourceConfig(name, description, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model" {
@@ -1979,6 +1960,9 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 		LatestVersion: client.CustomModelVersion{
 			ID:                versionID,
 			BaseEnvironmentID: baseEnvID,
+			RuntimeParameters: []client.RuntimeParameter{
+				{FieldName: "FOO", Type: "string", CurrentValue: "bar"},
+			},
 		},
 	}
 
@@ -1999,13 +1983,13 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// Create: runtime_parameters call (key assertion – must have RuntimeParameters set)
+	// Create: applyRuntimeParameterValues — v2 path (RuntimeParameters set)
 	runtimeParamsCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
 		Return(&client.CustomModelVersion{}, nil).
 		After(baseEnvCall)
 
-	// Create: wait after runtime_parameters
+	// Create: wait after runtime params
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
@@ -2019,13 +2003,13 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// Create: final GetCustomModel (line ~834)
+	// Create: final GetCustomModel
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
 	// Read (post-create refresh by the test framework)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// ModifyPlan during idempotency plan check (state is non-null after Create)
+	// ModifyPlan during idempotency plan check
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
 	// Destroy: Read then Delete
@@ -2041,13 +2025,12 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: customModelWithRuntimeParametersConfig(name, baseEnvID),
+				Config: customModelWithRuntimeParameterValuesConfig(name, baseEnvID),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.key", "FOO"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.type", "string"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.value", "bar"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "0"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "bar"),
 				),
 			},
 		},
@@ -2079,25 +2062,69 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 		LatestVersion: client.CustomModelVersion{
 			ID:                versionID,
 			BaseEnvironmentID: baseEnvID,
+			RuntimeParameters: []client.RuntimeParameter{
+				{FieldName: "FOO", Type: "string", CurrentValue: "bar"},
+			},
 		},
 	}
 
-	// Create partially succeeds...
-	mockService.EXPECT().CreateCustomModel(gomock.Any(), gomock.Any()).Return(customModel, nil)
-	mockService.EXPECT().
+	// Create: base environment version
+	baseEnvCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
 		Return(&client.CustomModelVersion{BaseEnvironmentID: baseEnvID}, nil)
+
+	// Create: model creation
+	mockService.EXPECT().CreateCustomModel(gomock.Any(), gomock.Any()).Return(customModel, nil)
+
+	// Create: files upload
 	mockService.EXPECT().
 		CreateCustomModelVersionFromFiles(gomock.Any(), modelID, gomock.Any()).
 		Return(&client.CustomModelVersion{}, nil)
+
+	// Create: wait after files
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// ...then fails with the old-API error when runtime_parameters are applied.
-	mockService.EXPECT().
+	// Create: applyRuntimeParameterValues — v2 attempt fails, triggering v1 fallback
+	v2FailCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
-		Return(nil, fmt.Errorf("runtimeParameters is not allowed key"))
+		Return(nil, fmt.Errorf("runtimeParameters is not allowed key")).
+		After(baseEnvCall)
 
+	// Create: v1 fallback succeeds
+	v1Call := mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamValuesMatcher{}).
+		Return(&client.CustomModelVersion{}, nil).
+		After(v2FailCall)
+
+	// Create: wait after v1 runtime params
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Create: replicas/network version
+	mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
+		Return(&client.CustomModelVersion{}, nil).
+		After(v1Call)
+
+	// Create: wait after replicas
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Create: final GetCustomModel
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Read (post-create refresh)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// ModifyPlan during idempotency check
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Destroy: Read then Delete
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+	mockService.EXPECT().DeleteCustomModel(gomock.Any(), modelID).Return(nil)
+
+	resourceName := "datarobot_custom_model.test"
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: true,
 		PreCheck: func() {
@@ -2106,20 +2133,36 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:      customModelWithRuntimeParametersConfig(name, baseEnvID),
-				ExpectError: regexp.MustCompile("runtime_parameters not supported by this API"),
+				Config: customModelWithRuntimeParameterValuesConfig(name, baseEnvID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "bar"),
+				),
 			},
 		},
 	})
 }
 
-func customModelWithRuntimeParametersConfig(name, baseEnvID string) string {
+type hasRuntimeParamValuesMatcher struct{}
+
+func (hasRuntimeParamValuesMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*client.CreateCustomModelVersionFromLatestRequest)
+	return ok && req.RuntimeParameterValues != "" && req.RuntimeParameters == ""
+}
+
+func (hasRuntimeParamValuesMatcher) String() string {
+	return "CreateCustomModelVersionFromLatestRequest with RuntimeParameterValues set (v1)"
+}
+
+func customModelWithRuntimeParameterValuesConfig(name, baseEnvID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_model" "test" {
   name                = %q
   target_type         = "TextGeneration"
   base_environment_id = %q
-  runtime_parameters  = [
+  runtime_parameter_values = [
     {
       key   = "FOO"
       type  = "string"
