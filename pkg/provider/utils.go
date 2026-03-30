@@ -388,17 +388,6 @@ func formatRuntimeParameterValues(
 	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, false)
 }
 
-func formatRuntimeParameterValuesForRetrainingJob(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
-	parametersInPlan basetypes.ListValue,
-) (
-	basetypes.ListValue,
-	diag.Diagnostics,
-) {
-	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
-}
-
 func formatRuntimeParameterValuesInternal(
 	ctx context.Context,
 	runtimeParameterValues []client.RuntimeParameter,
@@ -478,6 +467,10 @@ func formatRuntimeParameterValuesByManagedKeys(
 	apiParams []client.RuntimeParameter,
 	parametersInPlan basetypes.ListValue,
 ) (basetypes.ListValue, diag.Diagnostics) {
+	if parametersInPlan.IsNull() {
+		return parametersInPlan, nil
+	}
+
 	declared := make([]RuntimeParameterValue, 0)
 	if IsKnown(parametersInPlan) {
 		if diags := parametersInPlan.ElementsAs(ctx, &declared, false); diags.HasError() {

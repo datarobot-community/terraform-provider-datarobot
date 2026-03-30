@@ -239,16 +239,18 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 
 	// runtime parameter values/parameters must be set after local files are added,
 	// because the runtime parameter definitions are created in the metadata.yaml file
-	if err = r.updateRuntimeParameterValuesUnified(
-		ctx,
-		createApplicationSourceResp.ID,
-		createApplicationSourceVersionResp.ID,
-		createApplicationSourceVersionResp.RequiredKeyScopeLevel,
-		ApplicationSourceResourceModel{},
-		data,
-	); err != nil {
-		resp.Diagnostics.AddError("Error setting runtime parameters for Application Source", err.Error())
-		return
+	if IsKnown(data.RuntimeParameterValues) && len(data.RuntimeParameterValues.Elements()) > 0 {
+		if err = r.updateRuntimeParameterValuesUnified(
+			ctx,
+			createApplicationSourceResp.ID,
+			createApplicationSourceVersionResp.ID,
+			createApplicationSourceVersionResp.RequiredKeyScopeLevel,
+			ApplicationSourceResourceModel{},
+			data,
+		); err != nil {
+			resp.Diagnostics.AddError("Error setting runtime parameters for Application Source", err.Error())
+			return
+		}
 	}
 
 	applicationSource, err := r.provider.service.GetApplicationSource(ctx, createApplicationSourceResp.ID)

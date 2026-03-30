@@ -631,4 +631,3 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnified(
 
 	return nil
 }
-
