@@ -233,7 +233,6 @@ func (r *CustomJobResource) Create(ctx context.Context, req resource.CreateReque
 			ctx,
 			customJob.ID,
 			customJob.Name,
-			resp.Private,
 			CustomJobResourceModel{},
 			data,
 		); err != nil {
@@ -400,7 +399,7 @@ func (r *CustomJobResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if err = r.updateRuntimeParameterValuesUnifiedForJob(ctx, plan.ID.ValueString(), plan.Name.ValueString(), resp.Private, state, plan); err != nil {
+	if err = r.updateRuntimeParameterValuesUnifiedForJob(ctx, plan.ID.ValueString(), plan.Name.ValueString(), state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -597,7 +596,6 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
 	ctx context.Context,
 	jobID string,
 	jobName string,
-	writePrivate privateStateWriter,
 	state, plan CustomJobResourceModel,
 ) error {
 	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
@@ -615,8 +613,6 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
 		RuntimeParameters: v2Payload,
 	})
 
-	var apiVersion runtimeParamAPIVersion
-
 	if err != nil && isNewRuntimeParametersAttrNotSupportedError(err) {
 		// v2 unavailable — fall back to v1 with nil entries for removed params.
 		v1Payload, err := buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
@@ -632,17 +628,11 @@ func (r *CustomJobResource) updateRuntimeParameterValuesUnifiedForJob(
 				return fmt.Errorf("setting Custom Job runtime parameter values (v1 fallback): %w", err)
 			}
 		}
-		apiVersion = runtimeParamAPIV1
 	} else if err != nil {
 		return fmt.Errorf("updating Custom Job runtime parameters: %w", err)
-	} else {
-		apiVersion = runtimeParamAPIV2
 	}
 
-	return saveRuntimeParamPrivateState(ctx, writePrivate, runtimeParamPrivateState{
-		APIVersion:  apiVersion,
-		ManagedKeys: managedKeysFromJobPlan(ctx, plan),
-	})
+	return nil
 }
 
 // buildV1RuntimeParamPayload builds the JSON payload for a v1 runtime parameter
@@ -702,14 +692,3 @@ func buildV1RuntimeParamPayload(ctx context.Context, stateVals, planVals types.L
 	return string(jsonParams), nil
 }
 
-func managedKeysFromJobPlan(ctx context.Context, plan CustomJobResourceModel) []string {
-	params := make([]RuntimeParameterValue, 0)
-	if IsKnown(plan.RuntimeParameterValues) {
-		_ = plan.RuntimeParameterValues.ElementsAs(ctx, &params, false)
-	}
-	keys := make([]string, len(params))
-	for i, p := range params {
-		keys[i] = p.Key.ValueString()
-	}
-	return keys
-}
