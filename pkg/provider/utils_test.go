@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 // TestGetFileInfoStripsWhitespace verifies that getFileInfo strips leading/trailing
@@ -312,4 +316,167 @@ func TestIsNewRuntimeParametersAttrNotSupportedError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeParamList(t *testing.T, params []RuntimeParameterValue) basetypes.ListValue {
+	t.Helper()
+	list, diags := listValueFromRuntimParameters(context.Background(), params)
+	if diags.HasError() {
+		t.Fatalf("makeParamList: %v", diags)
+	}
+	return list
+}
+
+func extractParams(t *testing.T, list basetypes.ListValue) []RuntimeParameterValue {
+	t.Helper()
+	var out []RuntimeParameterValue
+	if diags := list.ElementsAs(context.Background(), &out, false); diags.HasError() {
+		t.Fatalf("extractParams: %v", diags)
+	}
+	return out
+}
+
+func TestFormatRuntimeParameterValuesByManagedKeys(t *testing.T) {
+	t.Parallel()
+
+	t.Run("null parametersInPlan returns null", func(t *testing.T) {
+		t.Parallel()
+		nullList := basetypes.NewListNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), nil, nullList)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if !got.IsNull() {
+			t.Errorf("expected null list, got %v", got)
+		}
+	})
+
+	t.Run("empty parametersInPlan returns empty list", func(t *testing.T) {
+		t.Parallel()
+		emptyList := makeParamList(t, []RuntimeParameterValue{})
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), []client.RuntimeParameter{}, emptyList)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if got.IsNull() || len(got.Elements()) != 0 {
+			t.Errorf("expected empty list, got %v", got)
+		}
+	})
+
+	t.Run("unknown parametersInPlan returns empty list without error", func(t *testing.T) {
+		t.Parallel()
+		unknownList := basetypes.NewListUnknown(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"key":   types.StringType,
+				"type":  types.StringType,
+				"value": types.StringType,
+			},
+		})
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), nil, unknownList)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if len(got.Elements()) != 0 {
+			t.Errorf("expected empty result, got %v elements", len(got.Elements()))
+		}
+	})
+
+	t.Run("declared key present in API refreshes value", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("TIMEOUT"), Type: types.StringValue("numeric"), Value: types.StringValue("30")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "TIMEOUT", Type: "numeric", CurrentValue: "60"},
+		}
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), apiParams, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 param, got %d", len(result))
+		}
+		if result[0].Value.ValueString() != "60" {
+			t.Errorf("expected value '60', got %q", result[0].Value.ValueString())
+		}
+		if result[0].Key.ValueString() != "TIMEOUT" {
+			t.Errorf("expected key 'TIMEOUT', got %q", result[0].Key.ValueString())
+		}
+		if result[0].Type.ValueString() != "numeric" {
+			t.Errorf("expected type 'numeric', got %q", result[0].Type.ValueString())
+		}
+	})
+
+	t.Run("declared key missing from API keeps plan value", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("PENDING_KEY"), Type: types.StringValue("string"), Value: types.StringValue("original")},
+		})
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), []client.RuntimeParameter{}, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 param, got %d", len(result))
+		}
+		if result[0].Value.ValueString() != "original" {
+			t.Errorf("expected plan value 'original', got %q", result[0].Value.ValueString())
+		}
+	})
+
+	t.Run("API keys not declared in plan are excluded", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("MY_KEY"), Type: types.StringValue("string"), Value: types.StringValue("v")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "MY_KEY", Type: "string", CurrentValue: "v"},
+			{FieldName: "INJECTED_BY_METADATA", Type: "string", CurrentValue: "secret"},
+		}
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), apiParams, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 param, got %d", len(result))
+		}
+		if result[0].Key.ValueString() != "MY_KEY" {
+			t.Errorf("expected only MY_KEY in result, got %q", result[0].Key.ValueString())
+		}
+	})
+
+	t.Run("mixed: some refreshed, some kept from plan, extras excluded", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("A"), Type: types.StringValue("string"), Value: types.StringValue("old-a")},
+			{Key: types.StringValue("B"), Type: types.StringValue("string"), Value: types.StringValue("old-b")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "A", Type: "string", CurrentValue: "new-a"},
+			{FieldName: "EXTRA", Type: "string", CurrentValue: "should-be-excluded"},
+		}
+		got, diags := formatRuntimeParameterValuesByManagedKeys(context.Background(), apiParams, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 params, got %d", len(result))
+		}
+		if result[0].Key.ValueString() != "A" || result[0].Value.ValueString() != "new-a" {
+			t.Errorf("param A: expected value 'new-a', got key=%q value=%q", result[0].Key.ValueString(), result[0].Value.ValueString())
+		}
+		if result[1].Key.ValueString() != "B" || result[1].Value.ValueString() != "old-b" {
+			t.Errorf("param B: expected value 'old-b' (kept from plan), got key=%q value=%q", result[1].Key.ValueString(), result[1].Value.ValueString())
+		}
+	})
 }
