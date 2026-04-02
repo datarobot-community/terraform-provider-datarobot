@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- Added `datarobot_memory_space` resource for managing Memory Spaces (requires enabled feature flag `AGENTIC_MEMORY_API`)
+
 ## [0.10.31] - 2026-03-24
 
 ### Added
