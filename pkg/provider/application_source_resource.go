@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -120,30 +119,8 @@ func (r *ApplicationSourceResource) Schema(ctx context.Context, req resource.Sch
 				},
 			},
 			"runtime_parameter_values": schema.ListNestedAttribute{
-				Optional:           true,
-				Computed:           true,
-				DeprecationMessage: "The runtime parameter values for the Application Source. Deprecated: use `runtime_parameters` instead.",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"key": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The name of the runtime parameter.",
-						},
-						"type": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The type of the runtime parameter.",
-							Validators:          RuntimeParameterTypeValidators(),
-						},
-						"value": schema.StringAttribute{
-							Required:            true,
-							MarkdownDescription: "The value of the runtime parameter (type conversion is handled internally).",
-						},
-					},
-				},
-			},
-			"runtime_parameters": schema.ListNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "The runtime parameters for the Application Source version. Use instead of `runtime_parameter_values`. Requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature on the DataRobot API.",
+				Optional: true,
+				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
@@ -263,69 +240,15 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	// runtime parameter values/parameters must be set after local files are added,
 	// because the runtime parameter definitions are created in the metadata.yaml file
 	if IsKnown(data.RuntimeParameterValues) && len(data.RuntimeParameterValues.Elements()) > 0 {
-		runtimeParameterValues := make([]RuntimeParameterValue, 0)
-		if diags := data.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-		params := make([]client.RuntimeParameterValueRequest, len(runtimeParameterValues))
-		for i, param := range runtimeParameterValues {
-			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
-				return
-			}
-			params[i] = client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
-			}
-		}
-		jsonParams, err := json.Marshal(params)
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating runtime parameter values", err.Error())
-			return
-		}
-
-		traceAPICall("UpdateApplicationSourceVersion")
-		_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
+		if err = r.updateRuntimeParameterValuesUnified(
+			ctx,
 			createApplicationSourceResp.ID,
 			createApplicationSourceVersionResp.ID,
-			&client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameterValues: string(jsonParams),
-				RequiredKeyScopeLevel:  createApplicationSourceVersionResp.RequiredKeyScopeLevel, // not overriding RequiredKeyScopeLevel with None
-			})
-		if err != nil {
-			resp.Diagnostics.AddError("Error adding runtime parameter values to Application Source version", err.Error())
-			return
-		}
-	}
-
-	if !data.RuntimeParameters.IsNull() {
-		runtimeParameters, err := convertRuntimeParameters(ctx, data.RuntimeParameters)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameters", err.Error())
-			return
-		}
-
-		traceAPICall("UpdateApplicationSourceVersion")
-		_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
-			createApplicationSourceResp.ID,
-			createApplicationSourceVersionResp.ID,
-			&client.UpdateApplicationSourceVersionRequest{
-				RuntimeParameters:     runtimeParameters,
-				RequiredKeyScopeLevel: createApplicationSourceVersionResp.RequiredKeyScopeLevel,
-			})
-		if err != nil {
-			if isNewRuntimeParametersAttrNotSupportedError(err) {
-				resp.Diagnostics.AddError(
-					"runtime_parameters not supported by this API",
-					"The DataRobot API does not support the `runtime_parameters` attribute. "+
-						"Enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead.",
-				)
-				return
-			}
-			resp.Diagnostics.AddError("Error adding runtime parameters to Application Source version", err.Error())
+			createApplicationSourceVersionResp.RequiredKeyScopeLevel,
+			ApplicationSourceResourceModel{},
+			data,
+		); err != nil {
+			resp.Diagnostics.AddError("Error setting runtime parameters for Application Source", err.Error())
 			return
 		}
 	}
@@ -339,22 +262,13 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 	// Always populate resources from API response (field is Computed)
 	data.Resources = ApplicationResourcesFromAPI(ctx, applicationSource.LatestVersion.Resources)
 
-	if !data.RuntimeParameters.IsNull() {
-		data.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	} else {
-		data.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
-		data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-			ctx,
-			applicationSource.LatestVersion.RuntimeParameters,
-			data.RuntimeParameterValues)
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValuesByManagedKeys(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
@@ -395,22 +309,13 @@ func (r *ApplicationSourceResource) Read(ctx context.Context, req resource.ReadR
 	// Always populate resources from API response (field is Computed)
 	data.Resources = ApplicationResourcesFromAPI(ctx, applicationSource.LatestVersion.Resources)
 
-	if !data.RuntimeParameters.IsNull() {
-		data.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	} else {
-		data.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
-		data.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-			ctx,
-			applicationSource.LatestVersion.RuntimeParameters,
-			data.RuntimeParameterValues)
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+	data.RuntimeParameterValues, diags = formatRuntimeParameterValuesByManagedKeys(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		data.RuntimeParameterValues)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 	data.RequiredKeyScopeLevel = scopeLevelToTerraformString(applicationSource.LatestVersion.RequiredKeyScopeLevel)
 
@@ -525,107 +430,25 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		updateVersionRequest.RequiredKeyScopeLevel = client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString())
 	}
 
-	if !plan.RuntimeParameters.IsNull() {
-		runtimeParameters, err := convertRuntimeParametersToList(ctx, plan.RuntimeParameters)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading runtime parameters", err.Error())
-			return
-		}
-
-		stateRuntimeParameters, err := convertRuntimeParametersToList(ctx, state.RuntimeParameters)
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading state runtime parameters", err.Error())
-			return
-		}
-		planKeys := make(map[string]struct{}, len(runtimeParameters))
-		for _, p := range runtimeParameters {
-			planKeys[p.FieldName] = struct{}{}
-		}
-		for _, stateParam := range stateRuntimeParameters {
-			if _, found := planKeys[stateParam.FieldName]; !found {
-				runtimeParameters = append(runtimeParameters, client.RuntimeParameterRequest{
-					FieldName:    stateParam.FieldName,
-					Type:         stateParam.Type,
-					CurrentValue: nil,
-				})
-			}
-		}
-
-		jsonParams, jsonErr := json.Marshal(runtimeParameters)
-		if jsonErr != nil {
-			resp.Diagnostics.AddError("Error creating runtime parameters", jsonErr.Error())
-			return
-		}
-		updateVersionRequest.RuntimeParameters = string(jsonParams)
-	} else {
-		runtimeParameterValues := make([]RuntimeParameterValue, 0)
-		if IsKnown(plan.RuntimeParameterValues) {
-			if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &runtimeParameterValues, false); diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
-		}
-
-		params := make([]client.RuntimeParameterValueRequest, 0)
-		for _, param := range runtimeParameterValues {
-			value, err := formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Error formatting runtime parameter value", err.Error())
-				return
-			}
-			params = append(params, client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
-			})
-		}
-
-		runtimeParametersToReset := make([]RuntimeParameterValue, 0)
-		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &runtimeParametersToReset, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-
-		for _, param := range runtimeParametersToReset {
-			found := false
-			for _, newParam := range runtimeParameterValues {
-				if param.Key.ValueString() == newParam.Key.ValueString() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				params = append(params, client.RuntimeParameterValueRequest{
-					FieldName: param.Key.ValueString(),
-					Type:      param.Type.ValueString(),
-					Value:     nil,
-				})
-			}
-		}
-
-		jsonParams, err := json.Marshal(params)
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating runtime parameters", err.Error())
-			return
-		}
-		updateVersionRequest.RuntimeParameterValues = string(jsonParams)
-	}
-
 	traceAPICall("UpdateApplicationSourceVersion")
 	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx,
 		plan.ID.ValueString(),
 		applicationSourceVersion.ID,
 		updateVersionRequest)
 	if err != nil {
-		if isNewRuntimeParametersAttrNotSupportedError(err) {
-			resp.Diagnostics.AddError(
-				"runtime_parameters not supported by this API",
-				"The DataRobot API does not support the `runtime_parameters` attribute. "+
-					"Enable the RUNTIME_PARAMETERS_IMPROVEMENTS feature or use `runtime_parameter_values` instead.",
-			)
-			return
-		}
 		resp.Diagnostics.AddError("Error updating Application Source version", err.Error())
+		return
+	}
+
+	if err = r.updateRuntimeParameterValuesUnified(
+		ctx,
+		plan.ID.ValueString(),
+		applicationSourceVersion.ID,
+		client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString()),
+		state,
+		plan,
+	); err != nil {
+		resp.Diagnostics.AddError("Error updating runtime parameters for Application Source", err.Error())
 		return
 	}
 
@@ -642,22 +465,13 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	// Always populate resources from API response (field is Computed)
 	plan.Resources = ApplicationResourcesFromAPI(ctx, applicationSource.LatestVersion.Resources)
 
-	if !plan.RuntimeParameters.IsNull() {
-		plan.RuntimeParameterValues, diags = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	} else {
-		plan.RuntimeParameters = types.ListNull(runtimeParameterListElemType())
-		plan.RuntimeParameterValues, diags = formatRuntimeParameterValues(
-			ctx,
-			applicationSource.LatestVersion.RuntimeParameters,
-			plan.RuntimeParameterValues)
-		if diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+	plan.RuntimeParameterValues, diags = formatRuntimeParameterValuesByManagedKeys(
+		ctx,
+		applicationSource.LatestVersion.RuntimeParameters,
+		plan.RuntimeParameterValues)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -686,14 +500,8 @@ func (r *ApplicationSourceResource) ImportState(ctx context.Context, req resourc
 }
 
 func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	tflog.Debug(ctx, "ModifyPlan called", map[string]any{
-		"plan_raw_is_null":  req.Plan.Raw.IsNull(),
-		"state_raw_is_null": req.State.Raw.IsNull(),
-	})
-
 	if req.Plan.Raw.IsNull() {
 		// Resource is being destroyed
-		tflog.Debug(ctx, "ModifyPlan: Resource being destroyed")
 		return
 	}
 
@@ -704,30 +512,12 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 		return
 	}
 
-	tflog.Debug(ctx, "ModifyPlan: Got plan", map[string]any{
-		"resources_is_null": plan.Resources.IsNull(),
-	})
-
-	if IsRuntimeParameterValuesUsed(plan.RuntimeParameterValues) {
-		resp.Diagnostics.AddWarning(
-			"runtime_parameter_values is deprecated",
-			"The `runtime_parameter_values` attribute is deprecated and will be removed in a future version. Please migrate to `runtime_parameters`.",
-		)
-	}
-
-	if !plan.RuntimeParameters.IsNull() {
-		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-	}
-
-	// compute file content hashes
 	filesHashes, err := computeFilesHashes(ctx, plan.Files)
 	if err != nil {
 		resp.Diagnostics.AddError("Error calculating files hashes", err.Error())
 		return
 	}
 	plan.FilesHashes = filesHashes
-
-	tflog.Debug(ctx, "ModifyPlan: Computed file hashes")
 
 	folderPathHash, err := computeFolderHash(plan.FolderPath)
 	if err != nil {
@@ -736,19 +526,13 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 	}
 	plan.FolderPathHash = folderPathHash
 
-	tflog.Debug(ctx, "ModifyPlan: Computed folder hash")
-
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
-		tflog.Debug(ctx, "ModifyPlan: Error setting plan after hashes")
 		return
 	}
 
-	tflog.Debug(ctx, "ModifyPlan: Set plan after hashes")
-
 	if req.State.Raw.IsNull() {
 		// resource is being created
-		tflog.Debug(ctx, "ModifyPlan: Resource being created, setting final plan")
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
@@ -762,37 +546,28 @@ func (r ApplicationSourceResource) ModifyPlan(ctx context.Context, req resource.
 
 	if !IsKnown(plan.BaseEnvironmentID) {
 		if plan.BaseEnvironmentVersionID == state.BaseEnvironmentVersionID {
-			// use state base environment id if base environment version id is not changed
 			plan.BaseEnvironmentID = state.BaseEnvironmentID
 		}
 	}
 
 	if !IsKnown(plan.BaseEnvironmentVersionID) {
 		if plan.BaseEnvironmentID == state.BaseEnvironmentID {
-			// use state base environment version id if base environment id is not changed
 			plan.BaseEnvironmentVersionID = state.BaseEnvironmentVersionID
 		}
 	}
 
-	// reset unknown version id if if hashess have been changed
 	if !reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPathHash != state.FolderPathHash {
 		plan.VersionID = types.StringUnknown()
 	}
 
-	// use RequiredKeyScopeLevel from state if not set for plan
 	if plan.RequiredKeyScopeLevel.IsUnknown() {
 		plan.RequiredKeyScopeLevel = state.RequiredKeyScopeLevel
 	}
 
 	if !IsKnown(plan.RuntimeParameterValues) {
-		// use empty list if runtime parameter values are unknown
 		plan.RuntimeParameterValues, _ = listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
 	}
-
-	tflog.Debug(ctx, "ModifyPlan: Final plan state", map[string]any{
-		"resources_is_null": plan.Resources.IsNull(),
-	})
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
@@ -803,11 +578,54 @@ func (r ApplicationSourceResource) ConfigValidators(ctx context.Context) []resou
 			path.MatchRoot("base_environment_id"),
 			path.MatchRoot("base_environment_version_id"),
 		),
-		resourcevalidator.Conflicting(
-			path.MatchRoot("runtime_parameter_values"),
-			path.MatchRoot("runtime_parameters"),
-		),
 	}
+}
+
+// updateRuntimeParameterValuesUnified updates runtime parameters on an Application Source version.
+// It probes the v2 API first and falls back to v1 (with nil entries for removed params) when v2 is unavailable.
+func (r *ApplicationSourceResource) updateRuntimeParameterValuesUnified(
+	ctx context.Context,
+	sourceID, versionID string,
+	requiredKeyScopeLevel client.ScopeLevel,
+	state, plan ApplicationSourceResourceModel,
+) error {
+	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
+		return nil
+	}
+
+	v2Payload, err := convertRuntimeParameters(ctx, plan.RuntimeParameterValues)
+	if err != nil {
+		return fmt.Errorf("converting runtime parameters (v2 format): %w", err)
+	}
+
+	traceAPICall("UpdateApplicationSourceVersion")
+	_, err = r.provider.service.UpdateApplicationSourceVersion(ctx, sourceID, versionID, &client.UpdateApplicationSourceVersionRequest{
+		RuntimeParameters:     v2Payload,
+		RequiredKeyScopeLevel: requiredKeyScopeLevel,
+	})
+
+	if err != nil && isNewRuntimeParametersAttrNotSupportedError(err) {
+		v1Payload, err := buildV1RuntimeParamPayload(ctx, state.RuntimeParameterValues, plan.RuntimeParameterValues)
+		if err != nil {
+			return err
+		}
+		if v1Payload == "" {
+			return nil
+		}
+		traceAPICall("UpdateApplicationSourceVersion")
+		if _, err = r.provider.service.UpdateApplicationSourceVersion(ctx, sourceID, versionID, &client.UpdateApplicationSourceVersionRequest{
+			RuntimeParameterValues: v1Payload,
+			RequiredKeyScopeLevel:  requiredKeyScopeLevel,
+		}); err != nil {
+			return fmt.Errorf("setting Application Source runtime parameter values (v1 fallback): %w", err)
+		}
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("setting Application Source runtime parameter values: %w", err)
+	}
+	return nil
 }
 
 func (r *ApplicationSourceResource) addLocalFilesToApplicationSource(

@@ -317,7 +317,64 @@ func checkNameAlreadyExists(err error, name string, resourceType string) string 
 func isNewRuntimeParametersAttrNotSupportedError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "runtimeParameters is not allowed key") ||
-		strings.Contains(msg, "field requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled")
+		strings.Contains(msg, "requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature to be enabled")
+}
+
+// buildV1RuntimeParamPayload builds the JSON payload for a v1 runtime
+// parameter update. It includes all params from planVals and nil entries for
+// any params present in stateVals but absent from planVals, so the API clears
+// removed params. Returns an empty string when there is nothing to send.
+func buildV1RuntimeParamPayload(ctx context.Context, stateVals, planVals types.List) (string, error) {
+	planParams := make([]RuntimeParameterValue, 0)
+	if IsKnown(planVals) {
+		if diags := planVals.ElementsAs(ctx, &planParams, false); diags.HasError() {
+			return "", fmt.Errorf("reading plan runtime parameter values: %s", diags.Errors()[0].Detail())
+		}
+	}
+
+	stateParams := make([]RuntimeParameterValue, 0)
+	if IsKnown(stateVals) {
+		if diags := stateVals.ElementsAs(ctx, &stateParams, false); diags.HasError() {
+			return "", fmt.Errorf("reading state runtime parameter values: %s", diags.Errors()[0].Detail())
+		}
+	}
+
+	planKeys := make(map[string]bool, len(planParams))
+	for _, p := range planParams {
+		planKeys[p.Key.ValueString()] = true
+	}
+
+	params := make([]client.RuntimeParameterValueRequest, 0, len(planParams)+len(stateParams))
+	for _, p := range planParams {
+		value, err := formatRuntimeParameterValue(p.Type.ValueString(), p.Value.ValueString())
+		if err != nil {
+			return "", err
+		}
+		params = append(params, client.RuntimeParameterValueRequest{
+			FieldName: p.Key.ValueString(),
+			Type:      p.Type.ValueString(),
+			Value:     &value,
+		})
+	}
+	for _, sp := range stateParams {
+		if !planKeys[sp.Key.ValueString()] {
+			params = append(params, client.RuntimeParameterValueRequest{
+				FieldName: sp.Key.ValueString(),
+				Type:      sp.Type.ValueString(),
+				Value:     nil,
+			})
+		}
+	}
+
+	if len(params) == 0 {
+		return "", nil
+	}
+
+	jsonParams, err := json.Marshal(params)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonParams), nil
 }
 
 func formatRuntimeParameterValues(
@@ -329,17 +386,6 @@ func formatRuntimeParameterValues(
 	diag.Diagnostics,
 ) {
 	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, false)
-}
-
-func formatRuntimeParameterValuesForRetrainingJob(
-	ctx context.Context,
-	runtimeParameterValues []client.RuntimeParameter,
-	parametersInPlan basetypes.ListValue,
-) (
-	basetypes.ListValue,
-	diag.Diagnostics,
-) {
-	return formatRuntimeParameterValuesInternal(ctx, runtimeParameterValues, parametersInPlan, true)
 }
 
 func formatRuntimeParameterValuesInternal(
@@ -411,6 +457,52 @@ func formatRuntimeParameterValuesInternal(
 	}
 
 	return listValueFromRuntimParameters(ctx, parameters)
+}
+
+// formatRuntimeParameterValuesByManagedKeys returns only the parameters
+// declared in parametersInPlan, refreshed with current values from the API
+// response. Undeclared metadata-injected params are excluded to prevent drift.
+func formatRuntimeParameterValuesByManagedKeys(
+	ctx context.Context,
+	apiParams []client.RuntimeParameter,
+	parametersInPlan basetypes.ListValue,
+) (basetypes.ListValue, diag.Diagnostics) {
+	if parametersInPlan.IsNull() {
+		return parametersInPlan, nil
+	}
+
+	declared := make([]RuntimeParameterValue, 0)
+	if IsKnown(parametersInPlan) {
+		if diags := parametersInPlan.ElementsAs(ctx, &declared, false); diags.HasError() {
+			return basetypes.ListValue{}, diags
+		}
+	}
+
+	// Build lookup of API current values by key.
+	apiByKey := make(map[string]client.RuntimeParameter, len(apiParams))
+	for _, p := range apiParams {
+		apiByKey[p.FieldName] = p
+	}
+
+	// Walk declared params in their original order, refreshing values from the
+	// API response so that drift is detected on the next plan.
+	result := make([]RuntimeParameterValue, 0, len(declared))
+	for _, d := range declared {
+		key := d.Key.ValueString()
+		if apiParam, ok := apiByKey[key]; ok && apiParam.CurrentValue != nil {
+			result = append(result, RuntimeParameterValue{
+				Key:   d.Key,
+				Type:  d.Type,
+				Value: types.StringValue(fmt.Sprintf("%v", apiParam.CurrentValue)),
+			})
+		} else {
+			// Key not yet visible from the API (e.g. pending version) — keep
+			// the plan value to avoid a spurious diff.
+			result = append(result, d)
+		}
+	}
+
+	return listValueFromRuntimParameters(ctx, result)
 }
 
 func isManagedByGuards(param client.RuntimeParameter) bool {

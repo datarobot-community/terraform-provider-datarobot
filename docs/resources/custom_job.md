@@ -65,8 +65,7 @@ output "example_id" {
 - `folder_path` (String) The path to a folder containing files to be uploaded. Each file in the folder is uploaded under path relative to a folder path.
 - `job_type` (String) The type of the Custom Job.
 - `resource_bundle_id` (String) A single identifier that represents a bundle of resources: Memory, CPU, GPU, etc.
-- `runtime_parameter_values` (Attributes List, Deprecated) (see [below for nested schema](#nestedatt--runtime_parameter_values))
-- `runtime_parameters` (Attributes List) The runtime parameters for the Custom Job. Use instead of `runtime_parameter_values`. Requires the RUNTIME_PARAMETERS_IMPROVEMENTS feature on the DataRobot API. (see [below for nested schema](#nestedatt--runtime_parameters))
+- `runtime_parameter_values` (Attributes List) The runtime parameters for the Custom Job. (see [below for nested schema](#nestedatt--runtime_parameter_values))
 - `schedule` (Attributes) The schedule configuration for the custom job. (see [below for nested schema](#nestedatt--schedule))
 - `schedule_id` (String) The ID of the schedule associated with the custom job.
 
@@ -78,16 +77,6 @@ output "example_id" {
 
 <a id="nestedatt--runtime_parameter_values"></a>
 ### Nested Schema for `runtime_parameter_values`
-
-Required:
-
-- `key` (String) The name of the runtime parameter.
-- `type` (String) The type of the runtime parameter.
-- `value` (String) The value of the runtime parameter (type conversion is handled internally).
-
-
-<a id="nestedatt--runtime_parameters"></a>
-### Nested Schema for `runtime_parameters`
 
 Required:
 

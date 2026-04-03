@@ -185,7 +185,6 @@ type CustomModelResourceModel struct {
 	BaseEnvironmentID              types.String                    `tfsdk:"base_environment_id"`
 	BaseEnvironmentVersionID       types.String                    `tfsdk:"base_environment_version_id"`
 	RuntimeParameterValues         types.List                      `tfsdk:"runtime_parameter_values"`
-	RuntimeParameters              types.List                      `tfsdk:"runtime_parameters"`
 	SourceRemoteRepositories       []SourceRemoteRepository        `tfsdk:"source_remote_repositories"`
 	FolderPath                     types.String                    `tfsdk:"folder_path"`
 	FolderPathHash                 types.String                    `tfsdk:"folder_path_hash"`
@@ -306,7 +305,6 @@ type CustomJobResourceModel struct {
 	EnvironmentID          types.String  `tfsdk:"environment_id"`
 	EnvironmentVersionID   types.String  `tfsdk:"environment_version_id"`
 	RuntimeParameterValues types.List    `tfsdk:"runtime_parameter_values"`
-	RuntimeParameters      types.List    `tfsdk:"runtime_parameters"`
 	FolderPath             types.String  `tfsdk:"folder_path"`
 	FolderPathHash         types.String  `tfsdk:"folder_path_hash"`
 	Files                  types.Dynamic `tfsdk:"files"`
@@ -712,7 +710,6 @@ type ApplicationSourceResourceModel struct {
 	FilesHashes              types.List            `tfsdk:"files_hashes"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	RuntimeParameterValues   types.List            `tfsdk:"runtime_parameter_values"`
-	RuntimeParameters        types.List            `tfsdk:"runtime_parameters"`
 	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
 }
 
