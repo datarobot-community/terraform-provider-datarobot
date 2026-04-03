@@ -34,6 +34,12 @@ type UseCaseResourceModel struct {
 	Description types.String `tfsdk:"description"`
 }
 
+// MemorySpaceResourceModel describes the memory space resource.
+type MemorySpaceResourceModel struct {
+	ID          types.String `tfsdk:"id"`
+	Description types.String `tfsdk:"description"`
+}
+
 // RemoteRepositoryResourceModel describes the remote repository resource.
 type RemoteRepositoryResourceModel struct {
 	ID                  types.String `tfsdk:"id"`
