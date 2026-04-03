@@ -16,6 +16,12 @@ type Service interface {
 	AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
 	RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
 
+	// Memory Space
+	CreateMemorySpace(ctx context.Context, req *MemorySpaceRequest) (*MemorySpaceResponse, error)
+	GetMemorySpace(ctx context.Context, id string) (*MemorySpaceResponse, error)
+	UpdateMemorySpace(ctx context.Context, id string, req *MemorySpaceRequest) (*MemorySpaceResponse, error)
+	DeleteMemorySpace(ctx context.Context, id string) error
+
 	// Remote Repository
 	CreateRemoteRepository(ctx context.Context, req *CreateRemoteRepositoryRequest) (*RemoteRepositoryResponse, error)
 	GetRemoteRepository(ctx context.Context, id string) (*RemoteRepositoryResponse, error)
@@ -402,6 +408,23 @@ func (s *ServiceImpl) UpdateUseCase(ctx context.Context, id string, req *UseCase
 
 func (s *ServiceImpl) DeleteUseCase(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/useCases/"+id+"/")
+}
+
+// Memory Space Service Implementation.
+func (s *ServiceImpl) CreateMemorySpace(ctx context.Context, req *MemorySpaceRequest) (*MemorySpaceResponse, error) {
+	return Post[MemorySpaceResponse](s.client, ctx, "/memory/new/", req)
+}
+
+func (s *ServiceImpl) GetMemorySpace(ctx context.Context, id string) (*MemorySpaceResponse, error) {
+	return Get[MemorySpaceResponse](s.client, ctx, "/memory/"+id+"/")
+}
+
+func (s *ServiceImpl) UpdateMemorySpace(ctx context.Context, id string, req *MemorySpaceRequest) (*MemorySpaceResponse, error) {
+	return Patch[MemorySpaceResponse](s.client, ctx, "/memory/"+id+"/", req)
+}
+
+func (s *ServiceImpl) DeleteMemorySpace(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/memory/"+id+"/")
 }
 
 // Remote Repository Service Implementation.
