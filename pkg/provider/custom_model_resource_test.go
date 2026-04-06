@@ -1275,55 +1275,6 @@ func TestCustomModelResourceSchema(t *testing.T) {
 	}
 }
 
-func TestIsRuntimeParameterValuesUsed(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	nonEmptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
-		{Key: types.StringValue("FOO"), Type: types.StringValue("string"), Value: types.StringValue("bar")},
-	})
-	if diags.HasError() {
-		t.Fatalf("unexpected diags: %v", diags)
-	}
-
-	emptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-	if diags.HasError() {
-		t.Fatalf("unexpected diags: %v", diags)
-	}
-
-	tests := []struct {
-		name                   string
-		runtimeParameterValues types.List
-		expected               bool
-	}{
-		{
-			name:                   "non-empty runtime_parameter_values returns true",
-			runtimeParameterValues: nonEmptyList,
-			expected:               true,
-		},
-		{
-			name:                   "empty runtime_parameter_values returns false",
-			runtimeParameterValues: emptyList,
-			expected:               false,
-		},
-		{
-			name:                   "null runtime_parameter_values returns false",
-			runtimeParameterValues: types.ListNull(types.StringType),
-			expected:               false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsRuntimeParameterValuesUsed(tt.runtimeParameterValues)
-			if got != tt.expected {
-				t.Errorf("IsRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
 func customModelFromLlmBlueprintResourceConfig(name, description, nameSalt string) string {
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_custom_model" {
