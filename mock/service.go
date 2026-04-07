@@ -517,6 +517,21 @@ func (mr *MockServiceMockRecorder) CreateLLMBlueprint(ctx, req interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLLMBlueprint", reflect.TypeOf((*MockService)(nil).CreateLLMBlueprint), ctx, req)
 }
 
+// CreateMemorySpace mocks base method.
+func (m *MockService) CreateMemorySpace(ctx context.Context, req *client.MemorySpaceRequest) (*client.MemorySpaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMemorySpace", ctx, req)
+	ret0, _ := ret[0].(*client.MemorySpaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMemorySpace indicates an expected call of CreateMemorySpace.
+func (mr *MockServiceMockRecorder) CreateMemorySpace(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMemorySpace", reflect.TypeOf((*MockService)(nil).CreateMemorySpace), ctx, req)
+}
+
 // CreateNotificationChannel mocks base method.
 func (m *MockService) CreateNotificationChannel(ctx context.Context, req *client.CreateNotificationChannelRequest) (*client.NotificationChannel, error) {
 	m.ctrl.T.Helper()
@@ -964,6 +979,20 @@ func (m *MockService) DeleteLLMBlueprint(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteLLMBlueprint(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLLMBlueprint", reflect.TypeOf((*MockService)(nil).DeleteLLMBlueprint), ctx, id)
+}
+
+// DeleteMemorySpace mocks base method.
+func (m *MockService) DeleteMemorySpace(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteMemorySpace", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteMemorySpace indicates an expected call of DeleteMemorySpace.
+func (mr *MockServiceMockRecorder) DeleteMemorySpace(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMemorySpace", reflect.TypeOf((*MockService)(nil).DeleteMemorySpace), ctx, id)
 }
 
 // DeleteNotebook mocks base method.
@@ -1539,6 +1568,21 @@ func (m *MockService) GetLatestRegisteredModelVersion(ctx context.Context, id st
 func (mr *MockServiceMockRecorder) GetLatestRegisteredModelVersion(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestRegisteredModelVersion", reflect.TypeOf((*MockService)(nil).GetLatestRegisteredModelVersion), ctx, id)
+}
+
+// GetMemorySpace mocks base method.
+func (m *MockService) GetMemorySpace(ctx context.Context, id string) (*client.MemorySpaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMemorySpace", ctx, id)
+	ret0, _ := ret[0].(*client.MemorySpaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMemorySpace indicates an expected call of GetMemorySpace.
+func (mr *MockServiceMockRecorder) GetMemorySpace(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemorySpace", reflect.TypeOf((*MockService)(nil).GetMemorySpace), ctx, id)
 }
 
 // GetNotebook mocks base method.
@@ -2469,6 +2513,21 @@ func (m *MockService) UpdateLLMBlueprint(ctx context.Context, id string, req *cl
 func (mr *MockServiceMockRecorder) UpdateLLMBlueprint(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLLMBlueprint", reflect.TypeOf((*MockService)(nil).UpdateLLMBlueprint), ctx, id, req)
+}
+
+// UpdateMemorySpace mocks base method.
+func (m *MockService) UpdateMemorySpace(ctx context.Context, id string, req *client.MemorySpaceRequest) (*client.MemorySpaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMemorySpace", ctx, id, req)
+	ret0, _ := ret[0].(*client.MemorySpaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMemorySpace indicates an expected call of UpdateMemorySpace.
+func (mr *MockServiceMockRecorder) UpdateMemorySpace(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMemorySpace", reflect.TypeOf((*MockService)(nil).UpdateMemorySpace), ctx, id, req)
 }
 
 // UpdateNotebook mocks base method.
