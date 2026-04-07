@@ -1,12 +1,14 @@
+## [Unreleased]
+
+### Added
+
+- `runtime_parameters` added in `0.10.29` was removed in a favour of `runtime_parameter_values`. Now this parameter handles API changes internally in the provider code. This will make no need in updating existing terraform declarations.
+
 ## [0.10.32] - 2026-04-03
 
 ### Added
 
 - Added `datarobot_memory_space` resource for managing Memory Spaces (requires enabled feature flag `AGENTIC_MEMORY_API`)
-
-### Added
-
-- `runtime_parameters` added in `0.10.29` was removed in a favour of `runtime_parameter_values`. Now this parameter handles API changes internally in the provider code. This will make no need in updating existing terraform declarations.
 
 ## [0.10.31] - 2026-03-24
 
