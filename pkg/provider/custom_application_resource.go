@@ -204,6 +204,13 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	// Save the ID immediately so Terraform can destroy the resource if subsequent steps fail.
+	data.ID = types.StringValue(application.ID)
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
 	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
