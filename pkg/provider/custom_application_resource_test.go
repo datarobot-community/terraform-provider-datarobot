@@ -719,8 +719,16 @@ streamlit run streamlit-app.py
 `
 
 	appCode := `import streamlit as st
-st.title("Resources Test App")
-	`
+from datarobot import Client
+from datarobot.client import set_client
+
+def start_streamlit():
+    set_client(Client())
+    st.title("Scope Level Test Application")
+
+if __name__ == "__main__":
+    start_streamlit()
+`
 
 	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
 	if err != nil {
@@ -747,10 +755,10 @@ st.title("Resources Test App")
 					// Verify ApplicationSource has resources populated
 					resource.TestCheckResourceAttrSet(sourceResourceName, "id"),
 					resource.TestCheckResourceAttrSet(sourceResourceName, "version_id"),
-					resource.TestCheckResourceAttr(sourceResourceName, "resources.replicas", "2"),
-					resource.TestCheckResourceAttr(sourceResourceName, "resources.resource_label", "cpu.medium"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.replicas", "1"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.resource_label", "cpu.xlarge"),
 					resource.TestCheckResourceAttr(sourceResourceName, "resources.session_affinity", "true"),
-					resource.TestCheckResourceAttr(sourceResourceName, "resources.service_web_requests_on_root_path", "false"),
+					resource.TestCheckResourceAttr(sourceResourceName, "resources.service_web_requests_on_root_path", "true"),
 
 					// Verify CustomApplication exists
 					// NOTE: resources won't be populated unless explicitly passed from the source
@@ -771,10 +779,10 @@ resource "datarobot_application_source" "test" {
 	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	folder_path = "%s"
 	resources = {
-		replicas = 2
-		resource_label = "cpu.medium"
+		replicas = 1
+		resource_label = "cpu.xlarge"
 		session_affinity = true
-		service_web_requests_on_root_path = false
+		service_web_requests_on_root_path = true
 	}
 }
 
