@@ -800,7 +800,8 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateLocalFiles(ctx, customModel, &state, plan); err != nil {
+	localFilesUpdated, err := r.updateLocalFiles(ctx, customModel, &state, plan)
+	if err != nil {
 		resp.Diagnostics.AddError("Error updating Custom Model from files", err.Error())
 		return
 	}
@@ -820,7 +821,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, state, plan); err != nil {
+	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, state, plan, localFilesUpdated); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -1597,8 +1598,13 @@ func (r *CustomModelResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	customModel *client.CustomModel,
 	state, plan CustomModelResourceModel,
+	localFilesUpdated bool,
 ) error {
-	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
+	runtimeParamsChanged := !plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues)
+	reapplyAfterLocalFiles := localFilesUpdated &&
+		IsKnown(plan.RuntimeParameterValues) &&
+		len(plan.RuntimeParameterValues.Elements()) > 0
+	if !runtimeParamsChanged && !reapplyAfterLocalFiles {
 		return nil
 	}
 	return r.createVersionWithRuntimeParams(
@@ -1725,49 +1731,52 @@ func (r *CustomModelResource) updateLocalFiles(
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
-	if !reflect.DeepEqual(plan.Files, state.Files) ||
-		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
-		plan.FolderPath != state.FolderPath ||
-		plan.FolderPathHash != state.FolderPathHash {
-		filesToDelete := make([]string, 0)
-		for _, item := range customModel.LatestVersion.Items {
-			if item.FileSource == "local" {
-				filesToDelete = append(filesToDelete, item.ID)
-			}
-		}
-
-		if len(filesToDelete) > 0 {
-			traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
-			_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
-				IsMajorUpdate:            "false",
-				BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
-				BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
-				FilesToDelete:            filesToDelete,
-			})
-			if err != nil {
-				return
-			}
-		}
-
-		if err = r.createCustomModelVersionFromFiles(
-			ctx,
-			plan.FolderPath,
-			plan.Files,
-			customModel.ID,
-			customModel.LatestVersion.BaseEnvironmentID,
-		); err != nil {
-			return
-		}
-
-		state.Files = plan.Files
-		state.FolderPath = plan.FolderPath
-		state.FolderPathHash = plan.FolderPathHash
-		state.FilesHashes = plan.FilesHashes
+	if reflect.DeepEqual(plan.Files, state.Files) &&
+		reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) &&
+		plan.FolderPath == state.FolderPath &&
+		plan.FolderPathHash == state.FolderPathHash {
+		return false, nil
 	}
 
-	return
+	filesToDelete := make([]string, 0)
+	for _, item := range customModel.LatestVersion.Items {
+		if item.FileSource == "local" {
+			filesToDelete = append(filesToDelete, item.ID)
+		}
+	}
+
+	if len(filesToDelete) > 0 {
+		traceAPICall("CreateCustomModelVersionCreateFromLatestDeleteFiles")
+		_, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, &client.CreateCustomModelVersionFromLatestRequest{
+			IsMajorUpdate:            "false",
+			BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+			BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
+			FilesToDelete:            filesToDelete,
+		})
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if err = r.createCustomModelVersionFromFiles(
+		ctx,
+		plan.FolderPath,
+		plan.Files,
+		customModel.ID,
+		customModel.LatestVersion.BaseEnvironmentID,
+	); err != nil {
+		return false, err
+	}
+
+	state.Files = plan.Files
+	state.FolderPath = plan.FolderPath
+	state.FolderPathHash = plan.FolderPathHash
+	state.FilesHashes = plan.FilesHashes
+
+	return true, nil
 }
 
 func (r *CustomModelResource) updateGuardConfigurations(
