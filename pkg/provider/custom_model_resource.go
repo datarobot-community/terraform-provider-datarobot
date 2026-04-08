@@ -108,7 +108,7 @@ func (r *CustomModelResource) Schema(ctx context.Context, req resource.SchemaReq
 			"runtime_parameter_values": schema.ListNestedAttribute{
 				Optional:           true,
 				Computed:           true,
-				DeprecationMessage: "The runtime parameter values for the Custom Model. Deprecated: use `runtime_parameters` instead.",
+				DeprecationMessage: "The runtime parameter values for the Custom Model. Deprecated: use `runtime_parameters` instead, please",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
