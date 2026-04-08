@@ -247,6 +247,7 @@ func (r *ApplicationSourceResource) Create(ctx context.Context, req resource.Cre
 			createApplicationSourceVersionResp.RequiredKeyScopeLevel,
 			ApplicationSourceResourceModel{},
 			data,
+			false,
 		); err != nil {
 			resp.Diagnostics.AddError("Error setting runtime parameters for Application Source", err.Error())
 			return
@@ -399,6 +400,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 	}
 	applicationSourceVersion := *createApplicationSourceVersionResp
 
+	localFilesUpdated := false
 	if !reflect.DeepEqual(plan.Files, state.Files) ||
 		!reflect.DeepEqual(plan.FilesHashes, state.FilesHashes) ||
 		plan.FolderPath != state.FolderPath ||
@@ -408,6 +410,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 			resp.Diagnostics.AddError("Error updating Application Source files", err.Error())
 			return
 		}
+		localFilesUpdated = true
 	}
 
 	updateVersionRequest := &client.UpdateApplicationSourceVersionRequest{}
@@ -447,6 +450,7 @@ func (r *ApplicationSourceResource) Update(ctx context.Context, req resource.Upd
 		client.ScopeLevel(plan.RequiredKeyScopeLevel.ValueString()),
 		state,
 		plan,
+		localFilesUpdated,
 	); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameters for Application Source", err.Error())
 		return
@@ -588,8 +592,13 @@ func (r *ApplicationSourceResource) updateRuntimeParameterValuesUnified(
 	sourceID, versionID string,
 	requiredKeyScopeLevel client.ScopeLevel,
 	state, plan ApplicationSourceResourceModel,
+	localFilesUpdated bool,
 ) error {
-	if plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues) {
+	runtimeParamsChanged := !plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues)
+	reapplyAfterLocalFiles := localFilesUpdated &&
+		IsKnown(plan.RuntimeParameterValues) &&
+		len(plan.RuntimeParameterValues.Elements()) > 0
+	if !runtimeParamsChanged && !reapplyAfterLocalFiles {
 		return nil
 	}
 
