@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -558,53 +556,16 @@ func (hasCustomJobRuntimeParamsMatcher) String() string {
 	return "UpdateCustomJobRequest with RuntimeParameters set"
 }
 
-func TestIsCustomJobRuntimeParameterValuesUsed(t *testing.T) {
-	t.Parallel()
+// hasCustomJobRuntimeParamValuesMatcher asserts that the UpdateCustomJobRequest has RuntimeParameterValues set (v1 path).
+type hasCustomJobRuntimeParamValuesMatcher struct{}
 
-	ctx := context.Background()
+func (hasCustomJobRuntimeParamValuesMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*client.UpdateCustomJobRequest)
+	return ok && req.RuntimeParameterValues != ""
+}
 
-	nonEmptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{
-		{Key: types.StringValue("FOO"), Type: types.StringValue("string"), Value: types.StringValue("bar")},
-	})
-	if diags.HasError() {
-		t.Fatalf("unexpected diags: %v", diags)
-	}
-
-	emptyList, diags := listValueFromRuntimParameters(ctx, []RuntimeParameterValue{})
-	if diags.HasError() {
-		t.Fatalf("unexpected diags: %v", diags)
-	}
-
-	tests := []struct {
-		name     string
-		plan     CustomJobResourceModel
-		expected bool
-	}{
-		{
-			name:     "non-empty runtime_parameter_values returns true",
-			plan:     CustomJobResourceModel{RuntimeParameterValues: nonEmptyList},
-			expected: true,
-		},
-		{
-			name:     "empty runtime_parameter_values returns false",
-			plan:     CustomJobResourceModel{RuntimeParameterValues: emptyList},
-			expected: false,
-		},
-		{
-			name:     "null runtime_parameter_values returns false",
-			plan:     CustomJobResourceModel{RuntimeParameterValues: types.ListNull(types.StringType)},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isCustomJobRuntimeParameterValuesUsed(tt.plan)
-			if got != tt.expected {
-				t.Errorf("isCustomJobRuntimeParameterValuesUsed() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
+func (hasCustomJobRuntimeParamValuesMatcher) String() string {
+	return "UpdateCustomJobRequest with RuntimeParameterValues set"
 }
 
 func TestCustomJobResourceConflictingRuntimeFields(t *testing.T) {
@@ -620,8 +581,8 @@ func TestCustomJobResourceConflictingRuntimeFields(t *testing.T) {
 
 	validators := configValidatable.ConfigValidators(ctx)
 
-	if len(validators) < 2 {
-		t.Fatalf("Expected at least 2 config validators (including runtime_parameter_values/runtime_parameters conflict), got %d", len(validators))
+	if len(validators) < 1 {
+		t.Fatalf("Expected at least 1 config validator, got %d", len(validators))
 	}
 }
 
@@ -690,13 +651,12 @@ func TestIntegrationCustomJobResourceRuntimeParameters(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: customJobWithRuntimeParametersConfig(name, envID),
+				Config: customJobWithRuntimeParameterValuesConfig(name, envID),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.key", "FOO"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.type", "string"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameters.0.value", "bar"),
-					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "0"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "bar"),
 				),
 			},
 		},
@@ -739,11 +699,30 @@ func TestIntegrationCustomJobResourceRuntimeParametersOldAPI(t *testing.T) {
 		UpdateCustomJobFiles(gomock.Any(), jobID, gomock.Any()).
 		Return(customJob, nil)
 
-	// ...then fails with old-API error when runtime_parameters are applied.
+	// ...v2 probe fails with old-API error...
 	mockService.EXPECT().
 		UpdateCustomJob(gomock.Any(), jobID, hasCustomJobRuntimeParamsMatcher{}).
 		Return(nil, fmt.Errorf("runtimeParameters is not allowed key"))
 
+	// ...v1 fallback succeeds.
+	mockService.EXPECT().
+		UpdateCustomJob(gomock.Any(), jobID, hasCustomJobRuntimeParamValuesMatcher{}).
+		Return(customJob, nil)
+
+	// Post-create Read
+	mockService.EXPECT().
+		GetCustomJob(gomock.Any(), jobID).
+		Return(customJob, nil)
+	mockService.EXPECT().
+		ListCustomJobSchedules(gomock.Any(), jobID).
+		Return([]client.CustomJobScheduleResponse{}, nil)
+
+	// Destroy
+	mockService.EXPECT().
+		DeleteCustomJob(gomock.Any(), jobID).
+		Return(nil)
+
+	resourceName := "datarobot_custom_job.test"
 	resource.Test(t, resource.TestCase{
 		IsUnitTest: true,
 		PreCheck: func() {
@@ -752,19 +731,24 @@ func TestIntegrationCustomJobResourceRuntimeParametersOldAPI(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:      customJobWithRuntimeParametersConfig(name, envID),
-				ExpectError: regexp.MustCompile("runtime_parameters not supported by this API"),
+				Config: customJobWithRuntimeParameterValuesConfig(name, envID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.key", "FOO"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.type", "string"),
+					resource.TestCheckResourceAttr(resourceName, "runtime_parameter_values.0.value", "bar"),
+				),
 			},
 		},
 	})
 }
 
-func customJobWithRuntimeParametersConfig(name, envID string) string {
+func customJobWithRuntimeParameterValuesConfig(name, envID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_custom_job" "test" {
   name           = %q
   environment_id = %q
-  runtime_parameters = [
+  runtime_parameter_values = [
     {
       key   = "FOO"
       type  = "string"
