@@ -212,9 +212,10 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
 	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		recipients := make([]string, len(data.ExternalAccessRecipients))
-		for i, recipient := range data.ExternalAccessRecipients {
-			recipients[i] = recipient.ValueString()
+		var recipients []string
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
 		}
 
 		updateRequest := &client.UpdateApplicationRequest{
@@ -246,7 +247,12 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -307,7 +313,12 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
 	// Don't read required_key_scope_level from API - keep user-configured value
@@ -339,9 +350,10 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	recipients := make([]string, len(plan.ExternalAccessRecipients))
-	for i, recipient := range plan.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	var recipients []string
+	if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{

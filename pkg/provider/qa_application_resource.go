@@ -137,9 +137,10 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	recipients := make([]string, len(data.ExternalAccessRecipients))
-	for i, recipient := range data.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	var recipients []string
+	if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	traceAPICall("UpdateApplication")
@@ -174,7 +175,12 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -209,7 +215,12 @@ func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadReque
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
@@ -259,9 +270,10 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	recipients := make([]string, len(plan.ExternalAccessRecipients))
-	for i, recipient := range plan.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	var recipients []string
+	if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
