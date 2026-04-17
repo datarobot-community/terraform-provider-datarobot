@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -87,8 +88,12 @@ func (r *QAApplicationResource) Schema(ctx context.Context, req resource.SchemaR
 			},
 			"external_access_recipients": schema.ListAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The list of external email addresses that have access to the Q&A Application.",
 				ElementType:         types.StringType,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"allow_auto_stopping": schema.BoolAttribute{
 				Optional:            true,

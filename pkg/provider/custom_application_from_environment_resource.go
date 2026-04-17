@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -80,8 +81,12 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 			},
 			"external_access_recipients": schema.ListAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The list of external email addresses that have access to the Custom Application.",
 				ElementType:         types.StringType,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"allow_auto_stopping": schema.BoolAttribute{
 				Optional:            true,
