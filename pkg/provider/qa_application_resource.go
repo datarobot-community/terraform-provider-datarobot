@@ -137,10 +137,12 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	var recipients []string
-	if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	recipients := []string{}
+	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	traceAPICall("UpdateApplication")

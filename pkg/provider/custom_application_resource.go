@@ -212,10 +212,12 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
 	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		var recipients []string
-		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
+		recipients := []string{}
+		if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+			if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
 		}
 
 		updateRequest := &client.UpdateApplicationRequest{
