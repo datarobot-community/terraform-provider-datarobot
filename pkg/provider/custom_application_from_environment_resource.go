@@ -329,10 +329,12 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		return
 	}
 
-	var recipients []string
-	if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
+	recipients := []string{}
+	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
+		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
