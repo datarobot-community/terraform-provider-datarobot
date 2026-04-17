@@ -230,6 +230,7 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -286,6 +287,7 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
 	// Always populate resources from API response (field is Computed).

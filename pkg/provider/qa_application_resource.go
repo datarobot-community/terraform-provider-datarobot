@@ -174,6 +174,7 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -208,6 +209,7 @@ func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadReque
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)

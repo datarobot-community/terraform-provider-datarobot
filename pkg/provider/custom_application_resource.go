@@ -246,6 +246,7 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -306,6 +307,7 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	data.ExternalAccessRecipients = convertToTfStringList(application.ExternalAccessRecipients)
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
 	// Don't read required_key_scope_level from API - keep user-configured value
