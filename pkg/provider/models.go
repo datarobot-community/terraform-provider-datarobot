@@ -977,3 +977,58 @@ type UserMCPResourceMetadataResourceModel struct {
 	UserName           types.String `tfsdk:"user_name"`
 	MCPServerVersionID types.String `tfsdk:"mcp_server_version_id"`
 }
+
+// ArtifactResourceModel describes the Workload API artifact resource.
+type ArtifactResourceModel struct {
+	ID                   types.String      `tfsdk:"id"`
+	Name                 types.String      `tfsdk:"name"`
+	Description          types.String      `tfsdk:"description"`
+	Type                 types.String      `tfsdk:"type"`
+	ArtifactRepositoryID types.String      `tfsdk:"artifact_repository_id"`
+	Spec                 ArtifactSpecModel `tfsdk:"spec"`
+}
+
+type ArtifactSpecModel struct {
+	ContainerGroups []ArtifactContainerGroupModel `tfsdk:"container_groups"`
+}
+
+type ArtifactContainerGroupModel struct {
+	Containers []ArtifactContainerModel `tfsdk:"containers"`
+}
+
+type ArtifactContainerModel struct {
+	Name            types.String                       `tfsdk:"name"`
+	ImageURI        types.String                       `tfsdk:"image_uri"`
+	Primary         types.Bool                         `tfsdk:"primary"`
+	Description     types.String                       `tfsdk:"description"`
+	Port            types.Int64                        `tfsdk:"port"`
+	Entrypoint      []types.String                     `tfsdk:"entrypoint"`
+	EnvironmentVars []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
+	ResourceRequest ArtifactResourceRequestModel       `tfsdk:"resource_request"`
+	StartupProbe    *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
+	ReadinessProbe  *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
+	LivenessProbe   *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
+}
+
+type ArtifactEnvironmentVariableModel struct {
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+type ArtifactResourceRequestModel struct {
+	CPU     types.Float64 `tfsdk:"cpu"`
+	Memory  types.Int64   `tfsdk:"memory"`
+	GPU     types.Int64   `tfsdk:"gpu"`
+	GPUType types.String  `tfsdk:"gpu_type"`
+}
+
+type ArtifactProbeConfigModel struct {
+	Path                types.String `tfsdk:"path"`
+	Port                types.Int64  `tfsdk:"port"`
+	Scheme              types.String `tfsdk:"scheme"`
+	Host                types.String `tfsdk:"host"`
+	InitialDelaySeconds types.Int64  `tfsdk:"initial_delay_seconds"`
+	PeriodSeconds       types.Int64  `tfsdk:"period_seconds"`
+	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
+	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
+}
