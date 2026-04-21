@@ -122,7 +122,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"artifact_repository_id": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "ID of the artifact repository for versioning. Computed on first create; subsequent updates create new versions in the same repository.",
+				MarkdownDescription: "ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -158,7 +158,6 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 												MarkdownDescription: "Description of the container.",
 											},
 											"port": schema.Int64Attribute{
-												// Check if its enforced for non-primary containers
 												Optional:            true,
 												MarkdownDescription: "Container access port (1024-65535). Required for primary containers; omit for non-primary.",
 											},
@@ -352,6 +351,9 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 		return true
 	}
 	if !plan.Description.Equal(state.Description) {
+		return true
+	}
+	if !plan.ArtifactRepositoryID.Equal(state.ArtifactRepositoryID) {
 		return true
 	}
 	if len(plan.Spec.ContainerGroups) != len(state.Spec.ContainerGroups) {

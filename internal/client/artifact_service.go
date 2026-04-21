@@ -81,9 +81,9 @@ type CreateArtifactRequest struct {
 }
 
 func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error) {
-	return Post[Artifact](s.workloadClient, ctx, "/artifacts/", req)
+	return Post[Artifact](s.client, ctx, "/artifacts/", req)
 }
 
 func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, error) {
-	return Get[Artifact](s.workloadClient, ctx, "/artifacts/"+id+"/")
+	return Get[Artifact](s.client, ctx, "/artifacts/"+id+"/")
 }
