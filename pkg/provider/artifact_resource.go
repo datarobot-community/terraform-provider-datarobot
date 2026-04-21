@@ -254,10 +254,8 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	createReq := artifactCreateRequest(data)
-
 	traceAPICall("CreateArtifact")
-	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
+	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(data))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Artifact", err.Error())
 		return
@@ -307,20 +305,8 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	var state ArtifactResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	createReq := artifactCreateRequest(plan)
-	if !state.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsUnknown() {
-		repoID := state.ArtifactRepositoryID.ValueString()
-		createReq.ArtifactRepositoryID = &repoID
-	}
-
 	traceAPICall("CreateArtifact")
-	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
+	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
 		return
@@ -392,15 +378,35 @@ func containerGroupsEqual(a, b ArtifactContainerGroupModel) bool {
 }
 
 func containersEqual(a, b ArtifactContainerModel) bool {
-	return a.Name.Equal(b.Name) &&
-		a.ImageURI.Equal(b.ImageURI) &&
-		a.Primary.Equal(b.Primary) &&
-		a.Description.Equal(b.Description) &&
-		a.Port.Equal(b.Port) &&
-		resourceRequestsEqual(a.ResourceRequest, b.ResourceRequest) &&
-		probesEqual(a.StartupProbe, b.StartupProbe) &&
-		probesEqual(a.ReadinessProbe, b.ReadinessProbe) &&
-		probesEqual(a.LivenessProbe, b.LivenessProbe)
+	if !a.Name.Equal(b.Name) ||
+		!a.ImageURI.Equal(b.ImageURI) ||
+		!a.Primary.Equal(b.Primary) ||
+		!a.Description.Equal(b.Description) ||
+		!a.Port.Equal(b.Port) ||
+		!resourceRequestsEqual(a.ResourceRequest, b.ResourceRequest) ||
+		!probesEqual(a.StartupProbe, b.StartupProbe) ||
+		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
+		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
+		return false
+	}
+	if len(a.Entrypoint) != len(b.Entrypoint) {
+		return false
+	}
+	for i := range a.Entrypoint {
+		if !a.Entrypoint[i].Equal(b.Entrypoint[i]) {
+			return false
+		}
+	}
+	if len(a.EnvironmentVars) != len(b.EnvironmentVars) {
+		return false
+	}
+	for i := range a.EnvironmentVars {
+		if !a.EnvironmentVars[i].Name.Equal(b.EnvironmentVars[i].Name) ||
+			!a.EnvironmentVars[i].Value.Equal(b.EnvironmentVars[i].Value) {
+			return false
+		}
+	}
+	return true
 }
 
 func probesEqual(a, b *ArtifactProbeConfigModel) bool {
@@ -432,13 +438,18 @@ func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportS
 }
 
 func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactRequest {
-	return &client.CreateArtifactRequest{
+	req := &client.CreateArtifactRequest{
 		Name:        data.Name.ValueString(),
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
 		Status:      client.ArtifactStatusLocked,
 		Spec:        artifactSpecToClient(data.Spec),
 	}
+	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
+		repoID := data.ArtifactRepositoryID.ValueString()
+		req.ArtifactRepositoryID = &repoID
+	}
+	return req
 }
 
 func artifactSpecToClient(spec ArtifactSpecModel) client.ArtifactSpec {
