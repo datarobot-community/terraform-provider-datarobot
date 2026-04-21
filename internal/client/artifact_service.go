@@ -38,17 +38,17 @@ type ArtifactResourceRequest struct {
 }
 
 type ArtifactContainer struct {
-	Name            *string                        `json:"name,omitempty"`
-	ImageURI        string                         `json:"imageUri"`
-	Primary         *bool                          `json:"primary,omitempty"`
-	Description     string                         `json:"description,omitempty"`
-	Port            *int64                         `json:"port,omitempty"`
-	Entrypoint      []string                       `json:"entrypoint,omitempty"`
-	EnvironmentVars []ArtifactEnvironmentVariable  `json:"environmentVars,omitempty"`
-	ResourceRequest ArtifactResourceRequest        `json:"resourceRequest"`
-	StartupProbe    *ArtifactProbeConfig           `json:"startupProbe,omitempty"`
-	ReadinessProbe  *ArtifactProbeConfig           `json:"readinessProbe,omitempty"`
-	LivenessProbe   *ArtifactProbeConfig           `json:"livenessProbe,omitempty"`
+	Name            *string                       `json:"name,omitempty"`
+	ImageURI        string                        `json:"imageUri"`
+	Primary         *bool                         `json:"primary,omitempty"`
+	Description     string                        `json:"description,omitempty"`
+	Port            *int64                        `json:"port,omitempty"`
+	Entrypoint      []string                      `json:"entrypoint,omitempty"`
+	EnvironmentVars []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
+	ResourceRequest ArtifactResourceRequest       `json:"resourceRequest"`
+	StartupProbe    *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
+	ReadinessProbe  *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
+	LivenessProbe   *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
 }
 
 type ArtifactContainerGroup struct {
