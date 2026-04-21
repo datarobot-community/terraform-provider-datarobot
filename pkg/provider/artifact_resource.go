@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -55,7 +56,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 		"host": schema.StringAttribute{
 			Optional:            true,
+			Computed:            true,
 			MarkdownDescription: "Host name to connect to, defaults to the pod IP.",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"initial_delay_seconds": schema.Int64Attribute{
 			Optional:            true,
@@ -143,7 +148,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 										Attributes: map[string]schema.Attribute{
 											"name": schema.StringAttribute{
 												Optional:            true,
+												Computed:            true,
 												MarkdownDescription: "Name of the container.",
+												PlanModifiers: []planmodifier.String{
+													stringplanmodifier.UseStateForUnknown(),
+												},
 											},
 											"image_uri": schema.StringAttribute{
 												Required:            true,
@@ -151,7 +160,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 											},
 											"primary": schema.BoolAttribute{
 												Optional:            true,
+												Computed:            true,
 												MarkdownDescription: "Whether this is the primary container.",
+												PlanModifiers: []planmodifier.Bool{
+													boolplanmodifier.UseStateForUnknown(),
+												},
 											},
 											"description": schema.StringAttribute{
 												Optional:            true,
@@ -159,7 +172,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 											},
 											"port": schema.Int64Attribute{
 												Optional:            true,
+												Computed:            true,
 												MarkdownDescription: "Container access port (1024-65535). Required for primary containers; omit for non-primary.",
+												PlanModifiers: []planmodifier.Int64{
+													int64planmodifier.UseStateForUnknown(),
+												},
 											},
 											"entrypoint": schema.ListAttribute{
 												Optional:            true,
