@@ -153,7 +153,7 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 // checkArtifactUpdatedInSameRepo verifies that after update:
 // - the new artifact has the updated name in the API
 // - the artifact_repository_id is the same as before (same versioned repo)
-// - the previous artifact version is NOT deleted
+// - the previous artifact version is NOT deleted.
 func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, isMock bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
