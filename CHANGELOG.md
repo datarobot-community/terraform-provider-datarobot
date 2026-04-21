@@ -1,3 +1,8 @@
+## Unreleased
+
+### Added
+- `datarobot_artifact` resource was added. It creates Artifact objects in Workload API.
+
 ## [0.10.34] - 2026-04-20
 
 ### Fixed
