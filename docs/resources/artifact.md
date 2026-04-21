@@ -22,7 +22,7 @@ Artifact definition for the Workload API. Artifacts define container images and 
 
 ### Optional
 
-- `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create; subsequent updates create new versions in the same repository.
+- `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
