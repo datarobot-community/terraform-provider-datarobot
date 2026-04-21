@@ -259,13 +259,17 @@ type Service interface {
 	GetAppOAuthProvider(ctx context.Context, id string) (*AppOAuthProviderResponse, error)
 	UpdateAppOAuthProvider(ctx context.Context, id string, req *UpdateAppOAuthProviderRequest) (*AppOAuthProviderResponse, error)
 	DeleteAppOAuthProvider(ctx context.Context, id string) error
-	// Add your service methods here
+
+	// Artifact (Workload API)
+	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
+	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 }
 
 // Service for the DataRobot API.
 type ServiceImpl struct {
-	client      *Client
-	apiGWClient *Client
+	client         *Client
+	apiGWClient    *Client
+	workloadClient *Client
 }
 
 // NewService creates a new API service.
@@ -273,14 +277,18 @@ func NewService(c *Client) Service {
 	if c == nil {
 		panic("client is required")
 	}
-	// Construct the API Gateway client from the client config
 	apiGWConfig := *c.cfg
 	apiGWConfig.Endpoint = apiGWConfig.BaseURL() + "/api-gw"
 	apiGWClient := NewClient(&apiGWConfig)
 
+	workloadConfig := *c.cfg
+	workloadConfig.Endpoint = workloadConfig.BaseURL() + "/api/v2"
+	workloadClient := NewClient(&workloadConfig)
+
 	return &ServiceImpl{
-		client:      c,
-		apiGWClient: apiGWClient,
+		client:         c,
+		apiGWClient:    apiGWClient,
+		workloadClient: workloadClient,
 	}
 }
 
