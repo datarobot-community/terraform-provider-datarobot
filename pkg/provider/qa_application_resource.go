@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -87,8 +88,12 @@ func (r *QAApplicationResource) Schema(ctx context.Context, req resource.SchemaR
 			},
 			"external_access_recipients": schema.ListAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The list of external email addresses that have access to the Q&A Application.",
 				ElementType:         types.StringType,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"allow_auto_stopping": schema.BoolAttribute{
 				Optional:            true,
@@ -132,9 +137,12 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	recipients := make([]string, len(data.ExternalAccessRecipients))
-	for i, recipient := range data.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	recipients := []string{}
+	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	traceAPICall("UpdateApplication")
@@ -169,6 +177,12 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -203,6 +217,12 @@ func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadReque
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
@@ -252,9 +272,12 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	recipients := make([]string, len(plan.ExternalAccessRecipients))
-	for i, recipient := range plan.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	recipients := []string{}
+	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
+		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{

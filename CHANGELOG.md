@@ -1,3 +1,9 @@
+## [0.10.34] - 2026-04-20
+
+### Fixed
+
+- Fixed external sharing settings being stripped on `CustomApplicationSource`/`CustomApplication` updates
+
 ## [0.10.33] - 2026-04-14
 
 ### Added

@@ -687,15 +687,15 @@ type DREntity struct {
 // QAApplicationResourceModel describes the Q&A application resource.
 
 type QAApplicationResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	SourceID                 types.String   `tfsdk:"source_id"`
-	SourceVersionID          types.String   `tfsdk:"source_version_id"`
-	Name                     types.String   `tfsdk:"name"`
-	DeploymentID             types.String   `tfsdk:"deployment_id"`
-	ApplicationUrl           types.String   `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool     `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool     `tfsdk:"allow_auto_stopping"`
+	ID                       types.String `tfsdk:"id"`
+	SourceID                 types.String `tfsdk:"source_id"`
+	SourceVersionID          types.String `tfsdk:"source_version_id"`
+	Name                     types.String `tfsdk:"name"`
+	DeploymentID             types.String `tfsdk:"deployment_id"`
+	ApplicationUrl           types.String `tfsdk:"application_url"`
+	ExternalAccessEnabled    types.Bool   `tfsdk:"external_access_enabled"`
+	ExternalAccessRecipients types.List   `tfsdk:"external_access_recipients"`
+	AllowAutoStopping        types.Bool   `tfsdk:"allow_auto_stopping"`
 }
 
 type ApplicationSourceResourceModel struct {
@@ -735,7 +735,7 @@ type CustomApplicationResourceModel struct {
 	Name                     types.String          `tfsdk:"name"`
 	ApplicationUrl           types.String          `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String        `tfsdk:"external_access_recipients"`
+	ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
 	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
@@ -749,7 +749,7 @@ type CustomApplicationFromEnvironmentResourceModel struct {
 	Name                     types.String          `tfsdk:"name"`
 	ApplicationUrl           types.String          `tfsdk:"application_url"`
 	ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients []types.String        `tfsdk:"external_access_recipients"`
+	ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
 	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
 	Resources                basetypes.ObjectValue `tfsdk:"resources"`
 	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`

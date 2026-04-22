@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -80,8 +81,12 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 			},
 			"external_access_recipients": schema.ListAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The list of external email addresses that have access to the Custom Application.",
 				ElementType:         types.StringType,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"allow_auto_stopping": schema.BoolAttribute{
 				Optional:            true,
@@ -191,9 +196,12 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
 
 	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		recipients := make([]string, len(data.ExternalAccessRecipients))
-		for i, recipient := range data.ExternalAccessRecipients {
-			recipients[i] = recipient.ValueString()
+		recipients := []string{}
+		if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+			if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
 		}
 
 		updateRequest := &client.UpdateApplicationRequest{
@@ -225,6 +233,12 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -281,6 +295,12 @@ func (r *CustomApplicationFromEnvironmentResource) Read(ctx context.Context, req
 	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
 	// Always populate resources from API response (field is Computed).
@@ -309,9 +329,12 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		return
 	}
 
-	recipients := make([]string, len(plan.ExternalAccessRecipients))
-	for i, recipient := range plan.ExternalAccessRecipients {
-		recipients[i] = recipient.ValueString()
+	recipients := []string{}
+	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
+		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{

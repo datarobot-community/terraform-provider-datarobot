@@ -98,7 +98,7 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
-					resource.TestCheckNoResourceAttr(resourceName, "external_access_recipients"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.#", "0"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
@@ -169,6 +169,22 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
+				),
+			},
+			// Update without specifying external_access_recipients - they should be preserved
+			{
+				Config: customApplicationResourceConfig(
+					newName,
+					2,
+					true,
+					nil,
+					false,
+					nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkCustomApplicationResourceExists(),
+					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
+					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "false"),
 				),
 			},
 			// Delete is tested automatically
