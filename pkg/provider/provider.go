@@ -199,6 +199,7 @@ func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 		NewUserMCPResourceMetadataResource,
 		NewMemorySpaceResource,
 		NewArtifactResource,
+		NewWorkloadResource,
 	}
 }
 

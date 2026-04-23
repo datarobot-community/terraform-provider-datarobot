@@ -1032,3 +1032,38 @@ type ArtifactProbeConfigModel struct {
 	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
 	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
 }
+
+// WorkloadResourceModel describes the Workload API workload resource.
+type WorkloadResourceModel struct {
+	ID          types.String         `tfsdk:"id"`
+	Name        types.String         `tfsdk:"name"`
+	Description types.String         `tfsdk:"description"`
+	Importance  types.String         `tfsdk:"importance"`
+	ArtifactID  types.String         `tfsdk:"artifact_id"`
+	Endpoint    types.String         `tfsdk:"endpoint"`
+	Status      types.String         `tfsdk:"status"`
+	Runtime     WorkloadRuntimeModel `tfsdk:"runtime"`
+}
+
+type WorkloadRuntimeModel struct {
+	ReplicaCount types.Int64                   `tfsdk:"replica_count"`
+	Autoscaling  *WorkloadAutoscalingModel     `tfsdk:"autoscaling"`
+	Resources    []WorkloadResourceBundleModel `tfsdk:"resources"`
+}
+
+type WorkloadAutoscalingModel struct {
+	Enabled  types.Bool                       `tfsdk:"enabled"`
+	Policies []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
+}
+
+type WorkloadAutoscalingPolicyModel struct {
+	ScalingMetric types.String  `tfsdk:"scaling_metric"`
+	Target        types.Float64 `tfsdk:"target"`
+	MinCount      types.Int64   `tfsdk:"min_count"`
+	MaxCount      types.Int64   `tfsdk:"max_count"`
+	Priority      types.Int64   `tfsdk:"priority"`
+}
+
+type WorkloadResourceBundleModel struct {
+	ResourceBundleID types.String `tfsdk:"resource_bundle_id"`
+}

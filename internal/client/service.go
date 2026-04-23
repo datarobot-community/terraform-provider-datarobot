@@ -263,6 +263,12 @@ type Service interface {
 	// Artifact (Workload API)
 	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
+
+	// Workload (Workload API)
+	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
+	GetWorkload(ctx context.Context, id string) (*Workload, error)
+	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
+	DeleteWorkload(ctx context.Context, id string) error
 }
 
 // Service for the DataRobot API.
