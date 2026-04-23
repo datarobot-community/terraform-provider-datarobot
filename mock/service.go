@@ -124,6 +124,21 @@ func (mr *MockServiceMockRecorder) CreateApplicationSourceVersion(ctx, id, req i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).CreateApplicationSourceVersion), ctx, id, req)
 }
 
+// CreateArtifact mocks base method.
+func (m *MockService) CreateArtifact(ctx context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateArtifact", ctx, req)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateArtifact indicates an expected call of CreateArtifact.
+func (mr *MockServiceMockRecorder) CreateArtifact(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateArtifact", reflect.TypeOf((*MockService)(nil).CreateArtifact), ctx, req)
+}
+
 // CreateBatchPredictionJobDefinition mocks base method.
 func (m *MockService) CreateBatchPredictionJobDefinition(ctx context.Context, req *client.BatchPredictionJobDefinitionRequest) (*client.BatchPredictionJobDefinition, error) {
 	m.ctrl.T.Helper()
@@ -1193,6 +1208,21 @@ func (m *MockService) GetApplicationSourceVersion(ctx context.Context, id, versi
 func (mr *MockServiceMockRecorder) GetApplicationSourceVersion(ctx, id, versionId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicationSourceVersion", reflect.TypeOf((*MockService)(nil).GetApplicationSourceVersion), ctx, id, versionId)
+}
+
+// GetArtifact mocks base method.
+func (m *MockService) GetArtifact(ctx context.Context, id string) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArtifact", ctx, id)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetArtifact indicates an expected call of GetArtifact.
+func (mr *MockServiceMockRecorder) GetArtifact(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifact", reflect.TypeOf((*MockService)(nil).GetArtifact), ctx, id)
 }
 
 // GetBatchPredictionJobDefinition mocks base method.
@@ -2709,34 +2739,3 @@ func (mr *MockServiceMockRecorder) ValidateDeploymentModelReplacement(ctx, id, r
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDeploymentModelReplacement", reflect.TypeOf((*MockService)(nil).ValidateDeploymentModelReplacement), ctx, id, req)
 }
-
-// CreateArtifact mocks base method.
-func (m *MockService) CreateArtifact(ctx context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateArtifact", ctx, req)
-	ret0, _ := ret[0].(*client.Artifact)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateArtifact indicates an expected call of CreateArtifact.
-func (mr *MockServiceMockRecorder) CreateArtifact(ctx, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateArtifact", reflect.TypeOf((*MockService)(nil).CreateArtifact), ctx, req)
-}
-
-// GetArtifact mocks base method.
-func (m *MockService) GetArtifact(ctx context.Context, id string) (*client.Artifact, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetArtifact", ctx, id)
-	ret0, _ := ret[0].(*client.Artifact)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetArtifact indicates an expected call of GetArtifact.
-func (mr *MockServiceMockRecorder) GetArtifact(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifact", reflect.TypeOf((*MockService)(nil).GetArtifact), ctx, id)
-}
-

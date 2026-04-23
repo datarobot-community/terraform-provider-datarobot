@@ -321,7 +321,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	traceAPICall("CreateArtifact")
+	traceAPICall("CreateUpdatedArtifact")
 	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
@@ -563,7 +563,8 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 		p.Port = &port
 	}
 	if !probe.Scheme.IsNull() && !probe.Scheme.IsUnknown() {
-		p.Scheme = probe.Scheme.ValueString()
+		scheme := probe.Scheme.ValueString()
+		p.Scheme = &scheme
 	}
 	if !probe.Host.IsNull() && !probe.Host.IsUnknown() {
 		host := probe.Host.ValueString()
@@ -591,11 +592,7 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceModel) {
 	data.ID = types.StringValue(artifact.ID)
 	data.Name = types.StringValue(artifact.Name)
-	if artifact.Description != "" {
-		data.Description = types.StringValue(artifact.Description)
-	} else {
-		data.Description = types.StringNull()
-	}
+	data.Description = types.StringValue(artifact.Description)
 	data.Type = types.StringValue(string(artifact.Type))
 
 	if artifact.ArtifactRepositoryID != nil {
@@ -634,11 +631,7 @@ func loadContainerFromAPI(c client.ArtifactContainer) ArtifactContainerModel {
 		model.Name = types.StringNull()
 	}
 
-	if c.Description != "" {
-		model.Description = types.StringValue(c.Description)
-	} else {
-		model.Description = types.StringNull()
-	}
+	model.Description = types.StringValue(c.Description)
 
 	if c.Primary != nil {
 		model.Primary = types.BoolValue(*c.Primary)
@@ -700,8 +693,8 @@ func loadProbeFromAPI(probe *client.ArtifactProbeConfig) *ArtifactProbeConfigMod
 	} else {
 		m.Port = types.Int64Null()
 	}
-	if probe.Scheme != "" {
-		m.Scheme = types.StringValue(probe.Scheme)
+	if probe.Scheme != nil {
+		m.Scheme = types.StringValue(*probe.Scheme)
 	} else {
 		m.Scheme = types.StringNull()
 	}

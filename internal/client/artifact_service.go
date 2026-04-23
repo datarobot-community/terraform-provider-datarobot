@@ -21,7 +21,7 @@ type ArtifactEnvironmentVariable struct {
 type ArtifactProbeConfig struct {
 	Path                string            `json:"path"`
 	Port                *int64            `json:"port,omitempty"`
-	Scheme              string            `json:"scheme,omitempty"`
+	Scheme              *string           `json:"scheme,omitempty"`
 	Host                *string           `json:"host,omitempty"`
 	HTTPHeaders         map[string]string `json:"httpHeaders,omitempty"`
 	InitialDelaySeconds *int64            `json:"initialDelaySeconds,omitempty"`

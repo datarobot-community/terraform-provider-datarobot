@@ -64,6 +64,12 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		GetArtifact(gomock.Any(), updatedID).
 		Return(updatedArtifact, nil)
 
+	// Import: Read to hydrate state from ID, then ImportStateVerify refresh
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), updatedID).
+		Return(updatedArtifact, nil).
+		Times(2)
+
 	// Destroy: no API call expected — artifacts are persisted
 
 	testArtifactResource(t, name, true)
@@ -72,6 +78,8 @@ func TestIntegrationArtifactResource(t *testing.T) {
 func testArtifactResource(t *testing.T, name string, isMock bool) {
 	t.Helper()
 	resourceName := "datarobot_artifact.test"
+
+	var initialRepoID string
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
@@ -85,6 +93,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "type", "service"),
+					captureAttr(resourceName, "artifact_repository_id", &initialRepoID),
 					checkArtifactExistsInAPI(resourceName, name, "nginx:latest", isMock),
 				),
 			},
@@ -94,8 +103,13 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
 					resource.TestCheckResourceAttr(resourceName, "name", "updated-"+name),
-					checkArtifactUpdatedInSameRepo(resourceName, "updated-"+name, isMock),
+					checkArtifactUpdatedInSameRepo(resourceName, "updated-"+name, &initialRepoID, isMock),
 				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -150,11 +164,22 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 	}
 }
 
+func captureAttr(resourceName, attr string, dest *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+		*dest = rs.Primary.Attributes[attr]
+		return nil
+	}
+}
+
 // checkArtifactUpdatedInSameRepo verifies that after update:
 // - the new artifact has the updated name in the API
 // - the artifact_repository_id is the same as before (same versioned repo)
 // - the previous artifact version is NOT deleted.
-func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, isMock bool) resource.TestCheckFunc {
+func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, initialRepoID *string, isMock bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -164,6 +189,14 @@ func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, isMock bo
 		newID := rs.Primary.ID
 		if newID == "" {
 			return fmt.Errorf("artifact ID is not set after update")
+		}
+
+		newRepoID := rs.Primary.Attributes["artifact_repository_id"]
+		if newRepoID == "" {
+			return fmt.Errorf("artifact_repository_id is not set after update")
+		}
+		if *initialRepoID != "" && newRepoID != *initialRepoID {
+			return fmt.Errorf("artifact_repository_id changed after update: was %q, now %q", *initialRepoID, newRepoID)
 		}
 
 		if isMock {
@@ -185,8 +218,8 @@ func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, isMock bo
 			return fmt.Errorf("expected updated artifact name %q, got %q", expectedName, artifact.Name)
 		}
 
-		if artifact.ArtifactRepositoryID == nil {
-			return fmt.Errorf("updated artifact has no artifact_repository_id")
+		if artifact.ArtifactRepositoryID == nil || *artifact.ArtifactRepositoryID != *initialRepoID {
+			return fmt.Errorf("expected artifact_repository_id %q after update, got %v", *initialRepoID, artifact.ArtifactRepositoryID)
 		}
 
 		return nil
@@ -255,7 +288,6 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 		Status:               client.ArtifactStatusLocked,
 		ArtifactRepositoryID: repoID,
 		Spec: client.ArtifactSpec{
-			Type: "service",
 			ContainerGroups: []client.ArtifactContainerGroup{
 				{
 					Containers: []client.ArtifactContainer{
@@ -276,7 +308,7 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 							ReadinessProbe: &client.ArtifactProbeConfig{
 								Path:             "/health",
 								Port:             &port,
-								Scheme:           probeScheme,
+								Scheme:           &probeScheme,
 								FailureThreshold: &probeFailureThreshold,
 							},
 						},
