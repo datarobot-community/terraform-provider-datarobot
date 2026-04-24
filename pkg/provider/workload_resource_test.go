@@ -16,7 +16,7 @@ import (
 
 func TestAccWorkloadResource(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_workload.test"
+	resourceName := "datarobot_workload.test_acc_workload_resource"
 	name := "workload-" + nameSalt
 	var initialID string
 

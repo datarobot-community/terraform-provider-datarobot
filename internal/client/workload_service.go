@@ -69,7 +69,6 @@ type UpdateWorkloadRequest struct {
 	Importance  *WorkloadImportance `json:"importance,omitempty"`
 }
 
-
 func (s *ServiceImpl) CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error) {
 	return Post[Workload](s.client, ctx, "/workloads/", req)
 }
@@ -85,4 +84,3 @@ func (s *ServiceImpl) UpdateWorkload(ctx context.Context, id string, req *Update
 func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/workloads/"+id+"/")
 }
-

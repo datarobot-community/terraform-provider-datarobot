@@ -431,7 +431,6 @@ func workloadMetadataChanged(plan, state WorkloadResourceModel) bool {
 		!plan.Importance.Equal(state.Importance)
 }
 
-
 func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceModel) {
 	data.ID = types.StringValue(workload.ID)
 	data.Name = types.StringValue(workload.Name)

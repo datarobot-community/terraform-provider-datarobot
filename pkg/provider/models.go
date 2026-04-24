@@ -1016,10 +1016,10 @@ type ArtifactEnvironmentVariableModel struct {
 }
 
 type ArtifactResourceRequestModel struct {
-	CPU     types.Int64   `tfsdk:"cpu"`
-	Memory  types.Int64   `tfsdk:"memory"`
-	GPU     types.Int64   `tfsdk:"gpu"`
-	GPUType types.String  `tfsdk:"gpu_type"`
+	CPU     types.Int64  `tfsdk:"cpu"`
+	Memory  types.Int64  `tfsdk:"memory"`
+	GPU     types.Int64  `tfsdk:"gpu"`
+	GPUType types.String `tfsdk:"gpu_type"`
 }
 
 type ArtifactProbeConfigModel struct {
