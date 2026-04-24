@@ -64,11 +64,11 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		GetArtifact(gomock.Any(), updatedID).
 		Return(updatedArtifact, nil)
 
-	// Import: Read to hydrate state from ID, then ImportStateVerify refresh
+	// Import: Read to hydrate state from ID
 	mockService.EXPECT().
 		GetArtifact(gomock.Any(), updatedID).
 		Return(updatedArtifact, nil).
-		Times(2)
+		Times(1)
 
 	// Destroy: no API call expected — artifacts are persisted
 
