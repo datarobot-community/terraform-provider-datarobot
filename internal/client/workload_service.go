@@ -44,21 +44,15 @@ type ProtonRuntime struct {
 	Resources    []ResourceBundleResources `json:"resources,omitempty"`
 }
 
-type ProtonRuntimeFormatted struct {
-	ReplicaCount *int64                    `json:"replicaCount,omitempty"`
-	Autoscaling  *AutoscalingProperties    `json:"autoscaling,omitempty"`
-	Resources    []ResourceBundleResources `json:"resources,omitempty"`
-}
-
 type Workload struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Status      ProtonStatus           `json:"status"`
-	Importance  WorkloadImportance     `json:"importance"`
-	ArtifactID  *string                `json:"artifactId"`
-	Endpoint    *string                `json:"endpoint"`
-	Runtime     ProtonRuntimeFormatted `json:"runtime"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Status      ProtonStatus       `json:"status"`
+	Importance  WorkloadImportance `json:"importance"`
+	ArtifactID  *string            `json:"artifactId"`
+	Endpoint    *string            `json:"endpoint"`
+	Runtime     ProtonRuntime      `json:"runtime"`
 }
 
 type CreateWorkloadRequest struct {

@@ -203,7 +203,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 												Required:            true,
 												MarkdownDescription: "Resource requirements for the container.",
 												Attributes: map[string]schema.Attribute{
-													"cpu": schema.Float64Attribute{
+													"cpu": schema.Int64Attribute{
 														Required:            true,
 														MarkdownDescription: "Number of CPU cores required.",
 													},
@@ -540,7 +540,7 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 
 func artifactResourceRequestToClient(rr ArtifactResourceRequestModel) client.ArtifactResourceRequest {
 	req := client.ArtifactResourceRequest{
-		CPU:    rr.CPU.ValueFloat64(),
+		CPU:    rr.CPU.ValueInt64(),
 		Memory: rr.Memory.ValueInt64(),
 	}
 	if !rr.GPU.IsNull() && !rr.GPU.IsUnknown() {
@@ -632,7 +632,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.Str
 	model := ArtifactContainerModel{
 		ImageURI: types.StringValue(c.ImageURI),
 		ResourceRequest: ArtifactResourceRequestModel{
-			CPU:    types.Float64Value(c.ResourceRequest.CPU),
+			CPU:    types.Int64Value(c.ResourceRequest.CPU),
 			Memory: types.Int64Value(c.ResourceRequest.Memory),
 		},
 	}

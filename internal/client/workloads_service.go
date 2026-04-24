@@ -31,7 +31,7 @@ type ArtifactProbeConfig struct {
 }
 
 type ArtifactResourceRequest struct {
-	CPU     float64 `json:"cpu"`
+	CPU     int64   `json:"cpu"`
 	Memory  int64   `json:"memory"`
 	GPU     *int64  `json:"gpu,omitempty"`
 	GPUType *string `json:"gpuType,omitempty"`

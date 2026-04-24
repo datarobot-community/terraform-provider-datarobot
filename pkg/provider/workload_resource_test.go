@@ -641,7 +641,7 @@ func workloadFixture(id, artifactID, name, description string, importance client
 		Importance:  importance,
 		ArtifactID:  &artifactID,
 		Endpoint:    endpoint,
-		Runtime: client.ProtonRuntimeFormatted{
+		Runtime: client.ProtonRuntime{
 			ReplicaCount: replicaCount,
 		},
 	}
@@ -662,7 +662,7 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 		Importance: client.WorkloadImportanceLow,
 		ArtifactID: &artifactID,
 		Endpoint:   endpoint,
-		Runtime: client.ProtonRuntimeFormatted{
+		Runtime: client.ProtonRuntime{
 			Autoscaling: &client.AutoscalingProperties{
 				Enabled: &enabled,
 				Policies: []client.AutoscalingPolicy{

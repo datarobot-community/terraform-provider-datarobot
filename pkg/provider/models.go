@@ -1016,7 +1016,7 @@ type ArtifactEnvironmentVariableModel struct {
 }
 
 type ArtifactResourceRequestModel struct {
-	CPU     types.Float64 `tfsdk:"cpu"`
+	CPU     types.Int64   `tfsdk:"cpu"`
 	Memory  types.Int64   `tfsdk:"memory"`
 	GPU     types.Int64   `tfsdk:"gpu"`
 	GPUType types.String  `tfsdk:"gpu_type"`

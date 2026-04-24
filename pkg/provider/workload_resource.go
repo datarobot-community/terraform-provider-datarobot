@@ -455,7 +455,7 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 	data.Runtime = loadWorkloadRuntimeFromAPI(workload.Runtime)
 }
 
-func loadWorkloadRuntimeFromAPI(runtime client.ProtonRuntimeFormatted) WorkloadRuntimeModel {
+func loadWorkloadRuntimeFromAPI(runtime client.ProtonRuntime) WorkloadRuntimeModel {
 	model := WorkloadRuntimeModel{}
 
 	if runtime.ReplicaCount != nil {
