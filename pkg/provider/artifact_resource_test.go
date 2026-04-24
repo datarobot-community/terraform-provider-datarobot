@@ -271,7 +271,7 @@ resource "datarobot_artifact" "test" {
 }
 
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
-	cpu := float64(1)
+	cpu := int64(1)
 	memory := int64(536870912)
 	port := int64(8080)
 	primary := true
