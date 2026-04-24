@@ -592,7 +592,11 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceModel) {
 	data.ID = types.StringValue(artifact.ID)
 	data.Name = types.StringValue(artifact.Name)
-	data.Description = types.StringValue(artifact.Description)
+	if artifact.Description != "" {
+		data.Description = types.StringValue(artifact.Description)
+	} else if data.Description.IsUnknown() {
+		data.Description = types.StringNull()
+	}
 	data.Type = types.StringValue(string(artifact.Type))
 
 	if artifact.ArtifactRepositoryID != nil {
@@ -601,22 +605,22 @@ func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceMode
 		data.ArtifactRepositoryID = types.StringNull()
 	}
 
-	data.Spec = loadArtifactSpecFromAPI(artifact.Spec)
+	data.Spec = loadArtifactSpecFromAPI(artifact.Spec, data.Spec)
 }
 
-func loadArtifactSpecFromAPI(spec client.ArtifactSpec) ArtifactSpecModel {
+func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior ArtifactSpecModel) ArtifactSpecModel {
 	groups := make([]ArtifactContainerGroupModel, len(spec.ContainerGroups))
 	for i, g := range spec.ContainerGroups {
 		containers := make([]ArtifactContainerModel, len(g.Containers))
 		for j, c := range g.Containers {
-			containers[j] = loadContainerFromAPI(c)
+			containers[j] = loadContainerFromAPI(c, prior.ContainerGroups[i].Containers[j].Description)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
 	return ArtifactSpecModel{ContainerGroups: groups}
 }
 
-func loadContainerFromAPI(c client.ArtifactContainer) ArtifactContainerModel {
+func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.String) ArtifactContainerModel {
 	model := ArtifactContainerModel{
 		ImageURI: types.StringValue(c.ImageURI),
 		ResourceRequest: ArtifactResourceRequestModel{
@@ -631,7 +635,13 @@ func loadContainerFromAPI(c client.ArtifactContainer) ArtifactContainerModel {
 		model.Name = types.StringNull()
 	}
 
-	model.Description = types.StringValue(c.Description)
+	if c.Description != "" {
+		model.Description = types.StringValue(c.Description)
+	} else if priorDescription.IsUnknown() {
+		model.Description = types.StringNull()
+	} else {
+		model.Description = priorDescription
+	}
 
 	if c.Primary != nil {
 		model.Primary = types.BoolValue(*c.Primary)
