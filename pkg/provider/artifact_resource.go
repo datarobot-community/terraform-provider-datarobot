@@ -373,6 +373,9 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 	if !plan.ArtifactRepositoryID.Equal(state.ArtifactRepositoryID) {
 		return true
 	}
+	if plan.Spec == nil || state.Spec == nil {
+		return plan.Spec != state.Spec
+	}
 	if len(plan.Spec.ContainerGroups) != len(state.Spec.ContainerGroups) {
 		return true
 	}
@@ -462,7 +465,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
 		Status:      client.ArtifactStatusLocked,
-		Spec:        artifactSpecToClient(data.Spec),
+		Spec:        artifactSpecToClient(*data.Spec),
 	}
 	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
 		repoID := data.ArtifactRepositoryID.ValueString()
@@ -605,16 +608,17 @@ func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceMode
 		data.ArtifactRepositoryID = types.StringNull()
 	}
 
-	data.Spec = loadArtifactSpecFromAPI(artifact.Spec, data.Spec)
+	spec := loadArtifactSpecFromAPI(artifact.Spec, data.Spec)
+	data.Spec = &spec
 }
 
-func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior ArtifactSpecModel) ArtifactSpecModel {
+func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel) ArtifactSpecModel {
 	groups := make([]ArtifactContainerGroupModel, len(spec.ContainerGroups))
 	for i, g := range spec.ContainerGroups {
 		containers := make([]ArtifactContainerModel, len(g.Containers))
 		for j, c := range g.Containers {
 			var priorDescription types.String
-			if i < len(prior.ContainerGroups) && j < len(prior.ContainerGroups[i].Containers) {
+			if prior != nil && i < len(prior.ContainerGroups) && j < len(prior.ContainerGroups[i].Containers) {
 				priorDescription = prior.ContainerGroups[i].Containers[j].Description
 			}
 			containers[j] = loadContainerFromAPI(c, priorDescription)
