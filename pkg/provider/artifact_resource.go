@@ -613,7 +613,11 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior ArtifactSpecModel) 
 	for i, g := range spec.ContainerGroups {
 		containers := make([]ArtifactContainerModel, len(g.Containers))
 		for j, c := range g.Containers {
-			containers[j] = loadContainerFromAPI(c, prior.ContainerGroups[i].Containers[j].Description)
+			var priorDescription types.String
+			if i < len(prior.ContainerGroups) && j < len(prior.ContainerGroups[i].Containers) {
+				priorDescription = prior.ContainerGroups[i].Containers[j].Description
+			}
+			containers[j] = loadContainerFromAPI(c, priorDescription)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
