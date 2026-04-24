@@ -251,6 +251,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	id := state.ID.ValueString()
 
 	if workloadMetadataChanged(plan, state) {
+		plannedRuntime := plan.Runtime
 		traceAPICall("UpdateWorkload")
 		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(plan))
 		if err != nil {
@@ -258,6 +259,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
+		applyRuntimeSentinels(plannedRuntime, &plan)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

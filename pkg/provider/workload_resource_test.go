@@ -611,6 +611,10 @@ resource "datarobot_artifact" "test_artifact" {
             image_uri = "nginx:latest"
             port      = 8080
             primary   = true
+            resource_request = {
+              cpu    = 1
+              memory = 512
+            }
           }
         ]
       }
