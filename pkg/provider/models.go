@@ -981,6 +981,7 @@ type UserMCPResourceMetadataResourceModel struct {
 // ArtifactResourceModel describes the Workload API artifact resource.
 type ArtifactResourceModel struct {
 	ID                   types.String       `tfsdk:"id"`
+	ArtifactID           types.String       `tfsdk:"artifact_id"`
 	Name                 types.String       `tfsdk:"name"`
 	Description          types.String       `tfsdk:"description"`
 	Type                 types.String       `tfsdk:"type"`

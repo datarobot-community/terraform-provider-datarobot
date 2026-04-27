@@ -64,6 +64,20 @@ func (mr *MockServiceMockRecorder) AddEntityToUseCase(ctx, useCaseID, entityType
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddEntityToUseCase", reflect.TypeOf((*MockService)(nil).AddEntityToUseCase), ctx, useCaseID, entityType, entityID)
 }
 
+// BaseURL mocks base method.
+func (m *MockService) BaseURL() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BaseURL")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// BaseURL indicates an expected call of BaseURL.
+func (mr *MockServiceMockRecorder) BaseURL() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BaseURL", reflect.TypeOf((*MockService)(nil).BaseURL))
+}
+
 // CreateAppOAuthProvider mocks base method.
 func (m *MockService) CreateAppOAuthProvider(ctx context.Context, req *client.CreateAppOAuthProviderRequest) (*client.AppOAuthProviderResponse, error) {
 	m.ctrl.T.Helper()

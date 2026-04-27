@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/cenkalti/backoff/v4"
@@ -326,7 +325,8 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 			return backoff.Permanent(err)
 		}
 		if workload.Status == client.ProtonStatusErrored {
-			return backoff.Permanent(errors.New("workload failed to start, review the workload events for details"))
+			logsURL := s.BaseURL() + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
+			return backoff.Permanent(fmt.Errorf("workload failed to start, review the workload logs for details: %s", logsURL))
 		}
 		if workload.Status != client.ProtonStatusRunning {
 			return fmt.Errorf("workload is not running yet (status: %s)", workload.Status)

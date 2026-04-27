@@ -269,12 +269,18 @@ type Service interface {
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
 	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
+
+	BaseURL() string
 }
 
 // Service for the DataRobot API.
 type ServiceImpl struct {
 	client      *Client
 	apiGWClient *Client
+}
+
+func (s *ServiceImpl) BaseURL() string {
+	return s.client.cfg.BaseURL()
 }
 
 // NewService creates a new API service.
