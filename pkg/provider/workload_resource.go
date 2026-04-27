@@ -203,9 +203,9 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	plannedRuntime := data.Runtime
+	planned := data
 	loadWorkloadIntoModel(workload, &data)
-	applyRuntimeSentinels(plannedRuntime, &data)
+	applySentinels(planned, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -237,9 +237,9 @@ func (r *WorkloadResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	priorRuntime := data.Runtime
+	prior := data
 	loadWorkloadIntoModel(workload, &data)
-	applyRuntimeSentinels(priorRuntime, &data)
+	applySentinels(prior, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -255,7 +255,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	id := state.ID.ValueString()
 
 	if workloadMetadataChanged(plan, state) {
-		plannedRuntime := plan.Runtime
+		planned := plan
 		traceAPICall("UpdateWorkload")
 		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(plan))
 		if err != nil {
@@ -263,7 +263,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
-		applyRuntimeSentinels(plannedRuntime, &plan)
+		applySentinels(planned, &plan)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -287,7 +287,8 @@ func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteReques
 }
 
 func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("runtime"), WorkloadRuntimeModel{})...)
 }
 
 func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
@@ -419,13 +420,18 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.ProtonRuntime 
 	return r
 }
 
-// applyRuntimeSentinels restores sentinel values from the desired runtime into the
-// model after it has been overwritten by API response data. Currently, replica_count=0
-// is the sentinel meaning "explicitly cleared" — the API omits the field in that case
-// but we must keep 0 in state so subsequent plans show no diff.
-func applyRuntimeSentinels(desired WorkloadRuntimeModel, data *WorkloadResourceModel) {
-	if !desired.ReplicaCount.IsNull() && !desired.ReplicaCount.IsUnknown() && desired.ReplicaCount.ValueInt64() == 0 {
-		data.Runtime.ReplicaCount = desired.ReplicaCount
+// applySentinels restores values from the desired model that the API would otherwise
+// silently drop or misrepresent:
+//   - replica_count=0 signals "explicitly cleared"; the API omits the field so we
+//     write 0 back to state to prevent a perpetual diff.
+//   - description="" is indistinguishable from "not set" in the API response; when
+//     the prior value was null (user omitted it), we restore null so the plan stays clean.
+func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
+	if !desired.Runtime.ReplicaCount.IsNull() && !desired.Runtime.ReplicaCount.IsUnknown() && desired.Runtime.ReplicaCount.ValueInt64() == 0 {
+		data.Runtime.ReplicaCount = desired.Runtime.ReplicaCount
+	}
+	if desired.Description.IsNull() && data.Description.ValueString() == "" {
+		data.Description = types.StringNull()
 	}
 }
 
@@ -441,11 +447,7 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 	data.Status = types.StringValue(string(workload.Status))
 	data.Importance = types.StringValue(string(workload.Importance))
 
-	if workload.Description != "" {
-		data.Description = types.StringValue(workload.Description)
-	} else {
-		data.Description = types.StringNull()
-	}
+	data.Description = types.StringValue(workload.Description)
 
 	if workload.ArtifactID != nil {
 		data.ArtifactID = types.StringValue(*workload.ArtifactID)

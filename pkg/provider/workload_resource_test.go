@@ -421,6 +421,65 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 	})
 }
 
+func TestIntegrationWorkloadImportState(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	// Step 1: Create
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning poll
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-create Read
+
+	// Step 2: ImportState
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // import Read
+
+	// Destroy
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "endpoint"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
+					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
