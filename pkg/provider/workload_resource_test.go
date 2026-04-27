@@ -46,6 +46,14 @@ func TestAccWorkloadResource(t *testing.T) {
 					checkWorkloadExistsInAPI(resourceName, "updated-"+name, false),
 				),
 			},
+			{
+				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "2"),
+					checkWorkloadIDChanged(resourceName, &initialID),
+					checkWorkloadExistsInAPI(resourceName, "updated-"+name, false),
+				),
+			},
 		},
 	})
 }
@@ -613,7 +621,7 @@ resource "datarobot_artifact" "test_artifact" {
             primary   = true
             resource_request = {
               cpu    = 1
-              memory = 512
+              memory = 536870912
             }
           }
         ]
