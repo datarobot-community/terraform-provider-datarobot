@@ -28,7 +28,8 @@ Artifact definition for the Workload API. Artifacts define container images and 
 
 ### Read-Only
 
-- `id` (String) The ID of the Artifact.
+- `artifact_id` (String) The current artifact version ID. Updated on every create or update that produces a new artifact version. Reference this field from dependent resources such as Workload.
+- `id` (String) Stable provider-generated identifier for this artifact resource. Does not change across artifact version updates.
 
 <a id="nestedatt--spec"></a>
 ### Nested Schema for `spec`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -102,7 +103,14 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The ID of the Artifact.",
+				MarkdownDescription: "Stable provider-generated identifier for this artifact resource. Does not change across artifact version updates.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"artifact_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "The current artifact version ID. Updated on every create or update that produces a new artifact version. Reference this field from dependent resources such as Workload.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -203,7 +211,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 												Required:            true,
 												MarkdownDescription: "Resource requirements for the container.",
 												Attributes: map[string]schema.Attribute{
-													"cpu": schema.Float64Attribute{
+													"cpu": schema.Int64Attribute{
 														Required:            true,
 														MarkdownDescription: "Number of CPU cores required.",
 													},
@@ -277,6 +285,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -289,21 +298,21 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	if data.ID.IsNull() {
+	if data.ArtifactID.IsNull() || data.ArtifactID.IsUnknown() {
 		return
 	}
 
 	traceAPICall("GetArtifact")
-	artifact, err := r.provider.service.GetArtifact(ctx, data.ID.ValueString())
+	artifact, err := r.provider.service.GetArtifact(ctx, data.ArtifactID.ValueString())
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); ok {
 			resp.Diagnostics.AddWarning(
 				"Artifact not found",
-				fmt.Sprintf("Artifact with ID %s is not found. Removing from state.", data.ID.ValueString()))
+				fmt.Sprintf("Artifact with ID %s is not found. Removing from state.", data.ArtifactID.ValueString()))
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error getting Artifact with ID %s", data.ID.ValueString()),
+				fmt.Sprintf("Error getting Artifact with ID %s", data.ArtifactID.ValueString()),
 				err.Error())
 		}
 		return
@@ -314,11 +323,19 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan ArtifactResourceModel
+	var plan, state ArtifactResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// artifact_repository_id is Optional+Computed: when the user doesn't set it in config,
+	// the plan value is null (UseStateForUnknown only applies to unknown, not null).
+	// Preserve the computed value from state so subsequent versions are created in the same repo.
+	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
+		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
 	traceAPICall("CreateUpdatedArtifact")
@@ -358,8 +375,16 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
+	// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
+	// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
+	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
+		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	}
+
 	if artifactNeedsNewVersion(plan, state) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown())...)
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 	}
 }
 
@@ -456,7 +481,8 @@ func resourceRequestsEqual(a, b ArtifactResourceRequestModel) bool {
 }
 
 func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(uuid.NewString()))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("artifact_id"), types.StringValue(req.ID))...)
 }
 
 func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactRequest {
@@ -540,7 +566,7 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 
 func artifactResourceRequestToClient(rr ArtifactResourceRequestModel) client.ArtifactResourceRequest {
 	req := client.ArtifactResourceRequest{
-		CPU:    rr.CPU.ValueFloat64(),
+		CPU:    rr.CPU.ValueInt64(),
 		Memory: rr.Memory.ValueInt64(),
 	}
 	if !rr.GPU.IsNull() && !rr.GPU.IsUnknown() {
@@ -593,7 +619,7 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 }
 
 func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceModel) {
-	data.ID = types.StringValue(artifact.ID)
+	data.ArtifactID = types.StringValue(artifact.ID)
 	data.Name = types.StringValue(artifact.Name)
 	if artifact.Description != "" {
 		data.Description = types.StringValue(artifact.Description)
@@ -632,7 +658,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.Str
 	model := ArtifactContainerModel{
 		ImageURI: types.StringValue(c.ImageURI),
 		ResourceRequest: ArtifactResourceRequestModel{
-			CPU:    types.Float64Value(c.ResourceRequest.CPU),
+			CPU:    types.Int64Value(c.ResourceRequest.CPU),
 			Memory: types.Int64Value(c.ResourceRequest.Memory),
 		},
 	}
