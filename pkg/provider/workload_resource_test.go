@@ -132,6 +132,65 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 	})
 }
 
+func TestIntegrationWorkloadClearDescription(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	withDesc := workloadFixture(id, artifactID, name, "hello", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	withoutDesc := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	// Step 1: Create with description
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(withDesc, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // waitForRunning poll
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // post-create Read
+
+	// Step 2: Remove description — expect PATCH with description="" to clear it
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // pre-update plan refresh
+	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, updateDescriptionMatcher("")).Return(withoutDesc, nil)
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withoutDesc, nil) // pre-destroy plan refresh
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "hello", "low", artifactID, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "description", "hello"),
+				),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
+				),
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -506,6 +565,19 @@ func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 			},
 		},
 	})
+}
+
+// ─── matchers ─────────────────────────────────────────────────────────────────
+
+type updateDescriptionMatcher string
+
+func (m updateDescriptionMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*client.UpdateWorkloadRequest)
+	return ok && req.Description != nil && *req.Description == string(m)
+}
+
+func (m updateDescriptionMatcher) String() string {
+	return fmt.Sprintf("UpdateWorkloadRequest with description=%q", string(m))
 }
 
 // ─── check functions ───────────────────────────────────────────────────────────

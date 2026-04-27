@@ -362,10 +362,8 @@ func workloadUpdateRequest(data WorkloadResourceModel) *client.UpdateWorkloadReq
 	name := data.Name.ValueString()
 	req.Name = &name
 
-	if !data.Description.IsNull() && !data.Description.IsUnknown() {
-		desc := data.Description.ValueString()
-		req.Description = &desc
-	}
+	desc := data.Description.ValueString()
+	req.Description = &desc
 
 	if !data.Importance.IsNull() && !data.Importance.IsUnknown() {
 		imp := client.WorkloadImportance(data.Importance.ValueString())
