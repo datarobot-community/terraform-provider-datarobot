@@ -10,8 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -78,23 +76,6 @@ func (r *QAApplicationResource) Schema(ctx context.Context, req resource.SchemaR
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"external_access_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether external access is enabled for the Q&A Application.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"external_access_recipients": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The list of external email addresses that have access to the Q&A Application.",
-				ElementType:         types.StringType,
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
-			},
 			"allow_auto_stopping": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -137,22 +118,12 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	recipients := []string{}
-	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
-		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	}
-
 	traceAPICall("UpdateApplication")
 	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
 		&client.UpdateApplicationRequest{
-			Name:                     data.Name.ValueString(),
-			ExternalAccessEnabled:    IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool(),
-			ExternalAccessRecipients: recipients,
-			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
+			Name:              data.Name.ValueString(),
+			AllowAutoStopping: data.AllowAutoStopping.ValueBool(),
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -176,13 +147,6 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	data.ExternalAccessRecipients = recipientsList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
@@ -216,13 +180,6 @@ func (r *QAApplicationResource) Read(ctx context.Context, req resource.ReadReque
 	}
 	data.Name = types.StringValue(application.Name)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
@@ -272,18 +229,8 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	}
-
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients: recipients,
-		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
+		AllowAutoStopping: plan.AllowAutoStopping.ValueBool(),
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
