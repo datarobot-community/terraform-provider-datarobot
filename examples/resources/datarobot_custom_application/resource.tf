@@ -10,10 +10,6 @@ resource "datarobot_custom_application" "example" {
   source_version_id = datarobot_application_source.example.version_id
 
   # optional settings
-  external_access_enabled = true
-  external_access_recipients = [
-    "recipient@example.com",
-  ]
   allow_auto_stopping = false
 
   resources {

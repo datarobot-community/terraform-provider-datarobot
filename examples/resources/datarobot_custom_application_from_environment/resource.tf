@@ -3,10 +3,6 @@ resource "datarobot_custom_application_from_environment" "example" {
   environment_id = datarobot_execution_environment.example.id
 
   # optional settings
-  external_access_enabled = true
-  external_access_recipients = [
-    "recipient@example.com",
-  ]
   allow_auto_stopping = false
 
   resources {

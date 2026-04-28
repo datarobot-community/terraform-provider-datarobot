@@ -17,6 +17,7 @@ resource "datarobot_custom_application_from_environment" "example" {
   name           = "example-custom-app-from-environment"
   environment_id = datarobot_execution_environment.example.id
 
+  # optional settings
   allow_auto_stopping = false
 
   resources {
