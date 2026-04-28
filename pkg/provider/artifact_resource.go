@@ -110,7 +110,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"artifact_id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The current artifact version ID. Updated on every create or update that produces a new artifact version. Reference this field from dependent resources such as Workload.",
+				MarkdownDescription: "The current artifact ID. Updated on every create or update that produces a new artifact version. Reference this field from dependent resources such as Workload.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -359,7 +359,7 @@ func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	resp.Diagnostics.AddWarning(
 		"Locked artifacts can't be deleted from the API",
-		fmt.Sprintf("Artifact %s was not removed from %s artifact repository.", data.ID.ValueString(), data.ArtifactRepositoryID.ValueString()),
+		fmt.Sprintf("Artifact %s was not removed from %s artifact repository.", data.ArtifactID.ValueString(), data.ArtifactRepositoryID.ValueString()),
 	)
 }
 

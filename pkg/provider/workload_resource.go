@@ -69,7 +69,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"artifact_id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "ID of the Artifact to deploy. Changing this value forces a new Workload to be created.",
+				MarkdownDescription: "ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value forces a new Workload to be created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -196,7 +196,7 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	workload, err = waitForWorkloadToBeRunning(ctx, r.provider.service, workload.ID)
+	workload, err = waitForWorkloadToBeRunning(ctx, r.provider.service, workload.ID, r.provider.service.BaseURL)
 	if err != nil {
 		resp.Diagnostics.AddError("Error waiting for Workload to start", err.Error())
 		return
@@ -282,6 +282,11 @@ func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteReques
 		if _, ok := err.(*client.NotFoundError); !ok {
 			resp.Diagnostics.AddError("Error deleting Workload", err.Error())
 		}
+		return
+	}
+
+	if err := waitForWorkloadToBeDeleted(ctx, r.provider.service, data.ID.ValueString()); err != nil {
+		resp.Diagnostics.AddError("Error waiting for Workload to be deleted", err.Error())
 	}
 }
 
@@ -315,7 +320,7 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 }
 
-func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string) (*client.Workload, error) {
+func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string, baseURL func() string) (*client.Workload, error) {
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
@@ -325,7 +330,7 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 			return backoff.Permanent(err)
 		}
 		if workload.Status == client.ProtonStatusErrored {
-			logsURL := s.BaseURL() + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
+			logsURL := baseURL() + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
 			return backoff.Permanent(fmt.Errorf("workload failed to start, review the workload logs for details: %s", logsURL))
 		}
 		if workload.Status != client.ProtonStatusRunning {
@@ -340,6 +345,27 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 
 	traceAPICall("GetWorkload")
 	return s.GetWorkload(ctx, id)
+}
+
+func waitForWorkloadToBeDeleted(ctx context.Context, s client.Service, id string) error {
+	expBackoff := getExponentialBackoff()
+
+	operation := func() error {
+		traceAPICall("GetWorkload")
+		workload, err := s.GetWorkload(ctx, id)
+		if err != nil {
+			if _, ok := err.(*client.NotFoundError); ok {
+				return nil
+			}
+			return backoff.Permanent(err)
+		}
+		if workload.Status == client.ProtonStatusStopped {
+			return nil
+		}
+		return fmt.Errorf("workload is not stopped yet (status: %s)", workload.Status)
+	}
+
+	return backoff.Retry(operation, expBackoff)
 }
 
 func workloadCreateRequest(data WorkloadResourceModel) *client.CreateWorkloadRequest {
@@ -418,18 +444,26 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.ProtonRuntime 
 	return r
 }
 
-// applySentinels restores values from the desired model that the API would otherwise
-// silently drop or misrepresent:
+// applySentinels reconciles state values that the API would otherwise misrepresent:
 //   - replica_count=0 signals "explicitly cleared"; the API omits the field so we
 //     write 0 back to state to prevent a perpetual diff.
 //   - description="" is indistinguishable from "not set" in the API response; when
 //     the prior value was null (user omitted it), we restore null so the plan stays clean.
+//   - resources=nil (user omitted the block) must stay nil even when the API assigns a
+//     default bundle; otherwise Terraform raises "was null, but now has value".
+//   - resources=[] (explicit empty list): the API may assign a default bundle, so we
+//     discard whatever the API returned and keep an empty slice to match the config.
 func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
 	if !desired.Runtime.ReplicaCount.IsNull() && !desired.Runtime.ReplicaCount.IsUnknown() && desired.Runtime.ReplicaCount.ValueInt64() == 0 {
 		data.Runtime.ReplicaCount = desired.Runtime.ReplicaCount
 	}
 	if desired.Description.IsNull() && data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
+	}
+	if desired.Runtime.Resources == nil {
+		data.Runtime.Resources = nil
+	} else if len(desired.Runtime.Resources) == 0 {
+		data.Runtime.Resources = []WorkloadResourceBundleModel{}
 	}
 }
 

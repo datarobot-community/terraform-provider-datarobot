@@ -96,6 +96,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 	// Destroy
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(updatedWorkload, nil) // pre-destroy plan refresh
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -167,6 +168,7 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 	// Destroy
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withoutDesc, nil) // pre-destroy plan refresh
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	resourceName := "datarobot_workload.test"
 
@@ -227,6 +229,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	// Step 2: Replace (new artifact_id triggers replacement)
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
@@ -234,6 +237,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -300,6 +304,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 
 	// Step 2: Replace (changed replica_count triggers replacement via runtime.RequiresReplace)
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
@@ -307,6 +312,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -373,6 +379,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 
 	// Step 2: Replace (adding resources triggers replacement via runtime.RequiresReplace)
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
@@ -380,6 +387,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -443,6 +451,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 
 	// Step 2: Replace (changed autoscaling triggers replacement via runtime.RequiresReplace)
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
@@ -450,6 +459,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -512,6 +522,7 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 
 	resourceName := "datarobot_workload.test"
 
@@ -764,7 +775,7 @@ resource "datarobot_artifact" "test_artifact" {
 resource "datarobot_workload" "test" {
   name        = %q
   importance  = %q
-  artifact_id = datarobot_artifact.test_artifact.id
+  artifact_id = datarobot_artifact.test_artifact.artifact_id
   %s
   runtime = {
     replica_count = %d

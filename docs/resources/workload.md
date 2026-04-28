@@ -30,7 +30,7 @@ lifecycle {
 
 ### Required
 
-- `artifact_id` (String) ID of the Artifact to deploy. Changing this value forces a new Workload to be created.
+- `artifact_id` (String) ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value forces a new Workload to be created.
 - `name` (String) The name of the Workload.
 - `runtime` (Attributes) Runtime configuration for the Workload. (see [below for nested schema](#nestedatt--runtime))
 
