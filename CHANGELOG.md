@@ -1,5 +1,11 @@
 ## Unreleased
 
+## [0.10.35] - 2026-04-28
+
+### Removed
+
+- Removed external sharing settings from `CustomApplicationSource`/`CustomApplication`.SS
+
 ### Added
 - `datarobot_artifact` resource was added. It creates Artifact objects in Workload API.
 

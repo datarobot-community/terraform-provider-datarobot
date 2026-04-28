@@ -687,15 +687,13 @@ type DREntity struct {
 // QAApplicationResourceModel describes the Q&A application resource.
 
 type QAApplicationResourceModel struct {
-	ID                       types.String `tfsdk:"id"`
-	SourceID                 types.String `tfsdk:"source_id"`
-	SourceVersionID          types.String `tfsdk:"source_version_id"`
-	Name                     types.String `tfsdk:"name"`
-	DeploymentID             types.String `tfsdk:"deployment_id"`
-	ApplicationUrl           types.String `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool   `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients types.List   `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool   `tfsdk:"allow_auto_stopping"`
+	ID                types.String `tfsdk:"id"`
+	SourceID          types.String `tfsdk:"source_id"`
+	SourceVersionID   types.String `tfsdk:"source_version_id"`
+	Name              types.String `tfsdk:"name"`
+	DeploymentID      types.String `tfsdk:"deployment_id"`
+	ApplicationUrl    types.String `tfsdk:"application_url"`
+	AllowAutoStopping types.Bool   `tfsdk:"allow_auto_stopping"`
 }
 
 type ApplicationSourceResourceModel struct {
@@ -729,31 +727,27 @@ type ApplicationSourceFromTemplateResourceModel struct {
 }
 
 type CustomApplicationResourceModel struct {
-	ID                       types.String          `tfsdk:"id"`
-	SourceID                 types.String          `tfsdk:"source_id"`
-	SourceVersionID          types.String          `tfsdk:"source_version_id"`
-	Name                     types.String          `tfsdk:"name"`
-	ApplicationUrl           types.String          `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
-	Resources                basetypes.ObjectValue `tfsdk:"resources"`
-	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
-	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
+	ID                    types.String          `tfsdk:"id"`
+	SourceID              types.String          `tfsdk:"source_id"`
+	SourceVersionID       types.String          `tfsdk:"source_version_id"`
+	Name                  types.String          `tfsdk:"name"`
+	ApplicationUrl        types.String          `tfsdk:"application_url"`
+	AllowAutoStopping     types.Bool            `tfsdk:"allow_auto_stopping"`
+	Resources             basetypes.ObjectValue `tfsdk:"resources"`
+	UseCaseIDs            []types.String        `tfsdk:"use_case_ids"`
+	RequiredKeyScopeLevel types.String          `tfsdk:"required_key_scope_level"`
 }
 
 type CustomApplicationFromEnvironmentResourceModel struct {
-	ID                       types.String          `tfsdk:"id"`
-	EnvironmentID            types.String          `tfsdk:"environment_id"`
-	EnvironmentVersionID     types.String          `tfsdk:"environment_version_id"`
-	Name                     types.String          `tfsdk:"name"`
-	ApplicationUrl           types.String          `tfsdk:"application_url"`
-	ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
-	ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
-	AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
-	Resources                basetypes.ObjectValue `tfsdk:"resources"`
-	UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
-	RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
+	ID                    types.String          `tfsdk:"id"`
+	EnvironmentID         types.String          `tfsdk:"environment_id"`
+	EnvironmentVersionID  types.String          `tfsdk:"environment_version_id"`
+	Name                  types.String          `tfsdk:"name"`
+	ApplicationUrl        types.String          `tfsdk:"application_url"`
+	AllowAutoStopping     types.Bool            `tfsdk:"allow_auto_stopping"`
+	Resources             basetypes.ObjectValue `tfsdk:"resources"`
+	UseCaseIDs            []types.String        `tfsdk:"use_case_ids"`
+	RequiredKeyScopeLevel types.String          `tfsdk:"required_key_scope_level"`
 }
 
 // CredentialResourceModel describes the credential resource.
