@@ -201,10 +201,6 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	data.Name = types.StringValue(application.Name)
 	data.EnvironmentVersionID = types.StringValue(application.EnvVersionID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
