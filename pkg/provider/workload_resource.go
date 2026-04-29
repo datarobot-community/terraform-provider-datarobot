@@ -360,10 +360,7 @@ func waitForWorkloadToBeDeleted(ctx context.Context, s client.Service, id string
 			}
 			return backoff.Permanent(err)
 		}
-		if workload.Status == client.ProtonStatusStopped {
-			return nil
-		}
-		return fmt.Errorf("workload is not stopped yet (status: %s)", workload.Status)
+		return fmt.Errorf("workload is not deleted yet (status: %s)", workload.Status)
 	}
 
 	return backoff.Retry(operation, expBackoff)
