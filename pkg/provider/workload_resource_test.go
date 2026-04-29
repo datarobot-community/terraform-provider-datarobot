@@ -16,7 +16,7 @@ import (
 
 func TestAccWorkloadResource(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_workload.test_acc_workload_resource"
+	resourceName := "datarobot_workload.test"
 	name := "workload-" + nameSalt
 	var initialID string
 
@@ -747,9 +747,10 @@ resource "datarobot_artifact" "test_artifact" {
         containers = [
           {
             name      = "main"
-            image_uri = "nginx:latest"
+            image_uri = "containous/whoami:latest"
             port      = 8080
             primary   = true
+            entrypoint = ["/whoami", "--port", "8080"]
             resource_request = {
               cpu    = 1
               memory = 536870912
