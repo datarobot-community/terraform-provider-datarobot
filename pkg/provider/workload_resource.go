@@ -323,6 +323,7 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string, baseURL func() string) (*client.Workload, error) {
 	expBackoff := getExponentialBackoff()
 
+	var running *client.Workload
 	operation := func() error {
 		traceAPICall("GetWorkload")
 		workload, err := s.GetWorkload(ctx, id)
@@ -336,6 +337,7 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 		if workload.Status != client.ProtonStatusRunning {
 			return fmt.Errorf("workload is not running yet (status: %s)", workload.Status)
 		}
+		running = workload
 		return nil
 	}
 
@@ -343,8 +345,7 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 		return nil, err
 	}
 
-	traceAPICall("GetWorkload")
-	return s.GetWorkload(ctx, id)
+	return running, nil
 }
 
 func waitForWorkloadToBeDeleted(ctx context.Context, s client.Service, id string) error {

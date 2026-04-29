@@ -83,8 +83,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 
 	// Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-create Read
 
 	// Pre-update Read (step 2 plan refresh)
@@ -157,8 +156,7 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 
 	// Step 1: Create with description
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(withDesc, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // post-create Read
 
 	// Step 2: Remove description — expect PATCH with description="" to clear it
@@ -220,8 +218,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // post-create Read
 
 	// Pre-replace plan refresh
@@ -231,8 +228,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // post-replace perpetual diff check
 
 	// Destroy
@@ -295,8 +291,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // post-create Read
 
 	// Pre-replace plan refresh
@@ -306,8 +301,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // post-replace perpetual diff check
 
 	// Destroy
@@ -370,8 +364,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 
 	// Step 1: Create without resources
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // post-create Read
 
 	// Pre-replace plan refresh
@@ -381,8 +374,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // post-replace perpetual diff check
 
 	// Destroy
@@ -442,8 +434,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 
 	// Step 1: Create with autoscaling
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // post-create Read
 
 	// Pre-replace plan refresh
@@ -453,8 +444,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload")) // poll after delete
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id2).Return(workload2, nil) // post-replace perpetual diff check
 
 	// Destroy
@@ -513,8 +503,7 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning poll
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning final
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-create Read
 
 	// Step 2: ImportState
