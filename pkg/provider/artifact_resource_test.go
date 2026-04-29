@@ -72,7 +72,10 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		Return(updatedArtifact, nil).
 		MaxTimes(2)
 
-	// Destroy: no API call expected — artifacts are persisted
+	// Destroy: delete the artifact repository
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil)
 
 	testArtifactResource(t, name, true)
 }
@@ -82,11 +85,13 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 	resourceName := "datarobot_artifact.test"
 
 	var initialRepoID string
+	var lastArtifactID string
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, isMock),
 		Steps: []resource.TestStep{
 			{
 				Config: artifactResourceConfig(name, "nginx:latest"),
@@ -107,6 +112,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
 					resource.TestCheckResourceAttr(resourceName, "name", "updated-"+name),
+					captureAttr(resourceName, "artifact_id", &lastArtifactID),
 					checkArtifactUpdatedInSameRepo(resourceName, "updated-"+name, &initialRepoID, isMock),
 				),
 			},
@@ -233,6 +239,30 @@ func checkArtifactUpdatedInSameRepo(resourceName, expectedName string, initialRe
 
 		if artifact.ArtifactRepositoryID == nil || *artifact.ArtifactRepositoryID != *initialRepoID {
 			return fmt.Errorf("expected artifact_repository_id %q after update, got %v", *initialRepoID, artifact.ArtifactRepositoryID)
+		}
+
+		return nil
+	}
+}
+
+func checkArtifactRepoDestroyedFromAPI(lastArtifactID *string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if isMock || *lastArtifactID == "" {
+			return nil
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		_, err := p.service.GetArtifact(context.Background(), *lastArtifactID)
+		if err == nil {
+			return fmt.Errorf("artifact %s still exists after destroy", *lastArtifactID)
+		}
+		if _, ok := err.(*client.NotFoundError); !ok {
+			return fmt.Errorf("unexpected error checking artifact %s after destroy: %w", *lastArtifactID, err)
 		}
 
 		return nil

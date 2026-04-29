@@ -357,10 +357,19 @@ func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	resp.Diagnostics.AddWarning(
-		"Locked artifacts can't be deleted from the API",
-		fmt.Sprintf("Artifact %s was not removed from %s artifact repository.", data.ArtifactID.ValueString(), data.ArtifactRepositoryID.ValueString()),
-	)
+	if data.ArtifactRepositoryID.IsNull() || data.ArtifactRepositoryID.IsUnknown() {
+		return
+	}
+
+	traceAPICall("DeleteArtifactRepository")
+	if err := r.provider.service.DeleteArtifactRepository(ctx, data.ArtifactRepositoryID.ValueString()); err != nil {
+		if _, ok := err.(*client.NotFoundError); !ok {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Error deleting Artifact Repository with ID %s", data.ArtifactRepositoryID.ValueString()),
+				err.Error(),
+			)
+		}
+	}
 }
 
 func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {

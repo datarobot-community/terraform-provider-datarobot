@@ -1193,6 +1193,20 @@ func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
 }
 
+// DeleteArtifactRepository mocks base method.
+func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteArtifactRepository", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteArtifactRepository indicates an expected call of DeleteArtifactRepository.
+func (mr *MockServiceMockRecorder) DeleteArtifactRepository(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifactRepository", reflect.TypeOf((*MockService)(nil).DeleteArtifactRepository), ctx, id)
+}
+
 // GetAppOAuthProvider mocks base method.
 func (m *MockService) GetAppOAuthProvider(ctx context.Context, id string) (*client.AppOAuthProviderResponse, error) {
 	m.ctrl.T.Helper()

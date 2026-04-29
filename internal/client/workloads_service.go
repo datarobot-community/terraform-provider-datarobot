@@ -170,3 +170,7 @@ func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *CreateArtifactReq
 func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, error) {
 	return Get[Artifact](s.client, ctx, "/artifacts/"+id+"/")
 }
+
+func (s *ServiceImpl) DeleteArtifactRepository(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/artifactRepositories/"+id+"/")
+}
