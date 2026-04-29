@@ -33,7 +33,7 @@ func TestAccWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, false),
+					checkWorkloadExistsInAPI(name, false),
 				),
 			},
 			{
@@ -43,15 +43,15 @@ func TestAccWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
 					checkWorkloadIDPreserved(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, "updated-"+name, false),
+					checkWorkloadExistsInAPI("updated-"+name, false),
 				),
 			},
 			{
 				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "2"),
-					checkWorkloadIDChanged(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, "updated-"+name, false),
+					checkWorkloadIDChanged(&initialID),
+					checkWorkloadExistsInAPI("updated-"+name, false),
 				),
 			},
 		},
@@ -115,7 +115,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 			{
@@ -125,7 +125,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
 					checkWorkloadIDPreserved(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, updatedName, true),
+					checkWorkloadExistsInAPI(updatedName, true),
 				),
 			},
 		},
@@ -249,15 +249,15 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID1),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 			{
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
-					checkWorkloadIDChanged(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadIDChanged(&initialID),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 		},
@@ -321,15 +321,15 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 			{
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 3),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "3"),
-					checkWorkloadIDChanged(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadIDChanged(&initialID),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 		},
@@ -394,15 +394,15 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 			{
 				Config: workloadConfigWithReplicasAndResources(name, "", "low", artifactID, 1, "cpu.small"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.resources.0.resource_bundle_id", "cpu.small"),
-					checkWorkloadIDChanged(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadIDChanged(&initialID),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 		},
@@ -465,15 +465,15 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "runtime.autoscaling.policies.0.min_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 			{
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 2, 5, 70.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.autoscaling.policies.0.min_count", "2"),
-					checkWorkloadIDChanged(resourceName, &initialID),
-					checkWorkloadExistsInAPI(resourceName, name, true),
+					checkWorkloadIDChanged(&initialID),
+					checkWorkloadExistsInAPI(name, true),
 				),
 			},
 		},
@@ -582,11 +582,12 @@ func (m updateDescriptionMatcher) String() string {
 
 // ─── check functions ───────────────────────────────────────────────────────────
 
-func checkWorkloadExistsInAPI(resourceName, expectedName string, isMock bool) resource.TestCheckFunc {
+func checkWorkloadExistsInAPI(expectedName string, isMock bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
 		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
+			return fmt.Errorf("resource %s not found in state", rn)
 		}
 		if rs.Primary.ID == "" {
 			return fmt.Errorf("workload ID is not set in state")
@@ -625,11 +626,12 @@ func checkWorkloadIDPreserved(resourceName string, initialID *string) resource.T
 	}
 }
 
-func checkWorkloadIDChanged(resourceName string, initialID *string) resource.TestCheckFunc {
+func checkWorkloadIDChanged(initialID *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
 		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
+			return fmt.Errorf("resource %s not found in state", rn)
 		}
 		if *initialID != "" && rs.Primary.ID == *initialID {
 			return fmt.Errorf("expected workload ID to change after replacement, but it stayed %q", *initialID)
