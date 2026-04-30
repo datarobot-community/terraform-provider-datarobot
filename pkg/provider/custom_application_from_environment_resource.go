@@ -329,16 +329,28 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		return
 	}
 
+	// When plan is null/unknown (user didn't set the field), fall back to state to preserve the existing value.
+	effectiveRecipients := plan.ExternalAccessRecipients
+	if effectiveRecipients.IsNull() || effectiveRecipients.IsUnknown() {
+		effectiveRecipients = state.ExternalAccessRecipients
+	}
 	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+	if !effectiveRecipients.IsNull() && !effectiveRecipients.IsUnknown() {
+		if diags := effectiveRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
 			resp.Diagnostics.Append(diags...)
 			return
 		}
 	}
 
+	externalAccessEnabled := IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool()
+	if plan.ExternalAccessEnabled.IsNull() || plan.ExternalAccessEnabled.IsUnknown() {
+		if IsKnown(state.ExternalAccessEnabled) {
+			externalAccessEnabled = state.ExternalAccessEnabled.ValueBool()
+		}
+	}
+
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessEnabled:    externalAccessEnabled,
 		ExternalAccessRecipients: recipients,
 		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
 	}
@@ -369,6 +381,14 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		resp.Diagnostics.AddError("Custom Application is not ready", err.Error())
 		return
 	}
+
+	plan.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.ExternalAccessRecipients = recipientsList
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {

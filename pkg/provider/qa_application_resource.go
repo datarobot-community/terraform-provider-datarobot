@@ -272,16 +272,28 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
+	// When plan is null/unknown (user didn't set the field), fall back to state to preserve the existing value.
+	effectiveRecipients := plan.ExternalAccessRecipients
+	if effectiveRecipients.IsNull() || effectiveRecipients.IsUnknown() {
+		effectiveRecipients = state.ExternalAccessRecipients
+	}
 	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+	if !effectiveRecipients.IsNull() && !effectiveRecipients.IsUnknown() {
+		if diags := effectiveRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
 			resp.Diagnostics.Append(diags...)
 			return
 		}
 	}
 
+	externalAccessEnabled := IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool()
+	if plan.ExternalAccessEnabled.IsNull() || plan.ExternalAccessEnabled.IsUnknown() {
+		if IsKnown(state.ExternalAccessEnabled) {
+			externalAccessEnabled = state.ExternalAccessEnabled.ValueBool()
+		}
+	}
+
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
+		ExternalAccessEnabled:    externalAccessEnabled,
 		ExternalAccessRecipients: recipients,
 		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
 	}
@@ -307,11 +319,19 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	_, err = waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
+	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
 	}
+
+	plan.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.ExternalAccessRecipients = recipientsList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
