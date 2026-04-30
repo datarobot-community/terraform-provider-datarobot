@@ -12,18 +12,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &CustomApplicationResource{}
 var _ resource.ResourceWithImportState = &CustomApplicationResource{}
+var _ resource.ResourceWithUpgradeState = &CustomApplicationResource{}
 
 func NewCustomApplicationResource() resource.Resource {
 	return &CustomApplicationResource{}
@@ -41,6 +41,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Custom Application",
+		Version:             1,
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -71,23 +72,6 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				MarkdownDescription: "The URL of the Custom Application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"external_access_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether external access is enabled for the Custom Application.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"external_access_recipients": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The list of external email addresses that have access to the Custom Application.",
-				ElementType:         types.StringType,
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"allow_auto_stopping": schema.BoolAttribute{
@@ -209,21 +193,9 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
-
-	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		recipients := []string{}
-		if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
-			if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
-		}
-
+	if IsKnown(data.Name) || !data.AllowAutoStopping.ValueBool() {
 		updateRequest := &client.UpdateApplicationRequest{
-			ExternalAccessEnabled:    enableExternalAccess,
-			ExternalAccessRecipients: recipients,
-			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
+			AllowAutoStopping: data.AllowAutoStopping.ValueBool(),
 		}
 
 		if IsKnown(data.Name) {
@@ -248,13 +220,6 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 	data.Name = types.StringValue(application.Name)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
-	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	data.ExternalAccessRecipients = recipientsList
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {
@@ -314,13 +279,6 @@ func (r *CustomApplicationResource) Read(ctx context.Context, req resource.ReadR
 	data.ApplicationUrl = types.StringValue(application.ApplicationUrl)
 	data.SourceID = types.StringValue(application.CustomApplicationSourceID)
 	data.SourceVersionID = types.StringValue(application.CustomApplicationSourceVersionID)
-	data.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
-	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	data.ExternalAccessRecipients = recipientsList
 	data.AllowAutoStopping = types.BoolValue(application.AllowAutoStopping)
 
 	// Don't read required_key_scope_level from API - keep user-configured value
@@ -352,18 +310,8 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	}
-
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients: recipients,
-		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
+		AllowAutoStopping: plan.AllowAutoStopping.ValueBool(),
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
@@ -451,4 +399,76 @@ func (r *CustomApplicationResource) Delete(ctx context.Context, req resource.Del
 
 func (r *CustomApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r *CustomApplicationResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"id":                schema.StringAttribute{Computed: true},
+					"source_id":         schema.StringAttribute{Computed: true},
+					"source_version_id": schema.StringAttribute{Required: true},
+					"name":              schema.StringAttribute{Optional: true, Computed: true},
+					"application_url":   schema.StringAttribute{Computed: true},
+					"external_access_enabled": schema.BoolAttribute{
+						Optional: true,
+						Computed: true,
+					},
+					"external_access_recipients": schema.ListAttribute{
+						Optional:    true,
+						Computed:    true,
+						ElementType: types.StringType,
+					},
+					"allow_auto_stopping": schema.BoolAttribute{Optional: true, Computed: true},
+					"resources": schema.SingleNestedAttribute{
+						Optional: true,
+						Computed: true,
+						Attributes: map[string]schema.Attribute{
+							"replicas":                          schema.Int64Attribute{Optional: true},
+							"resource_label":                    schema.StringAttribute{Optional: true},
+							"session_affinity":                  schema.BoolAttribute{Optional: true},
+							"service_web_requests_on_root_path": schema.BoolAttribute{Optional: true},
+							"health_endpoint_path":              schema.StringAttribute{Optional: true},
+						},
+					},
+					"use_case_ids": schema.ListAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+					},
+					"required_key_scope_level": schema.StringAttribute{Optional: true},
+				},
+			},
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var oldState struct {
+					ID                       types.String          `tfsdk:"id"`
+					SourceID                 types.String          `tfsdk:"source_id"`
+					SourceVersionID          types.String          `tfsdk:"source_version_id"`
+					Name                     types.String          `tfsdk:"name"`
+					ApplicationUrl           types.String          `tfsdk:"application_url"`
+					ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
+					ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
+					AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
+					Resources                basetypes.ObjectValue `tfsdk:"resources"`
+					UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
+					RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
+				}
+				resp.Diagnostics.Append(req.State.Get(ctx, &oldState)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				resp.Diagnostics.Append(resp.State.Set(ctx, CustomApplicationResourceModel{
+					ID:                    oldState.ID,
+					SourceID:              oldState.SourceID,
+					SourceVersionID:       oldState.SourceVersionID,
+					Name:                  oldState.Name,
+					ApplicationUrl:        oldState.ApplicationUrl,
+					AllowAutoStopping:     oldState.AllowAutoStopping,
+					Resources:             oldState.Resources,
+					UseCaseIDs:            oldState.UseCaseIDs,
+					RequiredKeyScopeLevel: oldState.RequiredKeyScopeLevel,
+				})...)
+			},
+		},
+	}
 }

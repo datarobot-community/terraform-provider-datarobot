@@ -30,10 +30,6 @@ resource "datarobot_qa_application" "example" {
   deployment_id = datarobot_deployment.example.id
 
   # Optional
-  external_access_enabled = true
-  external_access_recipients = [
-    "recipient@example.com",
-  ]
   allow_auto_stopping = false
 }
 

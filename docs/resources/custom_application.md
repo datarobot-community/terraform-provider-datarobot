@@ -25,10 +25,6 @@ resource "datarobot_custom_application" "example" {
   source_version_id = datarobot_application_source.example.version_id
 
   # optional settings
-  external_access_enabled = true
-  external_access_recipients = [
-    "recipient@example.com",
-  ]
   allow_auto_stopping = false
 
   resources {
@@ -75,8 +71,6 @@ output "datarobot_custom_application_resources" {
 ### Optional
 
 - `allow_auto_stopping` (Boolean) Whether auto stopping is allowed for the Custom Application.
-- `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
-- `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
 - `name` (String) The name of the Custom Application.
 - `required_key_scope_level` (String) The API key scope level required for requests to this custom application. Can be set to 'viewer', 'user', or 'admin'.
 - `resources` (Attributes) The resources for the Custom Application. If not specified, default values will be computed by the API based on the cluster configuration. (see [below for nested schema](#nestedatt--resources))

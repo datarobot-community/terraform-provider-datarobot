@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -81,8 +84,6 @@ if __name__ == "__main__":
 					"",
 					1,
 					false,
-					[]string{},
-					false,
 					&useCaseResourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					compareValuesDiffer.AddStateValue(
@@ -97,19 +98,15 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.#", "0"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "false"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
 			},
-			// Update name, external access, and use case id
+			// Update name and use case id
 			{
 				Config: customApplicationResourceConfig(
 					newName,
 					1,
-					true,
-					[]string{"test@test.com"},
 					true,
 					&useCaseResourceName2),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -133,8 +130,6 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test@test.com"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
 				),
@@ -144,8 +139,6 @@ if __name__ == "__main__":
 				Config: customApplicationResourceConfig(
 					newName,
 					2,
-					true,
-					[]string{"test2@test.com"},
 					true,
 					nil),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -165,26 +158,8 @@ if __name__ == "__main__":
 					resource.TestCheckResourceAttrSet(resourceName, "source_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 					resource.TestCheckNoResourceAttr(resourceName, "use_case_ids.0"),
-				),
-			},
-			// Update without specifying external_access_recipients - they should be preserved
-			{
-				Config: customApplicationResourceConfig(
-					newName,
-					2,
-					true,
-					nil,
-					false,
-					nil),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					checkCustomApplicationResourceExists(),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "true"),
-					resource.TestCheckResourceAttr(resourceName, "external_access_recipients.0", "test2@test.com"),
-					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "false"),
 				),
 			},
 			// Delete is tested automatically
@@ -195,18 +170,9 @@ if __name__ == "__main__":
 func customApplicationResourceConfig(
 	name string,
 	applicationSourceReplicas int,
-	externalAccess bool,
-	externalAccessRecipients []string,
 	allowAutoStopping bool,
 	useCaseResourceName *string,
 ) string {
-	recipients := ""
-	if len(externalAccessRecipients) > 0 {
-		recipients = fmt.Sprintf(`
-		external_access_recipients = %q
-		`, externalAccessRecipients)
-	}
-
 	nameStr := ""
 	if name != "" {
 		nameStr = fmt.Sprintf(`
@@ -237,13 +203,11 @@ resource "datarobot_application_source" "test" {
 
 resource "datarobot_custom_application" "test" {
 	source_version_id = "${datarobot_application_source.test.version_id}"
-	external_access_enabled = %t
 	allow_auto_stopping = %t
 	%s
 	%s
-	%s
 }
-`, nameSalt, nameSalt, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
+`, nameSalt, nameSalt, applicationSourceReplicas, allowAutoStopping, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {
@@ -280,16 +244,6 @@ func checkCustomApplicationResourceExists() resource.TestCheckFunc {
 				}
 			}
 
-			b, err = strconv.ParseBool(rs.Primary.Attributes["external_access_enabled"])
-			if err == nil {
-				if application.ExternalAccessEnabled == b {
-					if len(application.ExternalAccessRecipients) > 0 {
-						if application.ExternalAccessRecipients[0] != rs.Primary.Attributes["external_access_recipients.0"] {
-							return fmt.Errorf("ExternalAccessRecipient is %s but should be %s", application.ExternalAccessRecipients[0], rs.Primary.Attributes["external_access_recipients.0"])
-						}
-					}
-				}
-			}
 			return nil
 		}
 
@@ -396,7 +350,6 @@ numpy
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "name", "Batch Files Test Custom Application "+testUniqueID),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 
 					// Custom check to verify application is working
@@ -466,7 +419,6 @@ resource "datarobot_application_source" "batch_test" {
 resource "datarobot_custom_application" "batch_test" {
 	name = "Batch Files Test Custom Application %s"
 	source_version_id = datarobot_application_source.batch_test.version_id
-	external_access_enabled = false
 	allow_auto_stopping = true
 }
 `, nameSalt, baseEnvironmentID, folderPath, nameSalt)
@@ -610,7 +562,6 @@ numpy
 					resource.TestCheckResourceAttrSet(resourceName, "source_version_id"),
 					resource.TestCheckResourceAttrSet(resourceName, "application_url"),
 					resource.TestCheckResourceAttr(resourceName, "name", "Real-World Batch Files Custom App "+nameSalt),
-					resource.TestCheckResourceAttr(resourceName, "external_access_enabled", "false"),
 					resource.TestCheckResourceAttr(resourceName, "allow_auto_stopping", "true"),
 
 					// Custom validation to ensure the application was created successfully
@@ -712,7 +663,6 @@ resource "datarobot_application_source" "real_batch_test" {
 resource "datarobot_custom_application" "real_batch_test" {
 	name = "Real-World Batch Files Custom App %s"
 	source_version_id = datarobot_application_source.real_batch_test.version_id
-	external_access_enabled = false
 	allow_auto_stopping = true
 }
 `, nameSalt, baseEnvironmentID, folderPath, nameSalt)
@@ -805,7 +755,6 @@ resource "datarobot_application_source" "test" {
 resource "datarobot_custom_application" "test" {
 	name = "Resources Test App %s"
 	source_version_id = datarobot_application_source.test.version_id
-	external_access_enabled = false
 	allow_auto_stopping = true
 }
 `, nameSalt, folderPath, nameSalt)
@@ -954,4 +903,129 @@ func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resour
 
 		return nil
 	}
+}
+
+func TestCustomApplicationUpgradeState_v0_to_v1(t *testing.T) {
+	ctx := context.Background()
+	r := &CustomApplicationResource{}
+
+	upgraders := r.UpgradeState(ctx)
+	upgrader, ok := upgraders[0]
+	if !ok {
+		t.Fatal("no upgrader registered for state version 0")
+	}
+
+	resourcesObjType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"replicas":                          tftypes.Number,
+			"resource_label":                    tftypes.String,
+			"session_affinity":                  tftypes.Bool,
+			"service_web_requests_on_root_path": tftypes.Bool,
+			"health_endpoint_path":              tftypes.String,
+		},
+	}
+
+	v0ObjType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"id":                         tftypes.String,
+			"source_id":                  tftypes.String,
+			"source_version_id":          tftypes.String,
+			"name":                       tftypes.String,
+			"application_url":            tftypes.String,
+			"external_access_enabled":    tftypes.Bool,
+			"external_access_recipients": tftypes.List{ElementType: tftypes.String},
+			"allow_auto_stopping":        tftypes.Bool,
+			"resources":                  resourcesObjType,
+			"use_case_ids":               tftypes.List{ElementType: tftypes.String},
+			"required_key_scope_level":   tftypes.String,
+		},
+	}
+
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	runUpgrade := func(t *testing.T, rawVal tftypes.Value) CustomApplicationResourceModel {
+		t.Helper()
+		upgradeResp := &fwresource.UpgradeStateResponse{
+			State: tfsdk.State{Schema: schemaResp.Schema},
+		}
+		upgrader.StateUpgrader(ctx, fwresource.UpgradeStateRequest{
+			State: &tfsdk.State{
+				Raw:    rawVal,
+				Schema: *upgrader.PriorSchema,
+			},
+		}, upgradeResp)
+		if upgradeResp.Diagnostics.HasError() {
+			t.Fatalf("unexpected diagnostics: %s", upgradeResp.Diagnostics)
+		}
+		var got CustomApplicationResourceModel
+		upgradeResp.State.Get(ctx, &got)
+		return got
+	}
+
+	t.Run("preserves all remaining fields and drops external_access fields", func(t *testing.T) {
+		got := runUpgrade(t, tftypes.NewValue(v0ObjType, map[string]tftypes.Value{
+			"id":                      tftypes.NewValue(tftypes.String, "app-123"),
+			"source_id":               tftypes.NewValue(tftypes.String, "src-456"),
+			"source_version_id":       tftypes.NewValue(tftypes.String, "ver-789"),
+			"name":                    tftypes.NewValue(tftypes.String, "my-app"),
+			"application_url":         tftypes.NewValue(tftypes.String, "https://example.com"),
+			"external_access_enabled": tftypes.NewValue(tftypes.Bool, true),
+			"external_access_recipients": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{
+				tftypes.NewValue(tftypes.String, "user@example.com"),
+			}),
+			"allow_auto_stopping":      tftypes.NewValue(tftypes.Bool, true),
+			"resources":                tftypes.NewValue(resourcesObjType, nil),
+			"use_case_ids":             tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{}),
+			"required_key_scope_level": tftypes.NewValue(tftypes.String, nil),
+		}))
+
+		if got.ID.ValueString() != "app-123" {
+			t.Errorf("ID: got %q, want %q", got.ID.ValueString(), "app-123")
+		}
+		if got.SourceID.ValueString() != "src-456" {
+			t.Errorf("SourceID: got %q, want %q", got.SourceID.ValueString(), "src-456")
+		}
+		if got.SourceVersionID.ValueString() != "ver-789" {
+			t.Errorf("SourceVersionID: got %q, want %q", got.SourceVersionID.ValueString(), "ver-789")
+		}
+		if got.Name.ValueString() != "my-app" {
+			t.Errorf("Name: got %q, want %q", got.Name.ValueString(), "my-app")
+		}
+		if got.ApplicationUrl.ValueString() != "https://example.com" {
+			t.Errorf("ApplicationUrl: got %q, want %q", got.ApplicationUrl.ValueString(), "https://example.com")
+		}
+		if !got.AllowAutoStopping.ValueBool() {
+			t.Errorf("AllowAutoStopping: got false, want true")
+		}
+		if !got.Resources.IsNull() {
+			t.Errorf("Resources: expected null, got %v", got.Resources)
+		}
+		if !got.RequiredKeyScopeLevel.IsNull() {
+			t.Errorf("RequiredKeyScopeLevel: expected null, got %q", got.RequiredKeyScopeLevel.ValueString())
+		}
+	})
+
+	t.Run("no diagnostics when external_access_recipients is null", func(t *testing.T) {
+		got := runUpgrade(t, tftypes.NewValue(v0ObjType, map[string]tftypes.Value{
+			"id":                         tftypes.NewValue(tftypes.String, "app-999"),
+			"source_id":                  tftypes.NewValue(tftypes.String, "src-999"),
+			"source_version_id":          tftypes.NewValue(tftypes.String, "ver-999"),
+			"name":                       tftypes.NewValue(tftypes.String, "app"),
+			"application_url":            tftypes.NewValue(tftypes.String, "https://app.example.com"),
+			"external_access_enabled":    tftypes.NewValue(tftypes.Bool, false),
+			"external_access_recipients": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, nil),
+			"allow_auto_stopping":        tftypes.NewValue(tftypes.Bool, false),
+			"resources":                  tftypes.NewValue(resourcesObjType, nil),
+			"use_case_ids":               tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{}),
+			"required_key_scope_level":   tftypes.NewValue(tftypes.String, nil),
+		}))
+
+		if got.ID.ValueString() != "app-999" {
+			t.Errorf("ID: got %q, want %q", got.ID.ValueString(), "app-999")
+		}
+		if got.AllowAutoStopping.ValueBool() {
+			t.Errorf("AllowAutoStopping: got true, want false")
+		}
+	})
 }

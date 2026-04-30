@@ -18,10 +18,6 @@ resource "datarobot_custom_application_from_environment" "example" {
   environment_id = datarobot_execution_environment.example.id
 
   # optional settings
-  external_access_enabled = true
-  external_access_recipients = [
-    "recipient@example.com",
-  ]
   allow_auto_stopping = false
 
   resources {
@@ -59,8 +55,6 @@ output "datarobot_custom_application_resources" {
 ### Optional
 
 - `allow_auto_stopping` (Boolean) Whether auto stopping is allowed for the Custom Application.
-- `external_access_enabled` (Boolean) Whether external access is enabled for the Custom Application.
-- `external_access_recipients` (List of String) The list of external email addresses that have access to the Custom Application.
 - `resources` (Attributes) The resources for the Custom Application. If not specified, default values will be computed by the API based on the cluster configuration. (see [below for nested schema](#nestedatt--resources))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Custom Application to.
 
