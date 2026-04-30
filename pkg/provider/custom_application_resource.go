@@ -209,27 +209,30 @@ func (r *CustomApplicationResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
+	updateRequest := &client.UpdateApplicationRequest{
+		AllowAutoStopping: data.AllowAutoStopping.ValueBool(),
+	}
+	needsUpdate := IsKnown(data.Name) || !data.AllowAutoStopping.ValueBool()
 
-	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		recipients := []string{}
-		if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
-			if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
+	if IsKnown(data.Name) {
+		updateRequest.Name = data.Name.ValueString()
+	}
+	if !data.ExternalAccessEnabled.IsNull() && !data.ExternalAccessEnabled.IsUnknown() {
+		v := data.ExternalAccessEnabled.ValueBool()
+		updateRequest.ExternalAccessEnabled = &v
+		needsUpdate = true
+	}
+	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+		r := []string{}
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
 		}
+		updateRequest.ExternalAccessRecipients = &r
+		needsUpdate = true
+	}
 
-		updateRequest := &client.UpdateApplicationRequest{
-			ExternalAccessEnabled:    enableExternalAccess,
-			ExternalAccessRecipients: recipients,
-			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
-		}
-
-		if IsKnown(data.Name) {
-			updateRequest.Name = data.Name.ValueString()
-		}
-
+	if needsUpdate {
 		traceAPICall("UpdateCustomApplication")
 		_, err = r.provider.service.UpdateApplication(ctx, application.ID, updateRequest)
 		if err != nil {
@@ -352,30 +355,29 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	// When plan is null/unknown (user didn't set the field), fall back to state to preserve the existing value.
-	effectiveRecipients := plan.ExternalAccessRecipients
-	if effectiveRecipients.IsNull() || effectiveRecipients.IsUnknown() {
-		effectiveRecipients = state.ExternalAccessRecipients
-	}
-	recipients := []string{}
-	if !effectiveRecipients.IsNull() && !effectiveRecipients.IsUnknown() {
-		if diags := effectiveRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
-	}
-
-	externalAccessEnabled := IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool()
-	if plan.ExternalAccessEnabled.IsNull() || plan.ExternalAccessEnabled.IsUnknown() {
-		if IsKnown(state.ExternalAccessEnabled) {
-			externalAccessEnabled = state.ExternalAccessEnabled.ValueBool()
-		}
+	// Read config (what the user explicitly wrote) to avoid treating prior-state
+	// values that bled into the plan as intentional user configuration.
+	var config CustomApplicationResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    externalAccessEnabled,
-		ExternalAccessRecipients: recipients,
-		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
+		AllowAutoStopping: plan.AllowAutoStopping.ValueBool(),
+	}
+
+	if !config.ExternalAccessEnabled.IsNull() && !config.ExternalAccessEnabled.IsUnknown() {
+		v := config.ExternalAccessEnabled.ValueBool()
+		updateRequest.ExternalAccessEnabled = &v
+	}
+	if !config.ExternalAccessRecipients.IsNull() && !config.ExternalAccessRecipients.IsUnknown() {
+		r := []string{}
+		if diags := config.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		updateRequest.ExternalAccessRecipients = &r
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
