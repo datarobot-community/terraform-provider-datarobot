@@ -965,11 +965,11 @@ func TestCustomApplicationUpgradeState_v0_to_v1(t *testing.T) {
 
 	t.Run("preserves all remaining fields and drops external_access fields", func(t *testing.T) {
 		got := runUpgrade(t, tftypes.NewValue(v0ObjType, map[string]tftypes.Value{
-			"id":               tftypes.NewValue(tftypes.String, "app-123"),
-			"source_id":        tftypes.NewValue(tftypes.String, "src-456"),
-			"source_version_id": tftypes.NewValue(tftypes.String, "ver-789"),
-			"name":             tftypes.NewValue(tftypes.String, "my-app"),
-			"application_url":  tftypes.NewValue(tftypes.String, "https://example.com"),
+			"id":                      tftypes.NewValue(tftypes.String, "app-123"),
+			"source_id":               tftypes.NewValue(tftypes.String, "src-456"),
+			"source_version_id":       tftypes.NewValue(tftypes.String, "ver-789"),
+			"name":                    tftypes.NewValue(tftypes.String, "my-app"),
+			"application_url":         tftypes.NewValue(tftypes.String, "https://example.com"),
 			"external_access_enabled": tftypes.NewValue(tftypes.Bool, true),
 			"external_access_recipients": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{
 				tftypes.NewValue(tftypes.String, "user@example.com"),
