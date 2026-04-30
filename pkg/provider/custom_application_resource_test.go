@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -900,4 +903,129 @@ func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resour
 
 		return nil
 	}
+}
+
+func TestCustomApplicationUpgradeState_v0_to_v1(t *testing.T) {
+	ctx := context.Background()
+	r := &CustomApplicationResource{}
+
+	upgraders := r.UpgradeState(ctx)
+	upgrader, ok := upgraders[0]
+	if !ok {
+		t.Fatal("no upgrader registered for state version 0")
+	}
+
+	resourcesObjType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"replicas":                          tftypes.Number,
+			"resource_label":                    tftypes.String,
+			"session_affinity":                  tftypes.Bool,
+			"service_web_requests_on_root_path": tftypes.Bool,
+			"health_endpoint_path":              tftypes.String,
+		},
+	}
+
+	v0ObjType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"id":                         tftypes.String,
+			"source_id":                  tftypes.String,
+			"source_version_id":          tftypes.String,
+			"name":                       tftypes.String,
+			"application_url":            tftypes.String,
+			"external_access_enabled":    tftypes.Bool,
+			"external_access_recipients": tftypes.List{ElementType: tftypes.String},
+			"allow_auto_stopping":        tftypes.Bool,
+			"resources":                  resourcesObjType,
+			"use_case_ids":               tftypes.List{ElementType: tftypes.String},
+			"required_key_scope_level":   tftypes.String,
+		},
+	}
+
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	runUpgrade := func(t *testing.T, rawVal tftypes.Value) CustomApplicationResourceModel {
+		t.Helper()
+		upgradeResp := &fwresource.UpgradeStateResponse{
+			State: tfsdk.State{Schema: schemaResp.Schema},
+		}
+		upgrader.StateUpgrader(ctx, fwresource.UpgradeStateRequest{
+			State: &tfsdk.State{
+				Raw:    rawVal,
+				Schema: *upgrader.PriorSchema,
+			},
+		}, upgradeResp)
+		if upgradeResp.Diagnostics.HasError() {
+			t.Fatalf("unexpected diagnostics: %s", upgradeResp.Diagnostics)
+		}
+		var got CustomApplicationResourceModel
+		upgradeResp.State.Get(ctx, &got)
+		return got
+	}
+
+	t.Run("preserves all remaining fields and drops external_access fields", func(t *testing.T) {
+		got := runUpgrade(t, tftypes.NewValue(v0ObjType, map[string]tftypes.Value{
+			"id":               tftypes.NewValue(tftypes.String, "app-123"),
+			"source_id":        tftypes.NewValue(tftypes.String, "src-456"),
+			"source_version_id": tftypes.NewValue(tftypes.String, "ver-789"),
+			"name":             tftypes.NewValue(tftypes.String, "my-app"),
+			"application_url":  tftypes.NewValue(tftypes.String, "https://example.com"),
+			"external_access_enabled": tftypes.NewValue(tftypes.Bool, true),
+			"external_access_recipients": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{
+				tftypes.NewValue(tftypes.String, "user@example.com"),
+			}),
+			"allow_auto_stopping":      tftypes.NewValue(tftypes.Bool, true),
+			"resources":                tftypes.NewValue(resourcesObjType, nil),
+			"use_case_ids":             tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{}),
+			"required_key_scope_level": tftypes.NewValue(tftypes.String, nil),
+		}))
+
+		if got.ID.ValueString() != "app-123" {
+			t.Errorf("ID: got %q, want %q", got.ID.ValueString(), "app-123")
+		}
+		if got.SourceID.ValueString() != "src-456" {
+			t.Errorf("SourceID: got %q, want %q", got.SourceID.ValueString(), "src-456")
+		}
+		if got.SourceVersionID.ValueString() != "ver-789" {
+			t.Errorf("SourceVersionID: got %q, want %q", got.SourceVersionID.ValueString(), "ver-789")
+		}
+		if got.Name.ValueString() != "my-app" {
+			t.Errorf("Name: got %q, want %q", got.Name.ValueString(), "my-app")
+		}
+		if got.ApplicationUrl.ValueString() != "https://example.com" {
+			t.Errorf("ApplicationUrl: got %q, want %q", got.ApplicationUrl.ValueString(), "https://example.com")
+		}
+		if !got.AllowAutoStopping.ValueBool() {
+			t.Errorf("AllowAutoStopping: got false, want true")
+		}
+		if !got.Resources.IsNull() {
+			t.Errorf("Resources: expected null, got %v", got.Resources)
+		}
+		if !got.RequiredKeyScopeLevel.IsNull() {
+			t.Errorf("RequiredKeyScopeLevel: expected null, got %q", got.RequiredKeyScopeLevel.ValueString())
+		}
+	})
+
+	t.Run("no diagnostics when external_access_recipients is null", func(t *testing.T) {
+		got := runUpgrade(t, tftypes.NewValue(v0ObjType, map[string]tftypes.Value{
+			"id":                         tftypes.NewValue(tftypes.String, "app-999"),
+			"source_id":                  tftypes.NewValue(tftypes.String, "src-999"),
+			"source_version_id":          tftypes.NewValue(tftypes.String, "ver-999"),
+			"name":                       tftypes.NewValue(tftypes.String, "app"),
+			"application_url":            tftypes.NewValue(tftypes.String, "https://app.example.com"),
+			"external_access_enabled":    tftypes.NewValue(tftypes.Bool, false),
+			"external_access_recipients": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, nil),
+			"allow_auto_stopping":        tftypes.NewValue(tftypes.Bool, false),
+			"resources":                  tftypes.NewValue(resourcesObjType, nil),
+			"use_case_ids":               tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{}),
+			"required_key_scope_level":   tftypes.NewValue(tftypes.String, nil),
+		}))
+
+		if got.ID.ValueString() != "app-999" {
+			t.Errorf("ID: got %q, want %q", got.ID.ValueString(), "app-999")
+		}
+		if got.AllowAutoStopping.ValueBool() {
+			t.Errorf("AllowAutoStopping: got true, want false")
+		}
+	})
 }

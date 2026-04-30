@@ -17,11 +17,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &CustomApplicationResource{}
 var _ resource.ResourceWithImportState = &CustomApplicationResource{}
+var _ resource.ResourceWithUpgradeState = &CustomApplicationResource{}
 
 func NewCustomApplicationResource() resource.Resource {
 	return &CustomApplicationResource{}
@@ -39,6 +41,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Custom Application",
+		Version:             1,
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -396,4 +399,76 @@ func (r *CustomApplicationResource) Delete(ctx context.Context, req resource.Del
 
 func (r *CustomApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r *CustomApplicationResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"id":                schema.StringAttribute{Computed: true},
+					"source_id":         schema.StringAttribute{Computed: true},
+					"source_version_id": schema.StringAttribute{Required: true},
+					"name":              schema.StringAttribute{Optional: true, Computed: true},
+					"application_url":   schema.StringAttribute{Computed: true},
+					"external_access_enabled": schema.BoolAttribute{
+						Optional: true,
+						Computed: true,
+					},
+					"external_access_recipients": schema.ListAttribute{
+						Optional:    true,
+						Computed:    true,
+						ElementType: types.StringType,
+					},
+					"allow_auto_stopping": schema.BoolAttribute{Optional: true, Computed: true},
+					"resources": schema.SingleNestedAttribute{
+						Optional: true,
+						Computed: true,
+						Attributes: map[string]schema.Attribute{
+							"replicas":                          schema.Int64Attribute{Optional: true},
+							"resource_label":                    schema.StringAttribute{Optional: true},
+							"session_affinity":                  schema.BoolAttribute{Optional: true},
+							"service_web_requests_on_root_path": schema.BoolAttribute{Optional: true},
+							"health_endpoint_path":              schema.StringAttribute{Optional: true},
+						},
+					},
+					"use_case_ids": schema.ListAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+					},
+					"required_key_scope_level": schema.StringAttribute{Optional: true},
+				},
+			},
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var oldState struct {
+					ID                       types.String          `tfsdk:"id"`
+					SourceID                 types.String          `tfsdk:"source_id"`
+					SourceVersionID          types.String          `tfsdk:"source_version_id"`
+					Name                     types.String          `tfsdk:"name"`
+					ApplicationUrl           types.String          `tfsdk:"application_url"`
+					ExternalAccessEnabled    types.Bool            `tfsdk:"external_access_enabled"`
+					ExternalAccessRecipients types.List            `tfsdk:"external_access_recipients"`
+					AllowAutoStopping        types.Bool            `tfsdk:"allow_auto_stopping"`
+					Resources                basetypes.ObjectValue `tfsdk:"resources"`
+					UseCaseIDs               []types.String        `tfsdk:"use_case_ids"`
+					RequiredKeyScopeLevel    types.String          `tfsdk:"required_key_scope_level"`
+				}
+				resp.Diagnostics.Append(req.State.Get(ctx, &oldState)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+				resp.Diagnostics.Append(resp.State.Set(ctx, CustomApplicationResourceModel{
+					ID:                    oldState.ID,
+					SourceID:              oldState.SourceID,
+					SourceVersionID:       oldState.SourceVersionID,
+					Name:                  oldState.Name,
+					ApplicationUrl:        oldState.ApplicationUrl,
+					AllowAutoStopping:     oldState.AllowAutoStopping,
+					Resources:             oldState.Resources,
+					UseCaseIDs:            oldState.UseCaseIDs,
+					RequiredKeyScopeLevel: oldState.RequiredKeyScopeLevel,
+				})...)
+			},
+		},
+	}
 }
