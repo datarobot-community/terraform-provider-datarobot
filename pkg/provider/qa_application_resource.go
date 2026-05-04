@@ -137,23 +137,27 @@ func (r *QAApplicationResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	recipients := []string{}
+	createUpdateRequest := &client.UpdateApplicationRequest{
+		Name:              data.Name.ValueString(),
+		AllowAutoStopping: data.AllowAutoStopping.ValueBool(),
+	}
+	if !data.ExternalAccessEnabled.IsNull() && !data.ExternalAccessEnabled.IsUnknown() {
+		v := data.ExternalAccessEnabled.ValueBool()
+		createUpdateRequest.ExternalAccessEnabled = &v
+	}
 	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
-		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
+		r := []string{}
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
 			resp.Diagnostics.Append(diags...)
 			return
 		}
+		createUpdateRequest.ExternalAccessRecipients = &r
 	}
 
 	traceAPICall("UpdateApplication")
 	_, err = r.provider.service.UpdateApplication(ctx,
 		createResp.ID,
-		&client.UpdateApplicationRequest{
-			Name:                     data.Name.ValueString(),
-			ExternalAccessEnabled:    IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool(),
-			ExternalAccessRecipients: recipients,
-			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
-		})
+		createUpdateRequest)
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
 			resp.Diagnostics.AddWarning(
@@ -272,22 +276,30 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+	var config QAApplicationResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients: recipients,
-		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
+		AllowAutoStopping: plan.AllowAutoStopping.ValueBool(),
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		updateRequest.Name = plan.Name.ValueString()
+	}
+	if !config.ExternalAccessEnabled.IsNull() && !config.ExternalAccessEnabled.IsUnknown() {
+		v := config.ExternalAccessEnabled.ValueBool()
+		updateRequest.ExternalAccessEnabled = &v
+	}
+	if !config.ExternalAccessRecipients.IsNull() && !config.ExternalAccessRecipients.IsUnknown() {
+		r := []string{}
+		if diags := config.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		updateRequest.ExternalAccessRecipients = &r
 	}
 
 	traceAPICall("UpdateApplication")
@@ -307,11 +319,19 @@ func (r *QAApplicationResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	_, err = waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
+	application, err := waitForApplicationToBeReady(ctx, r.provider.service, plan.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Application not ready", err.Error())
 		return
 	}
+
+	plan.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.ExternalAccessRecipients = recipientsList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

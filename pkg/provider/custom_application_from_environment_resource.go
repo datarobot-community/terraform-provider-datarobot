@@ -193,27 +193,30 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 		return
 	}
 
-	enableExternalAccess := IsKnown(data.ExternalAccessEnabled) && data.ExternalAccessEnabled.ValueBool()
+	updateRequest := &client.UpdateApplicationRequest{
+		AllowAutoStopping: data.AllowAutoStopping.ValueBool(),
+	}
+	needsUpdate := IsKnown(data.Name) || !data.AllowAutoStopping.ValueBool()
 
-	if IsKnown(data.Name) || enableExternalAccess || !data.AllowAutoStopping.ValueBool() {
-		recipients := []string{}
-		if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
-			if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
+	if IsKnown(data.Name) {
+		updateRequest.Name = data.Name.ValueString()
+	}
+	if !data.ExternalAccessEnabled.IsNull() && !data.ExternalAccessEnabled.IsUnknown() {
+		v := data.ExternalAccessEnabled.ValueBool()
+		updateRequest.ExternalAccessEnabled = &v
+		needsUpdate = true
+	}
+	if !data.ExternalAccessRecipients.IsNull() && !data.ExternalAccessRecipients.IsUnknown() {
+		r := []string{}
+		if diags := data.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
 		}
+		updateRequest.ExternalAccessRecipients = &r
+		needsUpdate = true
+	}
 
-		updateRequest := &client.UpdateApplicationRequest{
-			ExternalAccessEnabled:    enableExternalAccess,
-			ExternalAccessRecipients: recipients,
-			AllowAutoStopping:        data.AllowAutoStopping.ValueBool(),
-		}
-
-		if IsKnown(data.Name) {
-			updateRequest.Name = data.Name.ValueString()
-		}
-
+	if needsUpdate {
 		traceAPICall("UpdateCustomApplication")
 		_, err = r.provider.service.UpdateApplication(ctx, application.ID, updateRequest)
 		if err != nil {
@@ -329,22 +332,30 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		return
 	}
 
-	recipients := []string{}
-	if !plan.ExternalAccessRecipients.IsNull() && !plan.ExternalAccessRecipients.IsUnknown() {
-		if diags := plan.ExternalAccessRecipients.ElementsAs(ctx, &recipients, false); diags.HasError() {
-			resp.Diagnostics.Append(diags...)
-			return
-		}
+	var config CustomApplicationFromEnvironmentResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	updateRequest := &client.UpdateApplicationRequest{
-		ExternalAccessEnabled:    IsKnown(plan.ExternalAccessEnabled) && plan.ExternalAccessEnabled.ValueBool(),
-		ExternalAccessRecipients: recipients,
-		AllowAutoStopping:        plan.AllowAutoStopping.ValueBool(),
+		AllowAutoStopping: plan.AllowAutoStopping.ValueBool(),
 	}
 
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		updateRequest.Name = plan.Name.ValueString()
+	}
+	if !config.ExternalAccessEnabled.IsNull() && !config.ExternalAccessEnabled.IsUnknown() {
+		v := config.ExternalAccessEnabled.ValueBool()
+		updateRequest.ExternalAccessEnabled = &v
+	}
+	if !config.ExternalAccessRecipients.IsNull() && !config.ExternalAccessRecipients.IsUnknown() {
+		r := []string{}
+		if diags := config.ExternalAccessRecipients.ElementsAs(ctx, &r, false); diags.HasError() {
+			resp.Diagnostics.Append(diags...)
+			return
+		}
+		updateRequest.ExternalAccessRecipients = &r
 	}
 
 	traceAPICall("UpdateCustomApplication")
@@ -369,6 +380,14 @@ func (r *CustomApplicationFromEnvironmentResource) Update(ctx context.Context, r
 		resp.Diagnostics.AddError("Custom Application is not ready", err.Error())
 		return
 	}
+
+	plan.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
+	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.ExternalAccessRecipients = recipientsList
 
 	// Populate resources from API response (field is Computed).
 	if application.Resources != nil {

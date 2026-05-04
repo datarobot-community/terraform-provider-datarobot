@@ -88,8 +88,8 @@ type Application struct {
 type UpdateApplicationRequest struct {
 	Name                             string     `json:"name,omitempty"`
 	CustomApplicationSourceVersionID string     `json:"customApplicationSourceVersionId,omitempty"`
-	ExternalAccessEnabled            bool       `json:"externalAccessEnabled"`
-	ExternalAccessRecipients         []string   `json:"externalAccessRecipients"`
+	ExternalAccessEnabled            *bool      `json:"externalAccessEnabled,omitempty"`
+	ExternalAccessRecipients         *[]string  `json:"externalAccessRecipients,omitempty"`
 	AllowAutoStopping                bool       `json:"allowAutoStopping"`
 	RequiredKeyScopeLevel            ScopeLevel `json:"requiredKeyScopeLevel,omitempty"`
 }

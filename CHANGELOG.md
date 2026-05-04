@@ -3,6 +3,12 @@
 ### Added
 - `datarobot_artifact` & `datarobot_workload` resources are added. It creates Artifact objects in Workload API.
 
+## [0.10.35] - 2026-04-30
+
+### Fixed
+
+- Fixed external sharing settings being stripped on `CustomApplicationSource`/`CustomApplication` updates even better
+
 ## [0.10.34] - 2026-04-20
 
 ### Fixed
