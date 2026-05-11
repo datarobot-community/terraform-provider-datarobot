@@ -31,7 +31,7 @@ func (r *MemorySpaceResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *MemorySpaceResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Memory Space is a DataRobot concept that serves as a logical container for Chat Histories (Sessions) and persistent Memories. Feature should be enabled before use with `AGENTIC_MEMORY_API` flag.",
+		MarkdownDescription: "Memory Space is a DataRobot concept that serves as a logical container for Chat Histories (Sessions) and persistent Memories. Feature should be enabled before use with `ENABLE_AGENTIC_MEMORY_API` flag.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -71,7 +71,7 @@ func (r *MemorySpaceResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "AGENTIC_MEMORY_API")
+	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "ENABLE_AGENTIC_MEMORY_API")
 	if err != nil {
 		resp.Diagnostics.AddError("Error checking feature flag", err.Error())
 		return
@@ -79,7 +79,7 @@ func (r *MemorySpaceResource) Create(ctx context.Context, req resource.CreateReq
 	if !enabled {
 		resp.Diagnostics.AddError(
 			"Feature not enabled",
-			"The AGENTIC_MEMORY_API feature flag is not enabled. Please enable it in your DataRobot account settings to use Memory Spaces.",
+			"The ENABLE_AGENTIC_MEMORY_API feature flag is not enabled. Please enable it in your DataRobot account settings to use Memory Spaces.",
 		)
 		return
 	}
