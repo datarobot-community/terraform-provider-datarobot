@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_memory_space` now checks the correct feature flag name `ENABLE_AGENTIC_MEMORY_API` (previously checked `AGENTIC_MEMORY_API`, which always evaluated to disabled even on accounts where Memory Spaces were enabled).
+
 ## [0.10.35] - 2026-05-11
 
 ### Added

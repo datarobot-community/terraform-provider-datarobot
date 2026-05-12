@@ -37,7 +37,7 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 	newDescription := "new_" + description
 
 	// Create
-	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "AGENTIC_MEMORY_API").Return(true, nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_AGENTIC_MEMORY_API").Return(true, nil)
 	mockService.EXPECT().CreateMemorySpace(gomock.Any(), &client.MemorySpaceRequest{
 		Description: &description,
 	}).Return(&client.MemorySpaceResponse{
@@ -111,7 +111,7 @@ func TestIntegrationMemorySpaceResourceFeatureFlagDisabled(t *testing.T) {
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
-	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "AGENTIC_MEMORY_API").Return(false, nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_AGENTIC_MEMORY_API").Return(false, nil)
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -119,7 +119,7 @@ func TestIntegrationMemorySpaceResourceFeatureFlagDisabled(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      memorySpaceResourceConfig("test-description"),
-				ExpectError: regexp.MustCompile("AGENTIC_MEMORY_API feature flag is not enabled"),
+				ExpectError: regexp.MustCompile("ENABLE_AGENTIC_MEMORY_API feature flag is not enabled"),
 			},
 		},
 	})
@@ -129,7 +129,7 @@ func testMemorySpaceResource(t *testing.T, description string, isMock bool) {
 	resourceName := "datarobot_memory_space.test"
 	var preCheck func()
 	if !isMock {
-		preCheck = func() { testAccFeatureFlagPreCheck(t, "AGENTIC_MEMORY_API") }
+		preCheck = func() { testAccFeatureFlagPreCheck(t, "ENABLE_AGENTIC_MEMORY_API") }
 	}
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
