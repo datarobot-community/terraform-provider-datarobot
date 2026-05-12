@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -295,11 +296,6 @@ resource "datarobot_artifact" "test" {
               }
             ]
 
-            resource_request = {
-              cpu    = 1
-              memory = 536870912
-            }
-
             readiness_probe = {
               path = "/health"
               port = 8080
@@ -314,8 +310,6 @@ resource "datarobot_artifact" "test" {
 }
 
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
-	cpu := int64(1)
-	memory := int64(536870912)
 	port := int64(8080)
 	primary := true
 	containerName := "main"
@@ -344,10 +338,6 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
 								{Name: "ENV", Value: "production"},
 							},
-							ResourceRequest: client.ArtifactResourceRequest{
-								CPU:    cpu,
-								Memory: memory,
-							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
 								Path:             "/health",
 								Port:             &port,
@@ -360,4 +350,48 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 			},
 		},
 	}
+}
+
+func TestArtifactTooManyContainerGroups(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      artifactConfigWithMultipleGroups(),
+				ExpectError: regexp.MustCompile("Too many container groups"),
+			},
+		},
+	})
+}
+
+func artifactConfigWithMultipleGroups() string {
+	return `
+resource "datarobot_artifact" "test" {
+  name = "multi-group-test"
+  spec = {
+    container_groups = [
+      {
+        containers = [{ image_uri = "image-a:latest" }]
+      },
+      {
+        containers = [{ image_uri = "image-b:latest" }]
+      }
+    ]
+  }
+}
+`
 }

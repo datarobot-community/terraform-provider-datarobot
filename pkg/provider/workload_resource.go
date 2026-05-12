@@ -95,68 +95,116 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 					objectplanmodifier.RequiresReplace(),
 				},
 				Attributes: map[string]schema.Attribute{
-					"replica_count": schema.Int64Attribute{
+					"container_groups": schema.ListNestedAttribute{
 						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "Number of replicas to run. Cannot be used together with `autoscaling`. Omitting this field retains the current value. Set to `0` to explicitly clear it (e.g. when switching to autoscaling).",
-						PlanModifiers: []planmodifier.Int64{
-							int64planmodifier.UseStateForUnknown(),
-						},
-					},
-					"autoscaling": schema.SingleNestedAttribute{
-						Optional:            true,
-						MarkdownDescription: "Autoscaling configuration. When set, takes precedence over replica_count.",
-						Attributes: map[string]schema.Attribute{
-							"enabled": schema.BoolAttribute{
-								Optional:            true,
-								Computed:            true,
-								MarkdownDescription: "Whether autoscaling is enabled. Defaults to true.",
-								PlanModifiers: []planmodifier.Bool{
-									boolplanmodifier.UseStateForUnknown(),
+						MarkdownDescription: "Per-group runtime configuration.",
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"name": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "Container group name (server-assigned, always `default`).",
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.UseStateForUnknown(),
+									},
 								},
-							},
-							"policies": schema.ListNestedAttribute{
-								Required:            true,
-								MarkdownDescription: "Scaling policies that define when and how to scale.",
-								NestedObject: schema.NestedAttributeObject{
+								"replica_count": schema.Int64Attribute{
+									Optional:            true,
+									Computed:            true,
+									MarkdownDescription: "Number of replicas. Cannot be set alongside `autoscaling.enabled=true`. Set to `0` to explicitly clear it.",
+									PlanModifiers: []planmodifier.Int64{
+										int64planmodifier.UseStateForUnknown(),
+									},
+								},
+								"autoscaling": schema.SingleNestedAttribute{
+									Optional:            true,
+									MarkdownDescription: "Autoscaling configuration. When set, takes precedence over `replica_count`.",
 									Attributes: map[string]schema.Attribute{
-										"scaling_metric": schema.StringAttribute{
-											Required:            true,
-											MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.",
-										},
-										"target": schema.Float64Attribute{
-											Required:            true,
-											MarkdownDescription: "Target value for the scaling metric.",
-										},
-										"min_count": schema.Int64Attribute{
-											Required:            true,
-											MarkdownDescription: "Minimum number of replicas.",
-										},
-										"max_count": schema.Int64Attribute{
-											Required:            true,
-											MarkdownDescription: "Maximum number of replicas.",
-										},
-										"priority": schema.Int64Attribute{
+										"enabled": schema.BoolAttribute{
 											Optional:            true,
 											Computed:            true,
-											MarkdownDescription: "Policy priority when multiple policies are defined.",
-											PlanModifiers: []planmodifier.Int64{
-												int64planmodifier.UseStateForUnknown(),
+											MarkdownDescription: "Whether autoscaling is enabled. Defaults to true.",
+											PlanModifiers: []planmodifier.Bool{
+												boolplanmodifier.UseStateForUnknown(),
+											},
+										},
+										"policies": schema.ListNestedAttribute{
+											Required:            true,
+											MarkdownDescription: "Scaling policies that define when and how to scale.",
+											NestedObject: schema.NestedAttributeObject{
+												Attributes: map[string]schema.Attribute{
+													"scaling_metric": schema.StringAttribute{
+														Required:            true,
+														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.",
+													},
+													"target": schema.Float64Attribute{
+														Required:            true,
+														MarkdownDescription: "Target value for the scaling metric.",
+													},
+													"min_count": schema.Int64Attribute{
+														Required:            true,
+														MarkdownDescription: "Minimum number of replicas.",
+													},
+													"max_count": schema.Int64Attribute{
+														Required:            true,
+														MarkdownDescription: "Maximum number of replicas.",
+													},
+													"priority": schema.Int64Attribute{
+														Optional:            true,
+														Computed:            true,
+														MarkdownDescription: "Policy priority when multiple policies are defined.",
+														PlanModifiers: []planmodifier.Int64{
+															int64planmodifier.UseStateForUnknown(),
+														},
+													},
+												},
 											},
 										},
 									},
 								},
-							},
-						},
-					},
-					"resources": schema.ListNestedAttribute{
-						Optional:            true,
-						MarkdownDescription: "Resource bundles assigned to the Workload. When empty the server infers an appropriate bundle.",
-						NestedObject: schema.NestedAttributeObject{
-							Attributes: map[string]schema.Attribute{
-								"resource_bundle_id": schema.StringAttribute{
-									Required:            true,
-									MarkdownDescription: "ID of the resource bundle (e.g. `cpu.nano`).",
+								"resource_bundles": schema.ListAttribute{
+									Optional:            true,
+									ElementType:         types.StringType,
+									MarkdownDescription: "Ordered list of resource bundle IDs. One is selected at scheduling time.",
+								},
+								"bundle_selection_policy": schema.StringAttribute{
+									Optional:            true,
+									Computed:            true,
+									Default:             stringdefault.StaticString("availability"),
+									MarkdownDescription: "How to select among `resource_bundles`. Defaults to `availability`.",
+								},
+								"containers": schema.ListNestedAttribute{
+									Optional:            true,
+									MarkdownDescription: "Per-container resource allocation overrides.",
+									NestedObject: schema.NestedAttributeObject{
+										Attributes: map[string]schema.Attribute{
+											"name": schema.StringAttribute{
+												Required:            true,
+												MarkdownDescription: "Container name. Must match a container declared in the artifact group.",
+											},
+											"resource_allocation": schema.SingleNestedAttribute{
+												Optional:            true,
+												MarkdownDescription: "Resource allocation for this container.",
+												Attributes: map[string]schema.Attribute{
+													"cpu": schema.Float64Attribute{
+														Optional:            true,
+														MarkdownDescription: "CPU cores allocated to this container.",
+													},
+													"gpu": schema.Float64Attribute{
+														Optional:            true,
+														MarkdownDescription: "GPUs allocated to this container.",
+													},
+													"gpu_memory": schema.StringAttribute{
+														Optional:            true,
+														MarkdownDescription: "GPU VRAM allocated (e.g. `15GB`, `16GiB`, or raw bytes as a string).",
+													},
+													"memory": schema.StringAttribute{
+														Optional:            true,
+														MarkdownDescription: "RAM allocated (e.g. `8GB`, `512MiB`, or raw bytes as a string).",
+													},
+												},
+											},
+										},
+									},
 								},
 							},
 						},
@@ -292,7 +340,9 @@ func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteReques
 
 func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("runtime"), WorkloadRuntimeModel{})...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("runtime"), WorkloadRuntimeModel{
+		ContainerGroups: []WorkloadGroupRuntimeModel{},
+	})...)
 }
 
 func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
@@ -302,21 +352,32 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	}
 
-	replicaCountSet := !data.Runtime.ReplicaCount.IsNull() &&
-		!data.Runtime.ReplicaCount.IsUnknown() &&
-		data.Runtime.ReplicaCount.ValueInt64() != 0
-
-	autoscalingSet := data.Runtime.Autoscaling != nil &&
-		!data.Runtime.Autoscaling.Enabled.IsNull() &&
-		!data.Runtime.Autoscaling.Enabled.IsUnknown() &&
-		data.Runtime.Autoscaling.Enabled.ValueBool()
-
-	if replicaCountSet && autoscalingSet {
+	if len(data.Runtime.ContainerGroups) > 1 {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("runtime"),
-			"Conflicting runtime configuration",
-			"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
+			path.Root("runtime").AtName("container_groups"),
+			"Too many container groups",
+			"Currently, Workload API supports only 1 container group.",
 		)
+		return
+	}
+
+	for i, g := range data.Runtime.ContainerGroups {
+		replicaCountSet := !g.ReplicaCount.IsNull() &&
+			!g.ReplicaCount.IsUnknown() &&
+			g.ReplicaCount.ValueInt64() != 0
+
+		autoscalingSet := g.Autoscaling != nil &&
+			!g.Autoscaling.Enabled.IsNull() &&
+			!g.Autoscaling.Enabled.IsUnknown() &&
+			g.Autoscaling.Enabled.ValueBool()
+
+		if replicaCountSet && autoscalingSet {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("runtime").AtName("container_groups").AtListIndex(i),
+				"Conflicting runtime configuration",
+				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
+			)
+		}
 	}
 }
 
@@ -397,24 +458,44 @@ func workloadUpdateRequest(data WorkloadResourceModel) *client.UpdateWorkloadReq
 	return req
 }
 
-func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.ProtonRuntime {
-	r := client.ProtonRuntime{}
+func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.WorkloadRuntime {
+	r := client.WorkloadRuntime{}
 
-	if !runtime.ReplicaCount.IsNull() && !runtime.ReplicaCount.IsUnknown() && runtime.ReplicaCount.ValueInt64() != 0 {
-		v := runtime.ReplicaCount.ValueInt64()
-		r.ReplicaCount = &v
+	if len(runtime.ContainerGroups) > 0 {
+		r.ContainerGroups = make([]client.GroupRuntime, len(runtime.ContainerGroups))
+		for i, g := range runtime.ContainerGroups {
+			r.ContainerGroups[i] = groupRuntimeToClient(g)
+		}
 	}
 
-	if runtime.Autoscaling != nil {
-		r.Autoscaling = &client.AutoscalingProperties{}
+	return r
+}
 
-		if !runtime.Autoscaling.Enabled.IsNull() && !runtime.Autoscaling.Enabled.IsUnknown() {
-			enabled := runtime.Autoscaling.Enabled.ValueBool()
-			r.Autoscaling.Enabled = &enabled
+func groupRuntimeToClient(g WorkloadGroupRuntimeModel) client.GroupRuntime {
+	gr := client.GroupRuntime{}
+
+	if !g.Name.IsNull() && !g.Name.IsUnknown() {
+		gr.Name = g.Name.ValueString()
+	}
+
+	if !g.ReplicaCount.IsNull() && !g.ReplicaCount.IsUnknown() && g.ReplicaCount.ValueInt64() != 0 {
+		v := g.ReplicaCount.ValueInt64()
+		gr.ReplicaCount = &v
+	}
+
+	if !g.BundleSelectionPolicy.IsNull() && !g.BundleSelectionPolicy.IsUnknown() {
+		v := g.BundleSelectionPolicy.ValueString()
+		gr.BundleSelectionPolicy = &v
+	}
+
+	if g.Autoscaling != nil {
+		gr.Autoscaling = &client.AutoscalingProperties{}
+		if !g.Autoscaling.Enabled.IsNull() && !g.Autoscaling.Enabled.IsUnknown() {
+			enabled := g.Autoscaling.Enabled.ValueBool()
+			gr.Autoscaling.Enabled = &enabled
 		}
-
-		r.Autoscaling.Policies = make([]client.AutoscalingPolicy, len(runtime.Autoscaling.Policies))
-		for i, p := range runtime.Autoscaling.Policies {
+		gr.Autoscaling.Policies = make([]client.AutoscalingPolicy, len(g.Autoscaling.Policies))
+		for i, p := range g.Autoscaling.Policies {
 			policy := client.AutoscalingPolicy{
 				ScalingMetric: p.ScalingMetric.ValueString(),
 				Target:        p.Target.ValueFloat64(),
@@ -425,43 +506,72 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.ProtonRuntime 
 				v := p.Priority.ValueInt64()
 				policy.Priority = &v
 			}
-			r.Autoscaling.Policies[i] = policy
+			gr.Autoscaling.Policies[i] = policy
 		}
 	}
 
-	if len(runtime.Resources) > 0 {
-		r.Resources = make([]client.ResourceBundleResources, len(runtime.Resources))
-		for i, rb := range runtime.Resources {
-			r.Resources[i] = client.ResourceBundleResources{
-				Type:             "resource_bundle",
-				ResourceBundleID: rb.ResourceBundleID.ValueString(),
-			}
+	if len(g.ResourceBundles) > 0 {
+		gr.ResourceBundles = make([]string, len(g.ResourceBundles))
+		for i, rb := range g.ResourceBundles {
+			gr.ResourceBundles[i] = rb.ValueString()
 		}
 	}
 
-	return r
+	if len(g.Containers) > 0 {
+		gr.Containers = make([]client.ContainerOverride, len(g.Containers))
+		for i, c := range g.Containers {
+			gr.Containers[i] = containerOverrideToClient(c)
+		}
+	}
+
+	return gr
+}
+
+func containerOverrideToClient(c WorkloadContainerOverrideModel) client.ContainerOverride {
+	co := client.ContainerOverride{Name: c.Name.ValueString()}
+	if c.ResourceAllocation != nil {
+		ra := &client.ResourceAllocation{}
+		if !c.ResourceAllocation.CPU.IsNull() && !c.ResourceAllocation.CPU.IsUnknown() {
+			v := c.ResourceAllocation.CPU.ValueFloat64()
+			ra.CPU = &v
+		}
+		if !c.ResourceAllocation.GPU.IsNull() && !c.ResourceAllocation.GPU.IsUnknown() {
+			v := c.ResourceAllocation.GPU.ValueFloat64()
+			ra.GPU = &v
+		}
+		if !c.ResourceAllocation.GPUMemory.IsNull() && !c.ResourceAllocation.GPUMemory.IsUnknown() {
+			v := c.ResourceAllocation.GPUMemory.ValueString()
+			ra.GPUMemory = &v
+		}
+		if !c.ResourceAllocation.Memory.IsNull() && !c.ResourceAllocation.Memory.IsUnknown() {
+			v := c.ResourceAllocation.Memory.ValueString()
+			ra.Memory = &v
+		}
+		co.ResourceAllocation = ra
+	}
+	return co
 }
 
 // applySentinels reconciles state values that the API would otherwise misrepresent:
-//   - replica_count=0 signals "explicitly cleared"; the API omits the field so we
-//     write 0 back to state to prevent a perpetual diff.
-//   - description="" is indistinguishable from "not set" in the API response; when
-//     the prior value was null (user omitted it), we restore null so the plan stays clean.
-//   - resources=nil (user omitted the block) must stay nil even when the API assigns a
-//     default bundle; otherwise Terraform raises "was null, but now has value".
-//   - resources=[] (explicit empty list): the API may assign a default bundle, so we
-//     discard whatever the API returned and keep an empty slice to match the config.
+//   - replica_count=0 per group signals "explicitly cleared"; restore it to prevent a perpetual diff.
+//   - description="" is indistinguishable from "not set"; restore null when user omitted it.
+//   - container_groups=nil (user omitted the block) must stay nil even if the API returns groups.
 func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
-	if !desired.Runtime.ReplicaCount.IsNull() && !desired.Runtime.ReplicaCount.IsUnknown() && desired.Runtime.ReplicaCount.ValueInt64() == 0 {
-		data.Runtime.ReplicaCount = desired.Runtime.ReplicaCount
-	}
 	if desired.Description.IsNull() && data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
 	}
-	if desired.Runtime.Resources == nil {
-		data.Runtime.Resources = nil
-	} else if len(desired.Runtime.Resources) == 0 {
-		data.Runtime.Resources = []WorkloadResourceBundleModel{}
+	if desired.Runtime.ContainerGroups == nil {
+		data.Runtime.ContainerGroups = nil
+		return
+	}
+	for i := range desired.Runtime.ContainerGroups {
+		if i >= len(data.Runtime.ContainerGroups) {
+			break
+		}
+		dg := desired.Runtime.ContainerGroups[i]
+		if !dg.ReplicaCount.IsNull() && !dg.ReplicaCount.IsUnknown() && dg.ReplicaCount.ValueInt64() == 0 {
+			data.Runtime.ContainerGroups[i].ReplicaCount = dg.ReplicaCount
+		}
 	}
 }
 
@@ -492,26 +602,49 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 	data.Runtime = loadWorkloadRuntimeFromAPI(workload.Runtime)
 }
 
-func loadWorkloadRuntimeFromAPI(runtime client.ProtonRuntime) WorkloadRuntimeModel {
+func loadWorkloadRuntimeFromAPI(runtime client.WorkloadRuntime) WorkloadRuntimeModel {
 	model := WorkloadRuntimeModel{}
 
-	if runtime.ReplicaCount != nil {
-		model.ReplicaCount = types.Int64Value(*runtime.ReplicaCount)
-	} else {
-		model.ReplicaCount = types.Int64Null()
+	if len(runtime.ContainerGroups) > 0 {
+		model.ContainerGroups = make([]WorkloadGroupRuntimeModel, len(runtime.ContainerGroups))
+		for i, g := range runtime.ContainerGroups {
+			model.ContainerGroups[i] = loadGroupRuntimeFromAPI(g)
+		}
 	}
 
-	if runtime.Autoscaling != nil {
-		autoscaling := &WorkloadAutoscalingModel{}
+	return model
+}
 
-		if runtime.Autoscaling.Enabled != nil {
-			autoscaling.Enabled = types.BoolValue(*runtime.Autoscaling.Enabled)
+func loadGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadGroupRuntimeModel {
+	name := g.Name
+	if name == "" {
+		name = "default"
+	}
+	m := WorkloadGroupRuntimeModel{
+		Name: types.StringValue(name),
+	}
+
+	if g.ReplicaCount != nil {
+		m.ReplicaCount = types.Int64Value(*g.ReplicaCount)
+	} else {
+		m.ReplicaCount = types.Int64Null()
+	}
+
+	bundleSelectionPolicy := "availability"
+	if g.BundleSelectionPolicy != nil {
+		bundleSelectionPolicy = *g.BundleSelectionPolicy
+	}
+	m.BundleSelectionPolicy = types.StringValue(bundleSelectionPolicy)
+
+	if g.Autoscaling != nil {
+		autoscaling := &WorkloadAutoscalingModel{}
+		if g.Autoscaling.Enabled != nil {
+			autoscaling.Enabled = types.BoolValue(*g.Autoscaling.Enabled)
 		} else {
 			autoscaling.Enabled = types.BoolNull()
 		}
-
-		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(runtime.Autoscaling.Policies))
-		for i, p := range runtime.Autoscaling.Policies {
+		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(g.Autoscaling.Policies))
+		for i, p := range g.Autoscaling.Policies {
 			policy := WorkloadAutoscalingPolicyModel{
 				ScalingMetric: types.StringValue(p.ScalingMetric),
 				Target:        types.Float64Value(p.Target),
@@ -525,18 +658,53 @@ func loadWorkloadRuntimeFromAPI(runtime client.ProtonRuntime) WorkloadRuntimeMod
 			}
 			autoscaling.Policies[i] = policy
 		}
-
-		model.Autoscaling = autoscaling
+		m.Autoscaling = autoscaling
 	}
 
-	if len(runtime.Resources) > 0 {
-		model.Resources = make([]WorkloadResourceBundleModel, len(runtime.Resources))
-		for i, rb := range runtime.Resources {
-			model.Resources[i] = WorkloadResourceBundleModel{
-				ResourceBundleID: types.StringValue(rb.ResourceBundleID),
-			}
+	if len(g.ResourceBundles) > 0 {
+		m.ResourceBundles = make([]types.String, len(g.ResourceBundles))
+		for i, rb := range g.ResourceBundles {
+			m.ResourceBundles[i] = types.StringValue(rb)
 		}
 	}
 
-	return model
+	if len(g.Containers) > 0 {
+		m.Containers = make([]WorkloadContainerOverrideModel, len(g.Containers))
+		for i, c := range g.Containers {
+			m.Containers[i] = loadContainerOverrideFromAPI(c)
+		}
+	}
+
+	return m
+}
+
+func loadContainerOverrideFromAPI(c client.ContainerOverride) WorkloadContainerOverrideModel {
+	m := WorkloadContainerOverrideModel{
+		Name: types.StringValue(c.Name),
+	}
+	if c.ResourceAllocation != nil {
+		ra := &WorkloadResourceAllocationModel{}
+		if c.ResourceAllocation.CPU != nil {
+			ra.CPU = types.Float64Value(*c.ResourceAllocation.CPU)
+		} else {
+			ra.CPU = types.Float64Null()
+		}
+		if c.ResourceAllocation.GPU != nil {
+			ra.GPU = types.Float64Value(*c.ResourceAllocation.GPU)
+		} else {
+			ra.GPU = types.Float64Null()
+		}
+		if c.ResourceAllocation.GPUMemory != nil {
+			ra.GPUMemory = types.StringValue(*c.ResourceAllocation.GPUMemory)
+		} else {
+			ra.GPUMemory = types.StringNull()
+		}
+		if c.ResourceAllocation.Memory != nil {
+			ra.Memory = types.StringValue(*c.ResourceAllocation.Memory)
+		} else {
+			ra.Memory = types.StringNull()
+		}
+		m.ResourceAllocation = ra
+	}
+	return m
 }

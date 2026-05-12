@@ -33,15 +33,29 @@ type AutoscalingProperties struct {
 	Policies []AutoscalingPolicy `json:"policies"`
 }
 
-type ResourceBundleResources struct {
-	Type             string `json:"type"`
-	ResourceBundleID string `json:"resourceBundleId"`
+type ResourceAllocation struct {
+	CPU       *float64 `json:"cpu,omitempty"`
+	GPU       *float64 `json:"gpu,omitempty"`
+	GPUMemory *string  `json:"gpuMemory,omitempty"`
+	Memory    *string  `json:"memory,omitempty"`
 }
 
-type ProtonRuntime struct {
-	ReplicaCount *int64                    `json:"replicaCount,omitempty"`
-	Autoscaling  *AutoscalingProperties    `json:"autoscaling,omitempty"`
-	Resources    []ResourceBundleResources `json:"resources,omitempty"`
+type ContainerOverride struct {
+	Name               string              `json:"name"`
+	ResourceAllocation *ResourceAllocation `json:"resourceAllocation,omitempty"`
+}
+
+type GroupRuntime struct {
+	Name                  string                 `json:"name,omitempty"`
+	Containers            []ContainerOverride    `json:"containers,omitempty"`
+	Autoscaling           *AutoscalingProperties `json:"autoscaling,omitempty"`
+	BundleSelectionPolicy *string                `json:"bundleSelectionPolicy,omitempty"`
+	ReplicaCount          *int64                 `json:"replicaCount,omitempty"`
+	ResourceBundles       []string               `json:"resourceBundles,omitempty"`
+}
+
+type WorkloadRuntime struct {
+	ContainerGroups []GroupRuntime `json:"containerGroups,omitempty"`
 }
 
 type Workload struct {
@@ -52,12 +66,12 @@ type Workload struct {
 	Importance  WorkloadImportance `json:"importance"`
 	ArtifactID  *string            `json:"artifactId"`
 	Endpoint    *string            `json:"endpoint"`
-	Runtime     ProtonRuntime      `json:"runtime"`
+	Runtime     WorkloadRuntime    `json:"runtime"`
 }
 
 type CreateWorkloadRequest struct {
 	Name        string             `json:"name"`
-	Runtime     ProtonRuntime      `json:"runtime"`
+	Runtime     WorkloadRuntime    `json:"runtime"`
 	ArtifactID  *string            `json:"artifactId,omitempty"`
 	Description string             `json:"description,omitempty"`
 	Importance  WorkloadImportance `json:"importance,omitempty"`
@@ -113,13 +127,6 @@ type ArtifactProbeConfig struct {
 	FailureThreshold    *int64            `json:"failureThreshold,omitempty"`
 }
 
-type ArtifactResourceRequest struct {
-	CPU     int64   `json:"cpu"`
-	Memory  int64   `json:"memory"`
-	GPU     *int64  `json:"gpu,omitempty"`
-	GPUType *string `json:"gpuType,omitempty"`
-}
-
 type ArtifactContainer struct {
 	Name            *string                       `json:"name,omitempty"`
 	ImageURI        string                        `json:"imageUri"`
@@ -128,14 +135,14 @@ type ArtifactContainer struct {
 	Port            *int64                        `json:"port,omitempty"`
 	Entrypoint      []string                      `json:"entrypoint,omitempty"`
 	EnvironmentVars []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
-	ResourceRequest ArtifactResourceRequest       `json:"resourceRequest"`
 	StartupProbe    *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
 	ReadinessProbe  *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
 	LivenessProbe   *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
 }
 
 type ArtifactContainerGroup struct {
-	Containers []ArtifactContainer `json:"containers"`
+	Name       string               `json:"name,omitempty"`
+	Containers []ArtifactContainer  `json:"containers"`
 }
 
 type ArtifactSpec struct {

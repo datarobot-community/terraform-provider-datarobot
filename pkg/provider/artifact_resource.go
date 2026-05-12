@@ -20,6 +20,7 @@ import (
 var _ resource.Resource = &ArtifactResource{}
 var _ resource.ResourceWithImportState = &ArtifactResource{}
 var _ resource.ResourceWithModifyPlan = &ArtifactResource{}
+var _ resource.ResourceWithValidateConfig = &ArtifactResource{}
 
 func NewArtifactResource() resource.Resource {
 	return &ArtifactResource{}
@@ -204,28 +205,6 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 															Required:            true,
 															MarkdownDescription: "Value of the environment variable.",
 														},
-													},
-												},
-											},
-											"resource_request": schema.SingleNestedAttribute{
-												Required:            true,
-												MarkdownDescription: "Resource requirements for the container.",
-												Attributes: map[string]schema.Attribute{
-													"cpu": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Number of CPU cores required.",
-													},
-													"memory": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Memory required in bytes.",
-													},
-													"gpu": schema.Int64Attribute{
-														Optional:            true,
-														MarkdownDescription: "Number of GPUs required.",
-													},
-													"gpu_type": schema.StringAttribute{
-														Optional:            true,
-														MarkdownDescription: "GPU type required (e.g., NVIDIA-A100).",
 													},
 												},
 											},
@@ -439,7 +418,6 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
-		!resourceRequestsEqual(a.ResourceRequest, b.ResourceRequest) ||
 		!probesEqual(a.StartupProbe, b.StartupProbe) ||
 		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
 		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
@@ -482,11 +460,19 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.FailureThreshold.Equal(b.FailureThreshold)
 }
 
-func resourceRequestsEqual(a, b ArtifactResourceRequestModel) bool {
-	return a.CPU.Equal(b.CPU) &&
-		a.Memory.Equal(b.Memory) &&
-		a.GPU.Equal(b.GPU) &&
-		a.GPUType.Equal(b.GPUType)
+func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ArtifactResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() || data.Spec == nil {
+		return
+	}
+	if len(data.Spec.ContainerGroups) > 1 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("spec").AtName("container_groups"),
+			"Too many container groups",
+			"Currently, Workload API supports only 1 container group.",
+		)
+	}
 }
 
 func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -529,9 +515,8 @@ func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.Artifa
 
 func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContainer {
 	container := client.ArtifactContainer{
-		ImageURI:        c.ImageURI.ValueString(),
-		Description:     c.Description.ValueString(),
-		ResourceRequest: artifactResourceRequestToClient(c.ResourceRequest),
+		ImageURI:    c.ImageURI.ValueString(),
+		Description: c.Description.ValueString(),
 	}
 
 	if !c.Name.IsNull() && !c.Name.IsUnknown() {
@@ -571,22 +556,6 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	container.LivenessProbe = artifactProbeToClient(c.LivenessProbe)
 
 	return container
-}
-
-func artifactResourceRequestToClient(rr ArtifactResourceRequestModel) client.ArtifactResourceRequest {
-	req := client.ArtifactResourceRequest{
-		CPU:    rr.CPU.ValueInt64(),
-		Memory: rr.Memory.ValueInt64(),
-	}
-	if !rr.GPU.IsNull() && !rr.GPU.IsUnknown() {
-		gpu := rr.GPU.ValueInt64()
-		req.GPU = &gpu
-	}
-	if !rr.GPUType.IsNull() && !rr.GPUType.IsUnknown() {
-		gpuType := rr.GPUType.ValueString()
-		req.GPUType = &gpuType
-	}
-	return req
 }
 
 func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProbeConfig {
@@ -666,10 +635,6 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.String) ArtifactContainerModel {
 	model := ArtifactContainerModel{
 		ImageURI: types.StringValue(c.ImageURI),
-		ResourceRequest: ArtifactResourceRequestModel{
-			CPU:    types.Int64Value(c.ResourceRequest.CPU),
-			Memory: types.Int64Value(c.ResourceRequest.Memory),
-		},
 	}
 
 	if c.Name != nil {
@@ -696,18 +661,6 @@ func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.Str
 		model.Port = types.Int64Value(*c.Port)
 	} else {
 		model.Port = types.Int64Null()
-	}
-
-	if c.ResourceRequest.GPU != nil && *c.ResourceRequest.GPU != 0 {
-		model.ResourceRequest.GPU = types.Int64Value(*c.ResourceRequest.GPU)
-	} else {
-		model.ResourceRequest.GPU = types.Int64Null()
-	}
-
-	if c.ResourceRequest.GPUType != nil {
-		model.ResourceRequest.GPUType = types.StringValue(*c.ResourceRequest.GPUType)
-	} else {
-		model.ResourceRequest.GPUType = types.StringNull()
 	}
 
 	if len(c.Entrypoint) > 0 {

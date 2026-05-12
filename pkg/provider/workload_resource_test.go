@@ -319,7 +319,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 			{
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -327,7 +327,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 			{
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 3),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "3"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "3"),
 					checkWorkloadIDChanged(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -358,9 +358,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 	endpoint2 := "https://workloads.example.com/" + id2
 
 	workload1 := workloadFixtureWithResources(id1, artifactID, name, &replicaCount, &endpoint1, nil)
-	workload2 := workloadFixtureWithResources(id2, artifactID, name, &replicaCount, &endpoint2, []client.ResourceBundleResources{
-		{Type: "resource_bundle", ResourceBundleID: "cpu.small"},
-	})
+	workload2 := workloadFixtureWithResources(id2, artifactID, name, &replicaCount, &endpoint2, []string{"cpu.small"})
 
 	// Step 1: Create without resources
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
@@ -400,7 +398,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 			{
 				Config: workloadConfigWithReplicasAndResources(name, "", "low", artifactID, 1, "cpu.small"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.resources.0.resource_bundle_id", "cpu.small"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.resource_bundles.0", "cpu.small"),
 					checkWorkloadIDChanged(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -463,7 +461,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 1, 3, 50.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "runtime.autoscaling.policies.0.min_count", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -471,7 +469,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 			{
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 2, 5, 70.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.autoscaling.policies.0.min_count", "2"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "2"),
 					checkWorkloadIDChanged(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -567,6 +565,34 @@ func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 	})
 }
 
+func TestWorkloadTooManyContainerGroups(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithMultipleGroups(artifactID),
+				ExpectError: regexp.MustCompile("Too many container groups"),
+			},
+		},
+	})
+}
+
 // ─── matchers ─────────────────────────────────────────────────────────────────
 
 type updateDescriptionMatcher string
@@ -654,7 +680,11 @@ resource "datarobot_workload" "test" {
   artifact_id = %q
   %s
   runtime = {
-    replica_count = %d
+    container_groups = [
+      {
+        replica_count = %d
+      }
+    ]
   }
 }
 `, name, importance, artifactID, desc, replicaCount)
@@ -672,9 +702,11 @@ resource "datarobot_workload" "test" {
   artifact_id = %q
   %s
   runtime = {
-    replica_count = %d
-    resources = [
-      { resource_bundle_id = %q }
+    container_groups = [
+      {
+        replica_count    = %d
+        resource_bundles = [%q]
+      }
     ]
   }
 }
@@ -693,17 +725,21 @@ resource "datarobot_workload" "test" {
   artifact_id = %q
   %s
   runtime = {
-    autoscaling = {
-      enabled = true
-      policies = [
-        {
-          scaling_metric = "cpuAverageUtilization"
-          target         = %g
-          min_count      = %d
-          max_count      = %d
+    container_groups = [
+      {
+        autoscaling = {
+          enabled = true
+          policies = [
+            {
+              scaling_metric = "cpuAverageUtilization"
+              target         = %g
+              min_count      = %d
+              max_count      = %d
+            }
+          ]
         }
-      ]
-    }
+      }
+    ]
   }
 }
 `, name, importance, artifactID, desc, target, minCount, maxCount)
@@ -715,18 +751,22 @@ resource "datarobot_workload" "test" {
   name        = "conflict-test"
   artifact_id = %q
   runtime = {
-    replica_count = 2
-    autoscaling = {
-      enabled = true
-      policies = [
-        {
-          scaling_metric = "cpuAverageUtilization"
-          target         = 50
-          min_count      = 1
-          max_count      = 4
+    container_groups = [
+      {
+        replica_count = 2
+        autoscaling = {
+          enabled = true
+          policies = [
+            {
+              scaling_metric = "cpuAverageUtilization"
+              target         = 50
+              min_count      = 1
+              max_count      = 4
+            }
+          ]
         }
-      ]
-    }
+      }
+    ]
   }
 }
 `, artifactID)
@@ -753,10 +793,6 @@ resource "datarobot_artifact" "test_artifact" {
             port      = 8080
             primary   = true
             entrypoint = ["/whoami", "--port", "8080"]
-            resource_request = {
-              cpu    = 1
-              memory = 536870912
-            }
           }
         ]
       }
@@ -770,7 +806,11 @@ resource "datarobot_workload" "test" {
   artifact_id = datarobot_artifact.test_artifact.artifact_id
   %s
   runtime = {
-    replica_count = %d
+    container_groups = [
+      {
+        replica_count = %d
+      }
+    ]
   }
 }
 `, artifactName, name, importance, desc, replicaCount)
@@ -787,15 +827,17 @@ func workloadFixture(id, artifactID, name, description string, importance client
 		Importance:  importance,
 		ArtifactID:  &artifactID,
 		Endpoint:    endpoint,
-		Runtime: client.ProtonRuntime{
-			ReplicaCount: replicaCount,
+		Runtime: client.WorkloadRuntime{
+			ContainerGroups: []client.GroupRuntime{
+				{Name: "default", ReplicaCount: replicaCount},
+			},
 		},
 	}
 }
 
-func workloadFixtureWithResources(id, artifactID, name string, replicaCount *int64, endpoint *string, resources []client.ResourceBundleResources) *client.Workload {
+func workloadFixtureWithResources(id, artifactID, name string, replicaCount *int64, endpoint *string, resourceBundles []string) *client.Workload {
 	w := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, replicaCount, endpoint)
-	w.Runtime.Resources = resources
+	w.Runtime.ContainerGroups[0].ResourceBundles = resourceBundles
 	return w
 }
 
@@ -808,18 +850,38 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 		Importance: client.WorkloadImportanceLow,
 		ArtifactID: &artifactID,
 		Endpoint:   endpoint,
-		Runtime: client.ProtonRuntime{
-			Autoscaling: &client.AutoscalingProperties{
-				Enabled: &enabled,
-				Policies: []client.AutoscalingPolicy{
-					{
-						ScalingMetric: "cpuAverageUtilization",
-						Target:        target,
-						MinCount:      minCount,
-						MaxCount:      maxCount,
+		Runtime: client.WorkloadRuntime{
+			ContainerGroups: []client.GroupRuntime{
+				{
+					Name: "default",
+					Autoscaling: &client.AutoscalingProperties{
+						Enabled: &enabled,
+						Policies: []client.AutoscalingPolicy{
+							{
+								ScalingMetric: "cpuAverageUtilization",
+								Target:        target,
+								MinCount:      minCount,
+								MaxCount:      maxCount,
+							},
+						},
 					},
 				},
 			},
 		},
 	}
+}
+
+func workloadConfigWithMultipleGroups(artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = "multi-group-test"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      { replica_count = 1 },
+      { replica_count = 2 }
+    ]
+  }
+}
+`, artifactID)
 }
