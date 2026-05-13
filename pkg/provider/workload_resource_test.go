@@ -871,6 +871,53 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 	}
 }
 
+func TestWorkloadMissingResourceConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigMissingResourceAllocation(artifactID),
+				ExpectError: regexp.MustCompile("Missing resource configuration"),
+			},
+		},
+	})
+}
+
+func workloadConfigMissingResourceAllocation(artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = "missing-resource-test"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count = 1
+        containers = [
+          { name = "main" }
+        ]
+      }
+    ]
+  }
+}
+`, artifactID)
+}
+
 func workloadConfigWithMultipleGroups(artifactID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_workload" "test" {

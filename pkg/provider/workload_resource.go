@@ -193,13 +193,13 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 														Optional:            true,
 														MarkdownDescription: "GPUs allocated to this container.",
 													},
-													"gpu_memory": schema.StringAttribute{
+													"gpu_memory": schema.Int64Attribute{
 														Optional:            true,
-														MarkdownDescription: "GPU VRAM allocated (e.g. `15GB`, `16GiB`, or raw bytes as a string).",
+														MarkdownDescription: "GPU VRAM allocated in bytes.",
 													},
-													"memory": schema.StringAttribute{
+													"memory": schema.Int64Attribute{
 														Optional:            true,
-														MarkdownDescription: "RAM allocated (e.g. `8GB`, `512MiB`, or raw bytes as a string).",
+														MarkdownDescription: "RAM allocated in bytes.",
 													},
 												},
 											},
@@ -378,6 +378,18 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
 			)
 		}
+
+		if len(g.ResourceBundles) == 0 {
+			for j, c := range g.Containers {
+				if c.ResourceAllocation == nil {
+					resp.Diagnostics.AddAttributeError(
+						path.Root("runtime").AtName("container_groups").AtListIndex(i).AtName("containers").AtListIndex(j).AtName("resource_allocation"),
+						"Missing resource configuration",
+						"resource_allocation is required for each container when resource_bundles is not set.",
+					)
+				}
+			}
+		}
 	}
 }
 
@@ -540,11 +552,11 @@ func containerOverrideToClient(c WorkloadContainerOverrideModel) client.Containe
 			ra.GPU = &v
 		}
 		if !c.ResourceAllocation.GPUMemory.IsNull() && !c.ResourceAllocation.GPUMemory.IsUnknown() {
-			v := c.ResourceAllocation.GPUMemory.ValueString()
+			v := c.ResourceAllocation.GPUMemory.ValueInt64()
 			ra.GPUMemory = &v
 		}
 		if !c.ResourceAllocation.Memory.IsNull() && !c.ResourceAllocation.Memory.IsUnknown() {
-			v := c.ResourceAllocation.Memory.ValueString()
+			v := c.ResourceAllocation.Memory.ValueInt64()
 			ra.Memory = &v
 		}
 		co.ResourceAllocation = ra
@@ -695,14 +707,14 @@ func loadContainerOverrideFromAPI(c client.ContainerOverride) WorkloadContainerO
 			ra.GPU = types.Float64Null()
 		}
 		if c.ResourceAllocation.GPUMemory != nil {
-			ra.GPUMemory = types.StringValue(*c.ResourceAllocation.GPUMemory)
+			ra.GPUMemory = types.Int64Value(*c.ResourceAllocation.GPUMemory)
 		} else {
-			ra.GPUMemory = types.StringNull()
+			ra.GPUMemory = types.Int64Null()
 		}
 		if c.ResourceAllocation.Memory != nil {
-			ra.Memory = types.StringValue(*c.ResourceAllocation.Memory)
+			ra.Memory = types.Int64Value(*c.ResourceAllocation.Memory)
 		} else {
-			ra.Memory = types.StringNull()
+			ra.Memory = types.Int64Null()
 		}
 		m.ResourceAllocation = ra
 	}

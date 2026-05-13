@@ -36,8 +36,8 @@ type AutoscalingProperties struct {
 type ResourceAllocation struct {
 	CPU       *float64 `json:"cpu,omitempty"`
 	GPU       *float64 `json:"gpu,omitempty"`
-	GPUMemory *string  `json:"gpuMemory,omitempty"`
-	Memory    *string  `json:"memory,omitempty"`
+	GPUMemory *int64   `json:"gpuMemory,omitempty"`
+	Memory    *int64   `json:"memory,omitempty"`
 }
 
 type ContainerOverride struct {
