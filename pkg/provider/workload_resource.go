@@ -568,6 +568,7 @@ func containerOverrideToClient(c WorkloadContainerOverrideModel) client.Containe
 //   - replica_count=0 per group signals "explicitly cleared"; restore it to prevent a perpetual diff.
 //   - description="" is indistinguishable from "not set"; restore null when user omitted it.
 //   - container_groups=nil (user omitted the block) must stay nil even if the API returns groups.
+//   - resource_bundles=nil (user omitted the field) must stay nil even if the API injects defaults.
 func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
 	if desired.Description.IsNull() && data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
@@ -583,6 +584,9 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 		dg := desired.Runtime.ContainerGroups[i]
 		if !dg.ReplicaCount.IsNull() && !dg.ReplicaCount.IsUnknown() && dg.ReplicaCount.ValueInt64() == 0 {
 			data.Runtime.ContainerGroups[i].ReplicaCount = dg.ReplicaCount
+		}
+		if dg.ResourceBundles == nil {
+			data.Runtime.ContainerGroups[i].ResourceBundles = nil
 		}
 	}
 }
