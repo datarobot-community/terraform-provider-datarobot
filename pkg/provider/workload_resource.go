@@ -339,10 +339,25 @@ func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteReques
 }
 
 func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("runtime"), WorkloadRuntimeModel{
-		ContainerGroups: nil,
-	})...)
+	traceAPICall("GetWorkload")
+	workload, err := r.provider.service.GetWorkload(ctx, req.ID)
+	if err != nil {
+		if _, ok := err.(*client.NotFoundError); ok {
+			resp.Diagnostics.AddError("Workload not found",
+				fmt.Sprintf("Workload with ID %s is not found.", req.ID))
+		} else {
+			resp.Diagnostics.AddError("Error importing Workload", err.Error())
+		}
+		return
+	}
+
+	var data WorkloadResourceModel
+	data.ID = types.StringValue(req.ID)
+	loadWorkloadIntoModel(workload, &data)
+	if data.Description.ValueString() == "" {
+		data.Description = types.StringNull()
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {

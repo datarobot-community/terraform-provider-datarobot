@@ -49,7 +49,7 @@ func TestAccWorkloadResource(t *testing.T) {
 			{
 				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.replica_count", "2"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "2"),
 					checkWorkloadIDChanged(&initialID),
 					checkWorkloadExistsInAPI("updated-"+name, false),
 				),
@@ -357,10 +357,10 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 	endpoint1 := "https://workloads.example.com/" + id1
 	endpoint2 := "https://workloads.example.com/" + id2
 
-	workload1 := workloadFixtureWithResources(id1, artifactID, name, &replicaCount, &endpoint1, nil)
-	workload2 := workloadFixtureWithResources(id2, artifactID, name, &replicaCount, &endpoint2, []string{"cpu.small"})
+	workload1 := workloadFixtureWithResources(id1, artifactID, name, &replicaCount, &endpoint1, []string{"cpu.small"})
+	workload2 := workloadFixtureWithResources(id2, artifactID, name, &replicaCount, &endpoint2, []string{"cpu.large"})
 
-	// Step 1: Create without resources
+	// Step 1: Create with baseline resource bundle
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil) // post-create Read
@@ -396,9 +396,9 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 				),
 			},
 			{
-				Config: workloadConfigWithReplicasAndResources(name, "", "low", artifactID, 1, "cpu.small"),
+				Config: workloadConfigWithReplicasAndResources(name, "", "low", artifactID, 1, "cpu.large"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.resource_bundles.0", "cpu.small"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.resource_bundles.0", "cpu.large"),
 					checkWorkloadIDChanged(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -504,8 +504,9 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-create Read
 
-	// Step 2: ImportState
-	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // import Read
+	// Step 2: ImportState — ImportState fetches workload, then framework calls Read again
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // ImportState fetch
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-import Read
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
@@ -682,7 +683,8 @@ resource "datarobot_workload" "test" {
   runtime = {
     container_groups = [
       {
-        replica_count = %d
+        replica_count    = %d
+        resource_bundles = ["cpu.small"]
       }
     ]
   }
@@ -727,6 +729,7 @@ resource "datarobot_workload" "test" {
   runtime = {
     container_groups = [
       {
+        resource_bundles = ["cpu.small"]
         autoscaling = {
           enabled = true
           policies = [
@@ -808,7 +811,8 @@ resource "datarobot_workload" "test" {
   runtime = {
     container_groups = [
       {
-        replica_count = %d
+        replica_count    = %d
+        resource_bundles = ["cpu.small"]
       }
     ]
   }
@@ -829,7 +833,7 @@ func workloadFixture(id, artifactID, name, description string, importance client
 		Endpoint:    endpoint,
 		Runtime: client.WorkloadRuntime{
 			ContainerGroups: []client.GroupRuntime{
-				{Name: "default", ReplicaCount: replicaCount},
+				{Name: "default", ReplicaCount: replicaCount, ResourceBundles: []string{"cpu.small"}},
 			},
 		},
 	}
@@ -853,7 +857,8 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 		Runtime: client.WorkloadRuntime{
 			ContainerGroups: []client.GroupRuntime{
 				{
-					Name: "default",
+					Name:            "default",
+					ResourceBundles: []string{"cpu.small"},
 					Autoscaling: &client.AutoscalingProperties{
 						Enabled: &enabled,
 						Policies: []client.AutoscalingPolicy{
