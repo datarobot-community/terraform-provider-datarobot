@@ -466,7 +466,13 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() || data.Spec == nil {
 		return
 	}
-	if len(data.Spec.ContainerGroups) > 1 {
+	if len(data.Spec.ContainerGroups) == 0 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("spec").AtName("container_groups"),
+			"Missing container groups",
+			"At least one container group must be defined in the artifact spec.",
+		)
+	} else if len(data.Spec.ContainerGroups) > 1 {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("spec").AtName("container_groups"),
 			"Too many container groups",

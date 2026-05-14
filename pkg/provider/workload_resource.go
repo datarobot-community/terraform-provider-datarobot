@@ -341,7 +341,7 @@ func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteReques
 func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("runtime"), WorkloadRuntimeModel{
-		ContainerGroups: []WorkloadGroupRuntimeModel{},
+		ContainerGroups: nil,
 	})...)
 }
 
@@ -380,6 +380,13 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 		}
 
 		if len(g.ResourceBundles) == 0 {
+			if len(g.Containers) == 0 {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("runtime").AtName("container_groups").AtListIndex(i).AtName("containers"),
+					"Missing containers",
+					"At least one container must be defined when resource_bundles is not set.",
+				)
+			}
 			for j, c := range g.Containers {
 				if c.ResourceAllocation == nil {
 					resp.Diagnostics.AddAttributeError(
@@ -569,6 +576,7 @@ func containerOverrideToClient(c WorkloadContainerOverrideModel) client.Containe
 //   - description="" is indistinguishable from "not set"; restore null when user omitted it.
 //   - container_groups=nil (user omitted the block) must stay nil even if the API returns groups.
 //   - resource_bundles=nil (user omitted the field) must stay nil even if the API injects defaults.
+//   - bundle_selection_policy=null (user omitted the field) must stay null even if the API returns a default.
 func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
 	if desired.Description.IsNull() && data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
@@ -588,6 +596,7 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 		if dg.ResourceBundles == nil {
 			data.Runtime.ContainerGroups[i].ResourceBundles = nil
 		}
+		data.Runtime.ContainerGroups[i].BundleSelectionPolicy = dg.BundleSelectionPolicy
 	}
 }
 

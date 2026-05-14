@@ -918,6 +918,186 @@ resource "datarobot_workload" "test" {
 `, artifactID)
 }
 
+func TestWorkloadEmptyContainers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigEmptyContainers(artifactID),
+				ExpectError: regexp.MustCompile("Missing containers"),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadResourceBundlesSentinel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	// API injects resource_bundles even though the plan has none.
+	apiWorkload := workloadFixtureWithResources(id, artifactID, name, &replicaCount, &endpoint, []string{"api-injected-bundle"})
+	cpu := 1.0
+	mem := int64(536870912)
+	apiWorkload.Runtime.ContainerGroups[0].Containers = []client.ContainerOverride{
+		{Name: "main", ResourceAllocation: &client.ResourceAllocation{CPU: &cpu, Memory: &mem}},
+	}
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(apiWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // waitForRunning
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // post-create Read
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithResourceAllocation(name, artifactID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr(resourceName, "runtime.container_groups.0.resource_bundles.0"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadBundleSelectionPolicySentinel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	// API returns a different bundle_selection_policy than what the plan has.
+	apiWorkload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	apiPolicy := "latency"
+	apiWorkload.Runtime.ContainerGroups[0].BundleSelectionPolicy = &apiPolicy
+	cpu := 1.0
+	mem := int64(536870912)
+	apiWorkload.Runtime.ContainerGroups[0].Containers = []client.ContainerOverride{
+		{Name: "main", ResourceAllocation: &client.ResourceAllocation{CPU: &cpu, Memory: &mem}},
+	}
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(apiWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // waitForRunning
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // post-create Read
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// User omits bundle_selection_policy; schema Default gives "availability".
+				// API returns "latency". State must reflect the plan value, not the API value.
+				Config: workloadConfigWithResourceAllocation(name, artifactID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.bundle_selection_policy", "availability"),
+				),
+			},
+		},
+	})
+}
+
+func workloadConfigWithResourceAllocation(name, artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count = 1
+        containers = [
+          {
+            name = "main"
+            resource_allocation = {
+              cpu    = 1
+              memory = 536870912
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+`, name, artifactID)
+}
+
+func workloadConfigEmptyContainers(artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = "empty-containers-test"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count = 1
+        containers    = []
+      }
+    ]
+  }
+}
+`, artifactID)
+}
+
 func workloadConfigWithMultipleGroups(artifactID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_workload" "test" {
