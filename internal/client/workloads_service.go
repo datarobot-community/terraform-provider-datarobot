@@ -141,8 +141,8 @@ type ArtifactContainer struct {
 }
 
 type ArtifactContainerGroup struct {
-	Name       string               `json:"name,omitempty"`
-	Containers []ArtifactContainer  `json:"containers"`
+	Name       string              `json:"name,omitempty"`
+	Containers []ArtifactContainer `json:"containers"`
 }
 
 type ArtifactSpec struct {

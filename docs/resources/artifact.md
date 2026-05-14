@@ -51,7 +51,6 @@ Required:
 Required:
 
 - `image_uri` (String) Docker image URI.
-- `resource_request` (Attributes) Resource requirements for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--resource_request))
 
 Optional:
 
@@ -64,20 +63,6 @@ Optional:
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
-
-<a id="nestedatt--spec--container_groups--containers--resource_request"></a>
-### Nested Schema for `spec.container_groups.containers.resource_request`
-
-Required:
-
-- `cpu` (Number) Number of CPU cores required.
-- `memory` (Number) Memory required in bytes.
-
-Optional:
-
-- `gpu` (Number) Number of GPUs required.
-- `gpu_type` (String) GPU type required (e.g., NVIDIA-A100).
-
 
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
 ### Nested Schema for `spec.container_groups.containers.environment_vars`
