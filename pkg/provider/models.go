@@ -1005,7 +1005,6 @@ type ArtifactContainerModel struct {
 	Port            types.Int64                        `tfsdk:"port"`
 	Entrypoint      []types.String                     `tfsdk:"entrypoint"`
 	EnvironmentVars []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
-	ResourceRequest ArtifactResourceRequestModel       `tfsdk:"resource_request"`
 	StartupProbe    *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe  *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
 	LivenessProbe   *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
@@ -1014,13 +1013,6 @@ type ArtifactContainerModel struct {
 type ArtifactEnvironmentVariableModel struct {
 	Name  types.String `tfsdk:"name"`
 	Value types.String `tfsdk:"value"`
-}
-
-type ArtifactResourceRequestModel struct {
-	CPU     types.Int64  `tfsdk:"cpu"`
-	Memory  types.Int64  `tfsdk:"memory"`
-	GPU     types.Int64  `tfsdk:"gpu"`
-	GPUType types.String `tfsdk:"gpu_type"`
 }
 
 type ArtifactProbeConfigModel struct {
@@ -1047,9 +1039,28 @@ type WorkloadResourceModel struct {
 }
 
 type WorkloadRuntimeModel struct {
-	ReplicaCount types.Int64                   `tfsdk:"replica_count"`
-	Autoscaling  *WorkloadAutoscalingModel     `tfsdk:"autoscaling"`
-	Resources    []WorkloadResourceBundleModel `tfsdk:"resources"`
+	ContainerGroups []WorkloadGroupRuntimeModel `tfsdk:"container_groups"`
+}
+
+type WorkloadGroupRuntimeModel struct {
+	Name                  types.String                     `tfsdk:"name"`
+	ReplicaCount          types.Int64                      `tfsdk:"replica_count"`
+	Autoscaling           *WorkloadAutoscalingModel        `tfsdk:"autoscaling"`
+	ResourceBundles       []types.String                   `tfsdk:"resource_bundles"`
+	BundleSelectionPolicy types.String                     `tfsdk:"bundle_selection_policy"`
+	Containers            []WorkloadContainerOverrideModel `tfsdk:"containers"`
+}
+
+type WorkloadContainerOverrideModel struct {
+	Name               types.String                     `tfsdk:"name"`
+	ResourceAllocation *WorkloadResourceAllocationModel `tfsdk:"resource_allocation"`
+}
+
+type WorkloadResourceAllocationModel struct {
+	CPU       types.Float64 `tfsdk:"cpu"`
+	GPU       types.Float64 `tfsdk:"gpu"`
+	GPUMemory types.Int64   `tfsdk:"gpu_memory"`
+	Memory    types.Int64   `tfsdk:"memory"`
 }
 
 type WorkloadAutoscalingModel struct {
@@ -1063,8 +1074,4 @@ type WorkloadAutoscalingPolicyModel struct {
 	MinCount      types.Int64   `tfsdk:"min_count"`
 	MaxCount      types.Int64   `tfsdk:"max_count"`
 	Priority      types.Int64   `tfsdk:"priority"`
-}
-
-type WorkloadResourceBundleModel struct {
-	ResourceBundleID types.String `tfsdk:"resource_bundle_id"`
 }
