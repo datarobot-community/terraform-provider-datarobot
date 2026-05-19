@@ -1,9 +1,14 @@
+## [Unreleased]
+
+### Fixed
+
+- dropped resource_request attribute from `datarobot_artifact` resource and added container groups to the `datarobot_workload`. Now resources are managed via resource_allocation for each container in the container_group in workload resources
+
 ## [0.10.36] - 2026-05-12
 
 ### Fixed
 
 - `datarobot_memory_space` now checks the correct feature flag name `ENABLE_AGENTIC_MEMORY_API` (previously checked `AGENTIC_MEMORY_API`, which always evaluated to disabled even on accounts where Memory Spaces were enabled)
-- dropped resource_request attribute from `datarobot_artifact` resource and added container groups to the `datarobot_workload`. Now resources are managed via resource_allocation for each container in the container_group in workload resources
 
 ## [0.10.35] - 2026-05-11
 
