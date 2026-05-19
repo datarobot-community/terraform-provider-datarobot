@@ -50,23 +50,36 @@ lifecycle {
 
 Optional:
 
-- `autoscaling` (Attributes) Autoscaling configuration. When set, takes precedence over replica_count. (see [below for nested schema](#nestedatt--runtime--autoscaling))
-- `replica_count` (Number) Number of replicas to run. Cannot be used together with `autoscaling`. Omitting this field retains the current value. Set to `0` to explicitly clear it (e.g. when switching to autoscaling).
-- `resources` (Attributes List) Resource bundles assigned to the Workload. When empty the server infers an appropriate bundle. (see [below for nested schema](#nestedatt--runtime--resources))
+- `container_groups` (Attributes List) Per-group runtime configuration. (see [below for nested schema](#nestedatt--runtime--container_groups))
 
-<a id="nestedatt--runtime--autoscaling"></a>
-### Nested Schema for `runtime.autoscaling`
+<a id="nestedatt--runtime--container_groups"></a>
+### Nested Schema for `runtime.container_groups`
+
+Optional:
+
+- `autoscaling` (Attributes) Autoscaling configuration. When set, takes precedence over `replica_count`. (see [below for nested schema](#nestedatt--runtime--container_groups--autoscaling))
+- `bundle_selection_policy` (String) How to select among `resource_bundles`. Defaults to `availability`.
+- `containers` (Attributes List) Per-container resource allocation overrides. (see [below for nested schema](#nestedatt--runtime--container_groups--containers))
+- `replica_count` (Number) Number of replicas. Cannot be set alongside `autoscaling.enabled=true`. Set to `0` to explicitly clear it.
+- `resource_bundles` (List of String) Ordered list of resource bundle IDs. One is selected at scheduling time.
+
+Read-Only:
+
+- `name` (String) Container group name (server-assigned, always `default`).
+
+<a id="nestedatt--runtime--container_groups--autoscaling"></a>
+### Nested Schema for `runtime.container_groups.autoscaling`
 
 Required:
 
-- `policies` (Attributes List) Scaling policies that define when and how to scale. (see [below for nested schema](#nestedatt--runtime--autoscaling--policies))
+- `policies` (Attributes List) Scaling policies that define when and how to scale. (see [below for nested schema](#nestedatt--runtime--container_groups--autoscaling--policies))
 
 Optional:
 
 - `enabled` (Boolean) Whether autoscaling is enabled. Defaults to true.
 
-<a id="nestedatt--runtime--autoscaling--policies"></a>
-### Nested Schema for `runtime.autoscaling.policies`
+<a id="nestedatt--runtime--container_groups--autoscaling--policies"></a>
+### Nested Schema for `runtime.container_groups.autoscaling.policies`
 
 Required:
 
@@ -81,9 +94,23 @@ Optional:
 
 
 
-<a id="nestedatt--runtime--resources"></a>
-### Nested Schema for `runtime.resources`
+<a id="nestedatt--runtime--container_groups--containers"></a>
+### Nested Schema for `runtime.container_groups.containers`
 
 Required:
 
-- `resource_bundle_id` (String) ID of the resource bundle (e.g. `cpu.nano`).
+- `name` (String) Container name. Must match a container declared in the artifact group.
+
+Optional:
+
+- `resource_allocation` (Attributes) Resource allocation for this container. (see [below for nested schema](#nestedatt--runtime--container_groups--containers--resource_allocation))
+
+<a id="nestedatt--runtime--container_groups--containers--resource_allocation"></a>
+### Nested Schema for `runtime.container_groups.containers.resource_allocation`
+
+Optional:
+
+- `cpu` (Number) CPU cores allocated to this container.
+- `gpu` (Number) GPUs allocated to this container.
+- `gpu_memory` (Number) GPU VRAM allocated in bytes.
+- `memory` (Number) RAM allocated in bytes.
