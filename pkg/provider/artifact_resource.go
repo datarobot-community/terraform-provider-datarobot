@@ -197,13 +197,27 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 												MarkdownDescription: "Environment variables for the container.",
 												NestedObject: schema.NestedAttributeObject{
 													Attributes: map[string]schema.Attribute{
+														"source": schema.StringAttribute{
+															Optional:            true,
+															Computed:            true,
+															Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
+															MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".`,
+														},
 														"name": schema.StringAttribute{
 															Required:            true,
 															MarkdownDescription: "Name of the environment variable.",
 														},
 														"value": schema.StringAttribute{
-															Required:            true,
-															MarkdownDescription: "Value of the environment variable.",
+															Optional:            true,
+															MarkdownDescription: `Value of the environment variable. Required when source is "string".`,
+														},
+														"credential_id": schema.StringAttribute{
+															Optional:            true,
+															MarkdownDescription: `DataRobot credential ID. Required when source is "dr-credential".`,
+														},
+														"key": schema.StringAttribute{
+															Optional:            true,
+															MarkdownDescription: `Key within the credential. Required when source is "dr-credential".`,
 														},
 													},
 												},
@@ -435,8 +449,11 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 		return false
 	}
 	for i := range a.EnvironmentVars {
-		if !a.EnvironmentVars[i].Name.Equal(b.EnvironmentVars[i].Name) ||
-			!a.EnvironmentVars[i].Value.Equal(b.EnvironmentVars[i].Value) {
+		if !a.EnvironmentVars[i].Source.Equal(b.EnvironmentVars[i].Source) ||
+			!a.EnvironmentVars[i].Name.Equal(b.EnvironmentVars[i].Name) ||
+			!a.EnvironmentVars[i].Value.Equal(b.EnvironmentVars[i].Value) ||
+			!a.EnvironmentVars[i].CredentialID.Equal(b.EnvironmentVars[i].CredentialID) ||
+			!a.EnvironmentVars[i].Key.Equal(b.EnvironmentVars[i].Key) {
 			return false
 		}
 	}
@@ -478,6 +495,64 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			"Too many container groups",
 			"Currently, Workload API supports only 1 container group.",
 		)
+	}
+
+	for gi, group := range data.Spec.ContainerGroups {
+		for ci, container := range group.Containers {
+			for ei, ev := range container.EnvironmentVars {
+				if ev.Source.IsUnknown() {
+					continue
+				}
+				evPath := path.Root("spec").
+					AtName("container_groups").AtListIndex(gi).
+					AtName("containers").AtListIndex(ci).
+					AtName("environment_vars").AtListIndex(ei)
+
+				source := ev.Source.ValueString()
+				if ev.Source.IsNull() {
+					source = client.EnvironmentVariableSourceString
+				}
+
+				switch source {
+				case client.EnvironmentVariableSourceString:
+					if ev.Value.IsNull() || ev.Value.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+							"Missing value",
+							`"value" is required when source is "string".`)
+					}
+					if !ev.CredentialID.IsNull() && !ev.CredentialID.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("credential_id"),
+							"Unexpected field",
+							`"credential_id" must not be set when source is "string".`)
+					}
+					if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+							"Unexpected field",
+							`"key" must not be set when source is "string".`)
+					}
+				case client.EnvironmentVariableSourceCredential:
+					if ev.CredentialID.IsNull() || ev.CredentialID.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("credential_id"),
+							"Missing credential_id",
+							`"credential_id" is required when source is "dr-credential".`)
+					}
+					if ev.Key.IsNull() || ev.Key.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+							"Missing key",
+							`"key" is required when source is "dr-credential".`)
+					}
+					if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+							"Unexpected field",
+							`"value" must not be set when source is "dr-credential".`)
+					}
+				default:
+					resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
+						"Invalid source",
+						fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+				}
+			}
+		}
 	}
 }
 
@@ -550,10 +625,17 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			container.EnvironmentVars[i] = client.ArtifactEnvironmentVariable{
-				Name:  ev.Name.ValueString(),
-				Value: ev.Value.ValueString(),
+			envVar := client.ArtifactEnvironmentVariable{
+				Source: ev.Source.ValueString(),
+				Name:   ev.Name.ValueString(),
 			}
+			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
+				envVar.DrCredentialID = ev.CredentialID.ValueString()
+				envVar.Key = ev.Key.ValueString()
+			} else {
+				envVar.Value = ev.Value.ValueString()
+			}
+			container.EnvironmentVars[i] = envVar
 		}
 	}
 
@@ -627,18 +709,18 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 	for i, g := range spec.ContainerGroups {
 		containers := make([]ArtifactContainerModel, len(g.Containers))
 		for j, c := range g.Containers {
-			var priorDescription types.String
+			var priorContainer *ArtifactContainerModel
 			if prior != nil && i < len(prior.ContainerGroups) && j < len(prior.ContainerGroups[i].Containers) {
-				priorDescription = prior.ContainerGroups[i].Containers[j].Description
+				priorContainer = &prior.ContainerGroups[i].Containers[j]
 			}
-			containers[j] = loadContainerFromAPI(c, priorDescription)
+			containers[j] = loadContainerFromAPI(c, priorContainer)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
 	return ArtifactSpecModel{ContainerGroups: groups}
 }
 
-func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.String) ArtifactContainerModel {
+func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
 	model := ArtifactContainerModel{
 		ImageURI: types.StringValue(c.ImageURI),
 	}
@@ -649,6 +731,10 @@ func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.Str
 		model.Name = types.StringNull()
 	}
 
+	var priorDescription types.String
+	if prior != nil {
+		priorDescription = prior.Description
+	}
 	if c.Description != "" {
 		model.Description = types.StringValue(c.Description)
 	} else if priorDescription.IsUnknown() {
@@ -679,11 +765,23 @@ func loadContainerFromAPI(c client.ArtifactContainer, priorDescription types.Str
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			model.EnvironmentVars[i] = ArtifactEnvironmentVariableModel{
-				Name:  types.StringValue(ev.Name),
-				Value: types.StringValue(ev.Value),
+			m := ArtifactEnvironmentVariableModel{
+				Source:       types.StringValue(ev.Source),
+				Name:         types.StringValue(ev.Name),
+				Value:        types.StringNull(),
+				CredentialID: types.StringNull(),
+				Key:          types.StringNull(),
 			}
+			if ev.Source == client.EnvironmentVariableSourceCredential {
+				m.CredentialID = types.StringValue(ev.DrCredentialID)
+				m.Key = types.StringValue(ev.Key)
+			} else {
+				m.Value = types.StringValue(ev.Value)
+			}
+			model.EnvironmentVars[i] = m
 		}
+	} else if prior != nil && prior.EnvironmentVars != nil {
+		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
 	}
 
 	model.StartupProbe = loadProbeFromAPI(c.StartupProbe)

@@ -110,9 +110,17 @@ const (
 	ArtifactTypeNim     ArtifactType = "nim"
 )
 
+const (
+	EnvironmentVariableSourceString     = "string"
+	EnvironmentVariableSourceCredential = "dr-credential"
+)
+
 type ArtifactEnvironmentVariable struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Source         string `json:"source,omitempty"`
+	Name           string `json:"name"`
+	Value          string `json:"value,omitempty"`
+	DrCredentialID string `json:"drCredentialId,omitempty"`
+	Key            string `json:"key,omitempty"`
 }
 
 type ArtifactProbeConfig struct {

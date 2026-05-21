@@ -1011,8 +1011,11 @@ type ArtifactContainerModel struct {
 }
 
 type ArtifactEnvironmentVariableModel struct {
-	Name  types.String `tfsdk:"name"`
-	Value types.String `tfsdk:"value"`
+	Source       types.String `tfsdk:"source"`
+	Name         types.String `tfsdk:"name"`
+	Value        types.String `tfsdk:"value"`
+	CredentialID types.String `tfsdk:"credential_id"`
+	Key          types.String `tfsdk:"key"`
 }
 
 type ArtifactProbeConfigModel struct {
