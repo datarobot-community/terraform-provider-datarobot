@@ -70,7 +70,13 @@ Optional:
 Required:
 
 - `name` (String) Name of the environment variable.
-- `value` (String) Value of the environment variable.
+
+Optional:
+
+- `credential_id` (String) DataRobot credential ID. Required when source is "dr-credential".
+- `key` (String) Key within the credential. Required when source is "dr-credential".
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".
+- `value` (String) Value of the environment variable. Required when source is "string".
 
 
 <a id="nestedatt--spec--container_groups--containers--liveness_probe"></a>
