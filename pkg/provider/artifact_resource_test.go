@@ -291,8 +291,9 @@ resource "datarobot_artifact" "test" {
 
             environment_vars = [
               {
-                name  = "ENV"
-                value = "production"
+                source = "string"
+                name   = "ENV"
+                value  = "production"
               }
             ]
 
@@ -336,7 +337,7 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 							Port:        &port,
 							Entrypoint:  []string{"python", "-m", "app"},
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
-								{Name: "ENV", Value: "production"},
+								{Source: client.EnvironmentVariableSourceString, Name: "ENV", Value: "production"},
 							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
 								Path:             "/health",
@@ -391,6 +392,143 @@ resource "datarobot_artifact" "test" {
         containers = [{ image_uri = "image-b:latest" }]
       }
     ]
+  }
+}
+`
+}
+
+func TestArtifactCredentialEnvVarValidation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	cases := []struct {
+		name        string
+		config      string
+		expectError string
+	}{
+		{
+			name:        "credential env var missing credential_id",
+			config:      artifactConfigWithCredentialEnvVar("dr-credential", "", "token", ""),
+			expectError: `"credential_id" is required`,
+		},
+		{
+			name:        "credential env var missing key",
+			config:      artifactConfigWithCredentialEnvVar("dr-credential", "cred-abc", "", ""),
+			expectError: `"key" is required`,
+		},
+		{
+			name:        "credential env var with unexpected value",
+			config:      artifactConfigWithCredentialEnvVar("dr-credential", "cred-abc", "token", "should-not-be-here"),
+			expectError: `"value" must not be set`,
+		},
+		{
+			name:        "string env var missing value",
+			config:      artifactConfigWithStringEnvVarMissingValue(),
+			expectError: `"value" is required`,
+		},
+		{
+			name:        "invalid source type",
+			config:      artifactConfigWithInvalidSource(),
+			expectError: `Invalid source`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tc.config,
+						ExpectError: regexp.MustCompile(tc.expectError),
+					},
+				},
+			})
+		})
+	}
+}
+
+// artifactConfigWithCredentialEnvVar builds a config with a credential env var.
+// Pass empty strings for credential_id, key, or value to omit those fields.
+func artifactConfigWithCredentialEnvVar(source, credentialID, key, value string) string {
+	credentialIDLine := ""
+	if credentialID != "" {
+		credentialIDLine = fmt.Sprintf("credential_id = %q\n", credentialID)
+	}
+	keyLine := ""
+	if key != "" {
+		keyLine = fmt.Sprintf("key = %q\n", key)
+	}
+	valueLine := ""
+	if value != "" {
+		valueLine = fmt.Sprintf("value = %q\n", value)
+	}
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name = "cred-env-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        primary   = true
+        port      = 8080
+        environment_vars = [{
+          source = %q
+          name   = "MY_SECRET"
+          %s%s%s
+        }]
+      }]
+    }]
+  }
+}
+`, source, credentialIDLine, keyLine, valueLine)
+}
+
+func artifactConfigWithStringEnvVarMissingValue() string {
+	return `
+resource "datarobot_artifact" "test" {
+  name = "missing-value-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "string"
+          name   = "ENV"
+        }]
+      }]
+    }]
+  }
+}
+`
+}
+
+func artifactConfigWithInvalidSource() string {
+	return `
+resource "datarobot_artifact" "test" {
+  name = "invalid-source-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "unknown-type"
+          name   = "ENV"
+          value  = "foo"
+        }]
+      }]
+    }]
   }
 }
 `

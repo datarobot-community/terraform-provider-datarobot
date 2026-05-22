@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- added credential type for environment variables on the `datarobot_artifact` resource
+
 ## [0.10.37] - 2026-05-20
 
 ### Fixed
