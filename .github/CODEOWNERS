@@ -1,0 +1,6 @@
+* @datarobot-community/dsx
+
+internal/client/application_service.go @datarobot-community/apps
+pkg/provider/*app* @datarobot-community/apps
+docs/resources/*app*.md @datarobot-community/apps
+examples/resources/*app*/ @datarobot-community/apps
