@@ -112,5 +112,5 @@ Optional:
 
 - `cpu` (Number) CPU cores allocated to this container.
 - `gpu` (Number) GPUs allocated to this container.
-- `gpu_memory` (Number) GPU VRAM allocated in bytes.
-- `memory` (Number) RAM allocated in bytes.
+- `gpu_memory` (String) GPU VRAM allocated. Accepts human-readable strings (e.g. `"15GB"`, `"512MB"`, `"4096Mi"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.
+- `memory` (String) RAM allocated. Accepts human-readable strings (e.g. `"8GB"`, `"512MB"`, `"4096Mi"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.
