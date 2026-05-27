@@ -766,11 +766,11 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
 			m := ArtifactEnvironmentVariableModel{
-				Source:       types.StringValue(ev.Source),
-				Name:         types.StringValue(ev.Name),
-				Value:        types.StringNull(),
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringValue(ev.Name),
+				Value:          types.StringNull(),
 				DrCredentialID: types.StringNull(),
-				Key:          types.StringNull(),
+				Key:            types.StringNull(),
 			}
 			if ev.Source == client.EnvironmentVariableSourceCredential {
 				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
