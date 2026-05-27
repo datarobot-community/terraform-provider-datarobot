@@ -416,9 +416,9 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 		expectError string
 	}{
 		{
-			name:        "credential env var missing credential_id",
+			name:        "credential env var missing dr_credential_id",
 			config:      artifactConfigWithCredentialEnvVar("dr-credential", "", "token", ""),
-			expectError: `"credential_id" is required`,
+			expectError: `"dr_credential_id" is required`,
 		},
 		{
 			name:        "credential env var missing key",
@@ -460,11 +460,11 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 }
 
 // artifactConfigWithCredentialEnvVar builds a config with a credential env var.
-// Pass empty strings for credential_id, key, or value to omit those fields.
+// Pass empty strings for dr_credential_id, key, or value to omit those fields.
 func artifactConfigWithCredentialEnvVar(source, credentialID, key, value string) string {
 	credentialIDLine := ""
 	if credentialID != "" {
-		credentialIDLine = fmt.Sprintf("credential_id = %q\n", credentialID)
+		credentialIDLine = fmt.Sprintf("dr_credential_id = %q\n", credentialID)
 	}
 	keyLine := ""
 	if key != "" {
