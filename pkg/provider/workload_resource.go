@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -15,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -193,13 +195,19 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 														Optional:            true,
 														MarkdownDescription: "GPUs allocated to this container.",
 													},
-													"gpu_memory": schema.Int64Attribute{
+													"gpu_memory": schema.StringAttribute{
 														Optional:            true,
-														MarkdownDescription: "GPU VRAM allocated in bytes.",
+														MarkdownDescription: "GPU VRAM allocated. Accepts human-readable strings (e.g. `\"15GB\"`, `\"512MB\"`, `\"4096Mi\"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.",
+														Validators: []validator.String{
+															memoryStringValidator{},
+														},
 													},
-													"memory": schema.Int64Attribute{
+													"memory": schema.StringAttribute{
 														Optional:            true,
-														MarkdownDescription: "RAM allocated in bytes.",
+														MarkdownDescription: "RAM allocated. Accepts human-readable strings (e.g. `\"8GB\"`, `\"512MB\"`, `\"4096Mi\"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.",
+														Validators: []validator.String{
+															memoryStringValidator{},
+														},
 													},
 												},
 											},
@@ -574,11 +582,11 @@ func containerOverrideToClient(c WorkloadContainerOverrideModel) client.Containe
 			ra.GPU = &v
 		}
 		if !c.ResourceAllocation.GPUMemory.IsNull() && !c.ResourceAllocation.GPUMemory.IsUnknown() {
-			v := c.ResourceAllocation.GPUMemory.ValueInt64()
+			v, _ := parseMemoryBytes(c.ResourceAllocation.GPUMemory.ValueString())
 			ra.GPUMemory = &v
 		}
 		if !c.ResourceAllocation.Memory.IsNull() && !c.ResourceAllocation.Memory.IsUnknown() {
-			v := c.ResourceAllocation.Memory.ValueInt64()
+			v, _ := parseMemoryBytes(c.ResourceAllocation.Memory.ValueString())
 			ra.Memory = &v
 		}
 		co.ResourceAllocation = ra
@@ -592,6 +600,7 @@ func containerOverrideToClient(c WorkloadContainerOverrideModel) client.Containe
 //   - container_groups=nil (user omitted the block) must stay nil even if the API returns groups.
 //   - resource_bundles=nil (user omitted the field) must stay nil even if the API injects defaults.
 //   - bundle_selection_policy=null (user omitted the field) must stay null even if the API returns a default.
+//   - memory/gpu_memory: API normalizes to bytes; restore the user's original string format if values are semantically equal.
 func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) {
 	if desired.Description.IsNull() && data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
@@ -612,6 +621,35 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 			data.Runtime.ContainerGroups[i].ResourceBundles = nil
 		}
 		data.Runtime.ContainerGroups[i].BundleSelectionPolicy = dg.BundleSelectionPolicy
+		for j := range dg.Containers {
+			if j >= len(data.Runtime.ContainerGroups[i].Containers) {
+				break
+			}
+			restoreMemoryFormat(dg.Containers[j], &data.Runtime.ContainerGroups[i].Containers[j])
+		}
+	}
+}
+
+// restoreMemoryFormat keeps the user's original memory string in state when its byte value matches
+// what the API returned, preventing perpetual diffs caused by the API normalizing to raw bytes.
+func restoreMemoryFormat(desired WorkloadContainerOverrideModel, data *WorkloadContainerOverrideModel) {
+	if desired.ResourceAllocation == nil || data.ResourceAllocation == nil {
+		return
+	}
+	ra := desired.ResourceAllocation
+	if !ra.Memory.IsNull() && !data.ResourceAllocation.Memory.IsNull() {
+		if desiredBytes, err := parseMemoryBytes(ra.Memory.ValueString()); err == nil {
+			if dataBytes, err := parseMemoryBytes(data.ResourceAllocation.Memory.ValueString()); err == nil && desiredBytes == dataBytes {
+				data.ResourceAllocation.Memory = ra.Memory
+			}
+		}
+	}
+	if !ra.GPUMemory.IsNull() && !data.ResourceAllocation.GPUMemory.IsNull() {
+		if desiredBytes, err := parseMemoryBytes(ra.GPUMemory.ValueString()); err == nil {
+			if dataBytes, err := parseMemoryBytes(data.ResourceAllocation.GPUMemory.ValueString()); err == nil && desiredBytes == dataBytes {
+				data.ResourceAllocation.GPUMemory = ra.GPUMemory
+			}
+		}
 	}
 }
 
@@ -735,14 +773,14 @@ func loadContainerOverrideFromAPI(c client.ContainerOverride) WorkloadContainerO
 			ra.GPU = types.Float64Null()
 		}
 		if c.ResourceAllocation.GPUMemory != nil {
-			ra.GPUMemory = types.Int64Value(*c.ResourceAllocation.GPUMemory)
+			ra.GPUMemory = types.StringValue(strconv.FormatInt(*c.ResourceAllocation.GPUMemory, 10))
 		} else {
-			ra.GPUMemory = types.Int64Null()
+			ra.GPUMemory = types.StringNull()
 		}
 		if c.ResourceAllocation.Memory != nil {
-			ra.Memory = types.Int64Value(*c.ResourceAllocation.Memory)
+			ra.Memory = types.StringValue(strconv.FormatInt(*c.ResourceAllocation.Memory, 10))
 		} else {
-			ra.Memory = types.Int64Null()
+			ra.Memory = types.StringNull()
 		}
 		m.ResourceAllocation = ra
 	}

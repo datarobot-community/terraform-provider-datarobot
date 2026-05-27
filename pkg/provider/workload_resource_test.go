@@ -1061,6 +1061,63 @@ func TestIntegrationWorkloadBundleSelectionPolicySentinel(t *testing.T) {
 	})
 }
 
+func TestIntegrationWorkloadStringMemoryNormalization(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	// "512Mi" normalizes to 536870912 bytes; API returns that as int64.
+	cpu := 1.0
+	mem := int64(536870912) // 512 * 1024^2
+	apiWorkload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	apiWorkload.Runtime.ContainerGroups[0].Containers = []client.ContainerOverride{
+		{Name: "main", ResourceAllocation: &client.ResourceAllocation{CPU: &cpu, Memory: &mem}},
+	}
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(apiWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // waitForRunning
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil) // post-create Read
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(apiWorkload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// "512Mi" is sent as bytes to the API; the original string is preserved in state
+				// because the sentinel restores it when the byte values match.
+				Config: workloadConfigWithStringMemory(name, artifactID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName,
+						"runtime.container_groups.0.containers.0.resource_allocation.memory",
+						"512Mi"),
+				),
+			},
+		},
+	})
+}
+
 func workloadConfigWithResourceAllocation(name, artifactID string) string {
 	return fmt.Sprintf(`
 resource "datarobot_workload" "test" {
@@ -1076,6 +1133,31 @@ resource "datarobot_workload" "test" {
             resource_allocation = {
               cpu    = 1
               memory = 536870912
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+`, name, artifactID)
+}
+
+func workloadConfigWithStringMemory(name, artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count = 1
+        containers = [
+          {
+            name = "main"
+            resource_allocation = {
+              cpu    = 1
+              memory = "512Mi"
             }
           }
         ]

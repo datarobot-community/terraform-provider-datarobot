@@ -1062,8 +1062,8 @@ type WorkloadContainerOverrideModel struct {
 type WorkloadResourceAllocationModel struct {
 	CPU       types.Float64 `tfsdk:"cpu"`
 	GPU       types.Float64 `tfsdk:"gpu"`
-	GPUMemory types.Int64   `tfsdk:"gpu_memory"`
-	Memory    types.Int64   `tfsdk:"memory"`
+	GPUMemory types.String  `tfsdk:"gpu_memory"`
+	Memory    types.String  `tfsdk:"memory"`
 }
 
 type WorkloadAutoscalingModel struct {
