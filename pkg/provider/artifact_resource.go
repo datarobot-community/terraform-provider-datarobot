@@ -211,7 +211,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 															Optional:            true,
 															MarkdownDescription: `Value of the environment variable. Required when source is "string".`,
 														},
-														"credential_id": schema.StringAttribute{
+														"dr_credential_id": schema.StringAttribute{
 															Optional:            true,
 															MarkdownDescription: `DataRobot credential ID. Required when source is "dr-credential".`,
 														},
@@ -452,7 +452,7 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 		if !a.EnvironmentVars[i].Source.Equal(b.EnvironmentVars[i].Source) ||
 			!a.EnvironmentVars[i].Name.Equal(b.EnvironmentVars[i].Name) ||
 			!a.EnvironmentVars[i].Value.Equal(b.EnvironmentVars[i].Value) ||
-			!a.EnvironmentVars[i].CredentialID.Equal(b.EnvironmentVars[i].CredentialID) ||
+			!a.EnvironmentVars[i].DrCredentialID.Equal(b.EnvironmentVars[i].DrCredentialID) ||
 			!a.EnvironmentVars[i].Key.Equal(b.EnvironmentVars[i].Key) {
 			return false
 		}
@@ -520,10 +520,10 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 							"Missing value",
 							`"value" is required when source is "string".`)
 					}
-					if !ev.CredentialID.IsNull() && !ev.CredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("credential_id"),
+					if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 							"Unexpected field",
-							`"credential_id" must not be set when source is "string".`)
+							`"dr_credential_id" must not be set when source is "string".`)
 					}
 					if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
 						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
@@ -531,10 +531,10 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 							`"key" must not be set when source is "string".`)
 					}
 				case client.EnvironmentVariableSourceCredential:
-					if ev.CredentialID.IsNull() || ev.CredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("credential_id"),
-							"Missing credential_id",
-							`"credential_id" is required when source is "dr-credential".`)
+					if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
+						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+							"Missing dr_credential_id",
+							`"dr_credential_id" is required when source is "dr-credential".`)
 					}
 					if ev.Key.IsNull() || ev.Key.IsUnknown() {
 						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
@@ -630,7 +630,7 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 				Name:   ev.Name.ValueString(),
 			}
 			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
-				envVar.DrCredentialID = ev.CredentialID.ValueString()
+				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
 			} else {
 				envVar.Value = ev.Value.ValueString()
@@ -766,14 +766,14 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
 			m := ArtifactEnvironmentVariableModel{
-				Source:       types.StringValue(ev.Source),
-				Name:         types.StringValue(ev.Name),
-				Value:        types.StringNull(),
-				CredentialID: types.StringNull(),
-				Key:          types.StringNull(),
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringValue(ev.Name),
+				Value:          types.StringNull(),
+				DrCredentialID: types.StringNull(),
+				Key:            types.StringNull(),
 			}
 			if ev.Source == client.EnvironmentVariableSourceCredential {
-				m.CredentialID = types.StringValue(ev.DrCredentialID)
+				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
 				m.Key = types.StringValue(ev.Key)
 			} else {
 				m.Value = types.StringValue(ev.Value)

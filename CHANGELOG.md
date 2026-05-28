@@ -1,3 +1,11 @@
+## [0.10.39] - 2026-05-28
+
+### Fixed
+- changed credential_id into dr_credential_id to correspond to the Workload API vocab
+
+### Added
+- added support of human-readable memory definitions in resource allocations in workload resource
+
 ## [0.10.38] - 2026-05-22
 
 ### Fixed
