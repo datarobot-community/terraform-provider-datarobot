@@ -13,6 +13,9 @@ make install
 # Linting
 make lint                    # Uses golangci-lint
 
+# Security vulnerability scan
+make vuln                    # Uses govulncheck (Go CVE database)
+
 # Unit tests
 make test
 

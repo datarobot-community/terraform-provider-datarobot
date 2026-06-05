@@ -54,3 +54,7 @@ test-changed:
 lint:
 	echo "Running checks for service"
 	golangci-lint run ./...
+
+vuln:
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
