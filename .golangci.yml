@@ -10,6 +10,7 @@ linters:
     - gocognit
     - gocyclo
     - godot
+    - gosec
     - govet
     - ineffassign
     - lll
@@ -37,6 +38,9 @@ linters:
         - BUG
     lll:
       line-length: 400
+    gosec:
+      excludes:
+        - G104  # Errors unhandled — already caught by errcheck
     revive:
       rules:
         - name: package-comments
@@ -64,6 +68,9 @@ linters:
       - linters:
           - dupl
         path: user_mcp_.*_metadata_resource\.go$
+      - linters:
+          - gosec
+        path: _test\.go$
 issues:
   max-same-issues: 0
 formatters:
