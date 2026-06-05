@@ -71,6 +71,22 @@ linters:
       - linters:
           - gosec
         path: _test\.go$
+      # credentials_model_service.go contains only credential *type name* constants
+      # (e.g. "snowflake_oauth_user_account"), not actual credentials.
+      - linters:
+          - gosec
+        path: internal/client/credentials_model_service\.go$
+        text: "G101"
+      # EnvironmentVariableSourceCredential = "dr-credential" is a source-type label, not a credential.
+      - linters:
+          - gosec
+        path: internal/client/workloads_service\.go$
+        text: "G101"
+      # DataRobotApiKeyEnvVar = "DATAROBOT_API_TOKEN" is the *name* of an env var, not its value.
+      - linters:
+          - gosec
+        path: pkg/provider/models\.go$
+        text: "G101"
 issues:
   max-same-issues: 0
 formatters:
