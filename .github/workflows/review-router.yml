@@ -1,0 +1,17 @@
+---
+name: Review Router
+
+on:
+  pull_request_target:
+    types: [labeled]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+jobs:
+  route:
+    if: >-
+      github.event_name != 'issue_comment' || contains(github.event.comment.body, '/review')
+    uses: datarobot-community/.github/.github/workflows/review-router.yml@main
+    secrets: inherit
