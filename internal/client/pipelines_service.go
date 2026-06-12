@@ -37,27 +37,27 @@ const (
 type PipelineVersion struct {
 	Version       int                   `json:"version"`
 	Status        PipelineVersionStatus `json:"status"`
-	LatticeName   string                `json:"lattice_name"`
-	ElectronNames []string              `json:"electron_names,omitempty"`
-	PythonVersion string                `json:"python_version"`
-	ErrorDetail   *string               `json:"error_detail,omitempty"`
-	CreatedAt     string                `json:"created_at"`
+	TaskNames     []string              `json:"taskNames,omitempty"`
+	PythonVersion string                `json:"pythonVersion"`
+	ErrorDetail   *string               `json:"errorDetail,omitempty"`
+	CreatedAt     string                `json:"createdAt"`
 }
 
-// Pipeline maps to the PipelineDetailResponse schema.
-// LatticeName is the @pipeline-decorated function name; ElectronNames are @task names.
+// Pipeline maps to both PipelineCreateResponse and PipelineDetailResponse.
+// VersionNumber is populated by Create/Lock responses (top-level "version" field).
+// Versions is populated by Get responses (detail array).
 type Pipeline struct {
-	PipelineID    string            `json:"pipeline_id"`
+	PipelineID    string            `json:"id"`
 	Name          string            `json:"name"`
 	Description   *string           `json:"description,omitempty"`
 	Mode          PipelineMode      `json:"mode"`
-	IsActive      bool              `json:"is_active"`
-	LatticeName   *string           `json:"lattice_name,omitempty"`
-	ElectronNames []string          `json:"electron_names,omitempty"`
-	PythonVersion *string           `json:"python_version,omitempty"`
+	IsActive      bool              `json:"isActive"`
+	TaskNames     []string          `json:"taskNames,omitempty"`
+	PythonVersion *string           `json:"pythonVersion,omitempty"`
+	VersionNumber *int              `json:"version,omitempty"`
 	Versions      []PipelineVersion `json:"versions"`
-	CreatedAt     string            `json:"created_at"`
-	UpdatedAt     string            `json:"updated_at"`
+	CreatedAt     string            `json:"createdAt"`
+	UpdatedAt     string            `json:"updatedAt"`
 }
 
 type lockPipelineModeRequest struct {
@@ -91,14 +91,14 @@ func (s *ServiceImpl) DeletePipeline(ctx context.Context, id string) error {
 // PipelineInput types
 
 type PipelineInput struct {
-	InputID    string             `json:"input_id"`
-	PipelineID string             `json:"pipeline_id"`
-	VersionID  *int               `json:"version_id,omitempty"`
-	IsDraft    bool               `json:"is_draft"`
+	InputID    string             `json:"id"`
+	PipelineID string             `json:"pipelineId"`
+	VersionID  *int               `json:"versionId,omitempty"`
+	IsDraft    bool               `json:"isDraft"`
 	Payload    map[string]any     `json:"payload"`
 	State      PipelineInputState `json:"state"`
-	CreatedAt  string             `json:"created_at"`
-	UpdatedAt  string             `json:"updated_at"`
+	CreatedAt  string             `json:"createdAt"`
+	UpdatedAt  string             `json:"updatedAt"`
 }
 
 type PipelineInputCreateRequest struct {
@@ -140,14 +140,14 @@ func (s *ServiceImpl) DeleteLockedPipelineInput(ctx context.Context, pipelineID 
 // PipelineSchedule types
 
 type PipelineSchedule struct {
-	ScheduleID     string                 `json:"schedule_id"`
-	PipelineID     string                 `json:"pipeline_id"`
+	ScheduleID     string                 `json:"id"`
+	PipelineID     string                 `json:"pipelineId"`
 	Version        int                    `json:"version"`
-	CronExpression string                 `json:"cron_expression"`
+	CronExpression string                 `json:"cronExpression"`
 	Timezone       string                 `json:"timezone"`
 	Status         PipelineScheduleStatus `json:"status"`
-	CreatedAt      string                 `json:"created_at"`
-	UpdatedAt      string                 `json:"updated_at"`
+	CreatedAt      string                 `json:"createdAt"`
+	UpdatedAt      string                 `json:"updatedAt"`
 }
 
 // PipelineInputID is intentionally absent from PipelineSchedule: the GET endpoint does not return it.
@@ -186,19 +186,19 @@ type PipelineEnvironmentVersion struct {
 	Version     int                       `json:"version"`
 	Packages    []string                  `json:"packages"`
 	Status      PipelineEnvironmentStatus `json:"status"`
-	ErrorDetail *string                   `json:"error_detail,omitempty"`
-	CreatedAt   string                    `json:"created_at"`
-	UpdatedAt   string                    `json:"updated_at"`
+	ErrorDetail *string                   `json:"errorDetail,omitempty"`
+	CreatedAt   string                    `json:"createdAt"`
+	UpdatedAt   string                    `json:"updatedAt"`
 }
 
 type PipelineEnvironment struct {
-	EnvironmentID string                       `json:"environment_id"`
+	EnvironmentID string                       `json:"id"`
 	Name          string                       `json:"name"`
 	Description   *string                      `json:"description,omitempty"`
-	LatestVersion int                          `json:"latest_version"`
+	LatestVersion int                          `json:"latestVersion"`
 	Versions      []PipelineEnvironmentVersion `json:"versions"`
-	CreatedAt     string                       `json:"created_at"`
-	UpdatedAt     string                       `json:"updated_at"`
+	CreatedAt     string                       `json:"createdAt"`
+	UpdatedAt     string                       `json:"updatedAt"`
 }
 
 type PipelineEnvironmentCreateRequest struct {

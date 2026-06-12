@@ -270,12 +270,10 @@ func loadPipelineInputIntoModel(input *client.PipelineInput, data *PipelineInput
 	data.ID = types.StringValue(input.InputID)
 	data.PipelineID = types.StringValue(input.PipelineID)
 	data.State = types.StringValue(string(input.State))
-
-	if input.VersionID != nil {
-		data.Version = types.Int64Value(int64(*input.VersionID))
-	} else {
-		data.Version = types.Int64Null()
-	}
+	// data.Version is intentionally NOT set from input.VersionID.
+	// The API's version_id is an internal DB FK (auto-increment), not the
+	// user-facing pipeline version number. Version is user-provided and must
+	// be preserved from plan/state to avoid inconsistent result errors.
 
 	normalized, err := json.Marshal(input.Payload)
 	if err == nil {

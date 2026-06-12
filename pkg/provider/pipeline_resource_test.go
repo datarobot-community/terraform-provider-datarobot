@@ -85,9 +85,9 @@ func TestIntegrationPipelineResourceLockTransition(t *testing.T) {
 	id := uuid.NewString()
 	taskNames := []string{"task1"}
 	version := client.PipelineVersion{
-		Version:       1,
-		Status:        client.PipelineVersionStatusReady,
-		ElectronNames: taskNames,
+		Version:   1,
+		Status:    client.PipelineVersionStatusReady,
+		TaskNames: taskNames,
 	}
 	draftPipeline := pipelineFixture(id, client.PipelineModeDraft, nil, nil)
 	lockedPipeline := pipelineFixture(id, client.PipelineModeLocked, taskNames, []client.PipelineVersion{version})
@@ -205,14 +205,14 @@ func TestIntegrationPipelineResourceLockedReplaceOnDescriptionChange(t *testing.
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
-func pipelineFixture(id string, mode client.PipelineMode, electronNames []string, versions []client.PipelineVersion) *client.Pipeline {
+func pipelineFixture(id string, mode client.PipelineMode, taskNames []string, versions []client.PipelineVersion) *client.Pipeline {
 	return &client.Pipeline{
-		PipelineID:    id,
-		Mode:          mode,
-		ElectronNames: electronNames,
-		Versions:      versions,
-		CreatedAt:     "2025-01-01T00:00:00Z",
-		UpdatedAt:     "2025-01-01T00:00:00Z",
+		PipelineID: id,
+		Mode:       mode,
+		TaskNames:  taskNames,
+		Versions:   versions,
+		CreatedAt:  "2025-01-01T00:00:00Z",
+		UpdatedAt:  "2025-01-01T00:00:00Z",
 	}
 }
 

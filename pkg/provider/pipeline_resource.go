@@ -305,13 +305,15 @@ func loadPipelineIntoModel(p *client.Pipeline, data *PipelineResourceModel) {
 
 	if len(p.Versions) > 0 {
 		data.CurrentVersion = types.Int64Value(int64(p.Versions[0].Version))
+	} else if p.VersionNumber != nil {
+		data.CurrentVersion = types.Int64Value(int64(*p.VersionNumber))
 	} else {
 		data.CurrentVersion = types.Int64Null()
 	}
 
-	electronNames := p.ElectronNames
-	if len(p.Versions) > 0 && len(p.Versions[0].ElectronNames) > 0 {
-		electronNames = p.Versions[0].ElectronNames
+	electronNames := p.TaskNames
+	if len(p.Versions) > 0 && len(p.Versions[0].TaskNames) > 0 {
+		electronNames = p.Versions[0].TaskNames
 	}
 	if len(electronNames) > 0 {
 		vals := make([]attr.Value, len(electronNames))
