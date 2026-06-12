@@ -140,14 +140,14 @@ func (s *ServiceImpl) DeleteLockedPipelineInput(ctx context.Context, pipelineID 
 // PipelineSchedule types
 
 type PipelineSchedule struct {
-	ScheduleID     string                `json:"schedule_id"`
-	PipelineID     string                `json:"pipeline_id"`
-	Version        int                   `json:"version"`
-	CronExpression string                `json:"cron_expression"`
-	Timezone       string                `json:"timezone"`
+	ScheduleID     string                 `json:"schedule_id"`
+	PipelineID     string                 `json:"pipeline_id"`
+	Version        int                    `json:"version"`
+	CronExpression string                 `json:"cron_expression"`
+	Timezone       string                 `json:"timezone"`
 	Status         PipelineScheduleStatus `json:"status"`
-	CreatedAt      string                `json:"created_at"`
-	UpdatedAt      string                `json:"updated_at"`
+	CreatedAt      string                 `json:"created_at"`
+	UpdatedAt      string                 `json:"updated_at"`
 }
 
 // PipelineInputID is intentionally absent from PipelineSchedule: the GET endpoint does not return it.
