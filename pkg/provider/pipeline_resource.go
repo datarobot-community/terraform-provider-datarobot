@@ -176,8 +176,23 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
+	// Locked pipelines are immutable — ModifyPlan forces replacement for any content change.
+	// The only way we reach Update on a locked pipeline is when source_file path changed but
+	// hash (content) is the same. No API call needed; just persist the new path.
+	if state.Mode.ValueString() == string(client.PipelineModeLocked) {
+		state.SourceFile = plan.SourceFile
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		return
+	}
+
+	var desc *string
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		d := plan.Description.ValueString()
+		desc = &d
+	}
+
 	// Handle draft→locked transition.
-	if state.Mode.ValueString() == string(client.PipelineModeDraft) && plan.Mode.ValueString() == string(client.PipelineModeLocked) {
+	if plan.Mode.ValueString() == string(client.PipelineModeLocked) {
 		// Re-upload if the file also changed before locking.
 		if !plan.SourceFileHash.Equal(state.SourceFileHash) {
 			content, fileName, err := readSourceFile(plan.SourceFile.ValueString())
@@ -189,7 +204,7 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 				plan.SourceFileHash = types.StringValue(hash)
 			}
 			traceAPICall("UpdatePipelineDraft")
-			_, err = r.provider.service.UpdatePipelineDraft(ctx, state.ID.ValueString(), fileName, content)
+			_, err = r.provider.service.UpdatePipelineDraft(ctx, state.ID.ValueString(), fileName, content, desc)
 			if err != nil {
 				resp.Diagnostics.AddError("Error updating Pipeline draft", err.Error())
 				return
@@ -207,7 +222,7 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Draft update: re-upload the source file.
+	// Draft update: re-upload the source file (and sync description).
 	content, fileName, err := readSourceFile(plan.SourceFile.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("source_file"), "Cannot read source file", err.Error())
@@ -218,7 +233,7 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	traceAPICall("UpdatePipelineDraft")
-	pipeline, err := r.provider.service.UpdatePipelineDraft(ctx, state.ID.ValueString(), fileName, content)
+	pipeline, err := r.provider.service.UpdatePipelineDraft(ctx, state.ID.ValueString(), fileName, content, desc)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Pipeline draft", err.Error())
 		return
@@ -302,6 +317,11 @@ func readSourceFile(filePath string) (content []byte, fileName string, err error
 func loadPipelineIntoModel(p *client.Pipeline, data *PipelineResourceModel) {
 	data.ID = types.StringValue(p.PipelineID)
 	data.Mode = types.StringValue(string(p.Mode))
+	if p.Description != nil {
+		data.Description = types.StringValue(*p.Description)
+	} else {
+		data.Description = types.StringNull()
+	}
 
 	if len(p.Versions) > 0 {
 		data.CurrentVersion = types.Int64Value(int64(p.Versions[0].Version))

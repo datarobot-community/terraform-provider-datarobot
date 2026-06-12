@@ -274,7 +274,7 @@ type Service interface {
 	// Pipeline (Pipelines API)
 	CreatePipeline(ctx context.Context, fileName string, content []byte, description *string) (*Pipeline, error)
 	GetPipeline(ctx context.Context, id string) (*Pipeline, error)
-	UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte) (*Pipeline, error)
+	UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte, description *string) (*Pipeline, error)
 	LockPipeline(ctx context.Context, id string) (*Pipeline, error)
 	DeletePipeline(ctx context.Context, id string) error
 

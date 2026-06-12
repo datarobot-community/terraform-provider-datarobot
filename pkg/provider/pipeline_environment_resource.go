@@ -271,6 +271,12 @@ func loadPipelineEnvironmentIntoModel(env *client.PipelineEnvironment, data *Pip
 
 	if len(env.Versions) > 0 {
 		latestVer := env.Versions[0]
+		for _, v := range env.Versions {
+			if v.Version == env.LatestVersion {
+				latestVer = v
+				break
+			}
+		}
 		data.LatestStatus = types.StringValue(string(latestVer.Status))
 		pkgVals := make([]attr.Value, len(latestVer.Packages))
 		for i, p := range latestVer.Packages {

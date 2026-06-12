@@ -109,7 +109,7 @@ func TestAccPipelineEnvironmentResource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: accPipelineEnvConfig(name, nil, []string{"numpy==1.26.4"}),
+				Config: accPipelineEnvConfig(name, []string{"numpy==1.26.4"}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(rn, "id"),
 					resource.TestCheckResourceAttr(rn, "name", name),
@@ -121,7 +121,7 @@ func TestAccPipelineEnvironmentResource(t *testing.T) {
 				),
 			},
 			{
-				Config: accPipelineEnvConfig(name, nil, []string{"numpy==1.26.4", "pandas>=2.0"}),
+				Config: accPipelineEnvConfig(name, []string{"numpy==1.26.4", "pandas>=2.0"}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "packages.#", "2"),
 					checkWorkloadIDPreserved(rn, &initialID),
@@ -144,14 +144,14 @@ func TestAccPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: accPipelineEnvConfig(name1, nil, []string{"numpy==1.26.4"}),
+				Config: accPipelineEnvConfig(name1, []string{"numpy==1.26.4"}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "name", name1),
 					captureAttr(rn, "id", &initialID),
 				),
 			},
 			{
-				Config: accPipelineEnvConfig(name2, nil, []string{"numpy==1.26.4"}),
+				Config: accPipelineEnvConfig(name2, []string{"numpy==1.26.4"}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "name", name2),
 					checkIDChanged(rn, &initialID),
@@ -281,11 +281,7 @@ resource "datarobot_pipeline" "test" {
 `, srcFile, desc)
 }
 
-func accPipelineEnvConfig(name string, desc *string, pkgs []string) string {
-	descAttr := ""
-	if desc != nil {
-		descAttr = fmt.Sprintf("  description = %q\n", *desc)
-	}
+func accPipelineEnvConfig(name string, pkgs []string) string {
 	pkgList := ""
 	for _, p := range pkgs {
 		pkgList += fmt.Sprintf("    %q,\n", p)
@@ -293,10 +289,10 @@ func accPipelineEnvConfig(name string, desc *string, pkgs []string) string {
 	return fmt.Sprintf(`
 resource "datarobot_pipeline_environment" "test" {
   name     = %q
-%s  packages = [
+  packages = [
 %s  ]
 }
-`, name, descAttr, pkgList)
+`, name, pkgList)
 }
 
 func accPipelineWithDraftInputConfig(srcFile, payloadJSON string) string {

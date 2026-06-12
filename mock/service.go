@@ -2928,18 +2928,18 @@ func (mr *MockServiceMockRecorder) UpdateNotificationPolicy(ctx, relatedEntityTy
 }
 
 // UpdatePipelineDraft mocks base method.
-func (m *MockService) UpdatePipelineDraft(ctx context.Context, id, fileName string, content []byte) (*client.Pipeline, error) {
+func (m *MockService) UpdatePipelineDraft(ctx context.Context, id, fileName string, content []byte, description *string) (*client.Pipeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdatePipelineDraft", ctx, id, fileName, content)
+	ret := m.ctrl.Call(m, "UpdatePipelineDraft", ctx, id, fileName, content, description)
 	ret0, _ := ret[0].(*client.Pipeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdatePipelineDraft indicates an expected call of UpdatePipelineDraft.
-func (mr *MockServiceMockRecorder) UpdatePipelineDraft(ctx, id, fileName, content interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) UpdatePipelineDraft(ctx, id, fileName, content, description interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineDraft", reflect.TypeOf((*MockService)(nil).UpdatePipelineDraft), ctx, id, fileName, content)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineDraft", reflect.TypeOf((*MockService)(nil).UpdatePipelineDraft), ctx, id, fileName, content, description)
 }
 
 // UpdatePipelineEnvironment mocks base method.

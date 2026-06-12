@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -222,8 +224,23 @@ func (r *PipelineScheduleResource) Delete(ctx context.Context, req resource.Dele
 	}
 }
 
+// ImportState accepts "<pipeline_id>/<version>/<schedule_id>".
 func (r *PipelineScheduleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	parts := strings.Split(req.ID, "/")
+	if len(parts) != 3 {
+		resp.Diagnostics.AddError("Invalid import ID",
+			fmt.Sprintf("Expected <pipeline_id>/<version>/<schedule_id>, got: %s", req.ID))
+		return
+	}
+	version, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid import ID",
+			fmt.Sprintf("Version must be an integer in <pipeline_id>/<version>/<schedule_id>, got: %s", req.ID))
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("pipeline_id"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("version"), version)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[2])...)
 }
 
 func loadPipelineScheduleIntoModel(s *client.PipelineSchedule, data *PipelineScheduleResourceModel) {

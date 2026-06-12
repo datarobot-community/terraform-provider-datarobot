@@ -76,8 +76,12 @@ func (s *ServiceImpl) GetPipeline(ctx context.Context, id string) (*Pipeline, er
 	return Get[Pipeline](s.client, ctx, "/pipelines/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte) (*Pipeline, error) {
-	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines/"+id+"/", http.MethodPatch, fileName, content, map[string]string{})
+func (s *ServiceImpl) UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte, description *string) (*Pipeline, error) {
+	extraFields := map[string]string{}
+	if description != nil {
+		extraFields["description"] = *description
+	}
+	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines/"+id+"/", http.MethodPatch, fileName, content, extraFields)
 }
 
 func (s *ServiceImpl) LockPipeline(ctx context.Context, id string) (*Pipeline, error) {

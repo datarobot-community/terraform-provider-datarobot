@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -244,8 +246,28 @@ func (r *PipelineInputResource) ModifyPlan(ctx context.Context, req resource.Mod
 	}
 }
 
+// ImportState accepts "<pipeline_id>/<input_id>" for draft inputs or
+// "<pipeline_id>/<version>/<input_id>" for locked inputs.
 func (r *PipelineInputResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	parts := strings.Split(req.ID, "/")
+	switch len(parts) {
+	case 2:
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("pipeline_id"), parts[0])...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+	case 3:
+		version, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid import ID",
+				fmt.Sprintf("Version must be an integer in <pipeline_id>/<version>/<input_id>, got: %s", req.ID))
+			return
+		}
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("pipeline_id"), parts[0])...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("version"), version)...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[2])...)
+	default:
+		resp.Diagnostics.AddError("Invalid import ID",
+			fmt.Sprintf("Expected <pipeline_id>/<input_id> (draft) or <pipeline_id>/<version>/<input_id> (locked), got: %s", req.ID))
+	}
 }
 
 func unmarshalPayload(raw string) (map[string]any, error) {
