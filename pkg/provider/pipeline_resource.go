@@ -127,6 +127,8 @@ func (r *PipelineResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	plannedDesc := data.Description
+
 	if data.Mode.ValueString() == string(client.PipelineModeLocked) {
 		traceAPICall("LockPipeline")
 		pipeline, err = r.provider.service.LockPipeline(ctx, pipeline.PipelineID)
@@ -137,6 +139,10 @@ func (r *PipelineResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	loadPipelineIntoModel(pipeline, &data)
+	// LockPipeline response omits description — restore from plan if needed.
+	if data.Description.IsNull() && !plannedDesc.IsNull() {
+		data.Description = plannedDesc
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -217,7 +223,12 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error locking Pipeline", err.Error())
 			return
 		}
+		plannedDesc := plan.Description
 		loadPipelineIntoModel(pipeline, &plan)
+		// LockPipeline response omits description — restore from plan if needed.
+		if plan.Description.IsNull() && !plannedDesc.IsNull() {
+			plan.Description = plannedDesc
+		}
 		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 		return
 	}
