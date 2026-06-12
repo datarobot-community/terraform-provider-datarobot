@@ -486,6 +486,21 @@ func (mr *MockServiceMockRecorder) CreateDeploymentFromModelPackage(ctx, req int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeploymentFromModelPackage", reflect.TypeOf((*MockService)(nil).CreateDeploymentFromModelPackage), ctx, req)
 }
 
+// CreateDraftPipelineInput mocks base method.
+func (m *MockService) CreateDraftPipelineInput(ctx context.Context, pipelineID string, req *client.PipelineInputCreateRequest) (*client.PipelineInput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDraftPipelineInput", ctx, pipelineID, req)
+	ret0, _ := ret[0].(*client.PipelineInput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDraftPipelineInput indicates an expected call of CreateDraftPipelineInput.
+func (mr *MockServiceMockRecorder) CreateDraftPipelineInput(ctx, pipelineID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDraftPipelineInput", reflect.TypeOf((*MockService)(nil).CreateDraftPipelineInput), ctx, pipelineID, req)
+}
+
 // CreateExecutionEnvironment mocks base method.
 func (m *MockService) CreateExecutionEnvironment(ctx context.Context, req *client.CreateExecutionEnvironmentRequest) (*client.ExecutionEnvironment, error) {
 	m.ctrl.T.Helper()
@@ -546,6 +561,21 @@ func (mr *MockServiceMockRecorder) CreateLLMBlueprint(ctx, req interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLLMBlueprint", reflect.TypeOf((*MockService)(nil).CreateLLMBlueprint), ctx, req)
 }
 
+// CreateLockedPipelineInput mocks base method.
+func (m *MockService) CreateLockedPipelineInput(ctx context.Context, pipelineID string, version int, req *client.PipelineInputCreateRequest) (*client.PipelineInput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateLockedPipelineInput", ctx, pipelineID, version, req)
+	ret0, _ := ret[0].(*client.PipelineInput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateLockedPipelineInput indicates an expected call of CreateLockedPipelineInput.
+func (mr *MockServiceMockRecorder) CreateLockedPipelineInput(ctx, pipelineID, version, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateLockedPipelineInput", reflect.TypeOf((*MockService)(nil).CreateLockedPipelineInput), ctx, pipelineID, version, req)
+}
+
 // CreateMemorySpace mocks base method.
 func (m *MockService) CreateMemorySpace(ctx context.Context, req *client.MemorySpaceRequest) (*client.MemorySpaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -589,6 +619,51 @@ func (m *MockService) CreateNotificationPolicy(ctx context.Context, req *client.
 func (mr *MockServiceMockRecorder) CreateNotificationPolicy(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNotificationPolicy", reflect.TypeOf((*MockService)(nil).CreateNotificationPolicy), ctx, req)
+}
+
+// CreatePipeline mocks base method.
+func (m *MockService) CreatePipeline(ctx context.Context, fileName string, content []byte, description *string) (*client.Pipeline, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePipeline", ctx, fileName, content, description)
+	ret0, _ := ret[0].(*client.Pipeline)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePipeline indicates an expected call of CreatePipeline.
+func (mr *MockServiceMockRecorder) CreatePipeline(ctx, fileName, content, description interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipeline", reflect.TypeOf((*MockService)(nil).CreatePipeline), ctx, fileName, content, description)
+}
+
+// CreatePipelineEnvironment mocks base method.
+func (m *MockService) CreatePipelineEnvironment(ctx context.Context, req *client.PipelineEnvironmentCreateRequest) (*client.PipelineEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePipelineEnvironment", ctx, req)
+	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePipelineEnvironment indicates an expected call of CreatePipelineEnvironment.
+func (mr *MockServiceMockRecorder) CreatePipelineEnvironment(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipelineEnvironment", reflect.TypeOf((*MockService)(nil).CreatePipelineEnvironment), ctx, req)
+}
+
+// CreatePipelineSchedule mocks base method.
+func (m *MockService) CreatePipelineSchedule(ctx context.Context, pipelineID string, version int, req *client.PipelineScheduleCreateRequest) (*client.PipelineSchedule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePipelineSchedule", ctx, pipelineID, version, req)
+	ret0, _ := ret[0].(*client.PipelineSchedule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePipelineSchedule indicates an expected call of CreatePipelineSchedule.
+func (mr *MockServiceMockRecorder) CreatePipelineSchedule(ctx, pipelineID, version, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipelineSchedule", reflect.TypeOf((*MockService)(nil).CreatePipelineSchedule), ctx, pipelineID, version, req)
 }
 
 // CreatePlayground mocks base method.
@@ -843,6 +918,20 @@ func (mr *MockServiceMockRecorder) DeleteApplicationSource(ctx, id interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteApplicationSource), ctx, id)
 }
 
+// DeleteArtifactRepository mocks base method.
+func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteArtifactRepository", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteArtifactRepository indicates an expected call of DeleteArtifactRepository.
+func (mr *MockServiceMockRecorder) DeleteArtifactRepository(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifactRepository", reflect.TypeOf((*MockService)(nil).DeleteArtifactRepository), ctx, id)
+}
+
 // DeleteBatchPredictionJobDefinition mocks base method.
 func (m *MockService) DeleteBatchPredictionJobDefinition(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -997,6 +1086,20 @@ func (mr *MockServiceMockRecorder) DeleteDeployment(ctx, id interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDeployment", reflect.TypeOf((*MockService)(nil).DeleteDeployment), ctx, id)
 }
 
+// DeleteDraftPipelineInput mocks base method.
+func (m *MockService) DeleteDraftPipelineInput(ctx context.Context, pipelineID, inputID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDraftPipelineInput", ctx, pipelineID, inputID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDraftPipelineInput indicates an expected call of DeleteDraftPipelineInput.
+func (mr *MockServiceMockRecorder) DeleteDraftPipelineInput(ctx, pipelineID, inputID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDraftPipelineInput", reflect.TypeOf((*MockService)(nil).DeleteDraftPipelineInput), ctx, pipelineID, inputID)
+}
+
 // DeleteExecutionEnvironment mocks base method.
 func (m *MockService) DeleteExecutionEnvironment(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -1023,6 +1126,20 @@ func (m *MockService) DeleteLLMBlueprint(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteLLMBlueprint(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLLMBlueprint", reflect.TypeOf((*MockService)(nil).DeleteLLMBlueprint), ctx, id)
+}
+
+// DeleteLockedPipelineInput mocks base method.
+func (m *MockService) DeleteLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteLockedPipelineInput", ctx, pipelineID, version, inputID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteLockedPipelineInput indicates an expected call of DeleteLockedPipelineInput.
+func (mr *MockServiceMockRecorder) DeleteLockedPipelineInput(ctx, pipelineID, version, inputID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLockedPipelineInput", reflect.TypeOf((*MockService)(nil).DeleteLockedPipelineInput), ctx, pipelineID, version, inputID)
 }
 
 // DeleteMemorySpace mocks base method.
@@ -1079,6 +1196,48 @@ func (m *MockService) DeleteNotificationPolicy(ctx context.Context, relatedEntit
 func (mr *MockServiceMockRecorder) DeleteNotificationPolicy(ctx, relatedEntityType, relatedEntityID, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNotificationPolicy", reflect.TypeOf((*MockService)(nil).DeleteNotificationPolicy), ctx, relatedEntityType, relatedEntityID, id)
+}
+
+// DeletePipeline mocks base method.
+func (m *MockService) DeletePipeline(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePipeline", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePipeline indicates an expected call of DeletePipeline.
+func (mr *MockServiceMockRecorder) DeletePipeline(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipeline", reflect.TypeOf((*MockService)(nil).DeletePipeline), ctx, id)
+}
+
+// DeletePipelineEnvironment mocks base method.
+func (m *MockService) DeletePipelineEnvironment(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePipelineEnvironment", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePipelineEnvironment indicates an expected call of DeletePipelineEnvironment.
+func (mr *MockServiceMockRecorder) DeletePipelineEnvironment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineEnvironment", reflect.TypeOf((*MockService)(nil).DeletePipelineEnvironment), ctx, id)
+}
+
+// DeletePipelineSchedule mocks base method.
+func (m *MockService) DeletePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePipelineSchedule", ctx, pipelineID, version, scheduleID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePipelineSchedule indicates an expected call of DeletePipelineSchedule.
+func (mr *MockServiceMockRecorder) DeletePipelineSchedule(ctx, pipelineID, version, scheduleID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineSchedule", reflect.TypeOf((*MockService)(nil).DeletePipelineSchedule), ctx, pipelineID, version, scheduleID)
 }
 
 // DeletePlayground mocks base method.
@@ -1191,20 +1350,6 @@ func (m *MockService) DeleteWorkload(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
-}
-
-// DeleteArtifactRepository mocks base method.
-func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteArtifactRepository", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteArtifactRepository indicates an expected call of DeleteArtifactRepository.
-func (mr *MockServiceMockRecorder) DeleteArtifactRepository(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifactRepository", reflect.TypeOf((*MockService)(nil).DeleteArtifactRepository), ctx, id)
 }
 
 // GetAppOAuthProvider mocks base method.
@@ -1552,6 +1697,21 @@ func (mr *MockServiceMockRecorder) GetDeploymentSettings(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentSettings), ctx, id)
 }
 
+// GetDraftPipelineInput mocks base method.
+func (m *MockService) GetDraftPipelineInput(ctx context.Context, pipelineID, inputID string) (*client.PipelineInput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDraftPipelineInput", ctx, pipelineID, inputID)
+	ret0, _ := ret[0].(*client.PipelineInput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDraftPipelineInput indicates an expected call of GetDraftPipelineInput.
+func (mr *MockServiceMockRecorder) GetDraftPipelineInput(ctx, pipelineID, inputID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDraftPipelineInput", reflect.TypeOf((*MockService)(nil).GetDraftPipelineInput), ctx, pipelineID, inputID)
+}
+
 // GetExecutionEnvironment mocks base method.
 func (m *MockService) GetExecutionEnvironment(ctx context.Context, id string) (*client.ExecutionEnvironment, error) {
 	m.ctrl.T.Helper()
@@ -1657,6 +1817,21 @@ func (mr *MockServiceMockRecorder) GetLatestRegisteredModelVersion(ctx, id inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestRegisteredModelVersion", reflect.TypeOf((*MockService)(nil).GetLatestRegisteredModelVersion), ctx, id)
 }
 
+// GetLockedPipelineInput mocks base method.
+func (m *MockService) GetLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) (*client.PipelineInput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLockedPipelineInput", ctx, pipelineID, version, inputID)
+	ret0, _ := ret[0].(*client.PipelineInput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLockedPipelineInput indicates an expected call of GetLockedPipelineInput.
+func (mr *MockServiceMockRecorder) GetLockedPipelineInput(ctx, pipelineID, version, inputID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLockedPipelineInput", reflect.TypeOf((*MockService)(nil).GetLockedPipelineInput), ctx, pipelineID, version, inputID)
+}
+
 // GetMemorySpace mocks base method.
 func (m *MockService) GetMemorySpace(ctx context.Context, id string) (*client.MemorySpaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -1730,6 +1905,51 @@ func (m *MockService) GetOverallModerationConfigurationForCustomModelVersion(ctx
 func (mr *MockServiceMockRecorder) GetOverallModerationConfigurationForCustomModelVersion(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOverallModerationConfigurationForCustomModelVersion", reflect.TypeOf((*MockService)(nil).GetOverallModerationConfigurationForCustomModelVersion), ctx, id)
+}
+
+// GetPipeline mocks base method.
+func (m *MockService) GetPipeline(ctx context.Context, id string) (*client.Pipeline, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPipeline", ctx, id)
+	ret0, _ := ret[0].(*client.Pipeline)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPipeline indicates an expected call of GetPipeline.
+func (mr *MockServiceMockRecorder) GetPipeline(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipeline", reflect.TypeOf((*MockService)(nil).GetPipeline), ctx, id)
+}
+
+// GetPipelineEnvironment mocks base method.
+func (m *MockService) GetPipelineEnvironment(ctx context.Context, id string) (*client.PipelineEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPipelineEnvironment", ctx, id)
+	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPipelineEnvironment indicates an expected call of GetPipelineEnvironment.
+func (mr *MockServiceMockRecorder) GetPipelineEnvironment(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineEnvironment", reflect.TypeOf((*MockService)(nil).GetPipelineEnvironment), ctx, id)
+}
+
+// GetPipelineSchedule mocks base method.
+func (m *MockService) GetPipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) (*client.PipelineSchedule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPipelineSchedule", ctx, pipelineID, version, scheduleID)
+	ret0, _ := ret[0].(*client.PipelineSchedule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPipelineSchedule indicates an expected call of GetPipelineSchedule.
+func (mr *MockServiceMockRecorder) GetPipelineSchedule(ctx, pipelineID, version, scheduleID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineSchedule", reflect.TypeOf((*MockService)(nil).GetPipelineSchedule), ctx, pipelineID, version, scheduleID)
 }
 
 // GetPlayground mocks base method.
@@ -2182,6 +2402,21 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx, req)
 }
 
+// LockPipeline mocks base method.
+func (m *MockService) LockPipeline(ctx context.Context, id string) (*client.Pipeline, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LockPipeline", ctx, id)
+	ret0, _ := ret[0].(*client.Pipeline)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LockPipeline indicates an expected call of LockPipeline.
+func (mr *MockServiceMockRecorder) LockPipeline(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockPipeline", reflect.TypeOf((*MockService)(nil).LockPipeline), ctx, id)
+}
+
 // RemoveEntityFromUseCase mocks base method.
 func (m *MockService) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
@@ -2572,6 +2807,21 @@ func (mr *MockServiceMockRecorder) UpdateDeploymentSettings(ctx, id, req interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentSettings", reflect.TypeOf((*MockService)(nil).UpdateDeploymentSettings), ctx, id, req)
 }
 
+// UpdateDraftPipelineInput mocks base method.
+func (m *MockService) UpdateDraftPipelineInput(ctx context.Context, pipelineID, inputID string, req *client.PipelineInputUpdateRequest) (*client.PipelineInput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDraftPipelineInput", ctx, pipelineID, inputID, req)
+	ret0, _ := ret[0].(*client.PipelineInput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDraftPipelineInput indicates an expected call of UpdateDraftPipelineInput.
+func (mr *MockServiceMockRecorder) UpdateDraftPipelineInput(ctx, pipelineID, inputID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDraftPipelineInput", reflect.TypeOf((*MockService)(nil).UpdateDraftPipelineInput), ctx, pipelineID, inputID, req)
+}
+
 // UpdateExecutionEnvironment mocks base method.
 func (m *MockService) UpdateExecutionEnvironment(ctx context.Context, id string, req *client.UpdateExecutionEnvironmentRequest) (*client.ExecutionEnvironment, error) {
 	m.ctrl.T.Helper()
@@ -2675,6 +2925,51 @@ func (m *MockService) UpdateNotificationPolicy(ctx context.Context, relatedEntit
 func (mr *MockServiceMockRecorder) UpdateNotificationPolicy(ctx, relatedEntityType, relatedEntityID, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNotificationPolicy", reflect.TypeOf((*MockService)(nil).UpdateNotificationPolicy), ctx, relatedEntityType, relatedEntityID, id, req)
+}
+
+// UpdatePipelineDraft mocks base method.
+func (m *MockService) UpdatePipelineDraft(ctx context.Context, id, fileName string, content []byte) (*client.Pipeline, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePipelineDraft", ctx, id, fileName, content)
+	ret0, _ := ret[0].(*client.Pipeline)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdatePipelineDraft indicates an expected call of UpdatePipelineDraft.
+func (mr *MockServiceMockRecorder) UpdatePipelineDraft(ctx, id, fileName, content interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineDraft", reflect.TypeOf((*MockService)(nil).UpdatePipelineDraft), ctx, id, fileName, content)
+}
+
+// UpdatePipelineEnvironment mocks base method.
+func (m *MockService) UpdatePipelineEnvironment(ctx context.Context, id string, req *client.PipelineEnvironmentUpdateRequest) (*client.PipelineEnvironment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePipelineEnvironment", ctx, id, req)
+	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdatePipelineEnvironment indicates an expected call of UpdatePipelineEnvironment.
+func (mr *MockServiceMockRecorder) UpdatePipelineEnvironment(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineEnvironment", reflect.TypeOf((*MockService)(nil).UpdatePipelineEnvironment), ctx, id, req)
+}
+
+// UpdatePipelineSchedule mocks base method.
+func (m *MockService) UpdatePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string, req *client.PipelineScheduleUpdateRequest) (*client.PipelineSchedule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePipelineSchedule", ctx, pipelineID, version, scheduleID, req)
+	ret0, _ := ret[0].(*client.PipelineSchedule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdatePipelineSchedule indicates an expected call of UpdatePipelineSchedule.
+func (mr *MockServiceMockRecorder) UpdatePipelineSchedule(ctx, pipelineID, version, scheduleID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineSchedule", reflect.TypeOf((*MockService)(nil).UpdatePipelineSchedule), ctx, pipelineID, version, scheduleID, req)
 }
 
 // UpdatePlayground mocks base method.
