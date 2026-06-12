@@ -10,11 +10,11 @@ resource "datarobot_pipeline_input" "example" {
 }
 
 resource "datarobot_pipeline_schedule" "example" {
-  pipeline_id      = datarobot_pipeline.example.id
-  version          = datarobot_pipeline.example.current_version
+  pipeline_id       = datarobot_pipeline.example.id
+  version           = datarobot_pipeline.example.current_version
   pipeline_input_id = datarobot_pipeline_input.example.id
-  cron_expression  = "0 9 * * 1-5"
-  timezone         = "America/New_York"
+  cron_expression   = "0 9 * * 1-5"
+  timezone          = "America/New_York"
 }
 
 output "schedule_id" {
