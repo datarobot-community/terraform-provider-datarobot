@@ -193,8 +193,8 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 
 	// Handle draft→locked transition.
 	if plan.Mode.ValueString() == string(client.PipelineModeLocked) {
-		// Re-upload if the file also changed before locking.
-		if !plan.SourceFileHash.Equal(state.SourceFileHash) {
+		// Re-upload if the file or description changed before locking.
+		if !plan.SourceFileHash.Equal(state.SourceFileHash) || !plan.Description.Equal(state.Description) {
 			content, fileName, err := readSourceFile(plan.SourceFile.ValueString())
 			if err != nil {
 				resp.Diagnostics.AddAttributeError(path.Root("source_file"), "Cannot read source file", err.Error())
@@ -323,17 +323,22 @@ func loadPipelineIntoModel(p *client.Pipeline, data *PipelineResourceModel) {
 		data.Description = types.StringNull()
 	}
 
+	electronNames := p.TaskNames
 	if len(p.Versions) > 0 {
-		data.CurrentVersion = types.Int64Value(int64(p.Versions[0].Version))
+		latest := p.Versions[0]
+		for _, v := range p.Versions[1:] {
+			if v.Version > latest.Version {
+				latest = v
+			}
+		}
+		data.CurrentVersion = types.Int64Value(int64(latest.Version))
+		if len(latest.TaskNames) > 0 {
+			electronNames = latest.TaskNames
+		}
 	} else if p.VersionNumber != nil {
 		data.CurrentVersion = types.Int64Value(int64(*p.VersionNumber))
 	} else {
 		data.CurrentVersion = types.Int64Null()
-	}
-
-	electronNames := p.TaskNames
-	if len(p.Versions) > 0 && len(p.Versions[0].TaskNames) > 0 {
-		electronNames = p.Versions[0].TaskNames
 	}
 	if len(electronNames) > 0 {
 		vals := make([]attr.Value, len(electronNames))
