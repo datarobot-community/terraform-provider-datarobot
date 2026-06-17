@@ -293,11 +293,11 @@ type Service interface {
 	UpdatePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string, req *PipelineScheduleUpdateRequest) (*PipelineSchedule, error)
 	DeletePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) error
 
-	// PipelineEnvironment (Pipelines API)
-	CreatePipelineEnvironment(ctx context.Context, req *PipelineEnvironmentCreateRequest) (*PipelineEnvironment, error)
-	GetPipelineEnvironment(ctx context.Context, id string) (*PipelineEnvironment, error)
-	UpdatePipelineEnvironment(ctx context.Context, id string, req *PipelineEnvironmentUpdateRequest) (*PipelineEnvironment, error)
-	DeletePipelineEnvironment(ctx context.Context, id string) error
+	// PipelineImage (Pipelines API)
+	CreatePipelineImage(ctx context.Context, req *PipelineImageCreateRequest) (*PipelineImage, error)
+	GetPipelineImage(ctx context.Context, id string) (*PipelineImage, error)
+	UpdatePipelineImage(ctx context.Context, id string, req *PipelineImageUpdateRequest) (*PipelineImage, error)
+	DeletePipelineImage(ctx context.Context, id string) error
 
 	BaseURL() string
 }

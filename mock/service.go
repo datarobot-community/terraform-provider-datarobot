@@ -636,19 +636,19 @@ func (mr *MockServiceMockRecorder) CreatePipeline(ctx, fileName, content, descri
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipeline", reflect.TypeOf((*MockService)(nil).CreatePipeline), ctx, fileName, content, description)
 }
 
-// CreatePipelineEnvironment mocks base method.
-func (m *MockService) CreatePipelineEnvironment(ctx context.Context, req *client.PipelineEnvironmentCreateRequest) (*client.PipelineEnvironment, error) {
+// CreatePipelineImage mocks base method.
+func (m *MockService) CreatePipelineImage(ctx context.Context, req *client.PipelineImageCreateRequest) (*client.PipelineImage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePipelineEnvironment", ctx, req)
-	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret := m.ctrl.Call(m, "CreatePipelineImage", ctx, req)
+	ret0, _ := ret[0].(*client.PipelineImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreatePipelineEnvironment indicates an expected call of CreatePipelineEnvironment.
-func (mr *MockServiceMockRecorder) CreatePipelineEnvironment(ctx, req interface{}) *gomock.Call {
+// CreatePipelineImage indicates an expected call of CreatePipelineImage.
+func (mr *MockServiceMockRecorder) CreatePipelineImage(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipelineEnvironment", reflect.TypeOf((*MockService)(nil).CreatePipelineEnvironment), ctx, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePipelineImage", reflect.TypeOf((*MockService)(nil).CreatePipelineImage), ctx, req)
 }
 
 // CreatePipelineSchedule mocks base method.
@@ -1212,18 +1212,18 @@ func (mr *MockServiceMockRecorder) DeletePipeline(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipeline", reflect.TypeOf((*MockService)(nil).DeletePipeline), ctx, id)
 }
 
-// DeletePipelineEnvironment mocks base method.
-func (m *MockService) DeletePipelineEnvironment(ctx context.Context, id string) error {
+// DeletePipelineImage mocks base method.
+func (m *MockService) DeletePipelineImage(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeletePipelineEnvironment", ctx, id)
+	ret := m.ctrl.Call(m, "DeletePipelineImage", ctx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeletePipelineEnvironment indicates an expected call of DeletePipelineEnvironment.
-func (mr *MockServiceMockRecorder) DeletePipelineEnvironment(ctx, id interface{}) *gomock.Call {
+// DeletePipelineImage indicates an expected call of DeletePipelineImage.
+func (mr *MockServiceMockRecorder) DeletePipelineImage(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineEnvironment", reflect.TypeOf((*MockService)(nil).DeletePipelineEnvironment), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineImage", reflect.TypeOf((*MockService)(nil).DeletePipelineImage), ctx, id)
 }
 
 // DeletePipelineSchedule mocks base method.
@@ -1922,19 +1922,19 @@ func (mr *MockServiceMockRecorder) GetPipeline(ctx, id interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipeline", reflect.TypeOf((*MockService)(nil).GetPipeline), ctx, id)
 }
 
-// GetPipelineEnvironment mocks base method.
-func (m *MockService) GetPipelineEnvironment(ctx context.Context, id string) (*client.PipelineEnvironment, error) {
+// GetPipelineImage mocks base method.
+func (m *MockService) GetPipelineImage(ctx context.Context, id string) (*client.PipelineImage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPipelineEnvironment", ctx, id)
-	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret := m.ctrl.Call(m, "GetPipelineImage", ctx, id)
+	ret0, _ := ret[0].(*client.PipelineImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetPipelineEnvironment indicates an expected call of GetPipelineEnvironment.
-func (mr *MockServiceMockRecorder) GetPipelineEnvironment(ctx, id interface{}) *gomock.Call {
+// GetPipelineImage indicates an expected call of GetPipelineImage.
+func (mr *MockServiceMockRecorder) GetPipelineImage(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineEnvironment", reflect.TypeOf((*MockService)(nil).GetPipelineEnvironment), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineImage", reflect.TypeOf((*MockService)(nil).GetPipelineImage), ctx, id)
 }
 
 // GetPipelineSchedule mocks base method.
@@ -2942,19 +2942,19 @@ func (mr *MockServiceMockRecorder) UpdatePipelineDraft(ctx, id, fileName, conten
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineDraft", reflect.TypeOf((*MockService)(nil).UpdatePipelineDraft), ctx, id, fileName, content, description)
 }
 
-// UpdatePipelineEnvironment mocks base method.
-func (m *MockService) UpdatePipelineEnvironment(ctx context.Context, id string, req *client.PipelineEnvironmentUpdateRequest) (*client.PipelineEnvironment, error) {
+// UpdatePipelineImage mocks base method.
+func (m *MockService) UpdatePipelineImage(ctx context.Context, id string, req *client.PipelineImageUpdateRequest) (*client.PipelineImage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdatePipelineEnvironment", ctx, id, req)
-	ret0, _ := ret[0].(*client.PipelineEnvironment)
+	ret := m.ctrl.Call(m, "UpdatePipelineImage", ctx, id, req)
+	ret0, _ := ret[0].(*client.PipelineImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdatePipelineEnvironment indicates an expected call of UpdatePipelineEnvironment.
-func (mr *MockServiceMockRecorder) UpdatePipelineEnvironment(ctx, id, req interface{}) *gomock.Call {
+// UpdatePipelineImage indicates an expected call of UpdatePipelineImage.
+func (mr *MockServiceMockRecorder) UpdatePipelineImage(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineEnvironment", reflect.TypeOf((*MockService)(nil).UpdatePipelineEnvironment), ctx, id, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineImage", reflect.TypeOf((*MockService)(nil).UpdatePipelineImage), ctx, id, req)
 }
 
 // UpdatePipelineSchedule mocks base method.

@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestIntegrationPipelineEnvironmentResource(t *testing.T) {
+func TestIntegrationPipelineImageResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -27,7 +27,7 @@ func TestIntegrationPipelineEnvironmentResource(t *testing.T) {
 
 	id := uuid.NewString()
 	name := "env-" + uuid.NewString()[:8]
-	desc := "test pipeline environment"
+	desc := "test pipeline image"
 	pkgs1 := []string{"numpy==1.26.0"}
 	pkgs2 := []string{"numpy==1.26.0", "pandas>=2.0"}
 
@@ -35,18 +35,18 @@ func TestIntegrationPipelineEnvironmentResource(t *testing.T) {
 	env2 := pipelineEnvironmentFixture(id, name, &desc, pkgs2, 2)
 
 	// Step 1: Create
-	mockService.EXPECT().CreatePipelineEnvironment(gomock.Any(), gomock.Any()).Return(env1, nil)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id).Return(env1, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env1, nil) // post-create Read
 
 	// Step 2: Update — add pandas
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id).Return(env1, nil) // pre-step2 plan
-	mockService.EXPECT().UpdatePipelineEnvironment(gomock.Any(), id, gomock.Any()).Return(env2, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env1, nil) // pre-step2 plan
+	mockService.EXPECT().UpdatePipelineImage(gomock.Any(), id, gomock.Any()).Return(env2, nil)
 
 	// Destroy
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id).Return(env2, nil) // pre-destroy plan
-	mockService.EXPECT().DeletePipelineEnvironment(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env2, nil) // pre-destroy plan
+	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id).Return(nil)
 
-	const rn = "datarobot_pipeline_environment.test"
+	const rn = "datarobot_pipeline_image.test"
 	var initialID string
 
 	resource.Test(t, resource.TestCase{
@@ -79,7 +79,7 @@ func TestIntegrationPipelineEnvironmentResource(t *testing.T) {
 	})
 }
 
-func TestIntegrationPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
+func TestIntegrationPipelineImageReplaceOnNameChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -102,19 +102,19 @@ func TestIntegrationPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
 	env2 := pipelineEnvironmentFixture(id2, name2, nil, pkgs, 1)
 
 	// Step 1: Create
-	mockService.EXPECT().CreatePipelineEnvironment(gomock.Any(), gomock.Any()).Return(env1, nil)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id1).Return(env1, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env1, nil) // post-create Read
 
 	// Step 2: Replace (name change triggers RequiresReplace)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id1).Return(env1, nil) // pre-replace plan
-	mockService.EXPECT().DeletePipelineEnvironment(gomock.Any(), id1).Return(nil)
-	mockService.EXPECT().CreatePipelineEnvironment(gomock.Any(), gomock.Any()).Return(env2, nil)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id2).Return(env2, nil) // post-replace / pre-destroy combined
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env1, nil) // pre-replace plan
+	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env2, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(env2, nil) // post-replace / pre-destroy combined
 
 	// Destroy
-	mockService.EXPECT().DeletePipelineEnvironment(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id2).Return(nil)
 
-	const rn = "datarobot_pipeline_environment.test"
+	const rn = "datarobot_pipeline_image.test"
 	var initialID string
 
 	resource.Test(t, resource.TestCase{
@@ -140,7 +140,7 @@ func TestIntegrationPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
 	})
 }
 
-func TestIntegrationPipelineEnvironmentReplaceOnPackageRemoval(t *testing.T) {
+func TestIntegrationPipelineImageReplaceOnPackageRemoval(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -163,19 +163,19 @@ func TestIntegrationPipelineEnvironmentReplaceOnPackageRemoval(t *testing.T) {
 	env1pkg := pipelineEnvironmentFixture(id2, name, nil, pkgs1, 1)
 
 	// Step 1: Create with 2 packages
-	mockService.EXPECT().CreatePipelineEnvironment(gomock.Any(), gomock.Any()).Return(env2pkgs, nil)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id1).Return(env2pkgs, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env2pkgs, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env2pkgs, nil) // post-create Read
 
 	// Step 2: Remove pandas → ModifyPlan forces RequiresReplace
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id1).Return(env2pkgs, nil) // pre-replace plan
-	mockService.EXPECT().DeletePipelineEnvironment(gomock.Any(), id1).Return(nil)
-	mockService.EXPECT().CreatePipelineEnvironment(gomock.Any(), gomock.Any()).Return(env1pkg, nil)
-	mockService.EXPECT().GetPipelineEnvironment(gomock.Any(), id2).Return(env1pkg, nil) // post-replace / pre-destroy combined
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env2pkgs, nil) // pre-replace plan
+	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1pkg, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(env1pkg, nil) // post-replace / pre-destroy combined
 
 	// Destroy
-	mockService.EXPECT().DeletePipelineEnvironment(gomock.Any(), id2).Return(nil)
+	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id2).Return(nil)
 
-	const rn = "datarobot_pipeline_environment.test"
+	const rn = "datarobot_pipeline_image.test"
 	var initialID string
 
 	resource.Test(t, resource.TestCase{
@@ -218,17 +218,17 @@ func checkIDChanged(resourceName string, initialID *string) resource.TestCheckFu
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
-func pipelineEnvironmentFixture(id, name string, desc *string, pkgs []string, version int) *client.PipelineEnvironment {
-	return &client.PipelineEnvironment{
+func pipelineEnvironmentFixture(id, name string, desc *string, pkgs []string, version int) *client.PipelineImage {
+	return &client.PipelineImage{
 		EnvironmentID: id,
 		Name:          name,
 		Description:   desc,
 		LatestVersion: version,
-		Versions: []client.PipelineEnvironmentVersion{
+		Versions: []client.PipelineImageVersion{
 			{
 				Version:  version,
 				Packages: pkgs,
-				Status:   client.PipelineEnvironmentStatusReady,
+				Status:   client.PipelineImageStatusReady,
 			},
 		},
 		CreatedAt: "2025-01-01T00:00:00Z",
@@ -248,7 +248,7 @@ func pipelineEnvironmentConfig(name string, desc *string, pkgs []string) string 
 		pkgList += fmt.Sprintf("    %q,\n", p)
 	}
 	return fmt.Sprintf(`
-resource "datarobot_pipeline_environment" "test" {
+resource "datarobot_pipeline_image" "test" {
   name     = %q
   %s
   packages = [

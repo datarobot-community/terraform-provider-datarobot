@@ -10,7 +10,7 @@ type PipelineMode string
 type PipelineVersionStatus string
 type PipelineInputState string
 type PipelineScheduleStatus string
-type PipelineEnvironmentStatus string
+type PipelineImageStatus string
 
 const (
 	PipelineModeDraft  PipelineMode = "draft"
@@ -27,9 +27,9 @@ const (
 	PipelineScheduleStatusPaused  PipelineScheduleStatus = "PAUSED"
 	PipelineScheduleStatusDeleted PipelineScheduleStatus = "DELETED"
 
-	PipelineEnvironmentStatusCreating PipelineEnvironmentStatus = "CREATING"
-	PipelineEnvironmentStatusReady    PipelineEnvironmentStatus = "READY"
-	PipelineEnvironmentStatusError    PipelineEnvironmentStatus = "ERROR"
+	PipelineImageStatusCreating PipelineImageStatus = "CREATING"
+	PipelineImageStatusReady    PipelineImageStatus = "READY"
+	PipelineImageStatusError    PipelineImageStatus = "ERROR"
 )
 
 // Pipeline types
@@ -184,49 +184,49 @@ func (s *ServiceImpl) DeletePipelineSchedule(ctx context.Context, pipelineID str
 	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s/", pipelineID, version, scheduleID))
 }
 
-// PipelineEnvironment types
+// PipelineImage types
 
-type PipelineEnvironmentVersion struct {
+type PipelineImageVersion struct {
 	Version     int                       `json:"version"`
 	Packages    []string                  `json:"packages"`
-	Status      PipelineEnvironmentStatus `json:"status"`
+	Status      PipelineImageStatus `json:"status"`
 	ErrorDetail *string                   `json:"errorDetail,omitempty"`
 	CreatedAt   string                    `json:"createdAt"`
 	UpdatedAt   string                    `json:"updatedAt"`
 }
 
-type PipelineEnvironment struct {
-	EnvironmentID string                       `json:"id"`
+type PipelineImage struct {
+	ImageID string                       `json:"id"`
 	Name          string                       `json:"name"`
 	Description   *string                      `json:"description,omitempty"`
 	LatestVersion int                          `json:"latestVersion"`
-	Versions      []PipelineEnvironmentVersion `json:"versions"`
+	Versions      []PipelineImageVersion `json:"versions"`
 	CreatedAt     string                       `json:"createdAt"`
 	UpdatedAt     string                       `json:"updatedAt"`
 }
 
-type PipelineEnvironmentCreateRequest struct {
+type PipelineImageCreateRequest struct {
 	Name        string   `json:"name"`
 	Description *string  `json:"description,omitempty"`
 	Packages    []string `json:"packages"`
 }
 
-type PipelineEnvironmentUpdateRequest struct {
+type PipelineImageUpdateRequest struct {
 	Packages []string `json:"packages"`
 }
 
-func (s *ServiceImpl) CreatePipelineEnvironment(ctx context.Context, req *PipelineEnvironmentCreateRequest) (*PipelineEnvironment, error) {
-	return Post[PipelineEnvironment](s.client, ctx, "/pipelines/environments/", req)
+func (s *ServiceImpl) CreatePipelineImage(ctx context.Context, req *PipelineImageCreateRequest) (*PipelineImage, error) {
+	return Post[PipelineImage](s.client, ctx, "/pipelines/images/", req)
 }
 
-func (s *ServiceImpl) GetPipelineEnvironment(ctx context.Context, id string) (*PipelineEnvironment, error) {
-	return Get[PipelineEnvironment](s.client, ctx, "/pipelines/environments/"+id+"/")
+func (s *ServiceImpl) GetPipelineImage(ctx context.Context, id string) (*PipelineImage, error) {
+	return Get[PipelineImage](s.client, ctx, "/pipelines/images/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdatePipelineEnvironment(ctx context.Context, id string, req *PipelineEnvironmentUpdateRequest) (*PipelineEnvironment, error) {
-	return Patch[PipelineEnvironment](s.client, ctx, "/pipelines/environments/"+id+"/", req)
+func (s *ServiceImpl) UpdatePipelineImage(ctx context.Context, id string, req *PipelineImageUpdateRequest) (*PipelineImage, error) {
+	return Patch[PipelineImage](s.client, ctx, "/pipelines/images/"+id+"/", req)
 }
 
-func (s *ServiceImpl) DeletePipelineEnvironment(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/pipelines/environments/"+id+"/")
+func (s *ServiceImpl) DeletePipelineImage(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/pipelines/images/"+id+"/")
 }

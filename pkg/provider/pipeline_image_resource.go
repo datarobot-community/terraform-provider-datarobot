@@ -14,19 +14,19 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ resource.Resource = &PipelineEnvironmentResource{}
-var _ resource.ResourceWithImportState = &PipelineEnvironmentResource{}
-var _ resource.ResourceWithModifyPlan = &PipelineEnvironmentResource{}
+var _ resource.Resource = &PipelineImageResource{}
+var _ resource.ResourceWithImportState = &PipelineImageResource{}
+var _ resource.ResourceWithModifyPlan = &PipelineImageResource{}
 
-func NewPipelineEnvironmentResource() resource.Resource {
-	return &PipelineEnvironmentResource{}
+func NewPipelineImageResource() resource.Resource {
+	return &PipelineImageResource{}
 }
 
-type PipelineEnvironmentResource struct {
+type PipelineImageResource struct {
 	provider *Provider
 }
 
-type PipelineEnvironmentResourceModel struct {
+type PipelineImageResourceModel struct {
 	ID            types.String `tfsdk:"id"`
 	Name          types.String `tfsdk:"name"`
 	Description   types.String `tfsdk:"description"`
@@ -37,17 +37,17 @@ type PipelineEnvironmentResourceModel struct {
 	UpdatedAt     types.String `tfsdk:"updated_at"`
 }
 
-func (r *PipelineEnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_pipeline_environment"
+func (r *PipelineImageResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_pipeline_image"
 }
 
-func (r *PipelineEnvironmentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A pipeline execution environment containing a versioned set of pip packages.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The unique identifier of the pipeline environment.",
+				MarkdownDescription: "The unique identifier of the pipeline image.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -94,7 +94,7 @@ func (r *PipelineEnvironmentResource) Schema(ctx context.Context, req resource.S
 	}
 }
 
-func (r *PipelineEnvironmentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *PipelineImageResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -107,8 +107,8 @@ func (r *PipelineEnvironmentResource) Configure(ctx context.Context, req resourc
 	}
 }
 
-func (r *PipelineEnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data PipelineEnvironmentResourceModel
+func (r *PipelineImageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data PipelineImageResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -120,7 +120,7 @@ func (r *PipelineEnvironmentResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	createReq := &client.PipelineEnvironmentCreateRequest{
+	createReq := &client.PipelineImageCreateRequest{
 		Name:     data.Name.ValueString(),
 		Packages: packages,
 	}
@@ -129,41 +129,41 @@ func (r *PipelineEnvironmentResource) Create(ctx context.Context, req resource.C
 		createReq.Description = &desc
 	}
 
-	traceAPICall("CreatePipelineEnvironment")
-	env, err := r.provider.service.CreatePipelineEnvironment(ctx, createReq)
+	traceAPICall("CreatePipelineImage")
+	env, err := r.provider.service.CreatePipelineImage(ctx, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating Pipeline Environment", err.Error())
+		resp.Diagnostics.AddError("Error creating Pipeline Image", err.Error())
 		return
 	}
 
-	loadPipelineEnvironmentIntoModel(env, &data)
+	loadPipelineImageIntoModel(env, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *PipelineEnvironmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data PipelineEnvironmentResourceModel
+func (r *PipelineImageResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data PipelineImageResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	traceAPICall("GetPipelineEnvironment")
-	env, err := r.provider.service.GetPipelineEnvironment(ctx, data.ID.ValueString())
+	traceAPICall("GetPipelineImage")
+	env, err := r.provider.service.GetPipelineImage(ctx, data.ID.ValueString())
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); ok {
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		resp.Diagnostics.AddError("Error reading Pipeline Environment", err.Error())
+		resp.Diagnostics.AddError("Error reading Pipeline Image", err.Error())
 		return
 	}
 
-	loadPipelineEnvironmentIntoModel(env, &data)
+	loadPipelineImageIntoModel(env, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *PipelineEnvironmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state PipelineEnvironmentResourceModel
+func (r *PipelineImageResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, state PipelineImageResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -194,39 +194,39 @@ func (r *PipelineEnvironmentResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	traceAPICall("UpdatePipelineEnvironment")
-	env, err := r.provider.service.UpdatePipelineEnvironment(ctx, state.ID.ValueString(), &client.PipelineEnvironmentUpdateRequest{Packages: newPkgs})
+	traceAPICall("UpdatePipelineImage")
+	env, err := r.provider.service.UpdatePipelineImage(ctx, state.ID.ValueString(), &client.PipelineImageUpdateRequest{Packages: newPkgs})
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating Pipeline Environment", err.Error())
+		resp.Diagnostics.AddError("Error updating Pipeline Image", err.Error())
 		return
 	}
 
-	loadPipelineEnvironmentIntoModel(env, &plan)
+	loadPipelineImageIntoModel(env, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-func (r *PipelineEnvironmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data PipelineEnvironmentResourceModel
+func (r *PipelineImageResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data PipelineImageResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	traceAPICall("DeletePipelineEnvironment")
-	err := r.provider.service.DeletePipelineEnvironment(ctx, data.ID.ValueString())
+	traceAPICall("DeletePipelineImage")
+	err := r.provider.service.DeletePipelineImage(ctx, data.ID.ValueString())
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); !ok {
-			resp.Diagnostics.AddError("Error deleting Pipeline Environment", err.Error())
+			resp.Diagnostics.AddError("Error deleting Pipeline Image", err.Error())
 		}
 	}
 }
 
-func (r *PipelineEnvironmentResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *PipelineImageResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
 		return
 	}
 
-	var plan, state PipelineEnvironmentResourceModel
+	var plan, state PipelineImageResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -253,12 +253,12 @@ func (r *PipelineEnvironmentResource) ModifyPlan(ctx context.Context, req resour
 	}
 }
 
-func (r *PipelineEnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *PipelineImageResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func loadPipelineEnvironmentIntoModel(env *client.PipelineEnvironment, data *PipelineEnvironmentResourceModel) {
-	data.ID = types.StringValue(env.EnvironmentID)
+func loadPipelineImageIntoModel(env *client.PipelineImage, data *PipelineImageResourceModel) {
+	data.ID = types.StringValue(env.ImageID)
 	data.Name = types.StringValue(env.Name)
 	if env.Description != nil {
 		data.Description = types.StringValue(*env.Description)

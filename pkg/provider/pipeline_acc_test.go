@@ -98,9 +98,9 @@ func checkPipelineExistsInAPI(resourceName string) resource.TestCheckFunc {
 
 // ─── pipeline environment ─────────────────────────────────────────────────────
 
-func TestAccPipelineEnvironmentResource(t *testing.T) {
+func TestAccPipelineImageResource(t *testing.T) {
 	t.Parallel()
-	rn := "datarobot_pipeline_environment.test"
+	rn := "datarobot_pipeline_image.test"
 	name := "penv-" + nameSalt
 	var initialID string
 
@@ -117,7 +117,7 @@ func TestAccPipelineEnvironmentResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(rn, "latest_version"),
 					resource.TestCheckResourceAttrSet(rn, "latest_status"),
 					captureAttr(rn, "id", &initialID),
-					checkPipelineEnvironmentExistsInAPI(rn, name),
+					checkPipelineImageExistsInAPI(rn, name),
 				),
 			},
 			{
@@ -125,16 +125,16 @@ func TestAccPipelineEnvironmentResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "packages.#", "2"),
 					checkWorkloadIDPreserved(rn, &initialID),
-					checkPipelineEnvironmentExistsInAPI(rn, name),
+					checkPipelineImageExistsInAPI(rn, name),
 				),
 			},
 		},
 	})
 }
 
-func TestAccPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
+func TestAccPipelineImageReplaceOnNameChange(t *testing.T) {
 	t.Parallel()
-	rn := "datarobot_pipeline_environment.test"
+	rn := "datarobot_pipeline_image.test"
 	name1 := "penv-a-" + nameSalt
 	name2 := "penv-b-" + nameSalt
 	var initialID string
@@ -161,7 +161,7 @@ func TestAccPipelineEnvironmentReplaceOnNameChange(t *testing.T) {
 	})
 }
 
-func checkPipelineEnvironmentExistsInAPI(resourceName, expectedName string) resource.TestCheckFunc {
+func checkPipelineImageExistsInAPI(resourceName, expectedName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -175,9 +175,9 @@ func checkPipelineEnvironmentExistsInAPI(resourceName, expectedName string) reso
 			return fmt.Errorf("provider not found")
 		}
 		p.service = NewService(cl)
-		env, err := p.service.GetPipelineEnvironment(context.Background(), rs.Primary.ID)
+		env, err := p.service.GetPipelineImage(context.Background(), rs.Primary.ID)
 		if err != nil {
-			return fmt.Errorf("GetPipelineEnvironment(%s): %w", rs.Primary.ID, err)
+			return fmt.Errorf("GetPipelineImage(%s): %w", rs.Primary.ID, err)
 		}
 		if env.Name != expectedName {
 			return fmt.Errorf("expected env name %q, got %q", expectedName, env.Name)
@@ -287,7 +287,7 @@ func accPipelineEnvConfig(name string, pkgs []string) string {
 		pkgList += fmt.Sprintf("    %q,\n", p)
 	}
 	return fmt.Sprintf(`
-resource "datarobot_pipeline_environment" "test" {
+resource "datarobot_pipeline_image" "test" {
   name     = %q
   packages = [
 %s  ]
