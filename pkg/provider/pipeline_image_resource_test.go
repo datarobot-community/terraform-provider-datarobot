@@ -26,24 +26,24 @@ func TestIntegrationPipelineImageResource(t *testing.T) {
 	}
 
 	id := uuid.NewString()
-	name := "env-" + uuid.NewString()[:8]
+	name := "image-" + uuid.NewString()[:8]
 	desc := "test pipeline image"
 	pkgs1 := []string{"numpy==1.26.0"}
 	pkgs2 := []string{"numpy==1.26.0", "pandas>=2.0"}
 
-	env1 := pipelineEnvironmentFixture(id, name, &desc, pkgs1, 1)
-	env2 := pipelineEnvironmentFixture(id, name, &desc, pkgs2, 2)
+	image1 := pipelineImageFixture(id, name, &desc, pkgs1, 1)
+	image2 := pipelineImageFixture(id, name, &desc, pkgs2, 2)
 
 	// Step 1: Create
-	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1, nil)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env1, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(image1, nil) // post-create Read
 
 	// Step 2: Update — add pandas
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env1, nil) // pre-step2 plan
-	mockService.EXPECT().UpdatePipelineImage(gomock.Any(), id, gomock.Any()).Return(env2, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(image1, nil) // pre-step2 plan
+	mockService.EXPECT().UpdatePipelineImage(gomock.Any(), id, gomock.Any()).Return(image2, nil)
 
 	// Destroy
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(env2, nil) // pre-destroy plan
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(image2, nil) // pre-destroy plan
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id).Return(nil)
 
 	const rn = "datarobot_pipeline_image.test"
@@ -55,7 +55,7 @@ func TestIntegrationPipelineImageResource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: pipelineEnvironmentConfig(name, &desc, pkgs1),
+				Config: pipelineImageConfig(name, &desc, pkgs1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(rn, "id"),
 					resource.TestCheckResourceAttr(rn, "name", name),
@@ -68,7 +68,7 @@ func TestIntegrationPipelineImageResource(t *testing.T) {
 				),
 			},
 			{
-				Config: pipelineEnvironmentConfig(name, &desc, pkgs2),
+				Config: pipelineImageConfig(name, &desc, pkgs2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "packages.#", "2"),
 					resource.TestCheckResourceAttr(rn, "packages.1", "pandas>=2.0"),
@@ -94,22 +94,22 @@ func TestIntegrationPipelineImageReplaceOnNameChange(t *testing.T) {
 
 	id1 := uuid.NewString()
 	id2 := uuid.NewString()
-	name1 := "env-" + uuid.NewString()[:8]
-	name2 := "env-updated-" + uuid.NewString()[:8]
+	name1 := "image-" + uuid.NewString()[:8]
+	name2 := "image-updated-" + uuid.NewString()[:8]
 	pkgs := []string{"numpy==1.26.0"}
 
-	env1 := pipelineEnvironmentFixture(id1, name1, nil, pkgs, 1)
-	env2 := pipelineEnvironmentFixture(id2, name2, nil, pkgs, 1)
+	image1 := pipelineImageFixture(id1, name1, nil, pkgs, 1)
+	image2 := pipelineImageFixture(id2, name2, nil, pkgs, 1)
 
 	// Step 1: Create
-	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1, nil)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env1, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image1, nil) // post-create Read
 
 	// Step 2: Replace (name change triggers RequiresReplace)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env1, nil) // pre-replace plan
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image1, nil) // pre-replace plan
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
-	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env2, nil)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(env2, nil) // post-replace / pre-destroy combined
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image2, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(image2, nil) // post-replace / pre-destroy combined
 
 	// Destroy
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id2).Return(nil)
@@ -123,14 +123,14 @@ func TestIntegrationPipelineImageReplaceOnNameChange(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: pipelineEnvironmentConfig(name1, nil, pkgs),
+				Config: pipelineImageConfig(name1, nil, pkgs),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "name", name1),
 					captureAttr(rn, "id", &initialID),
 				),
 			},
 			{
-				Config: pipelineEnvironmentConfig(name2, nil, pkgs),
+				Config: pipelineImageConfig(name2, nil, pkgs),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "name", name2),
 					checkIDChanged(rn, &initialID),
@@ -155,22 +155,22 @@ func TestIntegrationPipelineImageReplaceOnPackageRemoval(t *testing.T) {
 
 	id1 := uuid.NewString()
 	id2 := uuid.NewString()
-	name := "env-" + uuid.NewString()[:8]
+	name := "image-" + uuid.NewString()[:8]
 	pkgs2 := []string{"numpy==1.26.0", "pandas>=2.0"}
 	pkgs1 := []string{"numpy==1.26.0"}
 
-	env2pkgs := pipelineEnvironmentFixture(id1, name, nil, pkgs2, 1)
-	env1pkg := pipelineEnvironmentFixture(id2, name, nil, pkgs1, 1)
+	image2pkgs := pipelineImageFixture(id1, name, nil, pkgs2, 1)
+	image1pkg := pipelineImageFixture(id2, name, nil, pkgs1, 1)
 
 	// Step 1: Create with 2 packages
-	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env2pkgs, nil)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env2pkgs, nil) // post-create Read
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image2pkgs, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image2pkgs, nil) // post-create Read
 
 	// Step 2: Remove pandas → ModifyPlan forces RequiresReplace
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(env2pkgs, nil) // pre-replace plan
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image2pkgs, nil) // pre-replace plan
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
-	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(env1pkg, nil)
-	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(env1pkg, nil) // post-replace / pre-destroy combined
+	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1pkg, nil)
+	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(image1pkg, nil) // post-replace / pre-destroy combined
 
 	// Destroy
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id2).Return(nil)
@@ -184,14 +184,14 @@ func TestIntegrationPipelineImageReplaceOnPackageRemoval(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: pipelineEnvironmentConfig(name, nil, pkgs2),
+				Config: pipelineImageConfig(name, nil, pkgs2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "packages.#", "2"),
 					captureAttr(rn, "id", &initialID),
 				),
 			},
 			{
-				Config: pipelineEnvironmentConfig(name, nil, pkgs1),
+				Config: pipelineImageConfig(name, nil, pkgs1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(rn, "packages.#", "1"),
 					checkIDChanged(rn, &initialID),
@@ -218,9 +218,9 @@ func checkIDChanged(resourceName string, initialID *string) resource.TestCheckFu
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
-func pipelineEnvironmentFixture(id, name string, desc *string, pkgs []string, version int) *client.PipelineImage {
+func pipelineImageFixture(id, name string, desc *string, pkgs []string, version int) *client.PipelineImage {
 	return &client.PipelineImage{
-		EnvironmentID: id,
+		ImageID:       id,
 		Name:          name,
 		Description:   desc,
 		LatestVersion: version,
@@ -238,7 +238,7 @@ func pipelineEnvironmentFixture(id, name string, desc *string, pkgs []string, ve
 
 // ─── config helpers ────────────────────────────────────────────────────────────
 
-func pipelineEnvironmentConfig(name string, desc *string, pkgs []string) string {
+func pipelineImageConfig(name string, desc *string, pkgs []string) string {
 	descAttr := ""
 	if desc != nil {
 		descAttr = fmt.Sprintf("description = %q", *desc)

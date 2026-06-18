@@ -96,7 +96,7 @@ func checkPipelineExistsInAPI(resourceName string) resource.TestCheckFunc {
 	}
 }
 
-// ─── pipeline environment ─────────────────────────────────────────────────────
+// ─── pipeline image ───────────────────────────────────────────────────────────
 
 func TestAccPipelineImageResource(t *testing.T) {
 	t.Parallel()
@@ -168,7 +168,7 @@ func checkPipelineImageExistsInAPI(resourceName, expectedName string) resource.T
 			return fmt.Errorf("resource %s not found in state", resourceName)
 		}
 		if rs.Primary.ID == "" {
-			return fmt.Errorf("pipeline environment ID is not set in state")
+			return fmt.Errorf("pipeline image ID is not set in state")
 		}
 		p, ok := testAccProvider.(*Provider)
 		if !ok {

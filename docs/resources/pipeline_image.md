@@ -14,8 +14,8 @@ A pipeline execution image containing a versioned set of pip packages.
 
 ```terraform
 resource "datarobot_pipeline_image" "example" {
-  name        = "my-pipeline-env"
-  description = "Python environment for my pipeline"
+  name        = "my-pipeline-image"
+  description = "Python image for my pipeline"
   packages    = ["numpy==1.26.0", "pandas>=2.0,<3.0"]
 }
 
@@ -30,7 +30,7 @@ output "example_id" {
 
 ### Required
 
-- `name` (String) Unique name for the environment. Changing this forces a new resource.
+- `name` (String) Unique name for the image. Changing this forces a new resource.
 - `packages` (List of String) List of pip package specifiers (e.g. `numpy==1.26.0`). Packages can only be added; removing any forces a new resource.
 
 ### Optional
@@ -39,8 +39,8 @@ output "example_id" {
 
 ### Read-Only
 
-- `created_at` (String) RFC 3339 timestamp when the environment was created.
+- `created_at` (String) RFC 3339 timestamp when the image was created.
 - `id` (String) The unique identifier of the pipeline image.
 - `latest_status` (String) Build status of the latest version: `CREATING`, `READY`, or `ERROR`.
-- `latest_version` (Number) The latest version number of this environment.
-- `updated_at` (String) RFC 3339 timestamp when the environment was last updated.
+- `latest_version` (Number) The latest version number of this image.
+- `updated_at` (String) RFC 3339 timestamp when the image was last updated.

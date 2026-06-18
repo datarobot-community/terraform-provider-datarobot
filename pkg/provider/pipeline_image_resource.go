@@ -43,7 +43,7 @@ func (r *PipelineImageResource) Metadata(ctx context.Context, req resource.Metad
 
 func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A pipeline execution environment containing a versioned set of pip packages.",
+		MarkdownDescription: "A pipeline execution image containing a versioned set of pip packages.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -54,7 +54,7 @@ func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaR
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Unique name for the environment. Changing this forces a new resource.",
+				MarkdownDescription: "Unique name for the image. Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -73,7 +73,7 @@ func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaR
 			},
 			"latest_version": schema.Int64Attribute{
 				Computed:            true,
-				MarkdownDescription: "The latest version number of this environment.",
+				MarkdownDescription: "The latest version number of this image.",
 			},
 			"latest_status": schema.StringAttribute{
 				Computed:            true,
@@ -81,14 +81,14 @@ func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaR
 			},
 			"created_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "RFC 3339 timestamp when the environment was created.",
+				MarkdownDescription: "RFC 3339 timestamp when the image was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "RFC 3339 timestamp when the environment was last updated.",
+				MarkdownDescription: "RFC 3339 timestamp when the image was last updated.",
 			},
 		},
 	}
@@ -130,13 +130,13 @@ func (r *PipelineImageResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	traceAPICall("CreatePipelineImage")
-	env, err := r.provider.service.CreatePipelineImage(ctx, createReq)
+	image, err := r.provider.service.CreatePipelineImage(ctx, createReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Pipeline Image", err.Error())
 		return
 	}
 
-	loadPipelineImageIntoModel(env, &data)
+	loadPipelineImageIntoModel(image, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -148,7 +148,7 @@ func (r *PipelineImageResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	traceAPICall("GetPipelineImage")
-	env, err := r.provider.service.GetPipelineImage(ctx, data.ID.ValueString())
+	image, err := r.provider.service.GetPipelineImage(ctx, data.ID.ValueString())
 	if err != nil {
 		if _, ok := err.(*client.NotFoundError); ok {
 			resp.State.RemoveResource(ctx)
@@ -158,7 +158,7 @@ func (r *PipelineImageResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	loadPipelineImageIntoModel(env, &data)
+	loadPipelineImageIntoModel(image, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -195,13 +195,13 @@ func (r *PipelineImageResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	traceAPICall("UpdatePipelineImage")
-	env, err := r.provider.service.UpdatePipelineImage(ctx, state.ID.ValueString(), &client.PipelineImageUpdateRequest{Packages: newPkgs})
+	image, err := r.provider.service.UpdatePipelineImage(ctx, state.ID.ValueString(), &client.PipelineImageUpdateRequest{Packages: newPkgs})
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Pipeline Image", err.Error())
 		return
 	}
 
-	loadPipelineImageIntoModel(env, &plan)
+	loadPipelineImageIntoModel(image, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -257,22 +257,22 @@ func (r *PipelineImageResource) ImportState(ctx context.Context, req resource.Im
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func loadPipelineImageIntoModel(env *client.PipelineImage, data *PipelineImageResourceModel) {
-	data.ID = types.StringValue(env.ImageID)
-	data.Name = types.StringValue(env.Name)
-	if env.Description != nil {
-		data.Description = types.StringValue(*env.Description)
+func loadPipelineImageIntoModel(image *client.PipelineImage, data *PipelineImageResourceModel) {
+	data.ID = types.StringValue(image.ImageID)
+	data.Name = types.StringValue(image.Name)
+	if image.Description != nil {
+		data.Description = types.StringValue(*image.Description)
 	} else {
 		data.Description = types.StringNull()
 	}
-	data.LatestVersion = types.Int64Value(int64(env.LatestVersion))
-	data.CreatedAt = types.StringValue(env.CreatedAt)
-	data.UpdatedAt = types.StringValue(env.UpdatedAt)
+	data.LatestVersion = types.Int64Value(int64(image.LatestVersion))
+	data.CreatedAt = types.StringValue(image.CreatedAt)
+	data.UpdatedAt = types.StringValue(image.UpdatedAt)
 
-	if len(env.Versions) > 0 {
-		latestVer := env.Versions[0]
-		for _, v := range env.Versions {
-			if v.Version == env.LatestVersion {
+	if len(image.Versions) > 0 {
+		latestVer := image.Versions[0]
+		for _, v := range image.Versions {
+			if v.Version == image.LatestVersion {
 				latestVer = v
 				break
 			}
