@@ -187,22 +187,22 @@ func (s *ServiceImpl) DeletePipelineSchedule(ctx context.Context, pipelineID str
 // PipelineImage types
 
 type PipelineImageVersion struct {
-	Version     int                       `json:"version"`
-	Packages    []string                  `json:"packages"`
+	Version     int                 `json:"version"`
+	Packages    []string            `json:"packages"`
 	Status      PipelineImageStatus `json:"status"`
-	ErrorDetail *string                   `json:"errorDetail,omitempty"`
-	CreatedAt   string                    `json:"createdAt"`
-	UpdatedAt   string                    `json:"updatedAt"`
+	ErrorDetail *string             `json:"errorDetail,omitempty"`
+	CreatedAt   string              `json:"createdAt"`
+	UpdatedAt   string              `json:"updatedAt"`
 }
 
 type PipelineImage struct {
-	ImageID string                       `json:"id"`
-	Name          string                       `json:"name"`
-	Description   *string                      `json:"description,omitempty"`
-	LatestVersion int                          `json:"latestVersion"`
+	ImageID       string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Description   *string                `json:"description,omitempty"`
+	LatestVersion int                    `json:"latestVersion"`
 	Versions      []PipelineImageVersion `json:"versions"`
-	CreatedAt     string                       `json:"createdAt"`
-	UpdatedAt     string                       `json:"updatedAt"`
+	CreatedAt     string                 `json:"createdAt"`
+	UpdatedAt     string                 `json:"updatedAt"`
 }
 
 type PipelineImageCreateRequest struct {
