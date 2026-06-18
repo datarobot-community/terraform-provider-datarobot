@@ -99,6 +99,9 @@ func checkPipelineExistsInAPI(resourceName string) resource.TestCheckFunc {
 // ─── pipeline image ───────────────────────────────────────────────────────────
 
 func TestAccPipelineImageResource(t *testing.T) {
+	if os.Getenv("ACCEPTANCE_RUN_PIPELINES_IMAGES") == "" {
+		t.Skip("pipelines-api /pipelines/images/ endpoint (environments→images rename) not yet deployed to staging; set ACCEPTANCE_RUN_PIPELINES_IMAGES=1 to enable")
+	}
 	t.Parallel()
 	rn := "datarobot_pipeline_image.test"
 	name := "penv-" + nameSalt
@@ -133,6 +136,9 @@ func TestAccPipelineImageResource(t *testing.T) {
 }
 
 func TestAccPipelineImageReplaceOnNameChange(t *testing.T) {
+	if os.Getenv("ACCEPTANCE_RUN_PIPELINES_IMAGES") == "" {
+		t.Skip("pipelines-api /pipelines/images/ endpoint (environments→images rename) not yet deployed to staging; set ACCEPTANCE_RUN_PIPELINES_IMAGES=1 to enable")
+	}
 	t.Parallel()
 	rn := "datarobot_pipeline_image.test"
 	name1 := "penv-a-" + nameSalt
