@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### Added
+- `datarobot_pipeline` resource: manage DataRobot pipelines defined by a Python source file using `@pipeline` and `@task` decorators. Supports draft/locked lifecycle, content-change detection via `source_file_hash`, and in-place version bumps while in draft mode.
+- `datarobot_pipeline_input` resource: manage JSON input payloads attached to a pipeline draft or a specific locked version. Draft inputs are patched in-place; locked inputs are deleted and recreated on update.
+- `datarobot_pipeline_schedule` resource: manage recurring cron schedules against a locked pipeline version. `cron_expression` and `timezone` are patchable in-place; all other attributes force replacement.
+- `datarobot_pipeline_environment` resource: manage named pip-package execution environments. Packages are append-only (removal forces replacement); single-call destroy via `DELETE /environments/{id}`.
+
 ## [0.10.39] - 2026-05-28
 
 ### Fixed

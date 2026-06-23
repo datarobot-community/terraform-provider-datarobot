@@ -271,6 +271,34 @@ type Service interface {
 	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
 
+	// Pipeline (Pipelines API)
+	CreatePipeline(ctx context.Context, fileName string, content []byte, description *string) (*Pipeline, error)
+	GetPipeline(ctx context.Context, id string) (*Pipeline, error)
+	UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte, description *string) (*Pipeline, error)
+	LockPipeline(ctx context.Context, id string) (*Pipeline, error)
+	DeletePipeline(ctx context.Context, id string) error
+
+	// PipelineInput (Pipelines API)
+	CreateDraftPipelineInput(ctx context.Context, pipelineID string, req *PipelineInputCreateRequest) (*PipelineInput, error)
+	CreateLockedPipelineInput(ctx context.Context, pipelineID string, version int, req *PipelineInputCreateRequest) (*PipelineInput, error)
+	GetDraftPipelineInput(ctx context.Context, pipelineID, inputID string) (*PipelineInput, error)
+	GetLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) (*PipelineInput, error)
+	UpdateDraftPipelineInput(ctx context.Context, pipelineID, inputID string, req *PipelineInputUpdateRequest) (*PipelineInput, error)
+	DeleteDraftPipelineInput(ctx context.Context, pipelineID, inputID string) error
+	DeleteLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) error
+
+	// PipelineSchedule (Pipelines API)
+	CreatePipelineSchedule(ctx context.Context, pipelineID string, version int, req *PipelineScheduleCreateRequest) (*PipelineSchedule, error)
+	GetPipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) (*PipelineSchedule, error)
+	UpdatePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string, req *PipelineScheduleUpdateRequest) (*PipelineSchedule, error)
+	DeletePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) error
+
+	// PipelineImage (Pipelines API)
+	CreatePipelineImage(ctx context.Context, req *PipelineImageCreateRequest) (*PipelineImage, error)
+	GetPipelineImage(ctx context.Context, id string) (*PipelineImage, error)
+	UpdatePipelineImage(ctx context.Context, id string, req *PipelineImageUpdateRequest) (*PipelineImage, error)
+	DeletePipelineImage(ctx context.Context, id string) error
+
 	BaseURL() string
 }
 
