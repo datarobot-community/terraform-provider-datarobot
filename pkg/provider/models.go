@@ -125,13 +125,14 @@ type VectorDatabaseResourceModel struct {
 
 // ChunkingParametersModel represents the chunking parameters nested attribute.
 type ChunkingParametersModel struct {
-	EmbeddingModel         types.String   `tfsdk:"embedding_model"`
-	ChunkOverlapPercentage types.Int64    `tfsdk:"chunk_overlap_percentage"`
-	ChunkSize              types.Int64    `tfsdk:"chunk_size"`
-	ChunkingMethod         types.String   `tfsdk:"chunking_method"`
-	IsSeparatorRegex       types.Bool     `tfsdk:"is_separator_regex"`
-	Separators             []types.String `tfsdk:"separators"`
-	CustomChunking         types.Bool     `tfsdk:"custom_chunking"`
+	EmbeddingModel         types.String `tfsdk:"embedding_model"`
+	ChunkOverlapPercentage types.Int64  `tfsdk:"chunk_overlap_percentage"`
+	ChunkSize              types.Int64  `tfsdk:"chunk_size"`
+	ChunkingMethod         types.String `tfsdk:"chunking_method"`
+	IsSeparatorRegex       types.Bool   `tfsdk:"is_separator_regex"`
+	// types.List (not []types.String) so it can hold the framework's Unknown state.
+	Separators     types.List `tfsdk:"separators"`
+	CustomChunking types.Bool `tfsdk:"custom_chunking"`
 }
 
 // CustomModelFromVectorDatabaseResourceModel describes a custom model packaged from a vector database.
