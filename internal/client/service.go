@@ -98,6 +98,7 @@ type Service interface {
 	CreateCustomModelVersionCreateFromLatest(ctxc context.Context, id string, req *CreateCustomModelVersionFromLatestRequest) (*CustomModelVersion, error)
 	CreateCustomModelVersionFromFiles(ctx context.Context, id string, req *CreateCustomModelVersionFromFilesRequest) (*CustomModelVersion, error)
 	CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error)
+	CreateCustomModelVersionFromVectorDatabase(ctx context.Context, vectorDatabaseID string, req *CreateCustomModelVersionFromVectorDatabaseRequest) (*CustomModelVersion, string, error)
 	GetCustomModel(ctx context.Context, id string) (*CustomModel, error)
 	IsCustomModelReady(ctx context.Context, id string) (bool, error)
 	UpdateCustomModel(ctx context.Context, id string, req *UpdateCustomModelRequest) (*CustomModel, error)
@@ -572,6 +573,10 @@ func (s *ServiceImpl) CreateCustomModelVersionFromFiles(ctx context.Context, id 
 
 func (s *ServiceImpl) CreateCustomModelVersionFromRemoteRepository(ctx context.Context, id string, req *CreateCustomModelVersionFromRemoteRepositoryRequest) (*CustomModelVersion, string, error) {
 	return ExecuteAndExpectStatus[CustomModelVersion](s.client, ctx, http.MethodPatch, "/customModels/"+id+"/versions/fromRepository/", req)
+}
+
+func (s *ServiceImpl) CreateCustomModelVersionFromVectorDatabase(ctx context.Context, vectorDatabaseID string, req *CreateCustomModelVersionFromVectorDatabaseRequest) (*CustomModelVersion, string, error) {
+	return ExecuteAndExpectStatus[CustomModelVersion](s.client, ctx, http.MethodPost, "/genai/vectorDatabases/"+vectorDatabaseID+"/customModelVersions/", req)
 }
 
 func (s *ServiceImpl) GetCustomModel(ctx context.Context, id string) (*CustomModel, error) {

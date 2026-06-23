@@ -18,6 +18,7 @@ type ChunkingParameters struct {
 	EmbeddingValidationId  string   `json:"embeddingValidationId,omitempty"`
 	IsSeparatorRegex       bool     `json:"isSeparatorRegex,omitempty"`
 	Separators             []string `json:"separators"`
+	CustomChunking         bool     `json:"customChunking,omitempty"` // when true each dataset row is treated as a finished chunk
 }
 
 type VectorDatabase struct {
@@ -32,6 +33,7 @@ type VectorDatabase struct {
 	ChunkOverlapPercentage int64    `json:"chunkOverlapPercentage"`
 	IsSeparatorRegex       bool     `json:"isSeparatorRegex"`
 	Separators             []string `json:"separators"`
+	CustomChunking         bool     `json:"customChunking"`
 	ParentID               *string  `json:"parentId"`
 	FamilyID               *string  `json:"familyId"`
 	Version                int64    `json:"version"`

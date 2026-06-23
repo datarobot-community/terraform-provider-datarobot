@@ -31,6 +31,7 @@ const (
 	defaultChunkSize              = 256
 	defaultChunkingMethod         = "recursive"
 	defaultIsSeparatorRegex       = false
+	defaultCustomChunking         = false
 )
 
 var defaultSeparators = []string{"\n\n", "\n", " ", ""}
@@ -93,6 +94,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						"chunking_method":          types.StringType,
 						"is_separator_regex":       types.BoolType,
 						"separators":               types.ListType{ElemType: types.StringType},
+						"custom_chunking":          types.BoolType,
 					},
 					map[string]attr.Value{
 						"embedding_model":          types.StringValue(defaultEmbeddingModel),
@@ -109,6 +111,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 								types.StringValue(defaultSeparators[3]),
 							},
 						),
+						"custom_chunking": types.BoolValue(defaultCustomChunking),
 					},
 				)),
 				Attributes: map[string]schema.Attribute{
@@ -175,6 +178,17 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						)),
 						PlanModifiers: []planmodifier.List{
 							listplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"custom_chunking": schema.BoolAttribute{
+						MarkdownDescription: "Whether DataRobot treats each row of the dataset as a finished chunk " +
+							"(custom chunking) instead of running the built-in chunker. Use this when the dataset " +
+							"is already pre-chunked. Defaults to false.",
+						Optional: true,
+						Computed: true,
+						Default:  booldefault.StaticBool(defaultCustomChunking),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 				},
@@ -252,6 +266,7 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 			ChunkingMethod:         data.ChunkingParameters.ChunkingMethod.ValueString(),
 			IsSeparatorRegex:       data.ChunkingParameters.IsSeparatorRegex.ValueBool(),
 			Separators:             separators,
+			CustomChunking:         data.ChunkingParameters.CustomChunking.ValueBool(),
 		},
 	})
 	if err != nil {
@@ -339,6 +354,7 @@ func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.Update
 				ChunkingMethod:         plan.ChunkingParameters.ChunkingMethod.ValueString(),
 				IsSeparatorRegex:       plan.ChunkingParameters.IsSeparatorRegex.ValueBool(),
 				Separators:             separators,
+				CustomChunking:         plan.ChunkingParameters.CustomChunking.ValueBool(),
 			},
 		})
 		if err != nil {
@@ -432,6 +448,7 @@ func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, d
 		ChunkSize:              types.Int64Value(vectorDatabase.ChunkSize),
 		ChunkingMethod:         types.StringValue(vectorDatabase.ChunkingMethod),
 		IsSeparatorRegex:       types.BoolValue(vectorDatabase.IsSeparatorRegex),
+		CustomChunking:         types.BoolValue(vectorDatabase.CustomChunking),
 	}
 	separatorList := make([]types.String, 0)
 	for _, separator := range vectorDatabase.Separators {

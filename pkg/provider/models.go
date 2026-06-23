@@ -131,6 +131,20 @@ type ChunkingParametersModel struct {
 	ChunkingMethod         types.String   `tfsdk:"chunking_method"`
 	IsSeparatorRegex       types.Bool     `tfsdk:"is_separator_regex"`
 	Separators             []types.String `tfsdk:"separators"`
+	CustomChunking         types.Bool     `tfsdk:"custom_chunking"`
+}
+
+// CustomModelFromVectorDatabaseResourceModel describes a custom model packaged from a vector database.
+type CustomModelFromVectorDatabaseResourceModel struct {
+	ID                  types.String `tfsdk:"id"`
+	VersionID           types.String `tfsdk:"version_id"`
+	VectorDatabaseID    types.String `tfsdk:"vector_database_id"`
+	Name                types.String `tfsdk:"name"`
+	Description         types.String `tfsdk:"description"`
+	ResourceBundleID    types.String `tfsdk:"resource_bundle_id"`
+	Replicas            types.Int64  `tfsdk:"replicas"`
+	NetworkEgressPolicy types.String `tfsdk:"network_egress_policy"`
+	MemoryMB            types.Int64  `tfsdk:"memory_mb"`
 }
 
 // PlaygroundResourceModel describes the playground associated to a use case.
