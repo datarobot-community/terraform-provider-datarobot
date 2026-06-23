@@ -35,6 +35,7 @@ func TestIntegrationPipelineImageResource(t *testing.T) {
 	image2 := pipelineImageFixture(id, name, &desc, pkgs2, 2)
 
 	// Step 1: Create
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1, nil)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id).Return(image1, nil) // post-create Read
 
@@ -102,12 +103,14 @@ func TestIntegrationPipelineImageReplaceOnNameChange(t *testing.T) {
 	image2 := pipelineImageFixture(id2, name2, nil, pkgs, 1)
 
 	// Step 1: Create
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1, nil)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image1, nil) // post-create Read
 
 	// Step 2: Replace (name change triggers RequiresReplace)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image1, nil) // pre-replace plan
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image2, nil)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(image2, nil) // post-replace / pre-destroy combined
 
@@ -163,12 +166,14 @@ func TestIntegrationPipelineImageReplaceOnPackageRemoval(t *testing.T) {
 	image1pkg := pipelineImageFixture(id2, name, nil, pkgs1, 1)
 
 	// Step 1: Create with 2 packages
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image2pkgs, nil)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image2pkgs, nil) // post-create Read
 
 	// Step 2: Remove pandas → ModifyPlan forces RequiresReplace
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id1).Return(image2pkgs, nil) // pre-replace plan
 	mockService.EXPECT().DeletePipelineImage(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineImage(gomock.Any(), gomock.Any()).Return(image1pkg, nil)
 	mockService.EXPECT().GetPipelineImage(gomock.Any(), id2).Return(image1pkg, nil) // post-replace / pre-destroy combined
 

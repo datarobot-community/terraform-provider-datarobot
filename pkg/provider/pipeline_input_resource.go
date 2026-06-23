@@ -98,6 +98,19 @@ func (r *PipelineInputResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
+	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "PIPELINES_API_ENABLED")
+	if err != nil {
+		resp.Diagnostics.AddError("Error checking feature flag", err.Error())
+		return
+	}
+	if !enabled {
+		resp.Diagnostics.AddError(
+			"Feature not enabled",
+			"The PIPELINES_API_ENABLED feature flag is not enabled. Please contact DataRobot to enable Pipelines for your account.",
+		)
+		return
+	}
+
 	payload, err := unmarshalPayload(data.Payload.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("payload"), "Invalid JSON payload", err.Error())

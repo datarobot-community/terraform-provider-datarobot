@@ -41,6 +41,7 @@ func TestIntegrationPipelineResourceDraftCRUD(t *testing.T) {
 	draftPipeline := pipelineFixture(id, client.PipelineModeDraft, nil, nil)
 
 	// Create
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(draftPipeline, nil)
 	mockService.EXPECT().GetPipeline(gomock.Any(), id).Return(draftPipeline, nil) // post-create / pre-destroy combined
 
@@ -93,6 +94,7 @@ func TestIntegrationPipelineResourceLockTransition(t *testing.T) {
 	lockedPipeline := pipelineFixture(id, client.PipelineModeLocked, taskNames, []client.PipelineVersion{version})
 
 	// Step 1: Create draft
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(draftPipeline, nil)
 	mockService.EXPECT().GetPipeline(gomock.Any(), id).Return(draftPipeline, nil) // post-create Read
 
@@ -162,6 +164,7 @@ func TestIntegrationPipelineResourceLockedReplaceOnDescriptionChange(t *testing.
 	lockedPipeline2.Description = &desc2
 
 	// Step 1: Create locked pipeline
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(pipeline1Draft, nil)
 	mockService.EXPECT().LockPipeline(gomock.Any(), id1).Return(lockedPipeline1, nil)
 	mockService.EXPECT().GetPipeline(gomock.Any(), id1).Return(lockedPipeline1, nil) // post-create Read
@@ -169,6 +172,7 @@ func TestIntegrationPipelineResourceLockedReplaceOnDescriptionChange(t *testing.
 	// Step 2: Change description → RequiresReplace (locked pipeline)
 	mockService.EXPECT().GetPipeline(gomock.Any(), id1).Return(lockedPipeline1, nil) // pre-replace plan
 	mockService.EXPECT().DeletePipeline(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(pipeline2Draft, nil)
 	mockService.EXPECT().LockPipeline(gomock.Any(), id2).Return(lockedPipeline2, nil)
 	mockService.EXPECT().GetPipeline(gomock.Any(), id2).Return(lockedPipeline2, nil) // post-replace / pre-destroy combined

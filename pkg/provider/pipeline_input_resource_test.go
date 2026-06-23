@@ -33,6 +33,7 @@ func TestIntegrationPipelineInputDraftCRUD(t *testing.T) {
 	input2 := pipelineInputFixture(inputID, pipelineID, nil, payload2)
 
 	// Step 1: Create draft input
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreateDraftPipelineInput(gomock.Any(), pipelineID, gomock.Any()).Return(input1, nil)
 	mockService.EXPECT().GetDraftPipelineInput(gomock.Any(), pipelineID, inputID).Return(input1, nil) // post-create Read
 
@@ -92,6 +93,7 @@ func TestIntegrationPipelineInputLockedCRUD(t *testing.T) {
 	lockedInput := pipelineInputFixture(inputID, pipelineID, &version, payload)
 
 	// Create locked input
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreateLockedPipelineInput(gomock.Any(), pipelineID, version, gomock.Any()).Return(lockedInput, nil)
 	mockService.EXPECT().GetLockedPipelineInput(gomock.Any(), pipelineID, version, inputID).Return(lockedInput, nil) // post-create / pre-destroy combined
 
@@ -142,12 +144,14 @@ func TestIntegrationPipelineInputLockedPayloadUpdate(t *testing.T) {
 	lockedInput2 := pipelineInputFixture(inputID2, pipelineID, &version, payload2)
 
 	// Step 1: Create locked input
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreateLockedPipelineInput(gomock.Any(), pipelineID, version, gomock.Any()).Return(lockedInput1, nil)
 	mockService.EXPECT().GetLockedPipelineInput(gomock.Any(), pipelineID, version, inputID1).Return(lockedInput1, nil) // post-create Read
 
 	// Step 2: payload change → ModifyPlan forces RequiresReplace for locked inputs
 	mockService.EXPECT().GetLockedPipelineInput(gomock.Any(), pipelineID, version, inputID1).Return(lockedInput1, nil) // pre-replace plan
 	mockService.EXPECT().DeleteLockedPipelineInput(gomock.Any(), pipelineID, version, inputID1).Return(nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreateLockedPipelineInput(gomock.Any(), pipelineID, version, gomock.Any()).Return(lockedInput2, nil)
 	mockService.EXPECT().GetLockedPipelineInput(gomock.Any(), pipelineID, version, inputID2).Return(lockedInput2, nil) // post-replace / pre-destroy combined
 

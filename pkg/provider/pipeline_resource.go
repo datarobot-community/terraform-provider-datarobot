@@ -105,6 +105,19 @@ func (r *PipelineResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "PIPELINES_API_ENABLED")
+	if err != nil {
+		resp.Diagnostics.AddError("Error checking feature flag", err.Error())
+		return
+	}
+	if !enabled {
+		resp.Diagnostics.AddError(
+			"Feature not enabled",
+			"The PIPELINES_API_ENABLED feature flag is not enabled. Please contact DataRobot to enable Pipelines for your account.",
+		)
+		return
+	}
+
 	content, fileName, err := readSourceFile(data.SourceFile.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("source_file"), "Cannot read source file", err.Error())

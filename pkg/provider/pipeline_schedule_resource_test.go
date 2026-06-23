@@ -36,6 +36,7 @@ func TestIntegrationPipelineScheduleResource(t *testing.T) {
 	sched2 := pipelineScheduleFixture(schedID, pipelineID, version, cron2, "UTC")
 
 	// Step 1: Create
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "PIPELINES_API_ENABLED").Return(true, nil)
 	mockService.EXPECT().CreatePipelineSchedule(gomock.Any(), pipelineID, version, gomock.Any()).Return(sched1, nil)
 	mockService.EXPECT().GetPipelineSchedule(gomock.Any(), pipelineID, version, schedID).Return(sched1, nil) // post-create Read
 

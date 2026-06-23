@@ -133,6 +133,19 @@ func (r *PipelineScheduleResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
+	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "PIPELINES_API_ENABLED")
+	if err != nil {
+		resp.Diagnostics.AddError("Error checking feature flag", err.Error())
+		return
+	}
+	if !enabled {
+		resp.Diagnostics.AddError(
+			"Feature not enabled",
+			"The PIPELINES_API_ENABLED feature flag is not enabled. Please contact DataRobot to enable Pipelines for your account.",
+		)
+		return
+	}
+
 	createReq := &client.PipelineScheduleCreateRequest{
 		CronExpression:  data.CronExpression.ValueString(),
 		PipelineInputID: data.PipelineInputID.ValueString(),
