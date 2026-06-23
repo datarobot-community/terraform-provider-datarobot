@@ -271,6 +271,12 @@ type Service interface {
 	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
 
+	// Quota
+	CreateQuota(ctx context.Context, req *CreateQuotaRequest) (*Quota, error)
+	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)
+	UpdateQuota(ctx context.Context, id string, req *UpdateQuotaRequest) (*Quota, error)
+	DeleteQuota(ctx context.Context, id string) error
+
 	BaseURL() string
 }
 
