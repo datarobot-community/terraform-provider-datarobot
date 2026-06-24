@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Added
+
+- `custom_chunking` field on the `datarobot_vector_database` resource: when enabled, DataRobot treats each row of the source dataset as a finished chunk instead of running the built-in chunker (use for pre-chunked datasets).
+- `datarobot_custom_model_from_vector_database` resource: packages a vector database into a deployable RAG custom model via the GenAI workshop endpoint, with optional compute settings (replicas, memory, resource bundle, network egress).
+
 ## [0.10.39] - 2026-05-28
 
 ### Fixed

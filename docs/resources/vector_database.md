@@ -70,6 +70,7 @@ Optional:
 - `chunk_overlap_percentage` (Number) The percentage of overlap between chunks.
 - `chunk_size` (Number) The size of the chunks.
 - `chunking_method` (String) The method used to chunk the data.
+- `custom_chunking` (Boolean) Whether DataRobot treats each row of the dataset as a finished chunk (custom chunking) instead of running the built-in chunker. Use this when the dataset is already pre-chunked. Defaults to false.
 - `embedding_model` (String) The id of the Embedding Model.
 - `is_separator_regex` (Boolean) Whether the separator is a regex.
 - `separators` (List of String) The separators used to split the data.
