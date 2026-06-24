@@ -9,8 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -35,68 +33,7 @@ func (r *ArtifactResource) Metadata(ctx context.Context, req resource.MetadataRe
 }
 
 func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
-	probeAttributes := map[string]schema.Attribute{
-		"path": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "URL path to query for health check.",
-		},
-		"port": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Port number to access on the container.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"scheme": schema.StringAttribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Scheme to use for connecting to the host (HTTP or HTTPS).",
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
-			},
-		},
-		"host": schema.StringAttribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Host name to connect to, defaults to the pod IP.",
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
-			},
-		},
-		"initial_delay_seconds": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Number of seconds to wait before the first probe is executed.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"period_seconds": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "How often (in seconds) to perform the probe.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"timeout_seconds": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Number of seconds after which the probe times out.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"failure_threshold": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Minimum consecutive failures for the probe to be considered failed.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-	}
+	probeAttributes := artifactResourceProbeAttributes()
 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.",
@@ -141,110 +78,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"spec": schema.SingleNestedAttribute{
-				Required:            true,
-				MarkdownDescription: "The artifact specification containing container group definitions.",
-				Attributes: map[string]schema.Attribute{
-					"container_groups": schema.ListNestedAttribute{
-						Required:            true,
-						MarkdownDescription: "List of container groups.",
-						NestedObject: schema.NestedAttributeObject{
-							Attributes: map[string]schema.Attribute{
-								"containers": schema.ListNestedAttribute{
-									Required:            true,
-									MarkdownDescription: "List of containers in this group.",
-									NestedObject: schema.NestedAttributeObject{
-										Attributes: map[string]schema.Attribute{
-											"name": schema.StringAttribute{
-												Optional:            true,
-												Computed:            true,
-												MarkdownDescription: "Name of the container.",
-												PlanModifiers: []planmodifier.String{
-													stringplanmodifier.UseStateForUnknown(),
-												},
-											},
-											"image_uri": schema.StringAttribute{
-												Required:            true,
-												MarkdownDescription: "Docker image URI.",
-											},
-											"primary": schema.BoolAttribute{
-												Optional:            true,
-												Computed:            true,
-												MarkdownDescription: "Whether this is the primary container.",
-												PlanModifiers: []planmodifier.Bool{
-													boolplanmodifier.UseStateForUnknown(),
-												},
-											},
-											"description": schema.StringAttribute{
-												Optional:            true,
-												MarkdownDescription: "Description of the container.",
-											},
-											"port": schema.Int64Attribute{
-												Optional:            true,
-												Computed:            true,
-												MarkdownDescription: "Container access port (1024-65535). Required for primary containers; omit for non-primary.",
-												PlanModifiers: []planmodifier.Int64{
-													int64planmodifier.UseStateForUnknown(),
-												},
-											},
-											"entrypoint": schema.ListAttribute{
-												Optional:            true,
-												ElementType:         types.StringType,
-												MarkdownDescription: "Container entrypoint.",
-											},
-											"environment_vars": schema.ListNestedAttribute{
-												Optional:            true,
-												MarkdownDescription: "Environment variables for the container.",
-												NestedObject: schema.NestedAttributeObject{
-													Attributes: map[string]schema.Attribute{
-														"source": schema.StringAttribute{
-															Optional:            true,
-															Computed:            true,
-															Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
-															MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".`,
-														},
-														"name": schema.StringAttribute{
-															Required:            true,
-															MarkdownDescription: "Name of the environment variable.",
-														},
-														"value": schema.StringAttribute{
-															Optional:            true,
-															MarkdownDescription: `Value of the environment variable. Required when source is "string".`,
-														},
-														"dr_credential_id": schema.StringAttribute{
-															Optional:            true,
-															MarkdownDescription: `DataRobot credential ID. Required when source is "dr-credential".`,
-														},
-														"key": schema.StringAttribute{
-															Optional:            true,
-															MarkdownDescription: `Key within the credential. Required when source is "dr-credential".`,
-														},
-													},
-												},
-											},
-											"startup_probe": schema.SingleNestedAttribute{
-												Optional:            true,
-												MarkdownDescription: "Container startup check configuration.",
-												Attributes:          probeAttributes,
-											},
-											"readiness_probe": schema.SingleNestedAttribute{
-												Optional:            true,
-												MarkdownDescription: "Container readiness check configuration.",
-												Attributes:          probeAttributes,
-											},
-											"liveness_probe": schema.SingleNestedAttribute{
-												Optional:            true,
-												MarkdownDescription: "Container liveness check configuration.",
-												Attributes:          probeAttributes,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			"spec": artifactResourceSpecAttribute(probeAttributes),
 		},
 	}
 }
