@@ -317,6 +317,17 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 	containerDesc := "main container"
 	probeScheme := "HTTP"
 	probeFailureThreshold := int64(3)
+	probeInitialDelay := int64(10)
+	probePeriod := int64(15)
+	probeTimeout := int64(5)
+	readinessInitialDelay := int64(5)
+	readinessPeriod := int64(10)
+	readinessTimeout := int64(3)
+	livenessFailureThreshold := int64(5)
+	version := 1
+	fullName := "Test User"
+	email := "test@example.com"
+	username := "testuser"
 
 	return &client.Artifact{
 		ID:                   id,
@@ -324,7 +335,20 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 		Description:          "test artifact description",
 		Type:                 client.ArtifactTypeService,
 		Status:               client.ArtifactStatusLocked,
+		Version:              &version,
 		ArtifactRepositoryID: repoID,
+		CreatedAt:            "2026-01-01T00:00:00Z",
+		UpdatedAt:            "2026-01-02T00:00:00Z",
+		Creator: &client.ArtifactUser{
+			ID:       "creator-id",
+			FullName: &fullName,
+			Email:    &email,
+			Username: &username,
+		},
+		Tags: []client.ArtifactTag{
+			{ID: "tag-id", Name: "env", Value: "test"},
+		},
+		Permissions: []string{"CAN_VIEW", "CAN_UPDATE"},
 		Spec: client.ArtifactSpec{
 			ContainerGroups: []client.ArtifactContainerGroup{
 				{
@@ -339,11 +363,29 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
 								{Source: client.EnvironmentVariableSourceString, Name: "ENV", Value: "production"},
 							},
+							StartupProbe: &client.ArtifactProbeConfig{
+								Path:                "/startup",
+								Port:                &port,
+								Scheme:              &probeScheme,
+								InitialDelaySeconds: &probeInitialDelay,
+								PeriodSeconds:       &probePeriod,
+								TimeoutSeconds:      &probeTimeout,
+								FailureThreshold:    &probeFailureThreshold,
+							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
-								Path:             "/health",
+								Path:                "/health",
+								Port:                &port,
+								Scheme:              &probeScheme,
+								InitialDelaySeconds: &readinessInitialDelay,
+								PeriodSeconds:       &readinessPeriod,
+								TimeoutSeconds:      &readinessTimeout,
+								FailureThreshold:    &probeFailureThreshold,
+							},
+							LivenessProbe: &client.ArtifactProbeConfig{
+								Path:             "/live",
 								Port:             &port,
 								Scheme:           &probeScheme,
-								FailureThreshold: &probeFailureThreshold,
+								FailureThreshold: &livenessFailureThreshold,
 							},
 						},
 					},
