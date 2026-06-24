@@ -2,7 +2,7 @@
 
 ### Added
 
-- `datarobot_quota` resource: manage per-resource usage quotas (e.g. on a deployment) via `/api/v2/quotas/`, with order-insensitive `default_rules` of `{rule, limit, window}`. Replaces the imperative `set_quota.py`.
+- `datarobot_quota` resource: manage per-resource usage quotas (e.g. on a deployment) via `/api/v2/quotas/`, with order-insensitive `default_rules` of `{rule, limit, window}`.
 
 ## [0.10.39] - 2026-05-28
 
