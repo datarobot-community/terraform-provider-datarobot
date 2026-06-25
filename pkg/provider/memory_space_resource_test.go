@@ -61,8 +61,12 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		MemorySpaceID: id,
 		Description:   description,
 	}, nil)
+	emptyStr := ""
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description: &newDescription,
+		Description:        &newDescription,
+		LLMModelName:       &emptyStr,
+		LLMBaseURL:         &emptyStr,
+		CustomInstructions: &emptyStr,
 	}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   newDescription,
@@ -83,7 +87,10 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		Description:   newDescription,
 	}, nil)
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description: &emptyDesc,
+		Description:        &emptyDesc,
+		LLMModelName:       &emptyDesc,
+		LLMBaseURL:         &emptyDesc,
+		CustomInstructions: &emptyDesc,
 	}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   "",

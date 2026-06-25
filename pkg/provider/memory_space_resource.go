@@ -199,20 +199,14 @@ func (r *MemorySpaceResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	desc := data.Description.ValueString()
+	llmModelName := data.LLMModelName.ValueString()
+	llmBaseURL := data.LLMBaseURL.ValueString()
+	customInstructions := data.CustomInstructions.ValueString()
 	apiReq := &client.MemorySpaceRequest{
-		Description: &desc,
-	}
-	if !data.LLMModelName.IsNull() {
-		v := data.LLMModelName.ValueString()
-		apiReq.LLMModelName = &v
-	}
-	if !data.LLMBaseURL.IsNull() {
-		v := data.LLMBaseURL.ValueString()
-		apiReq.LLMBaseURL = &v
-	}
-	if !data.CustomInstructions.IsNull() {
-		v := data.CustomInstructions.ValueString()
-		apiReq.CustomInstructions = &v
+		Description:        &desc,
+		LLMModelName:       &llmModelName,
+		LLMBaseURL:         &llmBaseURL,
+		CustomInstructions: &customInstructions,
 	}
 
 	traceAPICall("UpdateMemorySpace")
