@@ -27,7 +27,10 @@ output "datarobot_memory_space_id" {
 
 ### Optional
 
+- `custom_instructions` (String) Custom instructions for the Memory Space. Maximum 10000 characters.
 - `description` (String) The description of the Memory Space.
+- `llm_base_url` (String) The base URL of the LLM for the Memory Space. Must be between 1 and 2083 characters.
+- `llm_model_name` (String) The LLM model name for the Memory Space. Maximum 200 characters.
 
 ### Read-Only
 
