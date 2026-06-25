@@ -54,7 +54,7 @@ func (s *ServiceImpl) GetQuotaForResource(ctx context.Context, resourceType, res
 		return nil, err
 	}
 	for i := range resp.Data {
-		if resp.Data[i].ResourceID == resourceID {
+		if resp.Data[i].ResourceType == resourceType && resp.Data[i].ResourceID == resourceID {
 			return &resp.Data[i], nil
 		}
 	}

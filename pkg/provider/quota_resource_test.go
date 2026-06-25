@@ -103,9 +103,11 @@ inferenceModel:
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkQuotaResourceExists(),
 					resource.TestCheckResourceAttr(resourceName, "default_rules.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "default_rules.0.rule", "requests"),
-					resource.TestCheckResourceAttr(resourceName, "default_rules.0.limit", "1000"),
-					resource.TestCheckResourceAttr(resourceName, "default_rules.0.window", "day"),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "default_rules.*", map[string]string{
+						"rule":   "requests",
+						"limit":  "1000",
+						"window": "day",
+					}),
 				),
 			},
 			// Import by the governed resource id (the deployment id)

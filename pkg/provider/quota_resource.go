@@ -136,7 +136,7 @@ func (r *QuotaResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	if data.ResourceID.IsNull() || data.ResourceID.ValueString() == "" {
+	if data.ResourceID.IsNull() || data.ResourceID.IsUnknown() || data.ResourceID.ValueString() == "" {
 		return
 	}
 
