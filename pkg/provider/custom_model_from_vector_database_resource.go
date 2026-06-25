@@ -351,16 +351,29 @@ func loadCustomModelFromVectorDatabaseToState(customModel client.CustomModel, st
 	} else {
 		state.Description = types.StringNull()
 	}
+	// replicas / network_egress_policy / resource_bundle_id / memory_mb are Optional+Computed: when
+	// the user leaves one unset its planned value is unknown, so if the API does not echo a value
+	// back we must resolve it to null. Otherwise the attribute stays unknown after apply and
+	// Terraform reports "provider produced inconsistent result after apply". A value the user did
+	// set (already known in state) is left untouched.
 	if customModel.LatestVersion.Replicas != nil {
 		state.Replicas = types.Int64Value(*customModel.LatestVersion.Replicas)
+	} else if state.Replicas.IsUnknown() {
+		state.Replicas = types.Int64Null()
 	}
 	if customModel.LatestVersion.NetworkEgressPolicy != nil {
 		state.NetworkEgressPolicy = types.StringValue(*customModel.LatestVersion.NetworkEgressPolicy)
+	} else if state.NetworkEgressPolicy.IsUnknown() {
+		state.NetworkEgressPolicy = types.StringNull()
 	}
 	if customModel.LatestVersion.ResourceBundleID != nil {
 		state.ResourceBundleID = types.StringValue(*customModel.LatestVersion.ResourceBundleID)
+	} else if state.ResourceBundleID.IsUnknown() {
+		state.ResourceBundleID = types.StringNull()
 	}
 	if customModel.LatestVersion.MaximumMemory != nil {
 		state.MemoryMB = types.Int64Value(int64(*customModel.LatestVersion.MaximumMemory / (1024 * 1024)))
+	} else if state.MemoryMB.IsUnknown() {
+		state.MemoryMB = types.Int64Null()
 	}
 }

@@ -435,17 +435,27 @@ func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, d
 	data.Name = types.StringValue(vectorDatabase.Name)
 	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
 	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)
-	separatorElems := make([]attr.Value, 0, len(vectorDatabase.Separators))
-	for _, separator := range vectorDatabase.Separators {
-		separatorElems = append(separatorElems, types.StringValue(separator))
-	}
-	data.ChunkingParameters = &ChunkingParametersModel{
+	chunkingParameters := &ChunkingParametersModel{
 		EmbeddingModel:         types.StringValue(vectorDatabase.EmbeddingModel),
 		ChunkOverlapPercentage: types.Int64Value(vectorDatabase.ChunkOverlapPercentage),
-		ChunkSize:              types.Int64Value(vectorDatabase.ChunkSize),
-		ChunkingMethod:         types.StringValue(vectorDatabase.ChunkingMethod),
 		IsSeparatorRegex:       types.BoolValue(vectorDatabase.IsSeparatorRegex),
 		CustomChunking:         types.BoolValue(vectorDatabase.CustomChunking),
-		Separators:             types.ListValueMust(types.StringType, separatorElems),
 	}
+	if vectorDatabase.CustomChunking {
+		// A custom-chunking VDB treats each dataset row as a finished chunk and never runs the
+		// built-in chunker, so the API reports these fields as empty. They have no schema default,
+		// so keep them null rather than writing misleading zero/empty values into state.
+		chunkingParameters.ChunkSize = types.Int64Null()
+		chunkingParameters.ChunkingMethod = types.StringNull()
+		chunkingParameters.Separators = types.ListNull(types.StringType)
+	} else {
+		separatorElems := make([]attr.Value, 0, len(vectorDatabase.Separators))
+		for _, separator := range vectorDatabase.Separators {
+			separatorElems = append(separatorElems, types.StringValue(separator))
+		}
+		chunkingParameters.ChunkSize = types.Int64Value(vectorDatabase.ChunkSize)
+		chunkingParameters.ChunkingMethod = types.StringValue(vectorDatabase.ChunkingMethod)
+		chunkingParameters.Separators = types.ListValueMust(types.StringType, separatorElems)
+	}
+	data.ChunkingParameters = chunkingParameters
 }
