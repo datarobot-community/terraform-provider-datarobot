@@ -279,13 +279,8 @@ func checkArtifactRepoDestroyedFromAPI(lastArtifactID *string, isMock bool) reso
 	}
 }
 
-func artifactResourceConfig(name, imageURI string) string {
+func artifactTestContainerSpecBlock(imageURI string) string {
 	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name        = %q
-  description = "test artifact description"
-  type        = "service"
-
   spec = {
     container_groups = [
       {
@@ -336,11 +331,21 @@ resource "datarobot_artifact" "test" {
         ]
       }
     ]
-  }
-}
-`, name, imageURI)
+  }`, imageURI)
 }
 
+func artifactResourceConfig(name, imageURI string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name        = %q
+  description = "test artifact description"
+  type        = "service"
+%s
+}
+`, name, artifactTestContainerSpecBlock(imageURI))
+}
+
+// artifactFixture returns a full Workload API artifact response for integration tests.
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
 	port := int64(8080)
 	primary := true
