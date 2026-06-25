@@ -89,6 +89,14 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 	var initialRepoID string
 	var lastArtifactID string
 
+	config := func(resourceName, imageURI string) string {
+		cfg := artifactResourceConfig(resourceName, imageURI)
+		if isMock {
+			return testProviderConfigBlock() + "\n" + cfg
+		}
+		return cfg
+	}
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -96,7 +104,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, isMock),
 		Steps: []resource.TestStep{
 			{
-				Config: artifactResourceConfig(name, "nginx:latest"),
+				Config: config(name, "nginx:latest"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
@@ -108,7 +116,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 				),
 			},
 			{
-				Config: artifactResourceConfig("updated-"+name, "nginx:latest"),
+				Config: config("updated-"+name, "nginx:latest"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
