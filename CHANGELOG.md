@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- `MemorySpace` resource now supports `llm_model_name`, `llm_base_url`, and `custom_instructions` fields
+
 ## [0.10.39] - 2026-05-28
 
 ### Fixed
