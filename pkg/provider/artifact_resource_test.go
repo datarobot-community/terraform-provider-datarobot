@@ -297,9 +297,31 @@ resource "datarobot_artifact" "test" {
               }
             ]
 
+            startup_probe = {
+              path                  = "/startup"
+              port                  = 8080
+              scheme                = "HTTP"
+              initial_delay_seconds = 10
+              period_seconds        = 15
+              timeout_seconds       = 5
+              failure_threshold     = 3
+            }
+
             readiness_probe = {
-              path = "/health"
-              port = 8080
+              path                  = "/health"
+              port                  = 8080
+              scheme                = "HTTP"
+              initial_delay_seconds = 5
+              period_seconds        = 10
+              timeout_seconds       = 3
+              failure_threshold     = 3
+            }
+
+            liveness_probe = {
+              path              = "/live"
+              port              = 8080
+              scheme            = "HTTP"
+              failure_threshold = 5
             }
           }
         ]
