@@ -7,13 +7,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// TestLoadCustomModelFromVectorDatabaseToState covers the state-mapping logic, in particular how the
-// Optional+Computed compute settings are resolved when the API does or does not echo a value back.
+// Optional+Computed compute settings must resolve to null (not stay unknown) when the API omits them.
 func TestLoadCustomModelFromVectorDatabaseToState(t *testing.T) {
 	t.Run("api omits optional computed fields and they were unknown -> null", func(t *testing.T) {
-		// Simulates a Create plan where the user left every compute setting unset: their planned
-		// values are unknown. The API returns nil for all of them, so they must resolve to null,
-		// otherwise they stay unknown after apply and Terraform errors.
 		state := CustomModelFromVectorDatabaseResourceModel{
 			Replicas:            types.Int64Unknown(),
 			NetworkEgressPolicy: types.StringUnknown(),
@@ -98,8 +94,7 @@ func TestLoadCustomModelFromVectorDatabaseToState(t *testing.T) {
 	})
 
 	t.Run("user-set value preserved when api omits it", func(t *testing.T) {
-		// The user set replicas explicitly (already known in state). The API doesn't echo it back;
-		// we must keep the user's value rather than clobbering it to null.
+		// User-set (known) value is kept even when the API omits it.
 		state := CustomModelFromVectorDatabaseResourceModel{
 			Replicas:            types.Int64Value(5),
 			NetworkEgressPolicy: types.StringUnknown(),
@@ -119,9 +114,7 @@ func TestLoadCustomModelFromVectorDatabaseToState(t *testing.T) {
 	})
 }
 
-// TestLoadVectorDatabaseToTerraformState_Chunking verifies that a custom-chunking VDB reports the
-// built-in chunker fields as null (they have no schema default and are not meaningful), while a
-// built-in chunking VDB reports the concrete values returned by the API.
+// Custom-chunking VDB -> built-in chunker fields null; built-in chunking -> concrete values.
 func TestLoadVectorDatabaseToTerraformState_Chunking(t *testing.T) {
 	t.Run("custom chunking -> built-in fields null", func(t *testing.T) {
 		vdb := &client.VectorDatabase{

@@ -351,11 +351,8 @@ func loadCustomModelFromVectorDatabaseToState(customModel client.CustomModel, st
 	} else {
 		state.Description = types.StringNull()
 	}
-	// replicas / network_egress_policy / resource_bundle_id / memory_mb are Optional+Computed: when
-	// the user leaves one unset its planned value is unknown, so if the API does not echo a value
-	// back we must resolve it to null. Otherwise the attribute stays unknown after apply and
-	// Terraform reports "provider produced inconsistent result after apply". A value the user did
-	// set (already known in state) is left untouched.
+	// Resolve unset (unknown) Optional+Computed fields to null when the API omits them, else they
+	// stay unknown after apply. A user-set (known) value is left untouched.
 	if customModel.LatestVersion.Replicas != nil {
 		state.Replicas = types.Int64Value(*customModel.LatestVersion.Replicas)
 	} else if state.Replicas.IsUnknown() {

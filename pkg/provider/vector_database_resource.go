@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	defaultEmbeddingModel         = "jinaai/jina-embedding-t-en-v1"
+	defaultEmbeddingModel         = "intfloat/e5-large-v2"
 	defaultChunkOverlapPercentage = 0
 	defaultChunkSize              = 256
 	defaultChunkingMethod         = "recursive"
@@ -422,8 +422,14 @@ func buildChunkingParametersRequest(params *ChunkingParametersModel) client.Chun
 		}
 	}
 	request.ChunkOverlapPercentage = params.ChunkOverlapPercentage.ValueInt64Pointer()
-	request.ChunkSize = params.ChunkSize.ValueInt64Pointer()
-	request.ChunkingMethod = params.ChunkingMethod.ValueStringPointer()
+	// Send chunk_size/chunking_method only when known; an unknown's zero-value pointer (0/"") is
+	// rejected by the API. Omitting lets the platform default apply.
+	if IsKnown(params.ChunkSize) {
+		request.ChunkSize = params.ChunkSize.ValueInt64Pointer()
+	}
+	if IsKnown(params.ChunkingMethod) {
+		request.ChunkingMethod = params.ChunkingMethod.ValueStringPointer()
+	}
 	request.IsSeparatorRegex = params.IsSeparatorRegex.ValueBool()
 	request.Separators = separators
 	return request
@@ -442,9 +448,7 @@ func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, d
 		CustomChunking:         types.BoolValue(vectorDatabase.CustomChunking),
 	}
 	if vectorDatabase.CustomChunking {
-		// A custom-chunking VDB treats each dataset row as a finished chunk and never runs the
-		// built-in chunker, so the API reports these fields as empty. They have no schema default,
-		// so keep them null rather than writing misleading zero/empty values into state.
+		// Custom chunking skips the built-in chunker; keep these null rather than zero/empty.
 		chunkingParameters.ChunkSize = types.Int64Null()
 		chunkingParameters.ChunkingMethod = types.StringNull()
 		chunkingParameters.Separators = types.ListNull(types.StringType)
