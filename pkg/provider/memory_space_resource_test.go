@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -98,6 +99,150 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 	testMemorySpaceResource(t, description, true)
 }
 
+func TestIntegrationMemorySpaceResourceNewFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	modelName := "gpt-4o"
+	baseURL := "https://api.openai.com/v1"
+	instructions := "Be concise."
+	updatedInstructions := "Be very concise."
+
+	// Create
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_AGENTIC_MEMORY_API").Return(true, nil)
+	mockService.EXPECT().CreateMemorySpace(gomock.Any(), &client.MemorySpaceRequest{
+		LLMModelName:       &modelName,
+		LLMBaseURL:         &baseURL,
+		CustomInstructions: &instructions,
+	}).Return(&client.MemorySpaceResponse{
+		MemorySpaceID:      id,
+		LLMModelName:       modelName,
+		LLMBaseURL:         baseURL,
+		CustomInstructions: instructions,
+	}, nil)
+	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
+		MemorySpaceID:      id,
+		LLMModelName:       modelName,
+		LLMBaseURL:         baseURL,
+		CustomInstructions: instructions,
+	}, nil)
+
+	// Read (plan refresh before update)
+	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
+		MemorySpaceID:      id,
+		LLMModelName:       modelName,
+		LLMBaseURL:         baseURL,
+		CustomInstructions: instructions,
+	}, nil)
+
+	// Update
+	emptyDesc := ""
+	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
+		Description:        &emptyDesc,
+		LLMModelName:       &modelName,
+		LLMBaseURL:         &baseURL,
+		CustomInstructions: &updatedInstructions,
+	}).Return(&client.MemorySpaceResponse{
+		MemorySpaceID:      id,
+		LLMModelName:       modelName,
+		LLMBaseURL:         baseURL,
+		CustomInstructions: updatedInstructions,
+	}, nil)
+	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
+		MemorySpaceID:      id,
+		LLMModelName:       modelName,
+		LLMBaseURL:         baseURL,
+		CustomInstructions: updatedInstructions,
+	}, nil)
+
+	// Delete
+	mockService.EXPECT().DeleteMemorySpace(gomock.Any(), id).Return(nil)
+
+	resourceName := "datarobot_memory_space.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read
+			{
+				Config: memorySpaceResourceConfigWithNewFields(modelName, baseURL, instructions),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "llm_model_name", modelName),
+					resource.TestCheckResourceAttr(resourceName, "llm_base_url", baseURL),
+					resource.TestCheckResourceAttr(resourceName, "custom_instructions", instructions),
+				),
+			},
+			// Update custom_instructions
+			{
+				Config: memorySpaceResourceConfigWithNewFields(modelName, baseURL, updatedInstructions),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "custom_instructions", updatedInstructions),
+				),
+			},
+			// Delete is tested automatically
+		},
+	})
+}
+
+func TestIntegrationMemorySpaceResourceValidation(t *testing.T) {
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	tests := []struct {
+		name        string
+		config      string
+		expectError string
+	}{
+		{
+			name:        "llm_model_name too long",
+			config:      memorySpaceResourceConfigLLMModelName(strings.Repeat("a", 201)),
+			expectError: "string length must be at most 200",
+		},
+		{
+			name:        "llm_base_url empty",
+			config:      memorySpaceResourceConfigLLMBaseURL(""),
+			expectError: "string length must be between 1 and 2083",
+		},
+		{
+			name:        "llm_base_url too long",
+			config:      memorySpaceResourceConfigLLMBaseURL(strings.Repeat("a", 2084)),
+			expectError: "string length must be between 1 and 2083",
+		},
+		{
+			name:        "custom_instructions too long",
+			config:      memorySpaceResourceConfigCustomInstructions(strings.Repeat("a", 10001)),
+			expectError: "string length must be at most 10000",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tc.config,
+						ExpectError: regexp.MustCompile(tc.expectError),
+					},
+				},
+			})
+		})
+	}
+}
+
 func TestIntegrationMemorySpaceResourceFeatureFlagDisabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -180,6 +325,40 @@ resource "datarobot_memory_space" "test" {
 	  description = "%s"
 }
 `, description)
+}
+
+func memorySpaceResourceConfigWithNewFields(modelName, baseURL, instructions string) string {
+	return fmt.Sprintf(`
+resource "datarobot_memory_space" "test" {
+  llm_model_name       = "%s"
+  llm_base_url         = "%s"
+  custom_instructions  = "%s"
+}
+`, modelName, baseURL, instructions)
+}
+
+func memorySpaceResourceConfigLLMModelName(name string) string {
+	return fmt.Sprintf(`
+resource "datarobot_memory_space" "test" {
+  llm_model_name = %q
+}
+`, name)
+}
+
+func memorySpaceResourceConfigLLMBaseURL(url string) string {
+	return fmt.Sprintf(`
+resource "datarobot_memory_space" "test" {
+  llm_base_url = %q
+}
+`, url)
+}
+
+func memorySpaceResourceConfigCustomInstructions(instructions string) string {
+	return fmt.Sprintf(`
+resource "datarobot_memory_space" "test" {
+  custom_instructions = %q
+}
+`, instructions)
 }
 
 func checkMemorySpaceResourceExists(resourceName string) resource.TestCheckFunc {
