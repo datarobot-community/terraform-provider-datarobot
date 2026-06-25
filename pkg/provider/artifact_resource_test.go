@@ -29,6 +29,7 @@ func TestIntegrationArtifactResource(t *testing.T) {
 	})()
 
 	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
