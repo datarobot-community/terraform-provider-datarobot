@@ -6,9 +6,68 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+// When custom_chunking=false the API requires chunking_method/chunk_size; unknowns must be
+// filled with the provider defaults rather than omitted.
+func TestBuildChunkingParametersRequest(t *testing.T) {
+	t.Run("unknown chunk_size/chunking_method default to recursive/256", func(t *testing.T) {
+		req := buildChunkingParametersRequest(&ChunkingParametersModel{
+			EmbeddingModel:         types.StringValue("intfloat/e5-large-v2"),
+			ChunkOverlapPercentage: types.Int64Value(0),
+			ChunkSize:              types.Int64Unknown(),
+			ChunkingMethod:         types.StringUnknown(),
+			IsSeparatorRegex:       types.BoolValue(false),
+			Separators:             types.ListNull(types.StringType),
+			CustomChunking:         types.BoolValue(false),
+		})
+		if req.ChunkSize == nil || *req.ChunkSize != defaultChunkSize {
+			t.Errorf("ChunkSize = %v, want %d (default)", req.ChunkSize, defaultChunkSize)
+		}
+		if req.ChunkingMethod == nil || *req.ChunkingMethod != defaultChunkingMethod {
+			t.Errorf("ChunkingMethod = %v, want %q (default)", req.ChunkingMethod, defaultChunkingMethod)
+		}
+		if len(req.Separators) != len(defaultSeparators) {
+			t.Errorf("Separators length = %d, want %d (default)", len(req.Separators), len(defaultSeparators))
+		}
+	})
+
+	t.Run("known chunk_size/chunking_method sent", func(t *testing.T) {
+		req := buildChunkingParametersRequest(&ChunkingParametersModel{
+			EmbeddingModel:         types.StringValue("intfloat/e5-large-v2"),
+			ChunkOverlapPercentage: types.Int64Value(0),
+			ChunkSize:              types.Int64Value(500),
+			ChunkingMethod:         types.StringValue("recursive"),
+			IsSeparatorRegex:       types.BoolValue(false),
+			Separators:             types.ListNull(types.StringType),
+			CustomChunking:         types.BoolValue(false),
+		})
+		if req.ChunkSize == nil || *req.ChunkSize != 500 {
+			t.Errorf("ChunkSize = %v, want 500", req.ChunkSize)
+		}
+		if req.ChunkingMethod == nil || *req.ChunkingMethod != "recursive" {
+			t.Errorf("ChunkingMethod = %v, want recursive", req.ChunkingMethod)
+		}
+	})
+
+	t.Run("custom_chunking omits built-in fields", func(t *testing.T) {
+		req := buildChunkingParametersRequest(&ChunkingParametersModel{
+			EmbeddingModel: types.StringValue("intfloat/e5-large-v2"),
+			ChunkSize:      types.Int64Unknown(),
+			ChunkingMethod: types.StringUnknown(),
+			CustomChunking: types.BoolValue(true),
+		})
+		if !req.CustomChunking {
+			t.Error("CustomChunking = false, want true")
+		}
+		if req.ChunkSize != nil || req.ChunkingMethod != nil {
+			t.Error("built-in chunking fields should be nil when custom_chunking=true")
+		}
+	})
+}
 
 func TestAccVectorDatabaseResource(t *testing.T) {
 	t.Parallel()

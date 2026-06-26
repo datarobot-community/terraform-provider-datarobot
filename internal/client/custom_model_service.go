@@ -31,6 +31,22 @@ type CreateCustomModelVersionFromLLMBlueprintResponse struct {
 	CustomModelID string `json:"customModelId"`
 }
 
+// CustomModelVersionResources are the compute resources requested when packaging a custom
+// model version (mirrors the DataRobot "resources" payload used by the workshop endpoints).
+type CustomModelVersionResources struct {
+	ResourceBundleID    *string `json:"resourceBundleId,omitempty"`
+	Replicas            *int64  `json:"replicas,omitempty"`
+	NetworkEgressPolicy *string `json:"networkEgressPolicy,omitempty"`
+	MaximumMemory       *int64  `json:"maximumMemory,omitempty"`
+}
+
+// CreateCustomModelVersionFromVectorDatabaseRequest is the body for
+// POST /genai/vectorDatabases/{id}/customModelVersions/ — it packages a vector database into a
+// new custom model version (the "send to workshop" operation). The response is asynchronous.
+type CreateCustomModelVersionFromVectorDatabaseRequest struct {
+	Resources *CustomModelVersionResources `json:"resources,omitempty"`
+}
+
 type CustomModel struct {
 	ID                                          string             `json:"id"`
 	Name                                        string             `json:"name"`
