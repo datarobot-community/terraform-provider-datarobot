@@ -365,6 +365,22 @@ func (mr *MockServiceMockRecorder) CreateCustomModelVersionFromRemoteRepository(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomModelVersionFromRemoteRepository", reflect.TypeOf((*MockService)(nil).CreateCustomModelVersionFromRemoteRepository), ctx, id, req)
 }
 
+// CreateCustomModelVersionFromVectorDatabase mocks base method.
+func (m *MockService) CreateCustomModelVersionFromVectorDatabase(ctx context.Context, vectorDatabaseID string, req *client.CreateCustomModelVersionFromVectorDatabaseRequest) (*client.CustomModelVersion, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCustomModelVersionFromVectorDatabase", ctx, vectorDatabaseID, req)
+	ret0, _ := ret[0].(*client.CustomModelVersion)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreateCustomModelVersionFromVectorDatabase indicates an expected call of CreateCustomModelVersionFromVectorDatabase.
+func (mr *MockServiceMockRecorder) CreateCustomModelVersionFromVectorDatabase(ctx, vectorDatabaseID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCustomModelVersionFromVectorDatabase", reflect.TypeOf((*MockService)(nil).CreateCustomModelVersionFromVectorDatabase), ctx, vectorDatabaseID, req)
+}
+
 // CreateDataset mocks base method.
 func (m *MockService) CreateDataset(ctx context.Context, req *client.CreateDatasetRequest) (*client.CreateDatasetResponse, error) {
 	m.ctrl.T.Helper()
