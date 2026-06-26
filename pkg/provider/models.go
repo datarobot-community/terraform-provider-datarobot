@@ -1029,6 +1029,116 @@ type ArtifactProbeConfigModel struct {
 	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
 }
 
+// ArtifactDataSourceModel describes the read-only artifact data source.
+type ArtifactDataSourceModel struct {
+	ArtifactID           types.String                      `tfsdk:"artifact_id"`
+	Name                 types.String                      `tfsdk:"name"`
+	Description          types.String                      `tfsdk:"description"`
+	Type                 types.String                      `tfsdk:"type"`
+	Status               types.String                      `tfsdk:"status"`
+	Version              types.Int64                       `tfsdk:"version"`
+	ArtifactRepositoryID types.String                      `tfsdk:"artifact_repository_id"`
+	CreatedAt            types.String                      `tfsdk:"created_at"`
+	UpdatedAt            types.String                      `tfsdk:"updated_at"`
+	Creator              *ArtifactCreatorModel             `tfsdk:"creator"`
+	Tags                 []ArtifactTagModel                `tfsdk:"tags"`
+	Permissions          []types.String                    `tfsdk:"permissions"`
+	Spec                 *ArtifactSpecDataSourceModel      `tfsdk:"spec"`
+}
+
+type ArtifactCreatorModel struct {
+	ID       types.String `tfsdk:"id"`
+	FullName types.String `tfsdk:"full_name"`
+	Email    types.String `tfsdk:"email"`
+	Username types.String `tfsdk:"username"`
+	Userhash types.String `tfsdk:"userhash"`
+}
+
+type ArtifactTagModel struct {
+	ID    types.String `tfsdk:"id"`
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+type ArtifactSpecDataSourceModel struct {
+	ContainerGroups []ArtifactContainerGroupDSModel `tfsdk:"container_groups"`
+	Storage         *ArtifactNimStorageModel        `tfsdk:"storage"`
+	TemplateID      types.String                    `tfsdk:"template_id"`
+}
+
+type ArtifactContainerGroupDSModel struct {
+	Name       types.String                    `tfsdk:"name"`
+	Containers []ArtifactContainerDSModel      `tfsdk:"containers"`
+}
+
+type ArtifactContainerDSModel struct {
+	Name             types.String                       `tfsdk:"name"`
+	ImageURI         types.String                       `tfsdk:"image_uri"`
+	Primary          types.Bool                         `tfsdk:"primary"`
+	Description      types.String                       `tfsdk:"description"`
+	Port             types.Int64                        `tfsdk:"port"`
+	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
+	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
+	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
+	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
+	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
+	Build            *ArtifactContainerBuildModel       `tfsdk:"build"`
+	SecurityContext  *ArtifactSecurityContextModel      `tfsdk:"security_context"`
+}
+
+type ArtifactNimStorageModel struct {
+	Mode    types.String `tfsdk:"mode"`
+	PvcSize types.String `tfsdk:"pvc_size"`
+}
+
+type ArtifactImageBuildConfigModel struct {
+	CodeRef    *ArtifactCodeRefModel    `tfsdk:"code_ref"`
+	Dockerfile *ArtifactDockerfileModel `tfsdk:"dockerfile"`
+}
+
+type ArtifactCodeRefModel struct {
+	Provider  types.String              `tfsdk:"provider"`
+	Type      types.String              `tfsdk:"type"`
+	DataRobot ArtifactDataRobotCodeModel `tfsdk:"datarobot"`
+}
+
+type ArtifactDataRobotCodeModel struct {
+	CatalogID        types.String `tfsdk:"catalog_id"`
+	CatalogVersionID types.String `tfsdk:"catalog_version_id"`
+}
+
+type ArtifactDockerfileModel struct {
+	Source                        types.String   `tfsdk:"source"`
+	Path                          types.String   `tfsdk:"path"`
+	Entrypoint                    []types.String `tfsdk:"entrypoint"`
+	ExecutionEnvironmentID        types.String   `tfsdk:"execution_environment_id"`
+	ExecutionEnvironmentVersionID types.String   `tfsdk:"execution_environment_version_id"`
+}
+
+type ArtifactContainerBuildModel struct {
+	ArtifactImageBuildID types.String `tfsdk:"artifact_image_build_id"`
+	Status               types.String `tfsdk:"status"`
+	CreatedAt            types.String `tfsdk:"created_at"`
+}
+
+type ArtifactSecurityContextModel struct {
+	AllowPrivilegeEscalation types.Bool                    `tfsdk:"allow_privilege_escalation"`
+	ReadOnlyRootFilesystem   types.Bool                    `tfsdk:"read_only_root_filesystem"`
+	Capabilities             *ArtifactCapabilitiesModel    `tfsdk:"capabilities"`
+	SeccompProfile           *ArtifactSeccompProfileModel  `tfsdk:"seccomp_profile"`
+}
+
+type ArtifactCapabilitiesModel struct {
+	Add  []types.String `tfsdk:"add"`
+	Drop []types.String `tfsdk:"drop"`
+}
+
+type ArtifactSeccompProfileModel struct {
+	Type             types.String `tfsdk:"type"`
+	LocalhostProfile types.String `tfsdk:"localhost_profile"`
+}
+
 // WorkloadResourceModel describes the Workload API workload resource.
 type WorkloadResourceModel struct {
 	ID          types.String         `tfsdk:"id"`
