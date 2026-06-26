@@ -81,64 +81,13 @@ resource "datarobot_artifact" "test" {
   name        = %q
   description = "test artifact description"
   type        = "service"
-
-  spec = {
-    container_groups = [
-      {
-        containers = [
-          {
-            name        = "main"
-            image_uri   = %q
-            description = "main container"
-            primary     = true
-            port        = 8080
-            entrypoint  = ["python", "-m", "app"]
-
-            environment_vars = [
-              {
-                source = "string"
-                name   = "ENV"
-                value  = "production"
-              }
-            ]
-
-            startup_probe = {
-              path                  = "/startup"
-              port                  = 8080
-              scheme                = "HTTP"
-              initial_delay_seconds = 10
-              period_seconds        = 15
-              timeout_seconds       = 5
-              failure_threshold     = 3
-            }
-
-            readiness_probe = {
-              path                  = "/health"
-              port                  = 8080
-              scheme                = "HTTP"
-              initial_delay_seconds = 5
-              period_seconds        = 10
-              timeout_seconds       = 3
-              failure_threshold     = 3
-            }
-
-            liveness_probe = {
-              path              = "/live"
-              port              = 8080
-              scheme            = "HTTP"
-              failure_threshold = 5
-            }
-          }
-        ]
-      }
-    ]
-  }
+%s
 }
 
 data "datarobot_artifact" "by_id" {
   artifact_id = datarobot_artifact.test.artifact_id
 }
-`, testProviderConfigBlock(), name, imageURI)
+`, testProviderConfigBlock(), name, artifactTestContainerSpecBlock(imageURI))
 }
 
 func testProviderConfigBlock() string {
