@@ -1,3 +1,9 @@
+## [0.10.40] - 2026-06-24
+
+### Added
+
+- `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
+
 ## [0.10.39] - 2026-05-28
 
 ### Fixed
