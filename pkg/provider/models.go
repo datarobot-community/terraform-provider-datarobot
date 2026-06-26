@@ -1081,3 +1081,19 @@ type WorkloadAutoscalingPolicyModel struct {
 	MaxCount      types.Int64   `tfsdk:"max_count"`
 	Priority      types.Int64   `tfsdk:"priority"`
 }
+
+// QuotaResourceModel describes the datarobot_quota resource. default_rules is a set
+// (the order DataRobot echoes back is not significant), so reordering does not show
+// as a diff.
+type QuotaResourceModel struct {
+	ID           types.String     `tfsdk:"id"`
+	ResourceType types.String     `tfsdk:"resource_type"`
+	ResourceID   types.String     `tfsdk:"resource_id"`
+	DefaultRules []QuotaRuleModel `tfsdk:"default_rules"`
+}
+
+type QuotaRuleModel struct {
+	Rule   types.String `tfsdk:"rule"`
+	Limit  types.Int64  `tfsdk:"limit"`
+	Window types.String `tfsdk:"window"`
+}

@@ -2,6 +2,8 @@
 
 ### Added
 
+- `datarobot_quota` resource: manage per-resource usage quotas (e.g. on a deployment) via `/api/v2/quotas/`, with order-insensitive `default_rules` of `{rule, limit, window}`.
+
 - `MemorySpace` resource now supports `llm_model_name`, `llm_base_url`, and `custom_instructions` fields
 
 ## [0.10.39] - 2026-05-28
