@@ -652,6 +652,21 @@ func (mr *MockServiceMockRecorder) CreateQAApplication(ctx, req interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQAApplication", reflect.TypeOf((*MockService)(nil).CreateQAApplication), ctx, req)
 }
 
+// CreateQuota mocks base method.
+func (m *MockService) CreateQuota(ctx context.Context, req *client.CreateQuotaRequest) (*client.Quota, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateQuota", ctx, req)
+	ret0, _ := ret[0].(*client.Quota)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateQuota indicates an expected call of CreateQuota.
+func (mr *MockServiceMockRecorder) CreateQuota(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQuota", reflect.TypeOf((*MockService)(nil).CreateQuota), ctx, req)
+}
+
 // CreateRegisteredModelFromCustomModelVersion mocks base method.
 func (m *MockService) CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *client.CreateRegisteredModelFromCustomModelRequest) (*client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
@@ -857,6 +872,20 @@ func (m *MockService) DeleteApplicationSource(ctx context.Context, id string) er
 func (mr *MockServiceMockRecorder) DeleteApplicationSource(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteApplicationSource), ctx, id)
+}
+
+// DeleteArtifactRepository mocks base method.
+func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteArtifactRepository", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteArtifactRepository indicates an expected call of DeleteArtifactRepository.
+func (mr *MockServiceMockRecorder) DeleteArtifactRepository(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifactRepository", reflect.TypeOf((*MockService)(nil).DeleteArtifactRepository), ctx, id)
 }
 
 // DeleteBatchPredictionJobDefinition mocks base method.
@@ -1125,6 +1154,20 @@ func (mr *MockServiceMockRecorder) DeletePredictionEnvironment(ctx, id interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePredictionEnvironment", reflect.TypeOf((*MockService)(nil).DeletePredictionEnvironment), ctx, id)
 }
 
+// DeleteQuota mocks base method.
+func (m *MockService) DeleteQuota(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteQuota", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteQuota indicates an expected call of DeleteQuota.
+func (mr *MockServiceMockRecorder) DeleteQuota(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteQuota", reflect.TypeOf((*MockService)(nil).DeleteQuota), ctx, id)
+}
+
 // DeleteRegisteredModel mocks base method.
 func (m *MockService) DeleteRegisteredModel(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -1207,20 +1250,6 @@ func (m *MockService) DeleteWorkload(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
-}
-
-// DeleteArtifactRepository mocks base method.
-func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteArtifactRepository", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteArtifactRepository indicates an expected call of DeleteArtifactRepository.
-func (mr *MockServiceMockRecorder) DeleteArtifactRepository(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifactRepository", reflect.TypeOf((*MockService)(nil).DeleteArtifactRepository), ctx, id)
 }
 
 // GetAppOAuthProvider mocks base method.
@@ -1776,6 +1805,21 @@ func (m *MockService) GetPredictionEnvironment(ctx context.Context, id string) (
 func (mr *MockServiceMockRecorder) GetPredictionEnvironment(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPredictionEnvironment", reflect.TypeOf((*MockService)(nil).GetPredictionEnvironment), ctx, id)
+}
+
+// GetQuotaForResource mocks base method.
+func (m *MockService) GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*client.Quota, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQuotaForResource", ctx, resourceType, resourceID)
+	ret0, _ := ret[0].(*client.Quota)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetQuotaForResource indicates an expected call of GetQuotaForResource.
+func (mr *MockServiceMockRecorder) GetQuotaForResource(ctx, resourceType, resourceID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQuotaForResource", reflect.TypeOf((*MockService)(nil).GetQuotaForResource), ctx, resourceType, resourceID)
 }
 
 // GetRegisteredModel mocks base method.
@@ -2721,6 +2765,21 @@ func (m *MockService) UpdatePredictionEnvironment(ctx context.Context, id string
 func (mr *MockServiceMockRecorder) UpdatePredictionEnvironment(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePredictionEnvironment", reflect.TypeOf((*MockService)(nil).UpdatePredictionEnvironment), ctx, id, req)
+}
+
+// UpdateQuota mocks base method.
+func (m *MockService) UpdateQuota(ctx context.Context, id string, req *client.UpdateQuotaRequest) (*client.Quota, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateQuota", ctx, id, req)
+	ret0, _ := ret[0].(*client.Quota)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateQuota indicates an expected call of UpdateQuota.
+func (mr *MockServiceMockRecorder) UpdateQuota(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateQuota", reflect.TypeOf((*MockService)(nil).UpdateQuota), ctx, id, req)
 }
 
 // UpdateRegisteredModel mocks base method.
