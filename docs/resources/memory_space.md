@@ -27,10 +27,10 @@ output "datarobot_memory_space_id" {
 
 ### Optional
 
-- `custom_instructions` (String) Custom instructions for the Memory Space. Maximum 10000 characters.
-- `description` (String) The description of the Memory Space.
-- `llm_base_url` (String) The base URL of the LLM for the Memory Space. Must be between 1 and 2083 characters.
-- `llm_model_name` (String) The LLM model name for the Memory Space. Maximum 200 characters.
+- `custom_instructions` (String) Custom prompt instructions for fact extraction (maximum 10,000 characters). ``None`` means the default memory extraction prompt is used.
+- `description` (String) A human-readable description.
+- `llm_base_url` (String) The chat API URL used for memory extraction. The memory service uses the DataRobot LLM gateway by default; set this only when the default does not work — for example, in air-gapped environments or when the required LLM model is not provided by the gateway and cannot be added.
+- `llm_model_name` (String) An LLM model name associated with the memory space (maximum 200 characters). Non-reasoning models are recommended. Reasoning-capable models are significantly slower for fact extraction without producing meaningfully better results.
 
 ### Read-Only
 

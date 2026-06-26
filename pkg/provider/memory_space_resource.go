@@ -44,25 +44,25 @@ func (r *MemorySpaceResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "The description of the Memory Space.",
+				MarkdownDescription: "A human-readable description.",
 				Optional:            true,
 			},
 			"llm_model_name": schema.StringAttribute{
-				MarkdownDescription: "The LLM model name for the Memory Space. Maximum 200 characters.",
+				MarkdownDescription: "An LLM model name associated with the memory space (maximum 200 characters). Non-reasoning models are recommended. Reasoning-capable models are significantly slower for fact extraction without producing meaningfully better results.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtMost(200),
 				},
 			},
 			"llm_base_url": schema.StringAttribute{
-				MarkdownDescription: "The base URL of the LLM for the Memory Space. Must be between 1 and 2083 characters.",
+				MarkdownDescription: "The chat API URL used for memory extraction. The memory service uses the DataRobot LLM gateway by default; set this only when the default does not work — for example, in air-gapped environments or when the required LLM model is not provided by the gateway and cannot be added.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(1, 2083),
 				},
 			},
 			"custom_instructions": schema.StringAttribute{
-				MarkdownDescription: "Custom instructions for the Memory Space. Maximum 10000 characters.",
+				MarkdownDescription: "Custom prompt instructions for fact extraction (maximum 10,000 characters). ``None`` means the default memory extraction prompt is used.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtMost(10000),
