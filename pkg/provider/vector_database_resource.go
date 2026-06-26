@@ -402,8 +402,9 @@ func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Cont
 }
 
 // buildChunkingParametersRequest builds the API request body. custom_chunking is incompatible with
-// the built-in chunking-method fields, so they are omitted when it is set; otherwise unset (nil)
-// values are dropped and the platform applies its own defaults.
+// the built-in chunking-method fields, so they are omitted when it is set; otherwise the built-in
+// fields are required by the API (chunking_method has no platform default) so unset values fall
+// back to the provider-side constants.
 func buildChunkingParametersRequest(params *ChunkingParametersModel) client.ChunkingParameters {
 	request := client.ChunkingParameters{
 		EmbeddingModel: params.EmbeddingModel.ValueString(),
@@ -413,23 +414,27 @@ func buildChunkingParametersRequest(params *ChunkingParametersModel) client.Chun
 		return request
 	}
 
-	separators := []string{}
-	if !params.Separators.IsNull() && !params.Separators.IsUnknown() {
+	chunkSize := int64(defaultChunkSize)
+	if IsKnown(params.ChunkSize) {
+		chunkSize = params.ChunkSize.ValueInt64()
+	}
+	chunkingMethod := defaultChunkingMethod
+	if IsKnown(params.ChunkingMethod) {
+		chunkingMethod = params.ChunkingMethod.ValueString()
+	}
+	separators := defaultSeparators
+	if IsKnown(params.Separators) {
+		separators = []string{}
 		for _, elem := range params.Separators.Elements() {
 			if s, ok := elem.(types.String); ok && !s.IsNull() && !s.IsUnknown() {
 				separators = append(separators, s.ValueString())
 			}
 		}
 	}
+
 	request.ChunkOverlapPercentage = params.ChunkOverlapPercentage.ValueInt64Pointer()
-	// Send chunk_size/chunking_method only when known; an unknown's zero-value pointer (0/"") is
-	// rejected by the API. Omitting lets the platform default apply.
-	if IsKnown(params.ChunkSize) {
-		request.ChunkSize = params.ChunkSize.ValueInt64Pointer()
-	}
-	if IsKnown(params.ChunkingMethod) {
-		request.ChunkingMethod = params.ChunkingMethod.ValueStringPointer()
-	}
+	request.ChunkSize = &chunkSize
+	request.ChunkingMethod = &chunkingMethod
 	request.IsSeparatorRegex = params.IsSeparatorRegex.ValueBool()
 	request.Separators = separators
 	return request

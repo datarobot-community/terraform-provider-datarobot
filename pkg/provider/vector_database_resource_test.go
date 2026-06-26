@@ -11,9 +11,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// Unknown chunk_size/chunking_method (no schema default) must be omitted from the request, not sent as 0/"".
+// When custom_chunking=false the API requires chunking_method/chunk_size; unknowns must be
+// filled with the provider defaults rather than omitted.
 func TestBuildChunkingParametersRequest(t *testing.T) {
-	t.Run("unknown chunk_size/chunking_method omitted", func(t *testing.T) {
+	t.Run("unknown chunk_size/chunking_method default to recursive/256", func(t *testing.T) {
 		req := buildChunkingParametersRequest(&ChunkingParametersModel{
 			EmbeddingModel:         types.StringValue("intfloat/e5-large-v2"),
 			ChunkOverlapPercentage: types.Int64Value(0),
@@ -23,11 +24,14 @@ func TestBuildChunkingParametersRequest(t *testing.T) {
 			Separators:             types.ListNull(types.StringType),
 			CustomChunking:         types.BoolValue(false),
 		})
-		if req.ChunkSize != nil {
-			t.Errorf("ChunkSize = %d, want nil (omitted)", *req.ChunkSize)
+		if req.ChunkSize == nil || *req.ChunkSize != defaultChunkSize {
+			t.Errorf("ChunkSize = %v, want %d (default)", req.ChunkSize, defaultChunkSize)
 		}
-		if req.ChunkingMethod != nil {
-			t.Errorf("ChunkingMethod = %q, want nil (omitted)", *req.ChunkingMethod)
+		if req.ChunkingMethod == nil || *req.ChunkingMethod != defaultChunkingMethod {
+			t.Errorf("ChunkingMethod = %v, want %q (default)", req.ChunkingMethod, defaultChunkingMethod)
+		}
+		if len(req.Separators) != len(defaultSeparators) {
+			t.Errorf("Separators length = %d, want %d (default)", len(req.Separators), len(defaultSeparators))
 		}
 	})
 
