@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -26,11 +25,12 @@ import (
 )
 
 const (
-	defaultEmbeddingModel         = "jinaai/jina-embedding-t-en-v1"
+	defaultEmbeddingModel         = "intfloat/e5-large-v2"
 	defaultChunkOverlapPercentage = 0
 	defaultChunkSize              = 256
 	defaultChunkingMethod         = "recursive"
 	defaultIsSeparatorRegex       = false
+	defaultCustomChunking         = false
 )
 
 var defaultSeparators = []string{"\n\n", "\n", " ", ""}
@@ -93,6 +93,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						"chunking_method":          types.StringType,
 						"is_separator_regex":       types.BoolType,
 						"separators":               types.ListType{ElemType: types.StringType},
+						"custom_chunking":          types.BoolType,
 					},
 					map[string]attr.Value{
 						"embedding_model":          types.StringValue(defaultEmbeddingModel),
@@ -109,6 +110,7 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 								types.StringValue(defaultSeparators[3]),
 							},
 						),
+						"custom_chunking": types.BoolValue(defaultCustomChunking),
 					},
 				)),
 				Attributes: map[string]schema.Attribute{
@@ -131,11 +133,13 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 							int64planmodifier.UseStateForUnknown(),
 						},
 					},
+					// chunk_size / chunking_method / separators: Computed, no static default — a
+					// custom-chunking VDB reports these as null, so a default would cause an
+					// inconsistent-result-after-apply. Unset = known after apply.
 					"chunk_size": schema.Int64Attribute{
 						MarkdownDescription: "The size of the chunks.",
 						Optional:            true,
 						Computed:            true,
-						Default:             int64default.StaticInt64(defaultChunkSize),
 						PlanModifiers: []planmodifier.Int64{
 							int64planmodifier.UseStateForUnknown(),
 						},
@@ -144,7 +148,6 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						MarkdownDescription: "The method used to chunk the data.",
 						Optional:            true,
 						Computed:            true,
-						Default:             stringdefault.StaticString(defaultChunkingMethod),
 						Validators:          ChunkingMethodValidators(),
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
@@ -164,17 +167,19 @@ func (r *VectorDatabaseResource) Schema(ctx context.Context, req resource.Schema
 						ElementType:         types.StringType,
 						Optional:            true,
 						Computed:            true,
-						Default: listdefault.StaticValue(types.ListValueMust(
-							types.StringType,
-							[]attr.Value{
-								types.StringValue(defaultSeparators[0]),
-								types.StringValue(defaultSeparators[1]),
-								types.StringValue(defaultSeparators[2]),
-								types.StringValue(defaultSeparators[3]),
-							},
-						)),
 						PlanModifiers: []planmodifier.List{
 							listplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"custom_chunking": schema.BoolAttribute{
+						MarkdownDescription: "Whether DataRobot treats each row of the dataset as a finished chunk " +
+							"(custom chunking) instead of running the built-in chunker. Use this when the dataset " +
+							"is already pre-chunked. Defaults to false.",
+						Optional: true,
+						Computed: true,
+						Default:  booldefault.StaticBool(defaultCustomChunking),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 				},
@@ -235,24 +240,12 @@ func (r *VectorDatabaseResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
-	separators := make([]string, 0)
-	for _, separator := range data.ChunkingParameters.Separators {
-		separators = append(separators, separator.ValueString())
-	}
-
 	traceAPICall("CreateVectorDatabase")
 	vectorDatabase, err := r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
-		DatasetID: datasetID,
-		UseCaseID: useCaseID,
-		Name:      data.Name.ValueString(),
-		ChunkingParameters: client.ChunkingParameters{
-			EmbeddingModel:         data.ChunkingParameters.EmbeddingModel.ValueString(),
-			ChunkOverlapPercentage: data.ChunkingParameters.ChunkOverlapPercentage.ValueInt64(),
-			ChunkSize:              data.ChunkingParameters.ChunkSize.ValueInt64(),
-			ChunkingMethod:         data.ChunkingParameters.ChunkingMethod.ValueString(),
-			IsSeparatorRegex:       data.ChunkingParameters.IsSeparatorRegex.ValueBool(),
-			Separators:             separators,
-		},
+		DatasetID:          datasetID,
+		UseCaseID:          useCaseID,
+		Name:               data.Name.ValueString(),
+		ChunkingParameters: buildChunkingParametersRequest(data.ChunkingParameters),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating VectorDatabase", err.Error())
@@ -321,25 +314,13 @@ func (r *VectorDatabaseResource) Update(ctx context.Context, req resource.Update
 		!reflect.DeepEqual(state.DatasetID, plan.DatasetID) ||
 		!reflect.DeepEqual(state.UseCaseID, plan.UseCaseID) {
 		// create new vector database version
-		separators := make([]string, 0)
-		for _, separator := range plan.ChunkingParameters.Separators {
-			separators = append(separators, separator.ValueString())
-		}
-
 		traceAPICall("CreateVectorDatabase")
 		vectorDatabase, err = r.provider.service.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
 			ParentVectorDatabaseID: state.ID.ValueStringPointer(),
 			DatasetID:              plan.DatasetID.ValueString(),
 			UseCaseID:              plan.UseCaseID.ValueString(),
 			Name:                   plan.Name.ValueString(),
-			ChunkingParameters: client.ChunkingParameters{
-				EmbeddingModel:         plan.ChunkingParameters.EmbeddingModel.ValueString(),
-				ChunkOverlapPercentage: plan.ChunkingParameters.ChunkOverlapPercentage.ValueInt64(),
-				ChunkSize:              plan.ChunkingParameters.ChunkSize.ValueInt64(),
-				ChunkingMethod:         plan.ChunkingParameters.ChunkingMethod.ValueString(),
-				IsSeparatorRegex:       plan.ChunkingParameters.IsSeparatorRegex.ValueBool(),
-				Separators:             separators,
-			},
+			ChunkingParameters:     buildChunkingParametersRequest(plan.ChunkingParameters),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating VectorDatabase version", err.Error())
@@ -420,22 +401,70 @@ func (r *VectorDatabaseResource) waitForVectorDatabaseToBeReady(ctx context.Cont
 	return nil
 }
 
+// buildChunkingParametersRequest builds the API request body. custom_chunking is incompatible with
+// the built-in chunking-method fields, so they are omitted when it is set; otherwise the built-in
+// fields are required by the API (chunking_method has no platform default) so unset values fall
+// back to the provider-side constants.
+func buildChunkingParametersRequest(params *ChunkingParametersModel) client.ChunkingParameters {
+	request := client.ChunkingParameters{
+		EmbeddingModel: params.EmbeddingModel.ValueString(),
+		CustomChunking: params.CustomChunking.ValueBool(),
+	}
+	if params.CustomChunking.ValueBool() {
+		return request
+	}
+
+	chunkSize := int64(defaultChunkSize)
+	if IsKnown(params.ChunkSize) {
+		chunkSize = params.ChunkSize.ValueInt64()
+	}
+	chunkingMethod := defaultChunkingMethod
+	if IsKnown(params.ChunkingMethod) {
+		chunkingMethod = params.ChunkingMethod.ValueString()
+	}
+	separators := defaultSeparators
+	if IsKnown(params.Separators) {
+		separators = []string{}
+		for _, elem := range params.Separators.Elements() {
+			if s, ok := elem.(types.String); ok && !s.IsNull() && !s.IsUnknown() {
+				separators = append(separators, s.ValueString())
+			}
+		}
+	}
+
+	request.ChunkOverlapPercentage = params.ChunkOverlapPercentage.ValueInt64Pointer()
+	request.ChunkSize = &chunkSize
+	request.ChunkingMethod = &chunkingMethod
+	request.IsSeparatorRegex = params.IsSeparatorRegex.ValueBool()
+	request.Separators = separators
+	return request
+}
+
 func loadVectorDatabaseToTerraformState(vectorDatabase *client.VectorDatabase, data *VectorDatabaseResourceModel) {
 	data.ID = types.StringValue(vectorDatabase.ID)
 	data.Version = types.Int64Value(vectorDatabase.Version)
 	data.Name = types.StringValue(vectorDatabase.Name)
 	data.DatasetID = types.StringValue(vectorDatabase.DatasetID)
 	data.UseCaseID = types.StringValue(vectorDatabase.UseCaseID)
-	data.ChunkingParameters = &ChunkingParametersModel{
+	chunkingParameters := &ChunkingParametersModel{
 		EmbeddingModel:         types.StringValue(vectorDatabase.EmbeddingModel),
 		ChunkOverlapPercentage: types.Int64Value(vectorDatabase.ChunkOverlapPercentage),
-		ChunkSize:              types.Int64Value(vectorDatabase.ChunkSize),
-		ChunkingMethod:         types.StringValue(vectorDatabase.ChunkingMethod),
 		IsSeparatorRegex:       types.BoolValue(vectorDatabase.IsSeparatorRegex),
+		CustomChunking:         types.BoolValue(vectorDatabase.CustomChunking),
 	}
-	separatorList := make([]types.String, 0)
-	for _, separator := range vectorDatabase.Separators {
-		separatorList = append(separatorList, types.StringValue(separator))
+	if vectorDatabase.CustomChunking {
+		// Custom chunking skips the built-in chunker; keep these null rather than zero/empty.
+		chunkingParameters.ChunkSize = types.Int64Null()
+		chunkingParameters.ChunkingMethod = types.StringNull()
+		chunkingParameters.Separators = types.ListNull(types.StringType)
+	} else {
+		separatorElems := make([]attr.Value, 0, len(vectorDatabase.Separators))
+		for _, separator := range vectorDatabase.Separators {
+			separatorElems = append(separatorElems, types.StringValue(separator))
+		}
+		chunkingParameters.ChunkSize = types.Int64Value(vectorDatabase.ChunkSize)
+		chunkingParameters.ChunkingMethod = types.StringValue(vectorDatabase.ChunkingMethod)
+		chunkingParameters.Separators = types.ListValueMust(types.StringType, separatorElems)
 	}
-	data.ChunkingParameters.Separators = separatorList
+	data.ChunkingParameters = chunkingParameters
 }

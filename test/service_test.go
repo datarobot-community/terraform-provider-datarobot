@@ -753,14 +753,17 @@ func TestVectorDatabase(t *testing.T) {
 	require.NoError(err)
 
 	name := "Integration Test" + uuid.New().String()
+	chunkOverlapPercentage := int64(0)
+	chunkSize := int64(256)
+	chunkingMethod := "recursive"
 	vdb, err := s.CreateVectorDatabase(ctx, &client.CreateVectorDatabaseRequest{
 		Name:      name,
 		UseCaseID: useCase.ID,
 		DatasetID: dataset.ID,
 		ChunkingParameters: client.ChunkingParameters{
-			ChunkOverlapPercentage: 0,
-			ChunkSize:              256,
-			ChunkingMethod:         "recursive",
+			ChunkOverlapPercentage: &chunkOverlapPercentage,
+			ChunkSize:              &chunkSize,
+			ChunkingMethod:         &chunkingMethod,
 			EmbeddingModel:         "jinaai/jina-embedding-t-en-v1",
 			IsSeparatorRegex:       false,
 			Separators:             []string{"↵↵", "↵", " ", ""},
