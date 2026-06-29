@@ -1061,6 +1061,13 @@ type ArtifactDataSourceModel struct {
 	Spec                 *ArtifactSpecDataSourceModel `tfsdk:"spec"`
 }
 
+// ArtifactsDataSourceModel describes the plural artifact list data source.
+type ArtifactsDataSourceModel struct {
+	Status    types.String              `tfsdk:"status"`
+	Limit     types.Int64               `tfsdk:"limit"`
+	Artifacts []ArtifactDataSourceModel `tfsdk:"artifacts"`
+}
+
 type ArtifactCreatorModel struct {
 	ID       types.String `tfsdk:"id"`
 	FullName types.String `tfsdk:"full_name"`
