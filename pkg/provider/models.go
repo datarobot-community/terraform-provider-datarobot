@@ -1000,6 +1000,7 @@ type ArtifactResourceModel struct {
 	Name                 types.String       `tfsdk:"name"`
 	Description          types.String       `tfsdk:"description"`
 	Type                 types.String       `tfsdk:"type"`
+	Status               types.String       `tfsdk:"status"`
 	ArtifactRepositoryID types.String       `tfsdk:"artifact_repository_id"`
 	Spec                 *ArtifactSpecModel `tfsdk:"spec"`
 }
