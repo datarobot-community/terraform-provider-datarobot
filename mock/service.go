@@ -153,6 +153,21 @@ func (mr *MockServiceMockRecorder) CreateArtifact(ctx, req interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateArtifact", reflect.TypeOf((*MockService)(nil).CreateArtifact), ctx, req)
 }
 
+// PatchArtifact mocks base method.
+func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifact", ctx, id, req)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifact indicates an expected call of PatchArtifact.
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
+}
+
 // CreateBatchPredictionJobDefinition mocks base method.
 func (m *MockService) CreateBatchPredictionJobDefinition(ctx context.Context, req *client.BatchPredictionJobDefinitionRequest) (*client.BatchPredictionJobDefinition, error) {
 	m.ctrl.T.Helper()
