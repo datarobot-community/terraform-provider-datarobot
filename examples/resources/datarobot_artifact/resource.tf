@@ -1,7 +1,7 @@
 resource "datarobot_artifact" "example" {
   name        = "example-service"
   description = "Artifact for a containerized workload"
-  status = "draft"  # optional: "draft" (mutable) or "locked" (default)
+  status      = "draft" # optional: "draft" (mutable) or "locked" (default)
 
   spec = {
     container_groups = [{
