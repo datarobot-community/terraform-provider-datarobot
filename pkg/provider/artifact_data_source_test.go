@@ -61,7 +61,7 @@ func testArtifactDataSource(t *testing.T, name, imageURI string, isMock bool) {
 	steps := []resource.TestStep{
 		{
 			Config: artifactDataSourceConfig(name, imageURI),
-			Check: artifactDataSourceChecks(dataSourceName, name, imageURI, isMock),
+			Check:  artifactDataSourceChecks(dataSourceName, name, imageURI, isMock),
 		},
 	}
 

@@ -1046,19 +1046,19 @@ type ArtifactProbeConfigModel struct {
 
 // ArtifactDataSourceModel describes the read-only artifact data source.
 type ArtifactDataSourceModel struct {
-	ArtifactID           types.String                      `tfsdk:"artifact_id"`
-	Name                 types.String                      `tfsdk:"name"`
-	Description          types.String                      `tfsdk:"description"`
-	Type                 types.String                      `tfsdk:"type"`
-	Status               types.String                      `tfsdk:"status"`
-	Version              types.Int64                       `tfsdk:"version"`
-	ArtifactRepositoryID types.String                      `tfsdk:"artifact_repository_id"`
-	CreatedAt            types.String                      `tfsdk:"created_at"`
-	UpdatedAt            types.String                      `tfsdk:"updated_at"`
-	Creator              *ArtifactCreatorModel             `tfsdk:"creator"`
-	Tags                 []ArtifactTagModel                `tfsdk:"tags"`
-	Permissions          []types.String                    `tfsdk:"permissions"`
-	Spec                 *ArtifactSpecDataSourceModel      `tfsdk:"spec"`
+	ArtifactID           types.String                 `tfsdk:"artifact_id"`
+	Name                 types.String                 `tfsdk:"name"`
+	Description          types.String                 `tfsdk:"description"`
+	Type                 types.String                 `tfsdk:"type"`
+	Status               types.String                 `tfsdk:"status"`
+	Version              types.Int64                  `tfsdk:"version"`
+	ArtifactRepositoryID types.String                 `tfsdk:"artifact_repository_id"`
+	CreatedAt            types.String                 `tfsdk:"created_at"`
+	UpdatedAt            types.String                 `tfsdk:"updated_at"`
+	Creator              *ArtifactCreatorModel        `tfsdk:"creator"`
+	Tags                 []ArtifactTagModel           `tfsdk:"tags"`
+	Permissions          []types.String               `tfsdk:"permissions"`
+	Spec                 *ArtifactSpecDataSourceModel `tfsdk:"spec"`
 }
 
 type ArtifactCreatorModel struct {
@@ -1082,8 +1082,8 @@ type ArtifactSpecDataSourceModel struct {
 }
 
 type ArtifactContainerGroupDSModel struct {
-	Name       types.String                    `tfsdk:"name"`
-	Containers []ArtifactContainerDSModel      `tfsdk:"containers"`
+	Name       types.String               `tfsdk:"name"`
+	Containers []ArtifactContainerDSModel `tfsdk:"containers"`
 }
 
 type ArtifactContainerDSModel struct {
@@ -1113,8 +1113,8 @@ type ArtifactImageBuildConfigModel struct {
 }
 
 type ArtifactCodeRefModel struct {
-	Provider  types.String              `tfsdk:"provider"`
-	Type      types.String              `tfsdk:"type"`
+	Provider  types.String               `tfsdk:"provider"`
+	Type      types.String               `tfsdk:"type"`
 	DataRobot ArtifactDataRobotCodeModel `tfsdk:"datarobot"`
 }
 
@@ -1138,10 +1138,10 @@ type ArtifactContainerBuildModel struct {
 }
 
 type ArtifactSecurityContextModel struct {
-	AllowPrivilegeEscalation types.Bool                    `tfsdk:"allow_privilege_escalation"`
-	ReadOnlyRootFilesystem   types.Bool                    `tfsdk:"read_only_root_filesystem"`
-	Capabilities             *ArtifactCapabilitiesModel    `tfsdk:"capabilities"`
-	SeccompProfile           *ArtifactSeccompProfileModel  `tfsdk:"seccomp_profile"`
+	AllowPrivilegeEscalation types.Bool                   `tfsdk:"allow_privilege_escalation"`
+	ReadOnlyRootFilesystem   types.Bool                   `tfsdk:"read_only_root_filesystem"`
+	Capabilities             *ArtifactCapabilitiesModel   `tfsdk:"capabilities"`
+	SeccompProfile           *ArtifactSeccompProfileModel `tfsdk:"seccomp_profile"`
 }
 
 type ArtifactCapabilitiesModel struct {
