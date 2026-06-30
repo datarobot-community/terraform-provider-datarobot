@@ -1,3 +1,15 @@
+## [0.10.42] - 2026-06-30
+
+### Added
+
+- `MemorySpace` resource now supports `llm_model_name`, `llm_base_url`, and `custom_instructions` fields
+
+## [0.10.41] - 2026-06-29
+
+### Fixed
+
+- Example configurations for `datarobot_custom_application_from_environment`, `datarobot_datasource`, `datarobot_custom_metric`, `datarobot_batch_prediction_job_definition`, and `datarobot_deployment_retraining_policy` are now self-contained: they declare every resource they reference, so the examples can be applied as-is and downstream SDK/doc generation can convert them.
+
 ## [0.10.40] - 2026-06-26
 
 ### Added
@@ -5,7 +17,6 @@
 - `custom_chunking` field on the `datarobot_vector_database` resource: when enabled, DataRobot treats each row of the source dataset as a finished chunk instead of running the built-in chunker (use for pre-chunked datasets).
 - `datarobot_custom_model_from_vector_database` resource: packages a vector database into a deployable RAG custom model via the GenAI workshop endpoint, with optional compute settings (replicas, memory, resource bundle, network egress).
 - `datarobot_quota` resource: manage per-resource usage quotas (e.g. on a deployment) via `/api/v2/quotas/`, with order-insensitive `default_rules` of `{rule, limit, window}`.
-- `MemorySpace` resource now supports `llm_model_name`, `llm_base_url`, and `custom_instructions` fields
 
 ## [0.10.39] - 2026-05-28
 
