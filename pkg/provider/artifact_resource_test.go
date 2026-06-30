@@ -20,6 +20,11 @@ func TestAccArtifactResource(t *testing.T) {
 	testArtifactResource(t, uuid.NewString(), false)
 }
 
+func TestAccArtifactDraftLifecycle(t *testing.T) {
+	t.Parallel()
+	testArtifactDraftResource(t, "draft-"+uuid.NewString()[:8])
+}
+
 func TestIntegrationArtifactResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -142,6 +147,54 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 	})
 }
 
+func testArtifactDraftResource(t *testing.T, name string) {
+	t.Helper()
+	resourceName := "datarobot_artifact.test"
+	updatedName := "updated-" + name
+	imageURI := "nginx:latest"
+
+	var artifactID string
+	var lastArtifactID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, false),
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatus(name, "draft"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "status", "draft"),
+					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
+					captureAttr(resourceName, "artifact_id", &artifactID),
+					checkArtifactStatusInAPI(resourceName, "draft", false),
+					checkArtifactExistsInAPI(resourceName, name, imageURI, false),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatus(updatedName, "draft"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "status", "draft"),
+					checkArtifactIDEquals(resourceName, &artifactID),
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					checkArtifactStatusInAPI(resourceName, "draft", false),
+					checkArtifactExistsInAPI(resourceName, updatedName, imageURI, false),
+					captureAttr(resourceName, "artifact_id", &lastArtifactID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatus(updatedName, "locked"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "status", "locked"),
+					checkArtifactIDEquals(resourceName, &artifactID),
+					checkArtifactStatusInAPI(resourceName, "locked", false),
+					captureAttr(resourceName, "artifact_id", &lastArtifactID),
+				),
+			},
+		},
+	})
+}
+
 // checkArtifactExistsInAPI verifies the artifact exists in the API with correct fields.
 // In mock mode it uses Terraform state only; in acceptance mode it calls the API directly.
 func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI string, isMock bool) resource.TestCheckFunc {
@@ -191,6 +244,41 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 	}
 }
 
+func checkArtifactStatusInAPI(resourceName, expectedStatus string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if isMock {
+			return nil
+		}
+
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+
+		artifactID := rs.Primary.Attributes["artifact_id"]
+		if artifactID == "" {
+			return fmt.Errorf("artifact_id is not set in state")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		artifact, err := p.service.GetArtifact(context.Background(), artifactID)
+		if err != nil {
+			return fmt.Errorf("GetArtifact(%s): %w", artifactID, err)
+		}
+
+		if string(artifact.Status) != expectedStatus {
+			return fmt.Errorf("expected artifact status %q, got %q", expectedStatus, artifact.Status)
+		}
+
+		return nil
+	}
+}
+
 func captureAttr(resourceName, attr string, dest *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
@@ -198,6 +286,26 @@ func captureAttr(resourceName, attr string, dest *string) resource.TestCheckFunc
 			return fmt.Errorf("resource %s not found in state", resourceName)
 		}
 		*dest = rs.Primary.Attributes[attr]
+		return nil
+	}
+}
+
+func checkArtifactIDEquals(resourceName string, expected *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if expected == nil || *expected == "" {
+			return fmt.Errorf("expected artifact_id was not captured from a prior step")
+		}
+
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+
+		got := rs.Primary.Attributes["artifact_id"]
+		if got != *expected {
+			return fmt.Errorf("artifact_id: expected %q, got %q", *expected, got)
+		}
+
 		return nil
 	}
 }
