@@ -73,20 +73,7 @@ func TestIntegrationWorkloadDataSource(t *testing.T) {
 			{
 				Config: workloadDataSourceConfig(workload.ID),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(dataSourceName, "id", workload.ID),
-					resource.TestCheckResourceAttr(dataSourceName, "name", workload.Name),
-					resource.TestCheckResourceAttr(dataSourceName, "description", *workload.Description),
-					resource.TestCheckResourceAttr(dataSourceName, "status", string(workload.Status)),
-					resource.TestCheckResourceAttr(dataSourceName, "importance", string(workload.Importance)),
-					resource.TestCheckResourceAttr(dataSourceName, "type", string(workload.Type)),
-					resource.TestCheckResourceAttr(dataSourceName, "creator.username", "jane"),
-					resource.TestCheckResourceAttr(dataSourceName, "artifact.name", "my-artifact"),
-					resource.TestCheckResourceAttr(dataSourceName, "replacement.strategy", "rolling"),
-					resource.TestCheckResourceAttr(dataSourceName, "permissions.0", "CAN_VIEW"),
-					resource.TestCheckResourceAttr(dataSourceName, "request_stats.total_requests", "100"),
-					resource.TestCheckResourceAttr(dataSourceName, "tags.0.name", "env"),
-					resource.TestCheckResourceAttr(dataSourceName, "owners.0.username", "jane"),
-					resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.id", "cpu.small"),
+					workloadDataSourceTestCheckFuncs(dataSourceName, workload)...,
 				),
 			},
 		},
@@ -143,6 +130,104 @@ data "datarobot_workload" "test" {
   id = %q
 }
 `, id)
+}
+
+func workloadDataSourceTestCheckFuncs(dataSourceName string, w *client.Workload) []resource.TestCheckFunc {
+	creator := w.Creator
+	artifact := w.Artifact
+	replacement := w.Replacement
+	group := w.Runtime.ContainerGroups[0]
+	autoscaling := group.Autoscaling
+	policy := autoscaling.Policies[0]
+	container := group.Containers[0]
+	alloc := container.ResourceAllocation
+	resolved := group.ResolvedBundle
+	stats := w.RequestStats
+	tag := w.Tags[0]
+	owner := w.Owners[0]
+
+	checks := []resource.TestCheckFunc{
+		resource.TestCheckResourceAttr(dataSourceName, "id", w.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "name", w.Name),
+		resource.TestCheckResourceAttr(dataSourceName, "description", *w.Description),
+		resource.TestCheckResourceAttr(dataSourceName, "created_at", w.CreatedAt),
+		resource.TestCheckResourceAttr(dataSourceName, "updated_at", w.UpdatedAt),
+		resource.TestCheckResourceAttr(dataSourceName, "creator.id", creator.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "creator.full_name", *creator.FullName),
+		resource.TestCheckResourceAttr(dataSourceName, "creator.email", *creator.Email),
+		resource.TestCheckResourceAttr(dataSourceName, "creator.username", *creator.Username),
+		resource.TestCheckResourceAttr(dataSourceName, "creator.userhash", *creator.Userhash),
+		resource.TestCheckResourceAttr(dataSourceName, "proton_id", *w.ProtonID),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact_id", *w.ArtifactID),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.id", artifact.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.name", *artifact.Name),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.type", string(*artifact.Type)),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.status", string(*artifact.Status)),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.version", fmt.Sprintf("%d", *artifact.Version)),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.artifact_repository_id", *artifact.ArtifactRepositoryID),
+		resource.TestCheckResourceAttr(dataSourceName, "artifact.template_id", *artifact.TemplateID),
+		resource.TestCheckResourceAttr(dataSourceName, "type", string(w.Type)),
+		resource.TestCheckResourceAttr(dataSourceName, "status", string(w.Status)),
+		resource.TestCheckResourceAttr(dataSourceName, "replacement.status", replacement.Status),
+		resource.TestCheckResourceAttr(dataSourceName, "replacement.candidate_proton_ids.0", replacement.CandidateProtonIDs[0]),
+		resource.TestCheckResourceAttr(dataSourceName, "replacement.strategy", replacement.Strategy),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.name", group.Name),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.replica_count", fmt.Sprintf("%d", *group.ReplicaCount)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.bundle_selection_policy", *group.BundleSelectionPolicy),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resource_bundles.0", group.ResourceBundles[0]),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.enabled", "true"),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.policies.0.scaling_metric", policy.ScalingMetric),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.policies.0.target", fmt.Sprintf("%g", policy.Target)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", fmt.Sprintf("%d", policy.MinCount)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.policies.0.max_count", fmt.Sprintf("%d", policy.MaxCount)),
+		resource.TestCheckNoResourceAttr(dataSourceName, "runtime.container_groups.0.autoscaling.policies.0.priority"),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.containers.0.name", container.Name),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.containers.0.resource_allocation.cpu", fmt.Sprintf("%g", *alloc.CPU)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.containers.0.resource_allocation.memory", fmt.Sprintf("%d", *alloc.Memory)),
+		resource.TestCheckNoResourceAttr(dataSourceName, "runtime.container_groups.0.containers.0.resource_allocation.gpu"),
+		resource.TestCheckNoResourceAttr(dataSourceName, "runtime.container_groups.0.containers.0.resource_allocation.gpu_memory"),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.id", resolved.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.cpu_count", fmt.Sprintf("%g", resolved.CPUCount)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.memory_bytes", fmt.Sprintf("%d", resolved.MemoryBytes)),
+		resource.TestCheckResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.gpu_count", fmt.Sprintf("%d", *resolved.GPUCount)),
+		resource.TestCheckNoResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.gpu_maker"),
+		resource.TestCheckNoResourceAttr(dataSourceName, "runtime.container_groups.0.resolved_bundle.gpu_type_label"),
+		resource.TestCheckResourceAttr(dataSourceName, "permissions.0", w.Permissions[0]),
+		resource.TestCheckResourceAttr(dataSourceName, "permissions.1", w.Permissions[1]),
+		resource.TestCheckResourceAttr(dataSourceName, "importance", string(w.Importance)),
+		resource.TestCheckResourceAttr(dataSourceName, "request_stats.total_requests", fmt.Sprintf("%d", stats.TotalRequests)),
+		resource.TestCheckResourceAttr(dataSourceName, "request_stats.concurrent_requests", fmt.Sprintf("%d", stats.ConcurrentRequests)),
+		resource.TestCheckResourceAttr(dataSourceName, "request_stats.last_request_at", *stats.LastRequestAt),
+		resource.TestCheckResourceAttr(dataSourceName, "request_stats.response_time", fmt.Sprintf("%d", stats.ResponseTime)),
+		resource.TestCheckResourceAttr(dataSourceName, "request_stats.error_rate", fmt.Sprintf("%g", stats.ErrorRate)),
+		resource.TestCheckResourceAttr(dataSourceName, "tags.0.id", tag.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "tags.0.name", tag.Name),
+		resource.TestCheckResourceAttr(dataSourceName, "tags.0.value", tag.Value),
+		resource.TestCheckResourceAttr(dataSourceName, "endpoint", *w.Endpoint),
+		resource.TestCheckResourceAttr(dataSourceName, "last_response", *w.LastResponse),
+		resource.TestCheckResourceAttr(dataSourceName, "owners.0.id", owner.ID),
+		resource.TestCheckResourceAttr(dataSourceName, "owners.0.username", *owner.Username),
+		resource.TestCheckNoResourceAttr(dataSourceName, "owners.0.full_name"),
+		resource.TestCheckNoResourceAttr(dataSourceName, "owners.0.email"),
+		resource.TestCheckNoResourceAttr(dataSourceName, "owners.0.userhash"),
+	}
+
+	for i, rate := range stats.RequestRates {
+		checks = append(checks, resource.TestCheckResourceAttr(
+			dataSourceName,
+			fmt.Sprintf("request_stats.request_rates.%d", i),
+			fmt.Sprintf("%d", rate),
+		))
+	}
+	for i, rate := range stats.ErrorRates {
+		checks = append(checks, resource.TestCheckResourceAttr(
+			dataSourceName,
+			fmt.Sprintf("request_stats.error_rates.%d", i),
+			fmt.Sprintf("%d", rate),
+		))
+	}
+
+	return checks
 }
 
 func workloadDataSourceFixture() *client.Workload {
