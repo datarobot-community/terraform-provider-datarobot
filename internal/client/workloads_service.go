@@ -111,7 +111,7 @@ type ResolvedBundle struct {
 type Workload struct {
 	ID           string                `json:"id"`
 	Name         string                `json:"name"`
-	Description  string                `json:"description"`
+	Description  *string               `json:"description"`
 	CreatedAt    string                `json:"createdAt"`
 	UpdatedAt    string                `json:"updatedAt"`
 	Creator      *UserData             `json:"creator,omitempty"`
