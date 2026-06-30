@@ -24,6 +24,7 @@ Artifact definition for the Workload API. Artifacts define container images and 
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
+- `status` (String) Artifact lifecycle status: `draft` (mutable; supports in-place updates and image builds) or `locked` (immutable; spec changes create a new version). Defaults to `locked`. Locking a draft artifact is one-way.
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
 ### Read-Only
