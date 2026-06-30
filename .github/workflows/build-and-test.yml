@@ -129,6 +129,10 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
       - run: go mod download
+      - name: Check resource test coverage
+        run: bash scripts/check-resource-tests.sh
+      - name: Check acceptance test group assignment
+        run: bash scripts/run-test-group.sh --check
       - name: Run unit tests (schema and utility tests only)
         run: |
           # Run only true unit tests that don't require API credentials

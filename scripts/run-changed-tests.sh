@@ -23,7 +23,7 @@ set -euo pipefail
 BASE_REF="${BASE_REF:-main}"
 REPORT_FILE="${REPORT_FILE:-/harness/report.xml}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-60m}"
-TEST_PARALLEL="${TEST_PARALLEL:-4}"
+TEST_PARALLEL="${TEST_PARALLEL:-6}"
 
 # Shared helper files in pkg/provider/ that are used across all resources.
 # Any change to these triggers the full test suite.
@@ -63,12 +63,12 @@ XML
   fi
 }
 
-# Extract TestAcc* function names from a Go test file.
+# Extract TestAcc* and TestIntegration* function names from a Go test file.
 # Outputs one function name per line.
 extract_test_names() {
   local file="$1"
   if [[ -f "$file" ]]; then
-    grep -ohE 'func TestAcc[A-Za-z0-9_]+' "$file" | sed 's/func //' || true
+    grep -ohE 'func Test(Acc|Integration)[A-Za-z0-9_]+' "$file" | sed 's/func //' || true
   fi
 }
 
