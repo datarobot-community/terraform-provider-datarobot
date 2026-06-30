@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- `status` attribute on `datarobot_artifact`: `draft` (in-place updates, same `artifact_id`) or `locked` (default; spec changes create a new version). Locking a draft artifact is one-way.
+
 ## [0.10.40] - 2026-06-26
 
 ### Added
