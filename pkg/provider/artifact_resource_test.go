@@ -38,12 +38,11 @@ func TestIntegrationArtifactResource(t *testing.T) {
 	repoID := uuid.NewString()
 	name := "test-artifact-" + uuid.NewString()[:8]
 	updatedName := "updated-" + name
-	imageURI := "nginx:latest"
 
 	repoIDPtr := repoID
 
-	initialArtifact := artifactFixture(initialID, &repoIDPtr, name, imageURI)
-	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName, imageURI)
+	initialArtifact := artifactFixture(initialID, &repoIDPtr, name)
+	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName)
 
 	// Create: CreateArtifact → post-create Read
 	mockService.EXPECT().
@@ -345,8 +344,10 @@ resource "datarobot_artifact" "test" {
 `, name, artifactTestContainerSpecBlock(imageURI))
 }
 
+const artifactTestImageURI = "nginx:latest"
+
 // artifactFixture returns a full Workload API artifact response for integration tests.
-func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
+func artifactFixture(id string, repoID *string, name string) *client.Artifact {
 	port := int64(8080)
 	primary := true
 	containerName := "main"
@@ -391,7 +392,7 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 					Containers: []client.ArtifactContainer{
 						{
 							Name:        &containerName,
-							ImageURI:    imageURI,
+							ImageURI:    artifactTestImageURI,
 							Description: containerDesc,
 							Primary:     &primary,
 							Port:        &port,
