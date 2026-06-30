@@ -10,6 +10,7 @@ import (
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -47,7 +48,12 @@ func TestIntegrationArtifactResource(t *testing.T) {
 	// Create: CreateArtifact → post-create Read
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).
-		Return(initialArtifact, nil)
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Errorf("expected create status locked, got %q", req.Status)
+			}
+			return initialArtifact, nil
+		})
 	mockService.EXPECT().
 		GetArtifact(gomock.Any(), initialID).
 		Return(initialArtifact, nil)
@@ -102,6 +108,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "type", "service"),
+					resource.TestCheckResourceAttr(resourceName, "status", "locked"),
 					captureAttr(resourceName, "artifact_repository_id", &initialRepoID),
 					checkArtifactExistsInAPI(resourceName, name, "nginx:latest", isMock),
 				),
@@ -311,6 +318,10 @@ resource "datarobot_artifact" "test" {
 }
 
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
+	return artifactFixtureWithStatus(id, repoID, name, imageURI, client.ArtifactStatusLocked)
+}
+
+func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string, status client.ArtifactStatus) *client.Artifact {
 	port := int64(8080)
 	primary := true
 	containerName := "main"
@@ -323,7 +334,7 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 		Name:                 name,
 		Description:          "test artifact description",
 		Type:                 client.ArtifactTypeService,
-		Status:               client.ArtifactStatusLocked,
+		Status:               status,
 		ArtifactRepositoryID: repoID,
 		Spec: client.ArtifactSpec{
 			ContainerGroups: []client.ArtifactContainerGroup{
@@ -532,4 +543,254 @@ resource "datarobot_artifact" "test" {
   }
 }
 `
+}
+
+func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "draft-artifact-" + uuid.NewString()[:8]
+	updatedName := "updated-" + name
+	imageURI := "nginx:latest"
+
+	draftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, imageURI, client.ArtifactStatusDraft)
+	updatedDraftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, imageURI, client.ArtifactStatusDraft)
+	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, imageURI, client.ArtifactStatusLocked)
+
+	getArtifactResponse := draftArtifact
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), artifactID).
+		DoAndReturn(func(context.Context, string) (*client.Artifact, error) {
+			return getArtifactResponse, nil
+		}).AnyTimes()
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Errorf("expected create status draft, got %q", req.Status)
+			}
+			return draftArtifact, nil
+		})
+
+	patchCall := 0
+	mockService.EXPECT().
+		PatchArtifact(gomock.Any(), artifactID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			patchCall++
+			switch patchCall {
+			case 1:
+				if req.Status != nil {
+					t.Errorf("expected spec-only patch, got status %q", *req.Status)
+				}
+				getArtifactResponse = updatedDraftArtifact
+				return updatedDraftArtifact, nil
+			default:
+				if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+					t.Errorf("expected lock patch, got status %v", req.Status)
+				}
+				getArtifactResponse = lockedArtifact
+				return lockedArtifact, nil
+			}
+		}).Times(2)
+
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatus(name, imageURI, "draft"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatus(updatedName, imageURI, "draft"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "name", updatedName),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatus(updatedName, imageURI, "locked"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+		},
+	})
+}
+
+func TestArtifactLockedToDraftRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "locked-artifact-" + uuid.NewString()[:8]
+	imageURI := "nginx:latest"
+
+	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, imageURI, client.ArtifactStatusLocked)
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		Return(lockedArtifact, nil)
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), artifactID).
+		Return(lockedArtifact, nil).
+		AnyTimes()
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil).
+		AnyTimes()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatus(name, imageURI, "locked"),
+			},
+			{
+				Config:      artifactResourceConfigWithStatus(name, imageURI, "draft"),
+				ExpectError: regexp.MustCompile(`Cannot revert a locked artifact to draft`),
+			},
+		},
+	})
+}
+
+func artifactResourceConfigWithStatus(name, imageURI, status string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name        = %q
+  description = "test artifact description"
+  type        = "service"
+  status      = %q
+
+  spec = {
+    container_groups = [
+      {
+        containers = [
+          {
+            name        = "main"
+            image_uri   = %q
+            description = "main container"
+            primary     = true
+            port        = 8080
+            entrypoint  = ["python", "-m", "app"]
+
+            environment_vars = [
+              {
+                source = "string"
+                name   = "ENV"
+                value  = "production"
+              }
+            ]
+
+            readiness_probe = {
+              path = "/health"
+              port = 8080
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+`, name, status, imageURI)
+}
+
+func TestArtifactCreateRequestStatus(t *testing.T) {
+	spec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{
+			{Containers: []ArtifactContainerModel{{ImageURI: types.StringValue("nginx:latest")}}},
+		},
+	}
+
+	lockedReq := artifactCreateRequest(ArtifactResourceModel{
+		Name:   types.StringValue("test"),
+		Type:   types.StringValue("service"),
+		Status: types.StringValue("locked"),
+		Spec:   spec,
+	})
+	if lockedReq.Status != client.ArtifactStatusLocked {
+		t.Fatalf("expected locked, got %q", lockedReq.Status)
+	}
+
+	draftReq := artifactCreateRequest(ArtifactResourceModel{
+		Name:   types.StringValue("test"),
+		Type:   types.StringValue("service"),
+		Status: types.StringValue("draft"),
+		Spec:   spec,
+	})
+	if draftReq.Status != client.ArtifactStatusDraft {
+		t.Fatalf("expected draft, got %q", draftReq.Status)
+	}
+
+	defaultReq := artifactCreateRequest(ArtifactResourceModel{
+		Name: types.StringValue("test"),
+		Type: types.StringValue("service"),
+		Spec: spec,
+	})
+	if defaultReq.Status != client.ArtifactStatusLocked {
+		t.Fatalf("expected default locked, got %q", defaultReq.Status)
+	}
+}
+
+func TestPatchRequestFromPlan(t *testing.T) {
+	spec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{
+			{Containers: []ArtifactContainerModel{{ImageURI: types.StringValue("nginx:latest")}}},
+		},
+	}
+	base := ArtifactResourceModel{
+		Name:        types.StringValue("test"),
+		Description: types.StringValue("desc"),
+		Spec:        spec,
+	}
+
+	draftState := base
+	draftState.Status = types.StringValue("draft")
+	draftPlan := draftState
+
+	patch := patchRequestFromPlan(draftPlan, draftState)
+	if patch.Status != nil {
+		t.Fatalf("expected no status on draft spec patch, got %v", patch.Status)
+	}
+
+	lockPlan := draftPlan
+	lockPlan.Status = types.StringValue("locked")
+	lockPatch := patchRequestFromPlan(lockPlan, draftState)
+	if lockPatch.Status == nil || *lockPatch.Status != client.ArtifactStatusLocked {
+		t.Fatalf("expected lock status in patch, got %v", lockPatch.Status)
+	}
 }
