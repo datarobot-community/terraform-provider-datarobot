@@ -614,14 +614,14 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: artifactResourceConfigWithStatus(name, imageURI, "draft"),
+				Config: artifactResourceConfigWithStatus(name, "draft"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
 				),
 			},
 			{
-				Config: artifactResourceConfigWithStatus(updatedName, imageURI, "draft"),
+				Config: artifactResourceConfigWithStatus(updatedName, "draft"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
@@ -629,7 +629,7 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 				),
 			},
 			{
-				Config: artifactResourceConfigWithStatus(updatedName, imageURI, "locked"),
+				Config: artifactResourceConfigWithStatus(updatedName, "locked"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
@@ -678,17 +678,17 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: artifactResourceConfigWithStatus(name, imageURI, "locked"),
+				Config: artifactResourceConfigWithStatus(name, "locked"),
 			},
 			{
-				Config:      artifactResourceConfigWithStatus(name, imageURI, "draft"),
+				Config:      artifactResourceConfigWithStatus(name, "draft"),
 				ExpectError: regexp.MustCompile(`Cannot revert a locked artifact to draft`),
 			},
 		},
 	})
 }
 
-func artifactResourceConfigWithStatus(name, imageURI, status string) string {
+func artifactResourceConfigWithStatus(name, status string) string {
 	return fmt.Sprintf(`
 resource "datarobot_artifact" "test" {
   name        = %q
@@ -702,7 +702,7 @@ resource "datarobot_artifact" "test" {
         containers = [
           {
             name        = "main"
-            image_uri   = %q
+            image_uri   = "nginx:latest"
             description = "main container"
             primary     = true
             port        = 8080
@@ -726,7 +726,7 @@ resource "datarobot_artifact" "test" {
     ]
   }
 }
-`, name, status, imageURI)
+`, name, status)
 }
 
 func TestArtifactCreateRequestStatus(t *testing.T) {
