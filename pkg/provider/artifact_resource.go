@@ -98,6 +98,63 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 	}
 
+	dockerfileAttributes := map[string]schema.Attribute{
+		"source": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			Default:             stringdefault.StaticString("provided"),
+			MarkdownDescription: "How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.",
+			Validators:          ArtifactDockerfileSourceValidators(),
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
+		},
+		"path": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			Default:             stringdefault.StaticString("./Dockerfile"),
+			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
+		},
+		"execution_environment_id": schema.StringAttribute{
+			Optional:            true,
+			MarkdownDescription: "Execution environment ID for the base Docker image. Required when source is `generated`.",
+		},
+		"execution_environment_version_id": schema.StringAttribute{
+			Optional:            true,
+			MarkdownDescription: "Execution environment version ID that pins the base image. Required when source is `generated`.",
+		},
+		"entrypoint": schema.ListAttribute{
+			Optional:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.",
+		},
+	}
+
+	imageBuildConfigAttributes := map[string]schema.Attribute{
+		"code_ref": schema.SingleNestedAttribute{
+			Optional:            true,
+			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock.",
+			Attributes: map[string]schema.Attribute{
+				"catalog_id": schema.StringAttribute{
+					Required:            true,
+					MarkdownDescription: "Files API catalog ID (24-character hex).",
+				},
+				"catalog_version_id": schema.StringAttribute{
+					Required:            true,
+					MarkdownDescription: "Files API catalog version ID (24-character hex).",
+				},
+			},
+		},
+		"dockerfile": schema.SingleNestedAttribute{
+			Optional:            true,
+			MarkdownDescription: "How the Dockerfile is obtained for the image build. Defaults to using `./Dockerfile` from the source code.",
+			Attributes:          dockerfileAttributes,
+		},
+	}
+
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.",
 
@@ -174,8 +231,16 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 												},
 											},
 											"image_uri": schema.StringAttribute{
-												Required:            true,
-												MarkdownDescription: "Docker image URI.",
+												Optional:            true,
+												MarkdownDescription: "Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.",
+												PlanModifiers: []planmodifier.String{
+													stringplanmodifier.UseStateForUnknown(),
+												},
+											},
+											"image_build_config": schema.SingleNestedAttribute{
+												Optional:            true,
+												MarkdownDescription: "Configuration for server-side image builds from source code.",
+												Attributes:          imageBuildConfigAttributes,
 											},
 											"primary": schema.BoolAttribute{
 												Optional:            true,
