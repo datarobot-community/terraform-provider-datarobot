@@ -100,12 +100,12 @@ type RequestStats struct {
 }
 
 type ResolvedBundle struct {
-	ID           string   `json:"id"`
-	CPUCount     float64  `json:"cpuCount"`
-	MemoryBytes  int64    `json:"memoryBytes"`
-	GPUCount     *int     `json:"gpuCount,omitempty"`
-	GPUMaker     *string  `json:"gpuMaker,omitempty"`
-	GPUTypeLabel *string  `json:"gpuTypeLabel,omitempty"`
+	ID           string  `json:"id"`
+	CPUCount     float64 `json:"cpuCount"`
+	MemoryBytes  int64   `json:"memoryBytes"`
+	GPUCount     *int    `json:"gpuCount,omitempty"`
+	GPUMaker     *string `json:"gpuMaker,omitempty"`
+	GPUTypeLabel *string `json:"gpuTypeLabel,omitempty"`
 }
 
 type Workload struct {
