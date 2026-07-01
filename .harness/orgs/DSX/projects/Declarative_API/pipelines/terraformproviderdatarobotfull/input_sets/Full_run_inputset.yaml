@@ -1,0 +1,104 @@
+inputSet:
+  name: Full_run_inputset
+  identifier: Full_run_inputset
+  orgIdentifier: DSX
+  projectIdentifier: Declarative_API
+  pipeline:
+    identifier: terraformproviderdatarobotfull
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: main
+    stages:
+      - parallel:
+          - stage:
+              identifier: TestsFast
+              type: CI
+              spec:
+                execution:
+                  steps:
+                    - step:
+                        identifier: RunFast
+                        type: Run
+                        spec:
+                          image: datarobotdev/platform-base-golang-devel
+                    - step:
+                        identifier: Notify_dsxalerts_fast
+                        template:
+                          templateInputs:
+                            type: Run
+                            spec:
+                              envVariables:
+                                SLACK_URL: ""
+                                MESSAGE_DETAILS_FILENAME: ./SLACK_MESSAGE.md
+          - stage:
+              identifier: TestsModels
+              type: CI
+              spec:
+                execution:
+                  steps:
+                    - step:
+                        identifier: RunModels
+                        type: Run
+                        spec:
+                          image: datarobotdev/platform-base-golang-devel
+                    - step:
+                        identifier: Notify_dsxalerts_models
+                        template:
+                          templateInputs:
+                            type: Run
+                            spec:
+                              envVariables:
+                                SLACK_URL: ""
+                                MESSAGE_DETAILS_FILENAME: ./SLACK_MESSAGE.md
+          - stage:
+              identifier: TestsDeployments
+              type: CI
+              spec:
+                execution:
+                  steps:
+                    - step:
+                        identifier: RunDeployments
+                        type: Run
+                        spec:
+                          image: datarobotdev/platform-base-golang-devel
+                    - step:
+                        identifier: Notify_dsxalerts_deployments
+                        template:
+                          templateInputs:
+                            type: Run
+                            spec:
+                              envVariables:
+                                SLACK_URL: ""
+                                MESSAGE_DETAILS_FILENAME: ./SLACK_MESSAGE.md
+          - stage:
+              identifier: TestsApps
+              type: CI
+              spec:
+                execution:
+                  steps:
+                    - step:
+                        identifier: RunApps
+                        type: Run
+                        spec:
+                          image: datarobotdev/platform-base-golang-devel
+                    - step:
+                        identifier: Notify_dsxalerts_apps
+                        template:
+                          templateInputs:
+                            type: Run
+                            spec:
+                              envVariables:
+                                SLACK_URL: ""
+                                MESSAGE_DETAILS_FILENAME: ./SLACK_MESSAGE.md
+    variables:
+      - name: endpoint
+        type: String
+        value: https://staging.datarobot.com/api/v2
+      - name: apiKey
+        type: Secret
+        default: dr_staging_api_key
+        value: dr_staging_api_key
