@@ -1097,6 +1097,93 @@ type WorkloadAutoscalingPolicyModel struct {
 	Priority      types.Int64   `tfsdk:"priority"`
 }
 
+// WorkloadDataSourceModel describes the datarobot_workload data source.
+type WorkloadDataSourceModel struct {
+	ID           types.String                    `tfsdk:"id"`
+	Name         types.String                    `tfsdk:"name"`
+	Description  types.String                    `tfsdk:"description"`
+	CreatedAt    types.String                    `tfsdk:"created_at"`
+	UpdatedAt    types.String                    `tfsdk:"updated_at"`
+	Creator      *WorkloadUserDataModel          `tfsdk:"creator"`
+	ProtonID     types.String                    `tfsdk:"proton_id"`
+	ArtifactID   types.String                    `tfsdk:"artifact_id"`
+	Artifact     *WorkloadArtifactInfoModel      `tfsdk:"artifact"`
+	Type         types.String                    `tfsdk:"type"`
+	Status       types.String                    `tfsdk:"status"`
+	Replacement  *WorkloadReplacementModel       `tfsdk:"replacement"`
+	Runtime      *WorkloadDataSourceRuntimeModel `tfsdk:"runtime"`
+	Permissions  []types.String                  `tfsdk:"permissions"`
+	Importance   types.String                    `tfsdk:"importance"`
+	RequestStats *WorkloadRequestStatsModel      `tfsdk:"request_stats"`
+	Tags         []WorkloadTagModel              `tfsdk:"tags"`
+	Endpoint     types.String                    `tfsdk:"endpoint"`
+	LastResponse types.String                    `tfsdk:"last_response"`
+	Owners       []WorkloadUserDataModel         `tfsdk:"owners"`
+}
+
+type WorkloadUserDataModel struct {
+	ID       types.String `tfsdk:"id"`
+	FullName types.String `tfsdk:"full_name"`
+	Email    types.String `tfsdk:"email"`
+	Username types.String `tfsdk:"username"`
+	Userhash types.String `tfsdk:"userhash"`
+}
+
+type WorkloadArtifactInfoModel struct {
+	ID                   types.String `tfsdk:"id"`
+	Name                 types.String `tfsdk:"name"`
+	Type                 types.String `tfsdk:"type"`
+	Status               types.String `tfsdk:"status"`
+	Version              types.Int64  `tfsdk:"version"`
+	ArtifactRepositoryID types.String `tfsdk:"artifact_repository_id"`
+	TemplateID           types.String `tfsdk:"template_id"`
+}
+
+type WorkloadReplacementModel struct {
+	Status             types.String   `tfsdk:"status"`
+	CandidateProtonIDs []types.String `tfsdk:"candidate_proton_ids"`
+	Strategy           types.String   `tfsdk:"strategy"`
+}
+
+type WorkloadRequestStatsModel struct {
+	TotalRequests      types.Int64   `tfsdk:"total_requests"`
+	ConcurrentRequests types.Int64   `tfsdk:"concurrent_requests"`
+	LastRequestAt      types.String  `tfsdk:"last_request_at"`
+	ResponseTime       types.Int64   `tfsdk:"response_time"`
+	ErrorRate          types.Float64 `tfsdk:"error_rate"`
+	RequestRates       []types.Int64 `tfsdk:"request_rates"`
+	ErrorRates         []types.Int64 `tfsdk:"error_rates"`
+}
+
+type WorkloadTagModel struct {
+	ID    types.String `tfsdk:"id"`
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+type WorkloadDataSourceRuntimeModel struct {
+	ContainerGroups []WorkloadDataSourceGroupRuntimeModel `tfsdk:"container_groups"`
+}
+
+type WorkloadDataSourceGroupRuntimeModel struct {
+	Name                  types.String                     `tfsdk:"name"`
+	ReplicaCount          types.Int64                      `tfsdk:"replica_count"`
+	Autoscaling           *WorkloadAutoscalingModel        `tfsdk:"autoscaling"`
+	ResourceBundles       []types.String                   `tfsdk:"resource_bundles"`
+	BundleSelectionPolicy types.String                     `tfsdk:"bundle_selection_policy"`
+	Containers            []WorkloadContainerOverrideModel `tfsdk:"containers"`
+	ResolvedBundle        *WorkloadResolvedBundleModel     `tfsdk:"resolved_bundle"`
+}
+
+type WorkloadResolvedBundleModel struct {
+	ID           types.String  `tfsdk:"id"`
+	CPUCount     types.Float64 `tfsdk:"cpu_count"`
+	MemoryBytes  types.Int64   `tfsdk:"memory_bytes"`
+	GPUCount     types.Int64   `tfsdk:"gpu_count"`
+	GPUMaker     types.String  `tfsdk:"gpu_maker"`
+	GPUTypeLabel types.String  `tfsdk:"gpu_type_label"`
+}
+
 // QuotaResourceModel describes the datarobot_quota resource. default_rules is a set
 // (the order DataRobot echoes back is not significant), so reordering does not show
 // as a diff.

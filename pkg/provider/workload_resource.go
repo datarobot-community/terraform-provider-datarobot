@@ -665,7 +665,11 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 	data.Status = types.StringValue(string(workload.Status))
 	data.Importance = types.StringValue(string(workload.Importance))
 
-	data.Description = types.StringValue(workload.Description)
+	if workload.Description != nil {
+		data.Description = types.StringValue(*workload.Description)
+	} else {
+		data.Description = types.StringNull()
+	}
 
 	if workload.ArtifactID != nil {
 		data.ArtifactID = types.StringValue(*workload.ArtifactID)

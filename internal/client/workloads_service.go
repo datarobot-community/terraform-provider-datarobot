@@ -52,21 +52,83 @@ type GroupRuntime struct {
 	BundleSelectionPolicy *string                `json:"bundleSelectionPolicy,omitempty"`
 	ReplicaCount          *int64                 `json:"replicaCount,omitempty"`
 	ResourceBundles       []string               `json:"resourceBundles,omitempty"`
+	ResolvedBundle        *ResolvedBundle        `json:"resolvedBundle,omitempty"`
 }
 
 type WorkloadRuntime struct {
 	ContainerGroups []GroupRuntime `json:"containerGroups,omitempty"`
 }
 
+type UserData struct {
+	ID       string  `json:"id"`
+	FullName *string `json:"fullName,omitempty"`
+	Email    *string `json:"email,omitempty"`
+	Username *string `json:"username,omitempty"`
+	Userhash *string `json:"userhash,omitempty"`
+}
+
+type TagInfo struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type WorkloadArtifactInfo struct {
+	ID                   string          `json:"id"`
+	Name                 *string         `json:"name,omitempty"`
+	Type                 *ArtifactType   `json:"type,omitempty"`
+	Status               *ArtifactStatus `json:"status,omitempty"`
+	Version              *int            `json:"version,omitempty"`
+	ArtifactRepositoryID *string         `json:"artifactRepositoryId,omitempty"`
+	TemplateID           *string         `json:"templateId,omitempty"`
+}
+
+type WorkloadReplacement struct {
+	Status             string   `json:"status"`
+	CandidateProtonIDs []string `json:"candidateProtonIds"`
+	Strategy           string   `json:"strategy"`
+}
+
+type RequestStats struct {
+	TotalRequests      int     `json:"totalRequests"`
+	ConcurrentRequests int     `json:"concurrentRequests"`
+	LastRequestAt      *string `json:"lastRequestAt,omitempty"`
+	ResponseTime       int     `json:"responseTime"`
+	ErrorRate          float64 `json:"errorRate"`
+	RequestRates       []int   `json:"requestRates"`
+	ErrorRates         []int   `json:"errorRates"`
+}
+
+type ResolvedBundle struct {
+	ID           string  `json:"id"`
+	CPUCount     float64 `json:"cpuCount"`
+	MemoryBytes  int64   `json:"memoryBytes"`
+	GPUCount     *int    `json:"gpuCount,omitempty"`
+	GPUMaker     *string `json:"gpuMaker,omitempty"`
+	GPUTypeLabel *string `json:"gpuTypeLabel,omitempty"`
+}
+
 type Workload struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Status      ProtonStatus       `json:"status"`
-	Importance  WorkloadImportance `json:"importance"`
-	ArtifactID  *string            `json:"artifactId"`
-	Endpoint    *string            `json:"endpoint"`
-	Runtime     WorkloadRuntime    `json:"runtime"`
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	Description  *string               `json:"description"`
+	CreatedAt    string                `json:"createdAt"`
+	UpdatedAt    string                `json:"updatedAt"`
+	Creator      *UserData             `json:"creator,omitempty"`
+	ProtonID     *string               `json:"protonId,omitempty"`
+	ArtifactID   *string               `json:"artifactId,omitempty"`
+	Artifact     *WorkloadArtifactInfo `json:"artifact,omitempty"`
+	Type         ArtifactType          `json:"type"`
+	Status       ProtonStatus          `json:"status"`
+	Importance   WorkloadImportance    `json:"importance"`
+	Replacement  *WorkloadReplacement  `json:"replacement,omitempty"`
+	Runtime      WorkloadRuntime       `json:"runtime"`
+	Permissions  []string              `json:"permissions"`
+	RequestStats *RequestStats         `json:"requestStats,omitempty"`
+	Tags         []TagInfo             `json:"tags"`
+	Endpoint     *string               `json:"endpoint,omitempty"`
+	LastResponse *string               `json:"lastResponse,omitempty"`
+	Owners       []UserData            `json:"owners"`
 }
 
 type CreateWorkloadRequest struct {

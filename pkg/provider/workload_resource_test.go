@@ -823,10 +823,14 @@ resource "datarobot_workload" "test" {
 // ─── fixture helpers ───────────────────────────────────────────────────────────
 
 func workloadFixture(id, artifactID, name, description string, importance client.WorkloadImportance, replicaCount *int64, endpoint *string) *client.Workload {
+	var desc *string
+	if description != "" {
+		desc = &description
+	}
 	return &client.Workload{
 		ID:          id,
 		Name:        name,
-		Description: description,
+		Description: desc,
 		Status:      client.ProtonStatusRunning,
 		Importance:  importance,
 		ArtifactID:  &artifactID,

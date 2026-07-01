@@ -14,6 +14,7 @@
 
 ### Added
 
+- `datarobot_workload` data source: read a Workload by ID from the Workload API, exposing the full `WorkloadFormatted` response (artifact info, runtime, permissions, request stats, tags, owners, and more).
 - `custom_chunking` field on the `datarobot_vector_database` resource: when enabled, DataRobot treats each row of the source dataset as a finished chunk instead of running the built-in chunker (use for pre-chunked datasets).
 - `datarobot_custom_model_from_vector_database` resource: packages a vector database into a deployable RAG custom model via the GenAI workshop endpoint, with optional compute settings (replicas, memory, resource bundle, network egress).
 - `datarobot_quota` resource: manage per-resource usage quotas (e.g. on a deployment) via `/api/v2/quotas/`, with order-insensitive `default_rules` of `{rule, limit, window}`.
