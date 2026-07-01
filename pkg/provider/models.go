@@ -1096,26 +1096,26 @@ type WorkloadAutoscalingPolicyModel struct {
 
 // WorkloadDataSourceModel describes the datarobot_workload data source.
 type WorkloadDataSourceModel struct {
-	ID           types.String                      `tfsdk:"id"`
-	Name         types.String                      `tfsdk:"name"`
-	Description  types.String                      `tfsdk:"description"`
-	CreatedAt    types.String                      `tfsdk:"created_at"`
-	UpdatedAt    types.String                      `tfsdk:"updated_at"`
-	Creator      *WorkloadUserDataModel            `tfsdk:"creator"`
-	ProtonID     types.String                      `tfsdk:"proton_id"`
-	ArtifactID   types.String                      `tfsdk:"artifact_id"`
-	Artifact     *WorkloadArtifactInfoModel        `tfsdk:"artifact"`
-	Type         types.String                      `tfsdk:"type"`
-	Status       types.String                      `tfsdk:"status"`
-	Replacement  *WorkloadReplacementModel         `tfsdk:"replacement"`
-	Runtime      *WorkloadDataSourceRuntimeModel   `tfsdk:"runtime"`
-	Permissions  []types.String                    `tfsdk:"permissions"`
-	Importance   types.String                      `tfsdk:"importance"`
-	RequestStats *WorkloadRequestStatsModel        `tfsdk:"request_stats"`
-	Tags         []WorkloadTagModel                `tfsdk:"tags"`
-	Endpoint     types.String                      `tfsdk:"endpoint"`
-	LastResponse types.String                      `tfsdk:"last_response"`
-	Owners       []WorkloadUserDataModel           `tfsdk:"owners"`
+	ID           types.String                    `tfsdk:"id"`
+	Name         types.String                    `tfsdk:"name"`
+	Description  types.String                    `tfsdk:"description"`
+	CreatedAt    types.String                    `tfsdk:"created_at"`
+	UpdatedAt    types.String                    `tfsdk:"updated_at"`
+	Creator      *WorkloadUserDataModel          `tfsdk:"creator"`
+	ProtonID     types.String                    `tfsdk:"proton_id"`
+	ArtifactID   types.String                    `tfsdk:"artifact_id"`
+	Artifact     *WorkloadArtifactInfoModel      `tfsdk:"artifact"`
+	Type         types.String                    `tfsdk:"type"`
+	Status       types.String                    `tfsdk:"status"`
+	Replacement  *WorkloadReplacementModel       `tfsdk:"replacement"`
+	Runtime      *WorkloadDataSourceRuntimeModel `tfsdk:"runtime"`
+	Permissions  []types.String                  `tfsdk:"permissions"`
+	Importance   types.String                    `tfsdk:"importance"`
+	RequestStats *WorkloadRequestStatsModel      `tfsdk:"request_stats"`
+	Tags         []WorkloadTagModel              `tfsdk:"tags"`
+	Endpoint     types.String                    `tfsdk:"endpoint"`
+	LastResponse types.String                    `tfsdk:"last_response"`
+	Owners       []WorkloadUserDataModel         `tfsdk:"owners"`
 }
 
 type WorkloadUserDataModel struct {
@@ -1143,13 +1143,13 @@ type WorkloadReplacementModel struct {
 }
 
 type WorkloadRequestStatsModel struct {
-	TotalRequests      types.Int64    `tfsdk:"total_requests"`
-	ConcurrentRequests types.Int64    `tfsdk:"concurrent_requests"`
-	LastRequestAt      types.String   `tfsdk:"last_request_at"`
-	ResponseTime       types.Int64    `tfsdk:"response_time"`
-	ErrorRate          types.Float64  `tfsdk:"error_rate"`
-	RequestRates       []types.Int64  `tfsdk:"request_rates"`
-	ErrorRates         []types.Int64  `tfsdk:"error_rates"`
+	TotalRequests      types.Int64   `tfsdk:"total_requests"`
+	ConcurrentRequests types.Int64   `tfsdk:"concurrent_requests"`
+	LastRequestAt      types.String  `tfsdk:"last_request_at"`
+	ResponseTime       types.Int64   `tfsdk:"response_time"`
+	ErrorRate          types.Float64 `tfsdk:"error_rate"`
+	RequestRates       []types.Int64 `tfsdk:"request_rates"`
+	ErrorRates         []types.Int64 `tfsdk:"error_rates"`
 }
 
 type WorkloadTagModel struct {
@@ -1163,13 +1163,13 @@ type WorkloadDataSourceRuntimeModel struct {
 }
 
 type WorkloadDataSourceGroupRuntimeModel struct {
-	Name                  types.String                              `tfsdk:"name"`
-	ReplicaCount          types.Int64                               `tfsdk:"replica_count"`
-	Autoscaling           *WorkloadAutoscalingModel                 `tfsdk:"autoscaling"`
-	ResourceBundles       []types.String                            `tfsdk:"resource_bundles"`
-	BundleSelectionPolicy types.String                            `tfsdk:"bundle_selection_policy"`
-	Containers            []WorkloadContainerOverrideModel          `tfsdk:"containers"`
-	ResolvedBundle        *WorkloadResolvedBundleModel              `tfsdk:"resolved_bundle"`
+	Name                  types.String                     `tfsdk:"name"`
+	ReplicaCount          types.Int64                      `tfsdk:"replica_count"`
+	Autoscaling           *WorkloadAutoscalingModel        `tfsdk:"autoscaling"`
+	ResourceBundles       []types.String                   `tfsdk:"resource_bundles"`
+	BundleSelectionPolicy types.String                     `tfsdk:"bundle_selection_policy"`
+	Containers            []WorkloadContainerOverrideModel `tfsdk:"containers"`
+	ResolvedBundle        *WorkloadResolvedBundleModel     `tfsdk:"resolved_bundle"`
 }
 
 type WorkloadResolvedBundleModel struct {
