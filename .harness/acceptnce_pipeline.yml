@@ -4,8 +4,8 @@
 #
 # For the full-suite pipeline (main merges / release), see full_suite_pipeline.yml.
 pipeline:
-  name: terraform-provider-datarobot
-  identifier: terraformproviderdatarobot
+  name: terraform-provider-datarobot-pr
+  identifier: terraformproviderdatarobotpr
   projectIdentifier: Declarative_API
   orgIdentifier: DSX
   tags: {}

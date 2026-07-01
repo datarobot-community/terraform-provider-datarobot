@@ -24,222 +24,224 @@ pipeline:
         sparseCheckout: []
   stages:
     - parallel:
-      - stage:
-          name: Tests Fast
-          identifier: TestsFast
-          type: CI
-          spec:
-            cloneCodebase: true
-            infrastructure:
-              type: KubernetesDirect
-              spec:
-                connectorRef: account.cigeneral
-                namespace: harness-delegate-ng
-                automountServiceAccountToken: true
-                nodeSelector: {}
-                os: Linux
-            execution:
-              steps:
-                - step:
-                    type: Run
-                    name: Run Fast Group
-                    identifier: RunFast
-                    spec:
-                      connectorRef: account.dockerhub_datarobot_read
-                      image: <+input>.default(datarobotdev/platform-base-golang-devel)
-                      shell: Sh
-                      command: |-
-                        microdnf install unzip
-                        TERRAFORM_VERSION="1.14.5"
-                        curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                        unzip terraform.zip && mv terraform /usr/local/bin
-                        export PATH=$(go env GOPATH)/bin:$PATH
-                        go install github.com/jstemmer/go-junit-report/v2@latest
-                        go mod download
-                        make testacc-group-fast
-                      reports:
-                        type: JUnit
-                        spec:
-                          paths:
-                            - /harness/report-fast.xml
-                      envVariables:
-                        DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
-                        DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
-                        DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
-                        DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
-                        REPORT_FILE: /harness/report-fast.xml
-                      resources:
-                        limits:
-                          memory: 4Gi
-                          cpu: "4"
-            caching:
-              enabled: false
-            buildIntelligence:
-              enabled: false
+        - stage:
+            name: Tests Fast
+            identifier: TestsFast
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Fast Group
+                      identifier: RunFast
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-fast
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-fast.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-fast.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "4"
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
 
-      - stage:
-          name: Tests Models
-          identifier: TestsModels
-          type: CI
-          spec:
-            cloneCodebase: true
-            infrastructure:
-              type: KubernetesDirect
-              spec:
-                connectorRef: account.cigeneral
-                namespace: harness-delegate-ng
-                automountServiceAccountToken: true
-                nodeSelector: {}
-                os: Linux
-            execution:
-              steps:
-                - step:
-                    type: Run
-                    name: Run Models Group
-                    identifier: RunModels
-                    spec:
-                      connectorRef: account.dockerhub_datarobot_read
-                      image: <+input>.default(datarobotdev/platform-base-golang-devel)
-                      shell: Sh
-                      command: |-
-                        microdnf install unzip
-                        TERRAFORM_VERSION="1.14.5"
-                        curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                        unzip terraform.zip && mv terraform /usr/local/bin
-                        export PATH=$(go env GOPATH)/bin:$PATH
-                        go install github.com/jstemmer/go-junit-report/v2@latest
-                        go mod download
-                        make testacc-group-models
-                      reports:
-                        type: JUnit
-                        spec:
-                          paths:
-                            - /harness/report-models.xml
-                      envVariables:
-                        DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
-                        DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
-                        DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
-                        DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
-                        REPORT_FILE: /harness/report-models.xml
-                      resources:
-                        limits:
-                          memory: 4Gi
-                          cpu: "6"
-            caching:
-              enabled: false
-            buildIntelligence:
-              enabled: false
+        - stage:
+            name: Tests Models
+            identifier: TestsModels
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Models Group
+                      identifier: RunModels
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-models
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-models.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-models.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "6"
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
 
-      - stage:
-          name: Tests Deployments
-          identifier: TestsDeployments
-          type: CI
-          spec:
-            cloneCodebase: true
-            infrastructure:
-              type: KubernetesDirect
-              spec:
-                connectorRef: account.cigeneral
-                namespace: harness-delegate-ng
-                automountServiceAccountToken: true
-                nodeSelector: {}
-                os: Linux
-            execution:
-              steps:
-                - step:
-                    type: Run
-                    name: Run Deployments Group
-                    identifier: RunDeployments
-                    spec:
-                      connectorRef: account.dockerhub_datarobot_read
-                      image: <+input>.default(datarobotdev/platform-base-golang-devel)
-                      shell: Sh
-                      command: |-
-                        microdnf install unzip
-                        TERRAFORM_VERSION="1.14.5"
-                        curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                        unzip terraform.zip && mv terraform /usr/local/bin
-                        export PATH=$(go env GOPATH)/bin:$PATH
-                        go install github.com/jstemmer/go-junit-report/v2@latest
-                        go mod download
-                        make testacc-group-deployments
-                      reports:
-                        type: JUnit
-                        spec:
-                          paths:
-                            - /harness/report-deployments.xml
-                      envVariables:
-                        DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
-                        DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
-                        DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
-                        DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
-                        REPORT_FILE: /harness/report-deployments.xml
-                      resources:
-                        limits:
-                          memory: 4Gi
-                          cpu: "6"
-            caching:
-              enabled: false
-            buildIntelligence:
-              enabled: false
+        - stage:
+            name: Tests Deployments
+            identifier: TestsDeployments
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Deployments Group
+                      identifier: RunDeployments
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-deployments
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-deployments.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-deployments.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "6"
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
 
-      - stage:
-          name: Tests Apps
-          identifier: TestsApps
-          type: CI
-          spec:
-            cloneCodebase: true
-            infrastructure:
-              type: KubernetesDirect
-              spec:
-                connectorRef: account.cigeneral
-                namespace: harness-delegate-ng
-                automountServiceAccountToken: true
-                nodeSelector: {}
-                os: Linux
-            execution:
-              steps:
-                - step:
-                    type: Run
-                    name: Run Apps Group
-                    identifier: RunApps
-                    spec:
-                      connectorRef: account.dockerhub_datarobot_read
-                      image: <+input>.default(datarobotdev/platform-base-golang-devel)
-                      shell: Sh
-                      command: |-
-                        microdnf install unzip
-                        TERRAFORM_VERSION="1.14.5"
-                        curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                        unzip terraform.zip && mv terraform /usr/local/bin
-                        export PATH=$(go env GOPATH)/bin:$PATH
-                        go install github.com/jstemmer/go-junit-report/v2@latest
-                        go mod download
-                        make testacc-group-apps
-                      reports:
-                        type: JUnit
-                        spec:
-                          paths:
-                            - /harness/report-apps.xml
-                      envVariables:
-                        DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
-                        DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
-                        DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
-                        DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
-                        REPORT_FILE: /harness/report-apps.xml
-                      resources:
-                        limits:
-                          memory: 4Gi
-                          cpu: "4"
-            caching:
-              enabled: false
-            buildIntelligence:
-              enabled: false
+        - stage:
+            name: Tests Apps
+            identifier: TestsApps
+            type: CI
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Apps Group
+                      identifier: RunApps
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-apps
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-apps.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-apps.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "4"
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
 
     - stage:
         name: Notify
         identifier: Notify
         type: CI
+        when:
+          pipelineStatus: Failed
         spec:
           cloneCodebase: false
           infrastructure:
@@ -268,8 +270,6 @@ pipeline:
                           MESSAGE_TITLE: Declarative API Terraform Full Suite Failed
                           MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
                           MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
-              when:
-                stageStatus: Failure
           caching:
             enabled: false
           buildIntelligence:
