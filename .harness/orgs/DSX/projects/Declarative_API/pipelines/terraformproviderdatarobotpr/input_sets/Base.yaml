@@ -1,0 +1,43 @@
+inputSet:
+  name: Base
+  identifier: Base
+  orgIdentifier: DSX
+  projectIdentifier: Declarative_API
+  pipeline:
+    identifier: terraformproviderdatarobotpr
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
+    stages:
+      - stage:
+          identifier: Tests
+          type: CI
+          spec:
+            execution:
+              steps:
+                - step:
+                    identifier: Run_1
+                    type: Run
+                    spec:
+                      image: datarobotdev/platform-base-golang-devel
+                - step:
+                    identifier: Notify_dsxalerts
+                    template:
+                      templateInputs:
+                        type: Run
+                        spec:
+                          envVariables:
+                            SLACK_URL: ""
+                            MESSAGE_DETAILS_FILENAME: ./SLACK_MESSAGE.md
+          variables:
+            - name: endpoint
+              type: String
+              value: https://staging.datarobot.com/api/v2
+            - name: apiKey
+              type: Secret
+              default: dr_staging_api_key
+              value: dr_staging_api_key
