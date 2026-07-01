@@ -72,6 +72,24 @@ pipeline:
                           limits:
                             memory: 4Gi
                             cpu: "4"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_fast
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (fast)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
               caching:
                 enabled: false
               buildIntelligence:
@@ -125,6 +143,24 @@ pipeline:
                           limits:
                             memory: 4Gi
                             cpu: "6"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_models
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (models)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
               caching:
                 enabled: false
               buildIntelligence:
@@ -178,6 +214,24 @@ pipeline:
                           limits:
                             memory: 4Gi
                             cpu: "6"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_deployments
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (deployments)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
               caching:
                 enabled: false
               buildIntelligence:
@@ -231,49 +285,28 @@ pipeline:
                           limits:
                             memory: 4Gi
                             cpu: "4"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_apps
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (apps)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
               caching:
                 enabled: false
               buildIntelligence:
                 enabled: false
-
-    - stage:
-        name: Notify
-        identifier: Notify
-        type: CI
-        when:
-          pipelineStatus: Failed
-        spec:
-          cloneCodebase: false
-          infrastructure:
-            type: KubernetesDirect
-            spec:
-              connectorRef: account.cigeneral
-              namespace: harness-delegate-ng
-              automountServiceAccountToken: true
-              nodeSelector: {}
-              os: Linux
-          execution:
-            steps:
-              - step:
-                  name: Notify dsx-alerts
-                  identifier: Notify_dsxalerts
-                  template:
-                    templateRef: org.Send_Slack_notification
-                    versionLabel: v1
-                    templateInputs:
-                      type: Run
-                      spec:
-                        envVariables:
-                          SLACK_CHANNEL: dsx-alerts
-                          SLACK_URL: <+input>.default("")
-                          MESSAGE_TYPE: Error
-                          MESSAGE_TITLE: Declarative API Terraform Full Suite Failed
-                          MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
-                          MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
-          caching:
-            enabled: false
-          buildIntelligence:
-            enabled: false
 
   variables:
     - name: endpoint
