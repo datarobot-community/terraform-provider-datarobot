@@ -1017,16 +1017,35 @@ type ArtifactContainerGroupModel struct {
 }
 
 type ArtifactContainerModel struct {
-	Name            types.String                       `tfsdk:"name"`
-	ImageURI        types.String                       `tfsdk:"image_uri"`
-	Primary         types.Bool                         `tfsdk:"primary"`
-	Description     types.String                       `tfsdk:"description"`
-	Port            types.Int64                        `tfsdk:"port"`
-	Entrypoint      []types.String                     `tfsdk:"entrypoint"`
-	EnvironmentVars []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
-	StartupProbe    *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
-	ReadinessProbe  *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
-	LivenessProbe   *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
+	Name             types.String                       `tfsdk:"name"`
+	ImageURI         types.String                       `tfsdk:"image_uri"`
+	Primary          types.Bool                         `tfsdk:"primary"`
+	Description      types.String                       `tfsdk:"description"`
+	Port             types.Int64                        `tfsdk:"port"`
+	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
+	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
+	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
+	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
+	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
+}
+
+type ArtifactImageBuildConfigModel struct {
+	CodeRef    *ArtifactCodeRefModel    `tfsdk:"code_ref"`
+	Dockerfile *ArtifactDockerfileModel `tfsdk:"dockerfile"`
+}
+
+type ArtifactCodeRefModel struct {
+	CatalogID        types.String `tfsdk:"catalog_id"`
+	CatalogVersionID types.String `tfsdk:"catalog_version_id"`
+}
+
+type ArtifactDockerfileModel struct {
+	Source                        types.String   `tfsdk:"source"`
+	Path                          types.String   `tfsdk:"path"`
+	ExecutionEnvironmentID        types.String   `tfsdk:"execution_environment_id"`
+	ExecutionEnvironmentVersionID types.String   `tfsdk:"execution_environment_version_id"`
+	Entrypoint                    []types.String `tfsdk:"entrypoint"`
 }
 
 type ArtifactEnvironmentVariableModel struct {
