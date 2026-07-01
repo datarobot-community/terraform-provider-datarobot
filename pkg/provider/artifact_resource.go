@@ -541,6 +541,7 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
+		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig) ||
 		!probesEqual(a.StartupProbe, b.StartupProbe) ||
 		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
 		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
@@ -563,6 +564,53 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 			!a.EnvironmentVars[i].Value.Equal(b.EnvironmentVars[i].Value) ||
 			!a.EnvironmentVars[i].DrCredentialID.Equal(b.EnvironmentVars[i].DrCredentialID) ||
 			!a.EnvironmentVars[i].Key.Equal(b.EnvironmentVars[i].Key) {
+			return false
+		}
+	}
+	return true
+}
+
+func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if !codeRefEqual(a.CodeRef, b.CodeRef) {
+		return false
+	}
+	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
+}
+
+func codeRefEqual(a, b *ArtifactCodeRefModel) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.CatalogID.Equal(b.CatalogID) && a.CatalogVersionID.Equal(b.CatalogVersionID)
+}
+
+func dockerfileEqual(a, b *ArtifactDockerfileModel) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if !a.Source.Equal(b.Source) ||
+		!a.Path.Equal(b.Path) ||
+		!a.ExecutionEnvironmentID.Equal(b.ExecutionEnvironmentID) ||
+		!a.ExecutionEnvironmentVersionID.Equal(b.ExecutionEnvironmentVersionID) {
+		return false
+	}
+	if len(a.Entrypoint) != len(b.Entrypoint) {
+		return false
+	}
+	for i := range a.Entrypoint {
+		if !a.Entrypoint[i].Equal(b.Entrypoint[i]) {
 			return false
 		}
 	}
