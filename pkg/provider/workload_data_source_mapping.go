@@ -35,13 +35,6 @@ func stringPtrToTF(v *string) types.String {
 	return types.StringValue(*v)
 }
 
-func stringValueOrNull(v string) types.String {
-	if v == "" {
-		return types.StringNull()
-	}
-	return types.StringValue(v)
-}
-
 func loadUserDataModel(user *client.UserData) *WorkloadUserDataModel {
 	if user == nil {
 		return nil
