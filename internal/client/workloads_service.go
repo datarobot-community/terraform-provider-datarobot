@@ -135,17 +135,42 @@ type ArtifactProbeConfig struct {
 	FailureThreshold    *int64            `json:"failureThreshold,omitempty"`
 }
 
+type ArtifactDataRobotCodeRef struct {
+	CatalogID        string `json:"catalogId"`
+	CatalogVersionID string `json:"catalogVersionId"`
+}
+
+type ArtifactCodeRef struct {
+	Type      string                    `json:"type"`
+	Provider  string                    `json:"provider"`
+	Datarobot *ArtifactDataRobotCodeRef `json:"datarobot"`
+}
+
+type ArtifactDockerfile struct {
+	Source                        string   `json:"source"`
+	Path                          string   `json:"path,omitempty"`
+	ExecutionEnvironmentID        string   `json:"executionEnvironmentId,omitempty"`
+	ExecutionEnvironmentVersionID string   `json:"executionEnvironmentVersionId,omitempty"`
+	Entrypoint                    []string `json:"entrypoint,omitempty"`
+}
+
+type ArtifactImageBuildConfig struct {
+	CodeRef    *ArtifactCodeRef    `json:"codeRef,omitempty"`
+	Dockerfile *ArtifactDockerfile `json:"dockerfile,omitempty"`
+}
+
 type ArtifactContainer struct {
-	Name            *string                       `json:"name,omitempty"`
-	ImageURI        string                        `json:"imageUri"`
-	Primary         *bool                         `json:"primary,omitempty"`
-	Description     string                        `json:"description,omitempty"`
-	Port            *int64                        `json:"port,omitempty"`
-	Entrypoint      []string                      `json:"entrypoint,omitempty"`
-	EnvironmentVars []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
-	StartupProbe    *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
-	ReadinessProbe  *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
-	LivenessProbe   *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
+	Name             *string                   `json:"name,omitempty"`
+	ImageURI         *string                   `json:"imageUri,omitempty"`
+	Primary          *bool                     `json:"primary,omitempty"`
+	Description      string                    `json:"description,omitempty"`
+	Port             *int64                    `json:"port,omitempty"`
+	Entrypoint       []string                  `json:"entrypoint,omitempty"`
+	EnvironmentVars  []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
+	StartupProbe     *ArtifactProbeConfig      `json:"startupProbe,omitempty"`
+	ReadinessProbe   *ArtifactProbeConfig      `json:"readinessProbe,omitempty"`
+	LivenessProbe    *ArtifactProbeConfig      `json:"livenessProbe,omitempty"`
+	ImageBuildConfig *ArtifactImageBuildConfig `json:"imageBuildConfig,omitempty"`
 }
 
 type ArtifactContainerGroup struct {
