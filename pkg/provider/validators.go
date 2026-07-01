@@ -974,3 +974,9 @@ func ArtifactStatusValidators() []validator.String {
 		),
 	}
 }
+
+func ArtifactDockerfileSourceValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf("provided", "generated"),
+	}
+}
