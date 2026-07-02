@@ -879,8 +879,12 @@ func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.Artifa
 
 func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContainer {
 	container := client.ArtifactContainer{
-		ImageURI:    c.ImageURI.ValueString(),
 		Description: c.Description.ValueString(),
+	}
+
+	if !c.ImageURI.IsNull() && !c.ImageURI.IsUnknown() && c.ImageURI.ValueString() != "" {
+		uri := c.ImageURI.ValueString()
+		container.ImageURI = &uri
 	}
 
 	if !c.Name.IsNull() && !c.Name.IsUnknown() {
