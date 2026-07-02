@@ -263,6 +263,7 @@ type Service interface {
 
 	// Artifact (Workload API)
 	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
+	PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
 

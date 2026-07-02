@@ -178,8 +178,19 @@ type CreateArtifactRequest struct {
 	ArtifactRepositoryID *string        `json:"artifactRepositoryId,omitempty"`
 }
 
+type PatchArtifactRequest struct {
+	Name        *string         `json:"name,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Status      *ArtifactStatus `json:"status,omitempty"`
+	Spec        *ArtifactSpec   `json:"spec,omitempty"`
+}
+
 func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error) {
 	return Post[Artifact](s.client, ctx, "/artifacts/", req)
+}
+
+func (s *ServiceImpl) PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error) {
+	return Patch[Artifact](s.client, ctx, "/artifacts/"+id+"/", req)
 }
 
 func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, error) {
