@@ -104,7 +104,7 @@ pipeline:
 
     - parallel:
         - stage:
-            name: Tests Fast (full suite)
+            name: Tests Fast - Full Suite
             identifier: TestsFastPR
             type: CI
             when:
@@ -178,7 +178,7 @@ pipeline:
                 enabled: false
 
         - stage:
-            name: Tests Models (full suite)
+            name: Tests Models - Full Suite
             identifier: TestsModelsPR
             type: CI
             when:
@@ -252,7 +252,7 @@ pipeline:
                 enabled: false
 
         - stage:
-            name: Tests Deployments (full suite)
+            name: Tests Deployments - Full Suite
             identifier: TestsDeploymentsPR
             type: CI
             when:
@@ -326,7 +326,7 @@ pipeline:
                 enabled: false
 
         - stage:
-            name: Tests Apps (full suite)
+            name: Tests Apps - Full Suite
             identifier: TestsAppsPR
             type: CI
             when:
