@@ -112,9 +112,35 @@ export_needs_full_suite() {
 echo "==> Fetching origin/${BASE_REF}..."
 git fetch origin "$BASE_REF" --depth=1 2>/dev/null || git fetch origin "$BASE_REF" || true
 
+# A shallow fetch of BASE_REF's tip has no shared history with a shallow
+# checkout of HEAD, so `git merge-base` (needed by the triple-dot diff below)
+# fails with "no merge base". On PR builds this stays hidden because Harness
+# checks out a merge commit whose direct parent IS the target branch tip, so
+# the merge-base resolves trivially even shallow. On manual/branch dispatch
+# there's no such merge commit, so it always fails here. Unshallow so the
+# real merge-base can be found either way.
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+  echo "==> Shallow clone detected — unshallowing for an accurate diff..."
+  git fetch --unshallow origin 2>/dev/null || git fetch --depth=1000 origin "$BASE_REF" HEAD 2>/dev/null || true
+fi
+
 echo "==> Computing diff against origin/${BASE_REF}..."
-CHANGED_FILES=$(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" 2>/dev/null || \
-                git diff --name-only --diff-filter=d "origin/${BASE_REF}" 2>/dev/null || true)
+MERGE_BASE=$(git merge-base "origin/${BASE_REF}" HEAD 2>/dev/null || true)
+
+if [[ -z "$MERGE_BASE" ]]; then
+  # No safe way to scope the diff to just this branch's changes — a naive
+  # two-ref diff here would pick up every file that changed on BASE_REF
+  # since divergence (including unrelated shared-helper/internal/client
+  # changes from other merged PRs), falsely tripping RUN_ALL/NEEDS_FULL_SUITE
+  # on nearly every run. Bail out to the real full-suite signal instead.
+  echo "==> Could not determine a merge base with origin/${BASE_REF} even after unshallowing."
+  echo "==> Falling back to the full suite for safety instead of guessing from an inaccurate diff."
+  write_empty_report
+  export_needs_full_suite true
+  exit 0
+fi
+
+CHANGED_FILES=$(git diff --name-only --diff-filter=d "${MERGE_BASE}" HEAD 2>/dev/null || true)
 
 if [[ -z "$CHANGED_FILES" ]]; then
   echo "No changed files detected."
