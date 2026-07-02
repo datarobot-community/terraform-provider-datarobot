@@ -4,7 +4,13 @@
 - `datarobot_pipeline` resource: manage DataRobot pipelines defined by a Python source file using `@pipeline` and `@task` decorators. Supports draft/locked lifecycle, content-change detection via `source_file_hash`, and in-place version bumps while in draft mode.
 - `datarobot_pipeline_input` resource: manage JSON input payloads attached to a pipeline draft or a specific locked version. Draft inputs are patched in-place; locked inputs are deleted and recreated on update.
 - `datarobot_pipeline_schedule` resource: manage recurring cron schedules against a locked pipeline version. `cron_expression` and `timezone` are patchable in-place; all other attributes force replacement.
-- `datarobot_pipeline_environment` resource: manage named pip-package execution environments. Packages are append-only (removal forces replacement); single-call destroy via `DELETE /environments/{id}`.
+- `datarobot_pipeline_image` resource: manage named pip-package execution images. Packages are append-only (removal forces replacement). Supports an optional `python_base_image` attribute and surfaces the built image's `latest_image_uri` once a build completes.
+
+### Fixed
+- Pipelines API client: removed trailing slashes from every request path. pipelines-api registers routes without a trailing slash and disables automatic slash-redirects, so every call in the previous revision of this client 404'd against the real API.
+- `datarobot_pipeline_image`: `packages` and `python_base_image` are now read from the API's nested `definition` object instead of a non-existent top-level `packages` field, which previously caused the resource to always see an empty package list after create/read.
+- `datarobot_pipeline_image` update: the request body now carries the full desired package list and the required `name` field. Previously only the newly-added packages were sent and `name` was omitted entirely, which silently dropped existing packages from the new version and would be rejected by the API as a validation error.
+- `datarobot_pipeline_image` update: changing only `python_base_image` (with `packages` unchanged) now correctly triggers an update instead of being silently skipped.
 
 ## [0.10.39] - 2026-05-28
 

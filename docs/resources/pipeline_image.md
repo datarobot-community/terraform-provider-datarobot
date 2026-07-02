@@ -14,9 +14,10 @@ A pipeline execution image containing a versioned set of pip packages.
 
 ```terraform
 resource "datarobot_pipeline_image" "example" {
-  name        = "my-pipeline-image"
-  description = "Python image for my pipeline"
-  packages    = ["numpy==1.26.0", "pandas>=2.0,<3.0"]
+  name              = "my-pipeline-image"
+  description       = "Python image for my pipeline"
+  packages          = ["numpy==1.26.0", "pandas>=2.0,<3.0"]
+  python_base_image = "covalent-runtime-image:latest"
 }
 
 output "example_id" {
@@ -36,11 +37,13 @@ output "example_id" {
 ### Optional
 
 - `description` (String) Optional description. Changing this forces a new resource.
+- `python_base_image` (String) Optional base image reference (e.g. `covalent-runtime-image:latest`) used to build this image. Changing this creates a new version.
 
 ### Read-Only
 
 - `created_at` (String) RFC 3339 timestamp when the image was created.
 - `id` (String) The unique identifier of the pipeline image.
+- `latest_image_uri` (String) Fully-qualified image URI of the latest version, populated once the build completes successfully.
 - `latest_status` (String) Build status of the latest version: `CREATING`, `READY`, or `ERROR`.
 - `latest_version` (Number) The latest version number of this image.
 - `updated_at` (String) RFC 3339 timestamp when the image was last updated.

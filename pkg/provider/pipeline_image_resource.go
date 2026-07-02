@@ -27,14 +27,16 @@ type PipelineImageResource struct {
 }
 
 type PipelineImageResourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	Name          types.String `tfsdk:"name"`
-	Description   types.String `tfsdk:"description"`
-	Packages      types.List   `tfsdk:"packages"`
-	LatestVersion types.Int64  `tfsdk:"latest_version"`
-	LatestStatus  types.String `tfsdk:"latest_status"`
-	CreatedAt     types.String `tfsdk:"created_at"`
-	UpdatedAt     types.String `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	Description     types.String `tfsdk:"description"`
+	Packages        types.List   `tfsdk:"packages"`
+	PythonBaseImage types.String `tfsdk:"python_base_image"`
+	LatestVersion   types.Int64  `tfsdk:"latest_version"`
+	LatestStatus    types.String `tfsdk:"latest_status"`
+	LatestImageURI  types.String `tfsdk:"latest_image_uri"`
+	CreatedAt       types.String `tfsdk:"created_at"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
 
 func (r *PipelineImageResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -71,6 +73,10 @@ func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaR
 				ElementType:         types.StringType,
 				MarkdownDescription: "List of pip package specifiers (e.g. `numpy==1.26.0`). Packages can only be added; removing any forces a new resource.",
 			},
+			"python_base_image": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional base image reference (e.g. `covalent-runtime-image:latest`) used to build this image. Changing this creates a new version.",
+			},
 			"latest_version": schema.Int64Attribute{
 				Computed:            true,
 				MarkdownDescription: "The latest version number of this image.",
@@ -78,6 +84,10 @@ func (r *PipelineImageResource) Schema(ctx context.Context, req resource.SchemaR
 			"latest_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Build status of the latest version: `CREATING`, `READY`, or `ERROR`.",
+			},
+			"latest_image_uri": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Fully-qualified image URI of the latest version, populated once the build completes successfully.",
 			},
 			"created_at": schema.StringAttribute{
 				Computed:            true,
@@ -141,6 +151,10 @@ func (r *PipelineImageResource) Create(ctx context.Context, req resource.CreateR
 		desc := data.Description.ValueString()
 		createReq.Description = &desc
 	}
+	if !data.PythonBaseImage.IsNull() && !data.PythonBaseImage.IsUnknown() {
+		base := data.PythonBaseImage.ValueString()
+		createReq.PythonBaseImage = &base
+	}
 
 	traceAPICall("CreatePipelineImage")
 	image, err := r.provider.service.CreatePipelineImage(ctx, createReq)
@@ -195,20 +209,34 @@ func (r *PipelineImageResource) Update(ctx context.Context, req resource.UpdateR
 	for _, p := range statePkgs {
 		existingSet[p] = true
 	}
-	var newPkgs []string
+	hasNewPkgs := false
 	for _, p := range planPkgs {
 		if !existingSet[p] {
-			newPkgs = append(newPkgs, p)
+			hasNewPkgs = true
+			break
 		}
 	}
+	baseImageChanged := !plan.PythonBaseImage.Equal(state.PythonBaseImage)
 
-	if len(newPkgs) == 0 {
+	if !hasNewPkgs && !baseImageChanged {
 		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 		return
 	}
 
+	// The update body is a complete redefinition, not a merge: it must carry
+	// the full desired package list (previous + new) and the resource name,
+	// or the new version silently drops everything not resent here.
+	updateReq := &client.PipelineImageUpdateRequest{
+		Name:     state.Name.ValueString(),
+		Packages: planPkgs,
+	}
+	if !plan.PythonBaseImage.IsNull() && !plan.PythonBaseImage.IsUnknown() {
+		base := plan.PythonBaseImage.ValueString()
+		updateReq.PythonBaseImage = &base
+	}
+
 	traceAPICall("UpdatePipelineImage")
-	image, err := r.provider.service.UpdatePipelineImage(ctx, state.ID.ValueString(), &client.PipelineImageUpdateRequest{Packages: newPkgs})
+	image, err := r.provider.service.UpdatePipelineImage(ctx, state.ID.ValueString(), updateReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Pipeline Image", err.Error())
 		return
@@ -291,14 +319,27 @@ func loadPipelineImageIntoModel(image *client.PipelineImage, data *PipelineImage
 			}
 		}
 		data.LatestStatus = types.StringValue(string(latestVer.Status))
-		pkgVals := make([]attr.Value, len(latestVer.Packages))
-		for i, p := range latestVer.Packages {
+		if latestVer.ImageURI != nil {
+			data.LatestImageURI = types.StringValue(*latestVer.ImageURI)
+		} else {
+			data.LatestImageURI = types.StringNull()
+		}
+		if latestVer.Definition.PythonBaseImage != nil {
+			data.PythonBaseImage = types.StringValue(*latestVer.Definition.PythonBaseImage)
+		} else {
+			data.PythonBaseImage = types.StringNull()
+		}
+		pkgs := latestVer.Definition.Packages
+		pkgVals := make([]attr.Value, len(pkgs))
+		for i, p := range pkgs {
 			pkgVals[i] = types.StringValue(p)
 		}
 		pkgList, _ := types.ListValue(types.StringType, pkgVals)
 		data.Packages = pkgList
 	} else {
 		data.LatestStatus = types.StringValue("")
+		data.LatestImageURI = types.StringNull()
+		data.PythonBaseImage = types.StringNull()
 		data.Packages, _ = types.ListValue(types.StringType, []attr.Value{})
 	}
 }

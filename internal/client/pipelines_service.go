@@ -69,11 +69,11 @@ func (s *ServiceImpl) CreatePipeline(ctx context.Context, fileName string, conte
 	if description != nil && *description != "" {
 		extraFields["description"] = *description
 	}
-	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines/", http.MethodPost, fileName, content, extraFields)
+	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines", http.MethodPost, fileName, content, extraFields)
 }
 
 func (s *ServiceImpl) GetPipeline(ctx context.Context, id string) (*Pipeline, error) {
-	return Get[Pipeline](s.client, ctx, "/pipelines/"+id+"/")
+	return Get[Pipeline](s.client, ctx, "/pipelines/"+id)
 }
 
 func (s *ServiceImpl) UpdatePipelineDraft(ctx context.Context, id string, fileName string, content []byte, description *string) (*Pipeline, error) {
@@ -81,15 +81,15 @@ func (s *ServiceImpl) UpdatePipelineDraft(ctx context.Context, id string, fileNa
 	if description != nil {
 		extraFields["description"] = *description
 	}
-	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines/"+id+"/", http.MethodPatch, fileName, content, extraFields)
+	return uploadFileFromBinary[Pipeline](s.client, ctx, "/pipelines/"+id, http.MethodPatch, fileName, content, extraFields)
 }
 
 func (s *ServiceImpl) LockPipeline(ctx context.Context, id string) (*Pipeline, error) {
-	return Patch[Pipeline](s.client, ctx, "/pipelines/"+id+"/mode/", &lockPipelineModeRequest{Mode: PipelineModeLocked})
+	return Patch[Pipeline](s.client, ctx, "/pipelines/"+id+"/mode", &lockPipelineModeRequest{Mode: PipelineModeLocked})
 }
 
 func (s *ServiceImpl) DeletePipeline(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/pipelines/"+id+"/")
+	return Delete(s.client, ctx, "/pipelines/"+id)
 }
 
 // PipelineInput types
@@ -114,31 +114,31 @@ type PipelineInputUpdateRequest struct {
 }
 
 func (s *ServiceImpl) CreateDraftPipelineInput(ctx context.Context, pipelineID string, req *PipelineInputCreateRequest) (*PipelineInput, error) {
-	return Post[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/", pipelineID), req)
+	return Post[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs", pipelineID), req)
 }
 
 func (s *ServiceImpl) CreateLockedPipelineInput(ctx context.Context, pipelineID string, version int, req *PipelineInputCreateRequest) (*PipelineInput, error) {
-	return Post[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs/", pipelineID, version), req)
+	return Post[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs", pipelineID, version), req)
 }
 
 func (s *ServiceImpl) GetDraftPipelineInput(ctx context.Context, pipelineID, inputID string) (*PipelineInput, error) {
-	return Get[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s/", pipelineID, inputID))
+	return Get[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s", pipelineID, inputID))
 }
 
 func (s *ServiceImpl) GetLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) (*PipelineInput, error) {
-	return Get[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs/%s/", pipelineID, version, inputID))
+	return Get[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs/%s", pipelineID, version, inputID))
 }
 
 func (s *ServiceImpl) UpdateDraftPipelineInput(ctx context.Context, pipelineID, inputID string, req *PipelineInputUpdateRequest) (*PipelineInput, error) {
-	return Patch[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s/", pipelineID, inputID), req)
+	return Patch[PipelineInput](s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s", pipelineID, inputID), req)
 }
 
 func (s *ServiceImpl) DeleteDraftPipelineInput(ctx context.Context, pipelineID, inputID string) error {
-	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s/", pipelineID, inputID))
+	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/inputs/%s", pipelineID, inputID))
 }
 
 func (s *ServiceImpl) DeleteLockedPipelineInput(ctx context.Context, pipelineID string, version int, inputID string) error {
-	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs/%s/", pipelineID, version, inputID))
+	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/inputs/%s", pipelineID, version, inputID))
 }
 
 // PipelineSchedule types
@@ -169,30 +169,43 @@ type PipelineScheduleUpdateRequest struct {
 }
 
 func (s *ServiceImpl) CreatePipelineSchedule(ctx context.Context, pipelineID string, version int, req *PipelineScheduleCreateRequest) (*PipelineSchedule, error) {
-	return Post[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/", pipelineID, version), req)
+	return Post[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules", pipelineID, version), req)
 }
 
 func (s *ServiceImpl) GetPipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) (*PipelineSchedule, error) {
-	return Get[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s/", pipelineID, version, scheduleID))
+	return Get[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s", pipelineID, version, scheduleID))
 }
 
 func (s *ServiceImpl) UpdatePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string, req *PipelineScheduleUpdateRequest) (*PipelineSchedule, error) {
-	return Patch[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s/", pipelineID, version, scheduleID), req)
+	return Patch[PipelineSchedule](s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s", pipelineID, version, scheduleID), req)
 }
 
 func (s *ServiceImpl) DeletePipelineSchedule(ctx context.Context, pipelineID string, version int, scheduleID string) error {
-	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s/", pipelineID, version, scheduleID))
+	return Delete(s.client, ctx, fmt.Sprintf("/pipelines/%s/versions/%d/schedules/%s", pipelineID, version, scheduleID))
 }
 
 // PipelineImage types
 
+// PipelineImageDefinition is the canonical image definition nested under
+// PipelineImageVersion.Definition in API responses (GET), and also the shape
+// embedded (flattened, via Name/Packages/PythonBaseImage below) in the
+// Create/Update request bodies. "packages" maps to covalent's "pip" kwarg;
+// "pythonBaseImage" maps to covalent's "base_image" kwarg.
+type PipelineImageDefinition struct {
+	Name            string   `json:"name"`
+	Packages        []string `json:"packages"`
+	PythonBaseImage *string  `json:"pythonBaseImage,omitempty"`
+}
+
 type PipelineImageVersion struct {
-	Version     int                 `json:"version"`
-	Packages    []string            `json:"packages"`
-	Status      PipelineImageStatus `json:"status"`
-	ErrorDetail *string             `json:"errorDetail,omitempty"`
-	CreatedAt   string              `json:"createdAt"`
-	UpdatedAt   string              `json:"updatedAt"`
+	Version     int                     `json:"version"`
+	Definition  PipelineImageDefinition `json:"definition"`
+	Status      PipelineImageStatus     `json:"status"`
+	ErrorDetail *string                 `json:"errorDetail,omitempty"`
+	// ImageURI is populated once an IBS-direct build completes successfully.
+	ImageURI  *string `json:"imageUri,omitempty"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt string  `json:"updatedAt"`
 }
 
 type PipelineImage struct {
@@ -206,27 +219,34 @@ type PipelineImage struct {
 }
 
 type PipelineImageCreateRequest struct {
-	Name        string   `json:"name"`
-	Description *string  `json:"description,omitempty"`
-	Packages    []string `json:"packages"`
+	Name            string   `json:"name"`
+	Description     *string  `json:"description,omitempty"`
+	Packages        []string `json:"packages"`
+	PythonBaseImage *string  `json:"pythonBaseImage,omitempty"`
 }
 
+// PipelineImageUpdateRequest is a complete redefinition, not a merge: the API
+// creates a new immutable version carrying exactly this payload, so "name"
+// is required and "packages" must be the full desired list (previous +
+// new), not just the newly-added entries.
 type PipelineImageUpdateRequest struct {
-	Packages []string `json:"packages"`
+	Name            string   `json:"name"`
+	Packages        []string `json:"packages"`
+	PythonBaseImage *string  `json:"pythonBaseImage,omitempty"`
 }
 
 func (s *ServiceImpl) CreatePipelineImage(ctx context.Context, req *PipelineImageCreateRequest) (*PipelineImage, error) {
-	return Post[PipelineImage](s.client, ctx, "/pipelines/images/", req)
+	return Post[PipelineImage](s.client, ctx, "/pipelines/images", req)
 }
 
 func (s *ServiceImpl) GetPipelineImage(ctx context.Context, id string) (*PipelineImage, error) {
-	return Get[PipelineImage](s.client, ctx, "/pipelines/images/"+id+"/")
+	return Get[PipelineImage](s.client, ctx, "/pipelines/images/"+id)
 }
 
 func (s *ServiceImpl) UpdatePipelineImage(ctx context.Context, id string, req *PipelineImageUpdateRequest) (*PipelineImage, error) {
-	return Patch[PipelineImage](s.client, ctx, "/pipelines/images/"+id+"/", req)
+	return Patch[PipelineImage](s.client, ctx, "/pipelines/images/"+id, req)
 }
 
 func (s *ServiceImpl) DeletePipelineImage(ctx context.Context, id string) error {
-	return Delete(s.client, ctx, "/pipelines/images/"+id+"/")
+	return Delete(s.client, ctx, "/pipelines/images/"+id)
 }
