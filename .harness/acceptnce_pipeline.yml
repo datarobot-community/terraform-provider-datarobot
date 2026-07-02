@@ -47,9 +47,11 @@ pipeline:
                       go install github.com/jstemmer/go-junit-report/v2@latest
                       go mod download
                       go build -v .
-                      BASE_REF=main TEST_PARALLEL=6 bash scripts/run-changed-tests.sh
-
+                      NEEDS_FULL_SUITE_FILE=/tmp/needs_full_suite BASE_REF=main TEST_PARALLEL=6 bash scripts/run-changed-tests.sh
+                      TEST_EXIT_CODE=$?
+                      export NEEDS_FULL_SUITE="$(cat /tmp/needs_full_suite 2>/dev/null || echo false)"
                       echo $NEEDS_FULL_SUITE
+                      exit "$TEST_EXIT_CODE"
                     reports:
                       type: JUnit
                       spec:
