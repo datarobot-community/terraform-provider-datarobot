@@ -1,8 +1,17 @@
-# PR acceptance test pipeline — selective, runs only tests for changed files.
-# Uses scripts/run-changed-tests.sh to map changed source → test files → TestAcc*/TestIntegration* functions.
-# Expected wall-clock: 5-20 min per PR (vs. 60-80 min for the full suite).
+# PR acceptance test pipeline — two-phase: selective first, full suite only if needed.
 #
-# For the full-suite pipeline (main merges / release), see full_suite_pipeline.yml.
+# Phase 1 (always runs): scripts/run-changed-tests.sh maps changed source → test
+# files → TestAcc*/TestIntegration* functions and runs only those. Fast signal
+# on the direct change. Expected wall-clock: 5-20 min per PR.
+#
+# Phase 2 (conditional): if run-changed-tests.sh detects a shared helper or
+# internal/client/ change (NEEDS_FULL_SUITE=true, exported as a step output
+# variable), the four parallel group stages run afterward — same
+# testacc-group-* targets used by full_suite_pipeline.yml — to catch anything
+# the selective run couldn't see. PRs that don't touch shared code skip phase 2
+# entirely and stay fast.
+#
+# For the unconditional post-merge full-suite pipeline, see full_suite_pipeline.yml.
 pipeline:
   name: terraform-provider-datarobot-pr
   identifier: terraformproviderdatarobotpr
@@ -59,10 +68,12 @@ pipeline:
                         paths:
                           - /harness/report.xml
                     envVariables:
-                      DATAROBOT_ENDPOINT: <+stage.variables.endpoint>
-                      DATAROBOT_API_TOKEN: <+stage.variables.apiKey>
+                      DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                      DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
                       DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
                       DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                    outputVariables:
+                      - name: NEEDS_FULL_SUITE
                     resources:
                       limits:
                         memory: 4Gi
@@ -90,15 +101,313 @@ pipeline:
             paths: []
           buildIntelligence:
             enabled: false
-        variables:
-          - name: endpoint
-            type: String
-            description: ""
-            required: false
-            value: <+input>.default(https://staging.datarobot.com/api/v2).allowedValues(https://staging.datarobot.com/api/v2,https://app.datarobot.com/api/v2,https://dr-app-charts-r10p2-daily-eks.rd.int.datarobot.com/api/v2,https://private-ca-testing.rd.int.datarobot.com/api/v2)
-          - name: apiKey
-            type: Secret
-            default: dr_staging_api_key
-            description: ""
-            required: false
-            value: <+input>.default(dr_staging_api_key).allowedValues(dr_staging_api_key,dr_app_charts_r10p2_api_key,dr_private_ca_api_key)
+
+    - parallel:
+        - stage:
+            name: Tests Fast (full suite)
+            identifier: TestsFastPR
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.stages.Tests.spec.execution.steps.Run_1.output.outputVariables.NEEDS_FULL_SUITE> == "true"
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Fast Group
+                      identifier: RunFast
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-fast
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-fast.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-fast.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "4"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_fast
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (fast)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
+
+        - stage:
+            name: Tests Models (full suite)
+            identifier: TestsModelsPR
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.stages.Tests.spec.execution.steps.Run_1.output.outputVariables.NEEDS_FULL_SUITE> == "true"
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Models Group
+                      identifier: RunModels
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-models
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-models.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-models.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "6"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_models
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (models)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
+
+        - stage:
+            name: Tests Deployments (full suite)
+            identifier: TestsDeploymentsPR
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.stages.Tests.spec.execution.steps.Run_1.output.outputVariables.NEEDS_FULL_SUITE> == "true"
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Deployments Group
+                      identifier: RunDeployments
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-deployments
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-deployments.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-deployments.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "6"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_deployments
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (deployments)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
+
+        - stage:
+            name: Tests Apps (full suite)
+            identifier: TestsAppsPR
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.stages.Tests.spec.execution.steps.Run_1.output.outputVariables.NEEDS_FULL_SUITE> == "true"
+            spec:
+              cloneCodebase: true
+              infrastructure:
+                type: KubernetesDirect
+                spec:
+                  connectorRef: account.cigeneral
+                  namespace: harness-delegate-ng
+                  automountServiceAccountToken: true
+                  nodeSelector: {}
+                  os: Linux
+              execution:
+                steps:
+                  - step:
+                      type: Run
+                      name: Run Apps Group
+                      identifier: RunApps
+                      spec:
+                        connectorRef: account.dockerhub_datarobot_read
+                        image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                        shell: Sh
+                        command: |-
+                          microdnf install unzip
+                          TERRAFORM_VERSION="1.14.5"
+                          curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                          unzip terraform.zip && mv terraform /usr/local/bin
+                          export PATH=$(go env GOPATH)/bin:$PATH
+                          go install github.com/jstemmer/go-junit-report/v2@latest
+                          go mod download
+                          make testacc-group-apps
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - /harness/report-apps.xml
+                        envVariables:
+                          DATAROBOT_ENDPOINT: <+pipeline.variables.endpoint>
+                          DATAROBOT_API_TOKEN: <+pipeline.variables.apiKey>
+                          DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                          DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                          REPORT_FILE: /harness/report-apps.xml
+                        resources:
+                          limits:
+                            memory: 4Gi
+                            cpu: "4"
+                  - step:
+                      name: Notify dsx-alerts
+                      identifier: Notify_dsxalerts_apps
+                      template:
+                        templateRef: org.Send_Slack_notification
+                        versionLabel: v1
+                        templateInputs:
+                          type: Run
+                          spec:
+                            envVariables:
+                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_URL: <+input>.default("")
+                              MESSAGE_TYPE: Error
+                              MESSAGE_TITLE: Declarative API Terraform Tests Failed (apps)
+                              MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                              MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                      when:
+                        stageStatus: Failure
+              caching:
+                enabled: false
+              buildIntelligence:
+                enabled: false
+
+  variables:
+    - name: endpoint
+      type: String
+      description: ""
+      required: false
+      value: <+input>.default(https://staging.datarobot.com/api/v2).allowedValues(https://staging.datarobot.com/api/v2,https://app.datarobot.com/api/v2,https://dr-app-charts-r10p2-daily-eks.rd.int.datarobot.com/api/v2,https://private-ca-testing.rd.int.datarobot.com/api/v2)
+    - name: apiKey
+      type: Secret
+      default: dr_staging_api_key
+      description: ""
+      required: false
+      value: <+input>.default(dr_staging_api_key).allowedValues(dr_staging_api_key,dr_app_charts_r10p2_api_key,dr_private_ca_api_key)
