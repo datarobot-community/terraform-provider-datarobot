@@ -1,17 +1,3 @@
-# PR acceptance test pipeline — two-phase: selective first, full suite only if needed.
-#
-# Phase 1 (always runs): scripts/run-changed-tests.sh maps changed source → test
-# files → TestAcc*/TestIntegration* functions and runs only those. Fast signal
-# on the direct change. Expected wall-clock: 5-20 min per PR.
-#
-# Phase 2 (conditional): if run-changed-tests.sh detects a shared helper or
-# internal/client/ change (NEEDS_FULL_SUITE=true, exported as a step output
-# variable), the four parallel group stages run afterward — same
-# testacc-group-* targets used by full_suite_pipeline.yml — to catch anything
-# the selective run couldn't see. PRs that don't touch shared code skip phase 2
-# entirely and stay fast.
-#
-# For the unconditional post-merge full-suite pipeline, see full_suite_pipeline.yml.
 pipeline:
   name: terraform-provider-datarobot-pr
   identifier: terraformproviderdatarobotpr
@@ -61,7 +47,11 @@ pipeline:
                       go install github.com/jstemmer/go-junit-report/v2@latest
                       go mod download
                       go build -v .
-                      BASE_REF=main TEST_PARALLEL=6 bash scripts/run-changed-tests.sh
+                      NEEDS_FULL_SUITE_FILE=/tmp/needs_full_suite BASE_REF=main TEST_PARALLEL=6 bash scripts/run-changed-tests.sh
+                      TEST_EXIT_CODE=$?
+                      export NEEDS_FULL_SUITE="$(cat /tmp/needs_full_suite 2>/dev/null || echo false)"
+                      echo $NEEDS_FULL_SUITE
+                      exit "$TEST_EXIT_CODE"
                     reports:
                       type: JUnit
                       spec:
@@ -74,6 +64,8 @@ pipeline:
                       DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
                     outputVariables:
                       - name: NEEDS_FULL_SUITE
+                        type: String
+                        value: NEEDS_FULL_SUITE
                     resources:
                       limits:
                         memory: 4Gi
@@ -101,7 +93,6 @@ pipeline:
             paths: []
           buildIntelligence:
             enabled: false
-
     - parallel:
         - stage:
             name: Tests Fast - Full Suite
@@ -176,7 +167,6 @@ pipeline:
                 enabled: false
               buildIntelligence:
                 enabled: false
-
         - stage:
             name: Tests Models - Full Suite
             identifier: TestsModelsPR
@@ -250,7 +240,6 @@ pipeline:
                 enabled: false
               buildIntelligence:
                 enabled: false
-
         - stage:
             name: Tests Deployments - Full Suite
             identifier: TestsDeploymentsPR
@@ -324,7 +313,6 @@ pipeline:
                 enabled: false
               buildIntelligence:
                 enabled: false
-
         - stage:
             name: Tests Apps - Full Suite
             identifier: TestsAppsPR
@@ -398,7 +386,6 @@ pipeline:
                 enabled: false
               buildIntelligence:
                 enabled: false
-
   variables:
     - name: endpoint
       type: String
