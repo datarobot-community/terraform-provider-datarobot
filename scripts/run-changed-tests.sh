@@ -6,6 +6,12 @@
 # pkg/provider/ and internal/client/, and runs only the relevant TestAcc*
 # acceptance tests. Produces a JUnit XML report compatible with Harness.
 #
+# If a shared helper or internal/client/ file changed, this script does NOT
+# run the full suite inline — it still runs selective tests for any directly
+# changed resource/test files (if any), and exports NEEDS_FULL_SUITE=true so
+# the caller (Harness pipeline) can trigger the parallel group-based full
+# suite as a follow-up stage. See .harness/acceptnce_pipeline.yml.
+#
 # Environment variables:
 #   BASE_REF        — target branch to diff against (required, e.g. "main")
 #   REPORT_FILE     — JUnit XML output path    (default: /harness/report.xml)
@@ -81,6 +87,13 @@ source_to_test_file() {
   echo "pkg/provider/${base}_test.go"
 }
 
+# Export NEEDS_FULL_SUITE so the Harness step's outputVariables capture it,
+# signalling whether the follow-up parallel full-suite stages should run.
+export_needs_full_suite() {
+  export NEEDS_FULL_SUITE="$1"
+  echo "==> NEEDS_FULL_SUITE=${1}"
+}
+
 ###############################################################################
 # 1. Fetch target branch & compute diff
 ###############################################################################
@@ -94,6 +107,7 @@ CHANGED_FILES=$(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD"
 if [[ -z "$CHANGED_FILES" ]]; then
   echo "No changed files detected."
   write_empty_report
+  export_needs_full_suite false
   exit 0
 fi
 
@@ -154,44 +168,57 @@ done <<< "$CHANGED_FILES"
 
 ###############################################################################
 # 3. Build test regex
+#
+# NOTE: even when RUN_ALL is true (shared helper or internal/client/ change),
+# we do NOT run the full suite here — that's too slow for a single serial
+# step. We only run tests for any directly-changed resource/test files, and
+# export NEEDS_FULL_SUITE=true so the Harness pipeline runs the full suite
+# afterward via the parallel testacc-group-* stages.
 ###############################################################################
 if $RUN_ALL; then
   echo ""
-  echo "==> Running ALL acceptance tests (shared code changed)"
-  TEST_RUN_ARG=""
-elif [[ ${#TEST_FILES_TO_SCAN[@]} -eq 0 ]]; then
-  echo ""
-  echo "==> No relevant changes detected in pkg/provider/ or internal/client/. Skipping tests."
-  write_empty_report
-  exit 0
-else
-  # Collect unique TestAcc* function names from all identified test files
-  declare -A SEEN_TESTS
-  TEST_NAMES=()
-
-  for tf in "${TEST_FILES_TO_SCAN[@]}"; do
-    while IFS= read -r name; do
-      [[ -z "$name" ]] && continue
-      if [[ -z "${SEEN_TESTS[$name]+x}" ]]; then
-        SEEN_TESTS[$name]=1
-        TEST_NAMES+=("$name")
-      fi
-    done < <(extract_test_names "$tf")
-  done
-
-  if [[ ${#TEST_NAMES[@]} -eq 0 ]]; then
-    echo ""
-    echo "==> Changed test files contain no TestAcc* functions. Skipping tests."
-    write_empty_report
-    exit 0
-  fi
-
-  # Build regex: TestAccFoo|TestAccBar|...
-  REGEX=$(IFS='|'; echo "${TEST_NAMES[*]}")
-  TEST_RUN_ARG="-run ${REGEX}"
-  echo ""
-  echo "==> Running selective tests: ${REGEX}"
+  echo "==> Shared/client code changed — full suite will run separately in parallel group stages"
 fi
+
+if [[ ${#TEST_FILES_TO_SCAN[@]} -eq 0 ]]; then
+  echo ""
+  if $RUN_ALL; then
+    echo "==> No directly-changed resource/test files to run selectively."
+  else
+    echo "==> No relevant changes detected in pkg/provider/ or internal/client/. Skipping tests."
+  fi
+  write_empty_report
+  export_needs_full_suite "$RUN_ALL"
+  exit 0
+fi
+
+# Collect unique TestAcc* function names from all identified test files
+declare -A SEEN_TESTS
+TEST_NAMES=()
+
+for tf in "${TEST_FILES_TO_SCAN[@]}"; do
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    if [[ -z "${SEEN_TESTS[$name]+x}" ]]; then
+      SEEN_TESTS[$name]=1
+      TEST_NAMES+=("$name")
+    fi
+  done < <(extract_test_names "$tf")
+done
+
+if [[ ${#TEST_NAMES[@]} -eq 0 ]]; then
+  echo ""
+  echo "==> Changed test files contain no TestAcc* functions. Skipping tests."
+  write_empty_report
+  export_needs_full_suite "$RUN_ALL"
+  exit 0
+fi
+
+# Build regex: TestAccFoo|TestAccBar|...
+REGEX=$(IFS='|'; echo "${TEST_NAMES[*]}")
+TEST_RUN_ARG="-run ${REGEX}"
+echo ""
+echo "==> Running selective tests: ${REGEX}"
 
 ###############################################################################
 # 4. Run tests
@@ -204,6 +231,8 @@ set +e
 TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout "${TEST_TIMEOUT}" -parallel "${TEST_PARALLEL}" ./pkg/provider/ 2>&1 | tee report.out
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
+
+export_needs_full_suite "$RUN_ALL"
 
 ###############################################################################
 # 5. Generate JUnit report
