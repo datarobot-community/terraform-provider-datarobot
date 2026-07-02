@@ -1,3 +1,33 @@
+resource "datarobot_custom_model" "batch_prediction_job_definition" {
+  name                = "Example Custom Model"
+  target_type         = "Binary"
+  target_name         = "my_label"
+  base_environment_id = "65f9b27eab986d30d4c64268"
+  files               = ["example.py"]
+}
+
+resource "datarobot_registered_model" "batch_prediction_job_definition" {
+  custom_model_version_id = datarobot_custom_model.batch_prediction_job_definition.version_id
+  name                    = "Example Registered Model"
+}
+
+resource "datarobot_prediction_environment" "batch_prediction_job_definition" {
+  name     = "Example Prediction Environment"
+  platform = "datarobotServerless"
+}
+
+resource "datarobot_deployment" "batch_prediction_job_definition" {
+  label                       = "An example deployment"
+  prediction_environment_id   = datarobot_prediction_environment.batch_prediction_job_definition.id
+  registered_model_version_id = datarobot_registered_model.batch_prediction_job_definition.version_id
+}
+
+resource "datarobot_basic_credential" "batch_prediction_job_definition" {
+  name     = "Example Basic Credential"
+  user     = "example_user"
+  password = "example_password"
+}
+
 resource "datarobot_batch_prediction_job_definition" "example" {
   name          = "Example Batch Prediction Job Definition"
   deployment_id = datarobot_deployment.batch_prediction_job_definition.id

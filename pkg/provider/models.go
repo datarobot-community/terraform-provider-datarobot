@@ -36,8 +36,11 @@ type UseCaseResourceModel struct {
 
 // MemorySpaceResourceModel describes the memory space resource.
 type MemorySpaceResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Description types.String `tfsdk:"description"`
+	ID                 types.String `tfsdk:"id"`
+	Description        types.String `tfsdk:"description"`
+	LLMModelName       types.String `tfsdk:"llm_model_name"`
+	LLMBaseURL         types.String `tfsdk:"llm_base_url"`
+	CustomInstructions types.String `tfsdk:"custom_instructions"`
 }
 
 // RemoteRepositoryResourceModel describes the remote repository resource.

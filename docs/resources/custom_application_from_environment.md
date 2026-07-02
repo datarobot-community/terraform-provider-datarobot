@@ -13,6 +13,13 @@ Custom Application created from an Execution Environment.
 ## Example Usage
 
 ```terraform
+resource "datarobot_execution_environment" "example" {
+  name                 = "Example Execution Environment"
+  programming_language = "python"
+  docker_image         = "docker_image.tar"
+  use_cases            = ["customApplication"]
+}
+
 resource "datarobot_custom_application_from_environment" "example" {
   name           = "example-custom-app-from-environment"
   environment_id = datarobot_execution_environment.example.id
