@@ -750,6 +750,70 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 }
 
+func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPath path.Path, cfg *ArtifactImageBuildConfigModel, artifactType string) {
+	if cfg == nil {
+		return
+	}
+
+	if cfg.CodeRef != nil &&
+		!cfg.CodeRef.CatalogID.IsNull() &&
+		!cfg.CodeRef.CatalogVersionID.IsNull() &&
+		artifactType == string(client.ArtifactTypeNim) {
+		resp.Diagnostics.AddAttributeError(
+			containerPath.AtName("image_build_config").AtName("code_ref"),
+			"Unsupported code reference",
+			"NIM artifacts cannot include `code_ref` in `image_build_config`.",
+		)
+	}
+
+	source := "provided"
+	if cfg.Dockerfile != nil && !cfg.Dockerfile.Source.IsNull() && !cfg.Dockerfile.Source.IsUnknown() {
+		source = cfg.Dockerfile.Source.ValueString()
+	}
+
+	dockerfilePath := containerPath.AtName("image_build_config").AtName("dockerfile")
+	switch source {
+	case "generated":
+		if cfg.Dockerfile == nil {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath,
+				"Incomplete generated dockerfile",
+				"`execution_environment_id`, `execution_environment_version_id`, and `entrypoint` are required when source is `generated`.",
+			)
+			return
+		}
+		if cfg.Dockerfile.ExecutionEnvironmentID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("execution_environment_id"),
+				"Missing execution environment ID",
+				"`execution_environment_id` is required when dockerfile source is `generated`.",
+			)
+		}
+		if cfg.Dockerfile.ExecutionEnvironmentVersionID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentVersionID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("execution_environment_version_id"),
+				"Missing execution environment version ID",
+				"`execution_environment_version_id` is required when dockerfile source is `generated`.",
+			)
+		}
+		if len(cfg.Dockerfile.Entrypoint) == 0 {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("entrypoint"),
+				"Missing entrypoint",
+				"`entrypoint` is required when dockerfile source is `generated`.",
+			)
+		}
+	case "provided":
+		// path defaults to ./Dockerfile at marshal time
+	default:
+		resp.Diagnostics.AddAttributeError(
+			dockerfilePath.AtName("source"),
+			"Invalid dockerfile source",
+			fmt.Sprintf("Invalid dockerfile source %q. Allowed values: \"provided\", \"generated\".", source),
+		)
+	}
+}
+
 func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(uuid.NewString()))...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("artifact_id"), types.StringValue(req.ID))...)
