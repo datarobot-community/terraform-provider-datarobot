@@ -665,6 +665,34 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
+			containerPath := path.Root("spec").
+				AtName("container_groups").AtListIndex(gi).
+				AtName("containers").AtListIndex(ci)
+
+			hasImageURI := !container.ImageURI.IsNull() &&
+				!container.ImageURI.IsUnknown() &&
+				container.ImageURI.ValueString() != ""
+			hasBuildConfig := container.ImageBuildConfig != nil
+
+			if !hasImageURI && !hasBuildConfig {
+				resp.Diagnostics.AddAttributeError(
+					containerPath,
+					"Missing image source",
+					"Each container must set `image_uri`, `image_build_config`, or both.",
+				)
+			}
+
+			if hasBuildConfig {
+				validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
+				if status == string(client.ArtifactStatusLocked) && !hasImageURI {
+					resp.Diagnostics.AddAttributeError(
+						containerPath.AtName("image_build_config"),
+						"Incomplete build configuration for locked artifact",
+						"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` for pre-build artifacts.",
+					)
+				}
+			}
+
 			for ei, ev := range container.EnvironmentVars {
 				if ev.Source.IsUnknown() {
 					continue
