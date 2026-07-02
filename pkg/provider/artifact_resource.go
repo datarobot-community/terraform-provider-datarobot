@@ -887,6 +887,10 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 		container.ImageURI = &uri
 	}
 
+	if c.ImageBuildConfig != nil {
+		container.ImageBuildConfig = artifactImageBuildConfigToClient(c.ImageBuildConfig)
+	}
+
 	if !c.Name.IsNull() && !c.Name.IsUnknown() {
 		name := c.Name.ValueString()
 		container.Name = &name
