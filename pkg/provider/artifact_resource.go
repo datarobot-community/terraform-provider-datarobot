@@ -654,6 +654,15 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 		)
 	}
 
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	artifactType := "service"
+	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+		artifactType = data.Type.ValueString()
+	}
+
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
 			for ei, ev := range container.EnvironmentVars {
