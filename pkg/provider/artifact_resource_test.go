@@ -29,6 +29,7 @@ func TestIntegrationArtifactResource(t *testing.T) {
 	})()
 
 	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
@@ -88,6 +89,14 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 	var initialRepoID string
 	var lastArtifactID string
 
+	config := func(resourceName, imageURI string) string {
+		cfg := artifactResourceConfig(resourceName, imageURI)
+		if isMock {
+			return testProviderConfigBlock() + "\n" + cfg
+		}
+		return cfg
+	}
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -95,7 +104,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, isMock),
 		Steps: []resource.TestStep{
 			{
-				Config: artifactResourceConfig(name, "nginx:latest"),
+				Config: config(name, "nginx:latest"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
@@ -107,7 +116,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 				),
 			},
 			{
-				Config: artifactResourceConfig("updated-"+name, "nginx:latest"),
+				Config: config("updated-"+name, "nginx:latest"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
@@ -270,13 +279,8 @@ func checkArtifactRepoDestroyedFromAPI(lastArtifactID *string, isMock bool) reso
 	}
 }
 
-func artifactResourceConfig(name, imageURI string) string {
+func artifactTestContainerSpecBlock(imageURI string) string {
 	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name        = %q
-  description = "test artifact description"
-  type        = "service"
-
   spec = {
     container_groups = [
       {
@@ -297,19 +301,51 @@ resource "datarobot_artifact" "test" {
               }
             ]
 
+            startup_probe = {
+              path                  = "/startup"
+              port                  = 8080
+              scheme                = "HTTP"
+              initial_delay_seconds = 10
+              period_seconds        = 15
+              timeout_seconds       = 5
+              failure_threshold     = 3
+            }
+
             readiness_probe = {
-              path = "/health"
-              port = 8080
+              path                  = "/health"
+              port                  = 8080
+              scheme                = "HTTP"
+              initial_delay_seconds = 5
+              period_seconds        = 10
+              timeout_seconds       = 3
+              failure_threshold     = 3
+            }
+
+            liveness_probe = {
+              path              = "/live"
+              port              = 8080
+              scheme            = "HTTP"
+              failure_threshold = 5
             }
           }
         ]
       }
     ]
-  }
-}
-`, name, imageURI)
+  }`, imageURI)
 }
 
+func artifactResourceConfig(name, imageURI string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name        = %q
+  description = "test artifact description"
+  type        = "service"
+%s
+}
+`, name, artifactTestContainerSpecBlock(imageURI))
+}
+
+// artifactFixture returns a full Workload API artifact response for integration tests.
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
 	port := int64(8080)
 	primary := true
@@ -317,6 +353,17 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 	containerDesc := "main container"
 	probeScheme := "HTTP"
 	probeFailureThreshold := int64(3)
+	probeInitialDelay := int64(10)
+	probePeriod := int64(15)
+	probeTimeout := int64(5)
+	readinessInitialDelay := int64(5)
+	readinessPeriod := int64(10)
+	readinessTimeout := int64(3)
+	livenessFailureThreshold := int64(5)
+	version := 1
+	fullName := "Test User"
+	email := "test@example.com"
+	username := "testuser"
 
 	return &client.Artifact{
 		ID:                   id,
@@ -324,7 +371,20 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 		Description:          "test artifact description",
 		Type:                 client.ArtifactTypeService,
 		Status:               client.ArtifactStatusLocked,
+		Version:              &version,
 		ArtifactRepositoryID: repoID,
+		CreatedAt:            "2026-01-01T00:00:00Z",
+		UpdatedAt:            "2026-01-02T00:00:00Z",
+		Creator: &client.ArtifactUser{
+			ID:       "creator-id",
+			FullName: &fullName,
+			Email:    &email,
+			Username: &username,
+		},
+		Tags: []client.ArtifactTag{
+			{ID: "tag-id", Name: "env", Value: "test"},
+		},
+		Permissions: []string{"CAN_VIEW", "CAN_UPDATE"},
 		Spec: client.ArtifactSpec{
 			ContainerGroups: []client.ArtifactContainerGroup{
 				{
@@ -339,11 +399,29 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
 								{Source: client.EnvironmentVariableSourceString, Name: "ENV", Value: "production"},
 							},
+							StartupProbe: &client.ArtifactProbeConfig{
+								Path:                "/startup",
+								Port:                &port,
+								Scheme:              &probeScheme,
+								InitialDelaySeconds: &probeInitialDelay,
+								PeriodSeconds:       &probePeriod,
+								TimeoutSeconds:      &probeTimeout,
+								FailureThreshold:    &probeFailureThreshold,
+							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
-								Path:             "/health",
+								Path:                "/health",
+								Port:                &port,
+								Scheme:              &probeScheme,
+								InitialDelaySeconds: &readinessInitialDelay,
+								PeriodSeconds:       &readinessPeriod,
+								TimeoutSeconds:      &readinessTimeout,
+								FailureThreshold:    &probeFailureThreshold,
+							},
+							LivenessProbe: &client.ArtifactProbeConfig{
+								Path:             "/live",
 								Port:             &port,
 								Scheme:           &probeScheme,
-								FailureThreshold: &probeFailureThreshold,
+								FailureThreshold: &livenessFailureThreshold,
 							},
 						},
 					},
