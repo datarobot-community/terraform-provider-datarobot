@@ -2107,6 +2107,21 @@ func (mr *MockServiceMockRecorder) ListCustomModels(ctx interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModels", reflect.TypeOf((*MockService)(nil).ListCustomModels), ctx)
 }
 
+// ListArtifacts mocks base method.
+func (m *MockService) ListArtifacts(ctx context.Context, req *client.ListArtifactsRequest) ([]client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListArtifacts", ctx, req)
+	ret0, _ := ret[0].([]client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArtifacts indicates an expected call of ListArtifacts.
+func (mr *MockServiceMockRecorder) ListArtifacts(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifacts", reflect.TypeOf((*MockService)(nil).ListArtifacts), ctx, req)
+}
+
 // ListDatasources mocks base method.
 func (m *MockService) ListDatasources(ctx context.Context, req *client.ListDataSourcesRequest) ([]client.Datasource, error) {
 	m.ctrl.T.Helper()
