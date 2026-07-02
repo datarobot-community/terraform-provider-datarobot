@@ -1,0 +1,104 @@
+# PR acceptance test pipeline — selective, runs only tests for changed files.
+# Uses scripts/run-changed-tests.sh to map changed source → test files → TestAcc*/TestIntegration* functions.
+# Expected wall-clock: 5-20 min per PR (vs. 60-80 min for the full suite).
+#
+# For the full-suite pipeline (main merges / release), see full_suite_pipeline.yml.
+pipeline:
+  name: terraform-provider-datarobot-pr
+  identifier: terraformproviderdatarobotpr
+  projectIdentifier: Declarative_API
+  orgIdentifier: DSX
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: Sample
+        repoName: terraform-provider-datarobot
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Tests
+        identifier: Tests
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.cigeneral
+              namespace: harness-delegate-ng
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Selective Tests
+                  identifier: Run_1
+                  spec:
+                    connectorRef: account.dockerhub_datarobot_read
+                    image: <+input>.default(datarobotdev/platform-base-golang-devel)
+                    shell: Sh
+                    command: |-
+                      microdnf install unzip git
+                      TERRAFORM_VERSION="1.14.5"
+                      curl -o terraform.zip -SL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                      unzip terraform.zip
+                      mv terraform /usr/local/bin
+                      export PATH=$(go env GOPATH)/bin:$PATH
+                      go install github.com/jstemmer/go-junit-report/v2@latest
+                      go mod download
+                      go build -v .
+                      BASE_REF=main TEST_PARALLEL=6 bash scripts/run-changed-tests.sh
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - /harness/report.xml
+                    envVariables:
+                      DATAROBOT_ENDPOINT: <+stage.variables.endpoint>
+                      DATAROBOT_API_TOKEN: <+stage.variables.apiKey>
+                      DATAROBOT_USERNAME: declarative_user_admin@datarobot.com
+                      DATAROBOT_USER_ID: 69987d0c27ee4c2c40d1b924
+                    resources:
+                      limits:
+                        memory: 4Gi
+                        cpu: "6"
+              - step:
+                  name: Notify dsx-alerts
+                  identifier: Notify_dsxalerts
+                  template:
+                    templateRef: org.Send_Slack_notification
+                    versionLabel: v1
+                    templateInputs:
+                      type: Run
+                      spec:
+                        envVariables:
+                          SLACK_CHANNEL: dsx-alerts
+                          SLACK_URL: <+input>.default("")
+                          MESSAGE_TYPE: Error
+                          MESSAGE_TITLE: Declarative API Terraform Tests Failed
+                          MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
+                          MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
+                  when:
+                    stageStatus: Failure
+          caching:
+            enabled: false
+            paths: []
+          buildIntelligence:
+            enabled: false
+        variables:
+          - name: endpoint
+            type: String
+            description: ""
+            required: false
+            value: <+input>.default(https://staging.datarobot.com/api/v2).allowedValues(https://staging.datarobot.com/api/v2,https://app.datarobot.com/api/v2,https://dr-app-charts-r10p2-daily-eks.rd.int.datarobot.com/api/v2,https://private-ca-testing.rd.int.datarobot.com/api/v2)
+          - name: apiKey
+            type: Secret
+            default: dr_staging_api_key
+            description: ""
+            required: false
+            value: <+input>.default(dr_staging_api_key).allowedValues(dr_staging_api_key,dr_app_charts_r10p2_api_key,dr_private_ca_api_key)
