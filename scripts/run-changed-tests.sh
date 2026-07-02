@@ -30,6 +30,9 @@ BASE_REF="${BASE_REF:-main}"
 REPORT_FILE="${REPORT_FILE:-/harness/report.xml}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-60m}"
 TEST_PARALLEL="${TEST_PARALLEL:-6}"
+# Where the NEEDS_FULL_SUITE result is written so the caller (a separate
+# shell process — see export_needs_full_suite() below) can pick it up.
+NEEDS_FULL_SUITE_FILE="${NEEDS_FULL_SUITE_FILE:-/tmp/needs_full_suite}"
 
 # Shared helper files in pkg/provider/ that are used across all resources.
 # Any change to these triggers the full test suite.
@@ -87,10 +90,19 @@ source_to_test_file() {
   echo "pkg/provider/${base}_test.go"
 }
 
-# Export NEEDS_FULL_SUITE so the Harness step's outputVariables capture it,
+# Record NEEDS_FULL_SUITE for the Harness step's outputVariables capture,
 # signalling whether the follow-up parallel full-suite stages should run.
+#
+# NOTE: this script runs as `bash scripts/run-changed-tests.sh`, a child
+# process of the Harness step's own shell. A plain `export` here only sets
+# the variable in this child's environment — it can never propagate back to
+# the parent shell, since child process environment changes never flow
+# upstream. So we also write the value to a file; the pipeline step reads
+# that file and exports the variable itself, in the shell Harness inspects
+# for outputVariables. See .harness/acceptnce_pipeline.yml.
 export_needs_full_suite() {
   export NEEDS_FULL_SUITE="$1"
+  echo "$1" > "$NEEDS_FULL_SUITE_FILE"
   echo "==> NEEDS_FULL_SUITE=${1}"
 }
 
