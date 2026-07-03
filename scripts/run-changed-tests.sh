@@ -6,6 +6,12 @@
 # pkg/provider/ and internal/client/, and runs only the relevant TestAcc*
 # acceptance tests. Produces a JUnit XML report compatible with Harness.
 #
+# If a shared helper or internal/client/ file changed, this script does NOT
+# run the full suite inline — it still runs selective tests for any directly
+# changed resource/test files (if any), and exports NEEDS_FULL_SUITE=true so
+# the caller (Harness pipeline) can trigger the parallel group-based full
+# suite as a follow-up stage. See .harness/acceptnce_pipeline.yml.
+#
 # Environment variables:
 #   BASE_REF        — target branch to diff against (required, e.g. "main")
 #   REPORT_FILE     — JUnit XML output path    (default: /harness/report.xml)
@@ -24,6 +30,9 @@ BASE_REF="${BASE_REF:-main}"
 REPORT_FILE="${REPORT_FILE:-/harness/report.xml}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-60m}"
 TEST_PARALLEL="${TEST_PARALLEL:-6}"
+# Where the NEEDS_FULL_SUITE result is written so the caller (a separate
+# shell process — see export_needs_full_suite() below) can pick it up.
+NEEDS_FULL_SUITE_FILE="${NEEDS_FULL_SUITE_FILE:-/tmp/needs_full_suite}"
 
 # Shared helper files in pkg/provider/ that are used across all resources.
 # Any change to these triggers the full test suite.
@@ -81,19 +90,62 @@ source_to_test_file() {
   echo "pkg/provider/${base}_test.go"
 }
 
+# Record NEEDS_FULL_SUITE for the Harness step's outputVariables capture,
+# signalling whether the follow-up parallel full-suite stages should run.
+#
+# NOTE: this script runs as `bash scripts/run-changed-tests.sh`, a child
+# process of the Harness step's own shell. A plain `export` here only sets
+# the variable in this child's environment — it can never propagate back to
+# the parent shell, since child process environment changes never flow
+# upstream. So we also write the value to a file; the pipeline step reads
+# that file and exports the variable itself, in the shell Harness inspects
+# for outputVariables. See .harness/acceptnce_pipeline.yml.
+export_needs_full_suite() {
+  export NEEDS_FULL_SUITE="$1"
+  echo "$1" > "$NEEDS_FULL_SUITE_FILE"
+  echo "==> NEEDS_FULL_SUITE=${1}"
+}
+
 ###############################################################################
 # 1. Fetch target branch & compute diff
 ###############################################################################
 echo "==> Fetching origin/${BASE_REF}..."
 git fetch origin "$BASE_REF" --depth=1 2>/dev/null || git fetch origin "$BASE_REF" || true
 
+# A shallow fetch of BASE_REF's tip has no shared history with a shallow
+# checkout of HEAD, so `git merge-base` (needed by the triple-dot diff below)
+# fails with "no merge base". On PR builds this stays hidden because Harness
+# checks out a merge commit whose direct parent IS the target branch tip, so
+# the merge-base resolves trivially even shallow. On manual/branch dispatch
+# there's no such merge commit, so it always fails here. Unshallow so the
+# real merge-base can be found either way.
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+  echo "==> Shallow clone detected — unshallowing for an accurate diff..."
+  git fetch --unshallow origin 2>/dev/null || git fetch --depth=1000 origin "$BASE_REF" HEAD 2>/dev/null || true
+fi
+
 echo "==> Computing diff against origin/${BASE_REF}..."
-CHANGED_FILES=$(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" 2>/dev/null || \
-                git diff --name-only --diff-filter=d "origin/${BASE_REF}" 2>/dev/null || true)
+MERGE_BASE=$(git merge-base "origin/${BASE_REF}" HEAD 2>/dev/null || true)
+
+if [[ -z "$MERGE_BASE" ]]; then
+  # No safe way to scope the diff to just this branch's changes — a naive
+  # two-ref diff here would pick up every file that changed on BASE_REF
+  # since divergence (including unrelated shared-helper/internal/client
+  # changes from other merged PRs), falsely tripping RUN_ALL/NEEDS_FULL_SUITE
+  # on nearly every run. Bail out to the real full-suite signal instead.
+  echo "==> Could not determine a merge base with origin/${BASE_REF} even after unshallowing."
+  echo "==> Falling back to the full suite for safety instead of guessing from an inaccurate diff."
+  write_empty_report
+  export_needs_full_suite true
+  exit 0
+fi
+
+CHANGED_FILES=$(git diff --name-only --diff-filter=d "${MERGE_BASE}" HEAD 2>/dev/null || true)
 
 if [[ -z "$CHANGED_FILES" ]]; then
   echo "No changed files detected."
   write_empty_report
+  export_needs_full_suite false
   exit 0
 fi
 
@@ -154,44 +206,57 @@ done <<< "$CHANGED_FILES"
 
 ###############################################################################
 # 3. Build test regex
+#
+# NOTE: even when RUN_ALL is true (shared helper or internal/client/ change),
+# we do NOT run the full suite here — that's too slow for a single serial
+# step. We only run tests for any directly-changed resource/test files, and
+# export NEEDS_FULL_SUITE=true so the Harness pipeline runs the full suite
+# afterward via the parallel testacc-group-* stages.
 ###############################################################################
 if $RUN_ALL; then
   echo ""
-  echo "==> Running ALL acceptance tests (shared code changed)"
-  TEST_RUN_ARG=""
-elif [[ ${#TEST_FILES_TO_SCAN[@]} -eq 0 ]]; then
-  echo ""
-  echo "==> No relevant changes detected in pkg/provider/ or internal/client/. Skipping tests."
-  write_empty_report
-  exit 0
-else
-  # Collect unique TestAcc* function names from all identified test files
-  declare -A SEEN_TESTS
-  TEST_NAMES=()
-
-  for tf in "${TEST_FILES_TO_SCAN[@]}"; do
-    while IFS= read -r name; do
-      [[ -z "$name" ]] && continue
-      if [[ -z "${SEEN_TESTS[$name]+x}" ]]; then
-        SEEN_TESTS[$name]=1
-        TEST_NAMES+=("$name")
-      fi
-    done < <(extract_test_names "$tf")
-  done
-
-  if [[ ${#TEST_NAMES[@]} -eq 0 ]]; then
-    echo ""
-    echo "==> Changed test files contain no TestAcc* functions. Skipping tests."
-    write_empty_report
-    exit 0
-  fi
-
-  # Build regex: TestAccFoo|TestAccBar|...
-  REGEX=$(IFS='|'; echo "${TEST_NAMES[*]}")
-  TEST_RUN_ARG="-run ${REGEX}"
-  echo ""
-  echo "==> Running selective tests: ${REGEX}"
+  echo "==> Shared/client code changed — full suite will run separately in parallel group stages"
 fi
+
+if [[ ${#TEST_FILES_TO_SCAN[@]} -eq 0 ]]; then
+  echo ""
+  if $RUN_ALL; then
+    echo "==> No directly-changed resource/test files to run selectively."
+  else
+    echo "==> No relevant changes detected in pkg/provider/ or internal/client/. Skipping tests."
+  fi
+  write_empty_report
+  export_needs_full_suite "$RUN_ALL"
+  exit 0
+fi
+
+# Collect unique TestAcc* function names from all identified test files
+declare -A SEEN_TESTS
+TEST_NAMES=()
+
+for tf in "${TEST_FILES_TO_SCAN[@]}"; do
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    if [[ -z "${SEEN_TESTS[$name]+x}" ]]; then
+      SEEN_TESTS[$name]=1
+      TEST_NAMES+=("$name")
+    fi
+  done < <(extract_test_names "$tf")
+done
+
+if [[ ${#TEST_NAMES[@]} -eq 0 ]]; then
+  echo ""
+  echo "==> Changed test files contain no TestAcc* functions. Skipping tests."
+  write_empty_report
+  export_needs_full_suite "$RUN_ALL"
+  exit 0
+fi
+
+# Build regex: TestAccFoo|TestAccBar|...
+REGEX=$(IFS='|'; echo "${TEST_NAMES[*]}")
+TEST_RUN_ARG="-run ${REGEX}"
+echo ""
+echo "==> Running selective tests: ${REGEX}"
 
 ###############################################################################
 # 4. Run tests
@@ -204,6 +269,8 @@ set +e
 TF_ACC=1 go test -v -cover ${TEST_RUN_ARG} -timeout "${TEST_TIMEOUT}" -parallel "${TEST_PARALLEL}" ./pkg/provider/ 2>&1 | tee report.out
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
+
+export_needs_full_suite "$RUN_ALL"
 
 ###############################################################################
 # 5. Generate JUnit report
