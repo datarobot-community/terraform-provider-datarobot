@@ -30,6 +30,9 @@ BASE_REF="${BASE_REF:-main}"
 REPORT_FILE="${REPORT_FILE:-/harness/report.xml}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-60m}"
 TEST_PARALLEL="${TEST_PARALLEL:-6}"
+# Where the NEEDS_FULL_SUITE result is written so the caller (a separate
+# shell process — see export_needs_full_suite() below) can pick it up.
+NEEDS_FULL_SUITE_FILE="${NEEDS_FULL_SUITE_FILE:-/tmp/needs_full_suite}"
 
 # Shared helper files in pkg/provider/ that are used across all resources.
 # Any change to these triggers the full test suite.
@@ -87,10 +90,19 @@ source_to_test_file() {
   echo "pkg/provider/${base}_test.go"
 }
 
-# Export NEEDS_FULL_SUITE so the Harness step's outputVariables capture it,
+# Record NEEDS_FULL_SUITE for the Harness step's outputVariables capture,
 # signalling whether the follow-up parallel full-suite stages should run.
+#
+# NOTE: this script runs as `bash scripts/run-changed-tests.sh`, a child
+# process of the Harness step's own shell. A plain `export` here only sets
+# the variable in this child's environment — it can never propagate back to
+# the parent shell, since child process environment changes never flow
+# upstream. So we also write the value to a file; the pipeline step reads
+# that file and exports the variable itself, in the shell Harness inspects
+# for outputVariables. See .harness/acceptnce_pipeline.yml.
 export_needs_full_suite() {
   export NEEDS_FULL_SUITE="$1"
+  echo "$1" > "$NEEDS_FULL_SUITE_FILE"
   echo "==> NEEDS_FULL_SUITE=${1}"
 }
 
@@ -100,9 +112,35 @@ export_needs_full_suite() {
 echo "==> Fetching origin/${BASE_REF}..."
 git fetch origin "$BASE_REF" --depth=1 2>/dev/null || git fetch origin "$BASE_REF" || true
 
+# A shallow fetch of BASE_REF's tip has no shared history with a shallow
+# checkout of HEAD, so `git merge-base` (needed by the triple-dot diff below)
+# fails with "no merge base". On PR builds this stays hidden because Harness
+# checks out a merge commit whose direct parent IS the target branch tip, so
+# the merge-base resolves trivially even shallow. On manual/branch dispatch
+# there's no such merge commit, so it always fails here. Unshallow so the
+# real merge-base can be found either way.
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+  echo "==> Shallow clone detected — unshallowing for an accurate diff..."
+  git fetch --unshallow origin 2>/dev/null || git fetch --depth=1000 origin "$BASE_REF" HEAD 2>/dev/null || true
+fi
+
 echo "==> Computing diff against origin/${BASE_REF}..."
-CHANGED_FILES=$(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" 2>/dev/null || \
-                git diff --name-only --diff-filter=d "origin/${BASE_REF}" 2>/dev/null || true)
+MERGE_BASE=$(git merge-base "origin/${BASE_REF}" HEAD 2>/dev/null || true)
+
+if [[ -z "$MERGE_BASE" ]]; then
+  # No safe way to scope the diff to just this branch's changes — a naive
+  # two-ref diff here would pick up every file that changed on BASE_REF
+  # since divergence (including unrelated shared-helper/internal/client
+  # changes from other merged PRs), falsely tripping RUN_ALL/NEEDS_FULL_SUITE
+  # on nearly every run. Bail out to the real full-suite signal instead.
+  echo "==> Could not determine a merge base with origin/${BASE_REF} even after unshallowing."
+  echo "==> Falling back to the full suite for safety instead of guessing from an inaccurate diff."
+  write_empty_report
+  export_needs_full_suite true
+  exit 0
+fi
+
+CHANGED_FILES=$(git diff --name-only --diff-filter=d "${MERGE_BASE}" HEAD 2>/dev/null || true)
 
 if [[ -z "$CHANGED_FILES" ]]; then
   echo "No changed files detected."
