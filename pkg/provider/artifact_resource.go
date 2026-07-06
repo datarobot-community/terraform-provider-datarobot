@@ -937,6 +937,61 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	return container
 }
 
+func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *client.ArtifactImageBuildConfig {
+	if cfg == nil {
+		return nil
+	}
+
+	result := &client.ArtifactImageBuildConfig{
+		Dockerfile: artifactDockerfileToClient(cfg.Dockerfile),
+	}
+
+	if cfg.CodeRef != nil &&
+		!cfg.CodeRef.CatalogID.IsNull() && !cfg.CodeRef.CatalogID.IsUnknown() &&
+		!cfg.CodeRef.CatalogVersionID.IsNull() && !cfg.CodeRef.CatalogVersionID.IsUnknown() {
+		result.CodeRef = &client.ArtifactCodeRef{
+			Type:     "datarobot",
+			Provider: "datarobot",
+			Datarobot: &client.ArtifactDataRobotCodeRef{
+				CatalogID:        cfg.CodeRef.CatalogID.ValueString(),
+				CatalogVersionID: cfg.CodeRef.CatalogVersionID.ValueString(),
+			},
+		}
+	}
+
+	return result
+}
+
+func artifactDockerfileToClient(df *ArtifactDockerfileModel) *client.ArtifactDockerfile {
+	source := "provided"
+	if df != nil && !df.Source.IsNull() && !df.Source.IsUnknown() {
+		source = df.Source.ValueString()
+	}
+
+	result := &client.ArtifactDockerfile{Source: source}
+	if source == "generated" {
+		if df == nil {
+			return result
+		}
+		result.ExecutionEnvironmentID = df.ExecutionEnvironmentID.ValueString()
+		result.ExecutionEnvironmentVersionID = df.ExecutionEnvironmentVersionID.ValueString()
+		if len(df.Entrypoint) > 0 {
+			result.Entrypoint = make([]string, len(df.Entrypoint))
+			for i, e := range df.Entrypoint {
+				result.Entrypoint[i] = e.ValueString()
+			}
+		}
+		return result
+	}
+
+	path := "./Dockerfile"
+	if df != nil && !df.Path.IsNull() && !df.Path.IsUnknown() && df.Path.ValueString() != "" {
+		path = df.Path.ValueString()
+	}
+	result.Path = path
+	return result
+}
+
 func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProbeConfig {
 	if probe == nil {
 		return nil
