@@ -72,15 +72,13 @@ Required:
 <a id="nestedatt--spec--container_groups--containers"></a>
 ### Nested Schema for `spec.container_groups.containers`
 
-Required:
-
-- `image_uri` (String) Docker image URI.
-
 Optional:
 
 - `description` (String) Description of the container.
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
+- `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
+- `image_uri` (String) Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
@@ -101,6 +99,36 @@ Optional:
 - `key` (String) Key within the credential. Required when source is "dr-credential".
 - `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".
 - `value` (String) Value of the environment variable. Required when source is "string".
+
+
+<a id="nestedatt--spec--container_groups--containers--image_build_config"></a>
+### Nested Schema for `spec.container_groups.containers.image_build_config`
+
+Optional:
+
+- `code_ref` (Attributes) Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config--code_ref))
+- `dockerfile` (Attributes) How the Dockerfile is obtained for the image build. Defaults to using `./Dockerfile` from the source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config--dockerfile))
+
+<a id="nestedatt--spec--container_groups--containers--image_build_config--code_ref"></a>
+### Nested Schema for `spec.container_groups.containers.image_build_config.code_ref`
+
+Required:
+
+- `catalog_id` (String) Files API catalog ID (24-character hex).
+- `catalog_version_id` (String) Files API catalog version ID (24-character hex).
+
+
+<a id="nestedatt--spec--container_groups--containers--image_build_config--dockerfile"></a>
+### Nested Schema for `spec.container_groups.containers.image_build_config.dockerfile`
+
+Optional:
+
+- `entrypoint` (List of String) Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.
+- `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`.
+- `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`.
+- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.
+- `source` (String) How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.
+
 
 
 <a id="nestedatt--spec--container_groups--containers--liveness_probe"></a>
