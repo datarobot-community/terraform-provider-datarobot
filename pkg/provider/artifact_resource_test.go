@@ -1132,3 +1132,52 @@ func TestArtifactImageBuildConfigToClient_generated(t *testing.T) {
 		t.Fatalf("unexpected entrypoint: %v", cfg.Dockerfile.Entrypoint)
 	}
 }
+
+func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
+	t.Run("provided dockerfile with code_ref", func(t *testing.T) {
+		const (
+			catalogID        = "aaaaaaaaaaaaaaaaaaaaaaaa"
+			catalogVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
+		)
+
+		model := loadContainerFromAPI(client.ArtifactContainer{
+			ImageBuildConfig: &client.ArtifactImageBuildConfig{
+				CodeRef: &client.ArtifactCodeRef{
+					Type:     "datarobot",
+					Provider: "datarobot",
+					Datarobot: &client.ArtifactDataRobotCodeRef{
+						CatalogID:        catalogID,
+						CatalogVersionID: catalogVersionID,
+					},
+				},
+				Dockerfile: &client.ArtifactDockerfile{
+					Source: "provided",
+					Path:   "./Dockerfile",
+				},
+			},
+		}, nil)
+
+		cfg := model.ImageBuildConfig
+		if cfg == nil {
+			t.Fatal("expected image_build_config in state model")
+		}
+		if cfg.CodeRef == nil {
+			t.Fatal("expected code_ref in state model")
+		}
+		if got := cfg.CodeRef.CatalogID.ValueString(); got != catalogID {
+			t.Fatalf("catalog_id: got %q, want %q", got, catalogID)
+		}
+		if got := cfg.CodeRef.CatalogVersionID.ValueString(); got != catalogVersionID {
+			t.Fatalf("catalog_version_id: got %q, want %q", got, catalogVersionID)
+		}
+		if cfg.Dockerfile == nil {
+			t.Fatal("expected dockerfile in state model")
+		}
+		if got := cfg.Dockerfile.Source.ValueString(); got != "provided" {
+			t.Fatalf("dockerfile.source: got %q, want %q", got, "provided")
+		}
+		if got := cfg.Dockerfile.Path.ValueString(); got != "./Dockerfile" {
+			t.Fatalf("dockerfile.path: got %q, want %q", got, "./Dockerfile")
+		}
+	})
+}
