@@ -1229,6 +1229,39 @@ func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
 	})
 }
 
+func TestDockerfileEqual_normalizesProvidedDefaults(t *testing.T) {
+	providedDefaults := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringValue("./Dockerfile"),
+	}
+	providedNoPath := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringNull(),
+	}
+	providedSourceOnly := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+	}
+
+	cases := []struct {
+		name string
+		a    *ArtifactDockerfileModel
+		b    *ArtifactDockerfileModel
+	}{
+		{name: "nil vs nil", a: nil, b: nil},
+		{name: "nil vs provided defaults", a: nil, b: providedDefaults},
+		{name: "source only vs defaults", a: providedSourceOnly, b: providedDefaults},
+		{name: "null path vs defaults", a: providedNoPath, b: providedDefaults},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !dockerfileEqual(tc.a, tc.b) {
+				t.Fatal("expected normalized dockerfile configs to be equal")
+			}
+		})
+	}
+}
+
 func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 	base := ArtifactContainerModel{
 		ImageURI: types.StringValue("nginx:latest"),
