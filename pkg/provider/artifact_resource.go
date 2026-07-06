@@ -689,6 +689,100 @@ func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse,
 			"Currently, Workload API supports only 1 container group.",
 		)
 	}
+}
+
+func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPath path.Path, ev ArtifactEnvironmentVariableModel) {
+	if ev.Source.IsUnknown() {
+		return
+	}
+
+	source := ev.Source.ValueString()
+	if ev.Source.IsNull() {
+		source = client.EnvironmentVariableSourceString
+	}
+
+	switch source {
+	case client.EnvironmentVariableSourceString:
+		if ev.Value.IsNull() || ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Missing value",
+				`"value" is required when source is "string".`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "string".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "string".`)
+		}
+	case client.EnvironmentVariableSourceCredential:
+		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Missing dr_credential_id",
+				`"dr_credential_id" is required when source is "dr-credential".`)
+		}
+		if ev.Key.IsNull() || ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Missing key",
+				`"key" is required when source is "dr-credential".`)
+		}
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "dr-credential".`)
+		}
+	default:
+		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
+			"Invalid source",
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+	}
+}
+
+func validateArtifactContainer(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	status, artifactType string,
+) {
+	hasImageURI := !container.ImageURI.IsNull() &&
+		!container.ImageURI.IsUnknown() &&
+		container.ImageURI.ValueString() != ""
+	hasBuildConfig := container.ImageBuildConfig != nil
+
+	if !hasImageURI && !hasBuildConfig {
+		resp.Diagnostics.AddAttributeError(
+			containerPath,
+			"Missing image source",
+			"Each container must set `image_uri`, `image_build_config`, or both.",
+		)
+	}
+
+	if hasBuildConfig {
+		validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
+		if status == string(client.ArtifactStatusLocked) && !hasImageURI {
+			resp.Diagnostics.AddAttributeError(
+				containerPath.AtName("image_build_config"),
+				"Incomplete build configuration for locked artifact",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` for pre-build artifacts.",
+			)
+		}
+	}
+
+	for ei, ev := range container.EnvironmentVars {
+		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ArtifactResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() || data.Spec == nil {
+		return
+	}
+	validateArtifactContainerGroupsCount(resp, data.Spec.ContainerGroups)
 
 	status := string(client.ArtifactStatusLocked)
 	if !data.Status.IsNull() && !data.Status.IsUnknown() {
@@ -704,84 +798,7 @@ func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse,
 			containerPath := path.Root("spec").
 				AtName("container_groups").AtListIndex(gi).
 				AtName("containers").AtListIndex(ci)
-
-			hasImageURI := !container.ImageURI.IsNull() &&
-				!container.ImageURI.IsUnknown() &&
-				container.ImageURI.ValueString() != ""
-			hasBuildConfig := container.ImageBuildConfig != nil
-
-			if !hasImageURI && !hasBuildConfig {
-				resp.Diagnostics.AddAttributeError(
-					containerPath,
-					"Missing image source",
-					"Each container must set `image_uri`, `image_build_config`, or both.",
-				)
-			}
-
-			if hasBuildConfig {
-				validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
-				if status == string(client.ArtifactStatusLocked) && !hasImageURI {
-					resp.Diagnostics.AddAttributeError(
-						containerPath.AtName("image_build_config"),
-						"Incomplete build configuration for locked artifact",
-						"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` for pre-build artifacts.",
-					)
-				}
-			}
-
-			for ei, ev := range container.EnvironmentVars {
-				if ev.Source.IsUnknown() {
-					continue
-				}
-				evPath := path.Root("spec").
-					AtName("container_groups").AtListIndex(gi).
-					AtName("containers").AtListIndex(ci).
-					AtName("environment_vars").AtListIndex(ei)
-
-				source := ev.Source.ValueString()
-				if ev.Source.IsNull() {
-					source = client.EnvironmentVariableSourceString
-				}
-
-				switch source {
-				case client.EnvironmentVariableSourceString:
-					if ev.Value.IsNull() || ev.Value.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
-							"Missing value",
-							`"value" is required when source is "string".`)
-					}
-					if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
-							"Unexpected field",
-							`"dr_credential_id" must not be set when source is "string".`)
-					}
-					if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
-							"Unexpected field",
-							`"key" must not be set when source is "string".`)
-					}
-				case client.EnvironmentVariableSourceCredential:
-					if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
-							"Missing dr_credential_id",
-							`"dr_credential_id" is required when source is "dr-credential".`)
-					}
-					if ev.Key.IsNull() || ev.Key.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
-							"Missing key",
-							`"key" is required when source is "dr-credential".`)
-					}
-					if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
-							"Unexpected field",
-							`"value" must not be set when source is "dr-credential".`)
-					}
-				default:
-					resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
-						"Invalid source",
-						fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
-				}
-			}
+			validateArtifactContainer(resp, containerPath, container, status, artifactType)
 		}
 	}
 }
