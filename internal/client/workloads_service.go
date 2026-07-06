@@ -160,17 +160,17 @@ type ArtifactImageBuildConfig struct {
 }
 
 type ArtifactContainer struct {
-	Name             *string                   `json:"name,omitempty"`
-	ImageURI         *string                   `json:"imageUri,omitempty"`
-	Primary          *bool                     `json:"primary,omitempty"`
-	Description      string                    `json:"description,omitempty"`
-	Port             *int64                    `json:"port,omitempty"`
-	Entrypoint       []string                  `json:"entrypoint,omitempty"`
+	Name             *string                       `json:"name,omitempty"`
+	ImageURI         *string                       `json:"imageUri,omitempty"`
+	Primary          *bool                         `json:"primary,omitempty"`
+	Description      string                        `json:"description,omitempty"`
+	Port             *int64                        `json:"port,omitempty"`
+	Entrypoint       []string                      `json:"entrypoint,omitempty"`
 	EnvironmentVars  []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
-	StartupProbe     *ArtifactProbeConfig      `json:"startupProbe,omitempty"`
-	ReadinessProbe   *ArtifactProbeConfig      `json:"readinessProbe,omitempty"`
-	LivenessProbe    *ArtifactProbeConfig      `json:"livenessProbe,omitempty"`
-	ImageBuildConfig *ArtifactImageBuildConfig `json:"imageBuildConfig,omitempty"`
+	StartupProbe     *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
+	ReadinessProbe   *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
+	LivenessProbe    *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
+	ImageBuildConfig *ArtifactImageBuildConfig     `json:"imageBuildConfig,omitempty"`
 }
 
 type ArtifactContainerGroup struct {
