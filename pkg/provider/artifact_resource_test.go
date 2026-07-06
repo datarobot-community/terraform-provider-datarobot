@@ -955,3 +955,44 @@ resource "datarobot_artifact" "test" {
 		},
 	})
 }
+
+func TestArtifactLockedImageBuildConfigWithoutImageURI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "locked-build-config"
+  status = "locked"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Incomplete build configuration for locked artifact"),
+			},
+		},
+	})
+}
