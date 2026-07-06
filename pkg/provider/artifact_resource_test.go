@@ -236,7 +236,7 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 		if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
 			return fmt.Errorf("artifact has no containers")
 		}
-		if got := artifact.Spec.ContainerGroups[0].Containers[0].ImageURI; got != expectedImageURI {
+		if got := artifactImageURIValue(artifact.Spec.ContainerGroups[0].Containers[0]); got != expectedImageURI {
 			return fmt.Errorf("expected image_uri %q, got %q", expectedImageURI, got)
 		}
 
@@ -425,6 +425,17 @@ resource "datarobot_artifact" "test" {
 `, name, imageURI)
 }
 
+func artifactImageURIValue(c client.ArtifactContainer) string {
+	if c.ImageURI == nil {
+		return ""
+	}
+	return *c.ImageURI
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
 func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
 	return artifactFixtureWithStatus(id, repoID, name, imageURI, client.ArtifactStatusLocked)
 }
@@ -436,6 +447,11 @@ func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string,
 	containerDesc := "main container"
 	probeScheme := "HTTP"
 	probeFailureThreshold := int64(3)
+
+	var imageURIPtr *string
+	if imageURI != "" {
+		imageURIPtr = stringPtr(imageURI)
+	}
 
 	return &client.Artifact{
 		ID:                   id,
@@ -450,7 +466,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string,
 					Containers: []client.ArtifactContainer{
 						{
 							Name:        &containerName,
-							ImageURI:    imageURI,
+							ImageURI:    imageURIPtr,
 							Description: containerDesc,
 							Primary:     &primary,
 							Port:        &port,
