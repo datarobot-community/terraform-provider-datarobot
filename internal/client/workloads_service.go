@@ -135,17 +135,67 @@ type ArtifactProbeConfig struct {
 	FailureThreshold    *int64            `json:"failureThreshold,omitempty"`
 }
 
+type ArtifactCapabilities struct {
+	Add  []string `json:"add,omitempty"`
+	Drop []string `json:"drop,omitempty"`
+}
+
+type ArtifactSeccompProfile struct {
+	Type             string  `json:"type"`
+	LocalhostProfile *string `json:"localhostProfile,omitempty"`
+}
+
+type ArtifactSecurityContext struct {
+	AllowPrivilegeEscalation *bool                   `json:"allowPrivilegeEscalation,omitempty"`
+	Capabilities             *ArtifactCapabilities   `json:"capabilities,omitempty"`
+	ReadOnlyRootFilesystem   *bool                   `json:"readOnlyRootFilesystem,omitempty"`
+	SeccompProfile           *ArtifactSeccompProfile `json:"seccompProfile,omitempty"`
+}
+
+type ArtifactDataRobotCodeRef struct {
+	CatalogID        string `json:"catalogId"`
+	CatalogVersionID string `json:"catalogVersionId"`
+}
+
+type ArtifactCodeRef struct {
+	Provider  string                   `json:"provider,omitempty"`
+	Type      string                   `json:"type,omitempty"`
+	DataRobot ArtifactDataRobotCodeRef `json:"datarobot"`
+}
+
+type ArtifactDockerfileConfig struct {
+	Source                        string   `json:"source,omitempty"`
+	Path                          string   `json:"path,omitempty"`
+	Entrypoint                    []string `json:"entrypoint,omitempty"`
+	ExecutionEnvironmentID        string   `json:"executionEnvironmentId,omitempty"`
+	ExecutionEnvironmentVersionID string   `json:"executionEnvironmentVersionId,omitempty"`
+}
+
+type ArtifactImageBuildConfig struct {
+	CodeRef    *ArtifactCodeRef          `json:"codeRef,omitempty"`
+	Dockerfile *ArtifactDockerfileConfig `json:"dockerfile,omitempty"`
+}
+
+type ArtifactContainerBuildInfo struct {
+	ArtifactImageBuildID string `json:"artifactImageBuildId"`
+	Status               string `json:"status"`
+	CreatedAt            string `json:"createdAt"`
+}
+
 type ArtifactContainer struct {
-	Name            *string                       `json:"name,omitempty"`
-	ImageURI        string                        `json:"imageUri"`
-	Primary         *bool                         `json:"primary,omitempty"`
-	Description     string                        `json:"description,omitempty"`
-	Port            *int64                        `json:"port,omitempty"`
-	Entrypoint      []string                      `json:"entrypoint,omitempty"`
-	EnvironmentVars []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
-	StartupProbe    *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
-	ReadinessProbe  *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
-	LivenessProbe   *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
+	Name             *string                       `json:"name,omitempty"`
+	ImageURI         string                        `json:"imageUri"`
+	Primary          *bool                         `json:"primary,omitempty"`
+	Description      string                        `json:"description,omitempty"`
+	Port             *int64                        `json:"port,omitempty"`
+	Entrypoint       []string                      `json:"entrypoint,omitempty"`
+	EnvironmentVars  []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
+	StartupProbe     *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
+	ReadinessProbe   *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
+	LivenessProbe    *ArtifactProbeConfig          `json:"livenessProbe,omitempty"`
+	ImageBuildConfig *ArtifactImageBuildConfig     `json:"imageBuildConfig,omitempty"`
+	Build            *ArtifactContainerBuildInfo   `json:"build,omitempty"`
+	SecurityContext  *ArtifactSecurityContext      `json:"securityContext,omitempty"`
 }
 
 type ArtifactContainerGroup struct {
@@ -153,9 +203,30 @@ type ArtifactContainerGroup struct {
 	Containers []ArtifactContainer `json:"containers"`
 }
 
+type ArtifactNimStorageConfig struct {
+	Mode    string  `json:"mode,omitempty"`
+	PvcSize *string `json:"pvcSize,omitempty"`
+}
+
 type ArtifactSpec struct {
-	Type            string                   `json:"type,omitempty"`
-	ContainerGroups []ArtifactContainerGroup `json:"containerGroups"`
+	Type            string                    `json:"type,omitempty"`
+	ContainerGroups []ArtifactContainerGroup  `json:"containerGroups"`
+	Storage         *ArtifactNimStorageConfig `json:"storage,omitempty"`
+	TemplateID      *string                   `json:"templateId,omitempty"`
+}
+
+type ArtifactUser struct {
+	ID       string  `json:"id"`
+	FullName *string `json:"fullName,omitempty"`
+	Email    *string `json:"email,omitempty"`
+	Username *string `json:"username,omitempty"`
+	Userhash *string `json:"userhash,omitempty"`
+}
+
+type ArtifactTag struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type Artifact struct {
@@ -167,6 +238,11 @@ type Artifact struct {
 	Version              *int           `json:"version"`
 	Spec                 ArtifactSpec   `json:"spec"`
 	ArtifactRepositoryID *string        `json:"artifactRepositoryId"`
+	CreatedAt            string         `json:"createdAt"`
+	UpdatedAt            string         `json:"updatedAt"`
+	Creator              *ArtifactUser  `json:"creator,omitempty"`
+	Tags                 []ArtifactTag  `json:"tags,omitempty"`
+	Permissions          []string       `json:"permissions,omitempty"`
 }
 
 type CreateArtifactRequest struct {
