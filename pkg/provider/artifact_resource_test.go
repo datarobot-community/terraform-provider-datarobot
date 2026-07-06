@@ -1079,3 +1079,28 @@ resource "datarobot_artifact" "test" {
 		},
 	})
 }
+
+func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		Primary: types.BoolValue(true),
+		Port:    types.Int64Value(8080),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source: types.StringValue("provided"),
+			},
+		},
+	})
+
+	if container.ImageURI != nil {
+		t.Fatalf("expected no imageUri, got %q", *container.ImageURI)
+	}
+	if container.ImageBuildConfig == nil || container.ImageBuildConfig.Dockerfile == nil {
+		t.Fatal("expected imageBuildConfig.dockerfile")
+	}
+	if container.ImageBuildConfig.Dockerfile.Source != "provided" {
+		t.Fatalf("expected provided source, got %q", container.ImageBuildConfig.Dockerfile.Source)
+	}
+	if container.ImageBuildConfig.Dockerfile.Path != "./Dockerfile" {
+		t.Fatalf("expected default dockerfile path, got %q", container.ImageBuildConfig.Dockerfile.Path)
+	}
+}
