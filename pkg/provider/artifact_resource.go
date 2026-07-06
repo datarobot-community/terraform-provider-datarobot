@@ -617,6 +617,15 @@ func dockerfileEqual(a, b *ArtifactDockerfileModel) bool {
 	return true
 }
 
+func defaultProvidedDockerfileModel() ArtifactDockerfileModel {
+	return ArtifactDockerfileModel{
+		Source:                        types.StringValue("provided"),
+		Path:                          types.StringValue("./Dockerfile"),
+		ExecutionEnvironmentID:        types.StringNull(),
+		ExecutionEnvironmentVersionID: types.StringNull(),
+	}
+}
+
 func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 	if a == nil && b == nil {
 		return true
