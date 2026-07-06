@@ -37,7 +37,7 @@ func TestIntegrationArtifactDataSource(t *testing.T) {
 	name := "test-artifact-ds-" + uuid.NewString()[:8]
 	imageURI := "nginx:latest"
 	repoIDPtr := repoID
-	artifact := artifactFixture(artifactID, &repoIDPtr, name, imageURI)
+	artifact := artifactFixture(artifactID, &repoIDPtr, name)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).

@@ -345,8 +345,11 @@ resource "datarobot_artifact" "test" {
 `, name, artifactTestContainerSpecBlock(imageURI))
 }
 
+// artifactTestImageURI is the image used in mock artifact fixtures and Terraform test configs.
+const artifactTestImageURI = "nginx:latest"
+
 // artifactFixture returns a full Workload API artifact response for integration tests.
-func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
+func artifactFixture(id string, repoID *string, name string) *client.Artifact {
 	port := int64(8080)
 	primary := true
 	containerName := "main"
