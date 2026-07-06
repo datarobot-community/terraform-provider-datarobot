@@ -1104,3 +1104,31 @@ func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
 		t.Fatalf("expected default dockerfile path, got %q", container.ImageBuildConfig.Dockerfile.Path)
 	}
 }
+
+func TestArtifactImageBuildConfigToClient_generated(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/app:latest"),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source:                        types.StringValue("generated"),
+				ExecutionEnvironmentID:        types.StringValue("eeeeeeeeeeeeeeeeeeeeeeee"),
+				ExecutionEnvironmentVersionID: types.StringValue("ffffffffffffffffffffffff"),
+				Entrypoint:                    []types.String{types.StringValue("python"), types.StringValue("app.py")},
+			},
+		},
+	})
+
+	cfg := container.ImageBuildConfig
+	if cfg == nil || cfg.Dockerfile == nil {
+		t.Fatal("expected imageBuildConfig")
+	}
+	if cfg.Dockerfile.ExecutionEnvironmentID != "eeeeeeeeeeeeeeeeeeeeeeee" {
+		t.Fatalf("unexpected executionEnvironmentId: %q", cfg.Dockerfile.ExecutionEnvironmentID)
+	}
+	if cfg.Dockerfile.ExecutionEnvironmentVersionID != "ffffffffffffffffffffffff" {
+		t.Fatalf("unexpected executionEnvironmentVersionID: %q", cfg.Dockerfile.ExecutionEnvironmentVersionID)
+	}
+	if len(cfg.Dockerfile.Entrypoint) != 2 || cfg.Dockerfile.Entrypoint[0] != "python" {
+		t.Fatalf("unexpected entrypoint: %v", cfg.Dockerfile.Entrypoint)
+	}
+}
