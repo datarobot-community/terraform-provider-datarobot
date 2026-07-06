@@ -594,27 +594,59 @@ func codeRefEqual(a, b *ArtifactCodeRefModel) bool {
 }
 
 func dockerfileEqual(a, b *ArtifactDockerfileModel) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
+	aNorm := normalizeDockerfileForEqual(a)
+	bNorm := normalizeDockerfileForEqual(b)
+
+	if !aNorm.Source.Equal(bNorm.Source) ||
+		!aNorm.Path.Equal(bNorm.Path) ||
+		!aNorm.ExecutionEnvironmentID.Equal(bNorm.ExecutionEnvironmentID) ||
+		!aNorm.ExecutionEnvironmentVersionID.Equal(bNorm.ExecutionEnvironmentVersionID) {
 		return false
 	}
-	if !a.Source.Equal(b.Source) ||
-		!a.Path.Equal(b.Path) ||
-		!a.ExecutionEnvironmentID.Equal(b.ExecutionEnvironmentID) ||
-		!a.ExecutionEnvironmentVersionID.Equal(b.ExecutionEnvironmentVersionID) {
+	if len(aNorm.Entrypoint) != len(bNorm.Entrypoint) {
 		return false
 	}
-	if len(a.Entrypoint) != len(b.Entrypoint) {
-		return false
-	}
-	for i := range a.Entrypoint {
-		if !a.Entrypoint[i].Equal(b.Entrypoint[i]) {
+	for i := range aNorm.Entrypoint {
+		if !aNorm.Entrypoint[i].Equal(bNorm.Entrypoint[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+// normalizeDockerfileForEqual applies API/schema defaults so omitted provided-dockerfile
+// blocks and null path in state compare equal to explicit {source: provided, path: ./Dockerfile}.
+func normalizeDockerfileForEqual(df *ArtifactDockerfileModel) ArtifactDockerfileModel {
+	if df == nil {
+		return defaultProvidedDockerfileModel()
+	}
+
+	source := "provided"
+	if !df.Source.IsNull() && !df.Source.IsUnknown() {
+		source = df.Source.ValueString()
+	}
+
+	if source == "generated" {
+		return ArtifactDockerfileModel{
+			Source:                        types.StringValue("generated"),
+			Path:                          types.StringNull(),
+			ExecutionEnvironmentID:        df.ExecutionEnvironmentID,
+			ExecutionEnvironmentVersionID: df.ExecutionEnvironmentVersionID,
+			Entrypoint:                    df.Entrypoint,
+		}
+	}
+
+	path := "./Dockerfile"
+	if !df.Path.IsNull() && !df.Path.IsUnknown() && df.Path.ValueString() != "" {
+		path = df.Path.ValueString()
+	}
+
+	return ArtifactDockerfileModel{
+		Source:                        types.StringValue("provided"),
+		Path:                          types.StringValue(path),
+		ExecutionEnvironmentID:        types.StringNull(),
+		ExecutionEnvironmentVersionID: types.StringNull(),
+	}
 }
 
 func defaultProvidedDockerfileModel() ArtifactDockerfileModel {
