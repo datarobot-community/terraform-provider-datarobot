@@ -918,3 +918,40 @@ func TestPatchRequestFromPlan(t *testing.T) {
 		t.Fatalf("expected lock status in patch, got %v", lockPatch.Status)
 	}
 }
+
+func TestArtifactImageSourceRequired(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name = "missing-image-source"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Missing image source"),
+			},
+		},
+	})
+}
