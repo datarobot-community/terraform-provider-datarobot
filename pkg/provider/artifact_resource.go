@@ -675,19 +675,14 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.FailureThreshold.Equal(b.FailureThreshold)
 }
 
-func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data ArtifactResourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() || data.Spec == nil {
-		return
-	}
-	if len(data.Spec.ContainerGroups) == 0 {
+func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
+	if len(groups) == 0 {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("spec").AtName("container_groups"),
 			"Missing container groups",
 			"At least one container group must be defined in the artifact spec.",
 		)
-	} else if len(data.Spec.ContainerGroups) > 1 {
+	} else if len(groups) > 1 {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("spec").AtName("container_groups"),
 			"Too many container groups",
