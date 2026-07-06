@@ -1250,3 +1250,99 @@ func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 		t.Fatal("expected image_build_config change to make containers unequal")
 	}
 }
+
+func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "draft-build-" + uuid.NewString()[:8]
+
+	draftArtifact := &client.Artifact{
+		ID:                   artifactID,
+		Name:                 name,
+		Type:                 client.ArtifactTypeService,
+		Status:               client.ArtifactStatusDraft,
+		ArtifactRepositoryID: &repoIDPtr,
+		Spec: client.ArtifactSpec{
+			ContainerGroups: []client.ArtifactContainerGroup{{
+				Containers: []client.ArtifactContainer{{
+					Name:    stringPtr("main"),
+					Primary: func() *bool { v := true; return &v }(),
+					Port:    func() *int64 { v := int64(8080); return &v }(),
+					ImageBuildConfig: &client.ArtifactImageBuildConfig{
+						Dockerfile: &client.ArtifactDockerfile{Source: "provided", Path: "./Dockerfile"},
+					},
+				}},
+			}},
+		},
+	}
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Errorf("expected draft create, got %q", req.Status)
+			}
+			c := req.Spec.ContainerGroups[0].Containers[0]
+			if c.ImageURI != nil {
+				t.Errorf("expected no imageUri on create, got %q", *c.ImageURI)
+			}
+			if c.ImageBuildConfig == nil || c.ImageBuildConfig.Dockerfile == nil {
+				t.Fatal("expected imageBuildConfig on create request")
+			}
+			if c.ImageBuildConfig.Dockerfile.Source != "provided" {
+				t.Fatalf("expected provided dockerfile, got %q", c.ImageBuildConfig.Dockerfile.Source)
+			}
+			if c.ImageBuildConfig.Dockerfile.Path != "./Dockerfile" {
+				t.Fatalf("expected dockerfile path, got %q", c.ImageBuildConfig.Dockerfile.Path)
+			}
+			return draftArtifact, nil
+		})
+
+	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(draftArtifact, nil).AnyTimes()
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "main"
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+		},
+	})
+}
