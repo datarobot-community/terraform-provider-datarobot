@@ -1242,7 +1242,7 @@ func loadDockerfileFromAPI(df *client.ArtifactDockerfile) *ArtifactDockerfileMod
 	if df.Path != "" {
 		model.Path = types.StringValue(df.Path)
 	} else {
-		model.Path = types.StringNull()
+		model.Path = types.StringValue("./Dockerfile")
 	}
 	return model
 }
