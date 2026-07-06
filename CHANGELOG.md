@@ -3,6 +3,7 @@
 ### Added
 
 - `status` attribute on `datarobot_artifact`: `draft` (in-place updates, same `artifact_id`) or `locked` (default; spec changes create a new version). Locking a draft artifact is one-way.
+- `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locked artifacts require `image_uri` when `image_build_config` is set.
 ## [0.10.42] - 2026-06-30
 
 ### Added
