@@ -38,7 +38,7 @@ func TestIntegrationArtifactsDataSource(t *testing.T) {
 	name := "test-artifacts-ds-" + uuid.NewString()[:8]
 	imageURI := "nginx:latest"
 	repoIDPtr := repoID
-	artifact := artifactFixture(artifactID, &repoIDPtr, name, imageURI)
+	artifact := artifactFixture(artifactID, &repoIDPtr, name)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).
@@ -77,7 +77,7 @@ func TestIntegrationArtifactsDataSourceWithStatusFilter(t *testing.T) {
 	name := "test-artifacts-ds-" + uuid.NewString()[:8]
 	imageURI := "nginx:latest"
 	repoIDPtr := repoID
-	artifact := artifactFixture(artifactID, &repoIDPtr, name, imageURI)
+	artifact := artifactFixture(artifactID, &repoIDPtr, name)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).
@@ -138,7 +138,7 @@ func TestIntegrationArtifactsDataSourceWithLimit(t *testing.T) {
 	name := "test-artifacts-ds-" + uuid.NewString()[:8]
 	imageURI := "nginx:latest"
 	repoIDPtr := repoID
-	artifact := artifactFixture(artifactID, &repoIDPtr, name, imageURI)
+	artifact := artifactFixture(artifactID, &repoIDPtr, name)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).

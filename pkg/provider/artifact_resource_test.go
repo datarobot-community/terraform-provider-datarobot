@@ -40,10 +40,9 @@ func TestIntegrationArtifactResource(t *testing.T) {
 	updatedName := "updated-" + name
 
 	repoIDPtr := repoID
-	imageURI := "nginx:latest"
 
-	initialArtifact := artifactFixture(initialID, &repoIDPtr, name, imageURI)
-	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName, imageURI)
+	initialArtifact := artifactFixture(initialID, &repoIDPtr, name)
+	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName)
 
 	// Create: CreateArtifact → post-create Read
 	mockService.EXPECT().
@@ -394,7 +393,7 @@ func artifactFixture(id string, repoID *string, name string) *client.Artifact {
 					Containers: []client.ArtifactContainer{
 						{
 							Name:        &containerName,
-							ImageURI:    imageURI,
+							ImageURI:    artifactTestImageURI,
 							Description: containerDesc,
 							Primary:     &primary,
 							Port:        &port,
