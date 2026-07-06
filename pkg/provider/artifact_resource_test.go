@@ -1181,3 +1181,50 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 		}
 	})
 }
+
+func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
+	t.Run("generated dockerfile", func(t *testing.T) {
+		const (
+			eeID        = "eeeeeeeeeeeeeeeeeeeeeeee"
+			eeVersionID = "ffffffffffffffffffffffff"
+		)
+
+		model := loadContainerFromAPI(client.ArtifactContainer{
+			ImageURI: stringPtr("registry.example/app:latest"),
+			ImageBuildConfig: &client.ArtifactImageBuildConfig{
+				Dockerfile: &client.ArtifactDockerfile{
+					Source:                        "generated",
+					ExecutionEnvironmentID:        eeID,
+					ExecutionEnvironmentVersionID: eeVersionID,
+					Entrypoint:                    []string{"python", "app.py"},
+				},
+			},
+		}, nil)
+
+		cfg := model.ImageBuildConfig
+		if cfg == nil || cfg.Dockerfile == nil {
+			t.Fatal("expected image_build_config.dockerfile in state model")
+		}
+		if got := cfg.Dockerfile.Source.ValueString(); got != "generated" {
+			t.Fatalf("dockerfile.source: got %q, want %q", got, "generated")
+		}
+		if got := cfg.Dockerfile.ExecutionEnvironmentID.ValueString(); got != eeID {
+			t.Fatalf("execution_environment_id: got %q, want %q", got, eeID)
+		}
+		if got := cfg.Dockerfile.ExecutionEnvironmentVersionID.ValueString(); got != eeVersionID {
+			t.Fatalf("execution_environment_version_id: got %q, want %q", got, eeVersionID)
+		}
+		if len(cfg.Dockerfile.Entrypoint) != 2 {
+			t.Fatalf("entrypoint length: got %d, want 2", len(cfg.Dockerfile.Entrypoint))
+		}
+		if got := cfg.Dockerfile.Entrypoint[0].ValueString(); got != "python" {
+			t.Fatalf("entrypoint[0]: got %q, want %q", got, "python")
+		}
+		if got := cfg.Dockerfile.Entrypoint[1].ValueString(); got != "app.py" {
+			t.Fatalf("entrypoint[1]: got %q, want %q", got, "app.py")
+		}
+		if model.ImageURI.ValueString() != "registry.example/app:latest" {
+			t.Fatalf("image_uri: got %q", model.ImageURI.ValueString())
+		}
+	})
+}
