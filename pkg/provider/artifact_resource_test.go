@@ -1086,7 +1086,7 @@ func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
 		Port:    types.Int64Value(8080),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
 			Dockerfile: &ArtifactDockerfileModel{
-				Source: types.StringValue("provided"),
+				Source: types.StringValue("provided"), // path omitted on purpose: defaults to ./Dockerfile in artifactDockerfileToClient
 			},
 		},
 	})
