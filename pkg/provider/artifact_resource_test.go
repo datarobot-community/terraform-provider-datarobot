@@ -1228,3 +1228,25 @@ func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
 		}
 	})
 }
+
+func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
+	base := ArtifactContainerModel{
+		ImageURI: types.StringValue("nginx:latest"),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+		},
+	}
+	changed := base
+	changed.ImageBuildConfig = &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{
+			Source:                        types.StringValue("generated"),
+			ExecutionEnvironmentID:        types.StringValue("eeeeeeeeeeeeeeeeeeeeeeee"),
+			ExecutionEnvironmentVersionID: types.StringValue("ffffffffffffffffffffffff"),
+			Entrypoint:                    []types.String{types.StringValue("python")},
+		},
+	}
+
+	if containersEqual(base, changed) {
+		t.Fatal("expected image_build_config change to make containers unequal")
+	}
+}
