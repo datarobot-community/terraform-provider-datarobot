@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -995,4 +998,38 @@ resource "datarobot_artifact" "test" {
 			},
 		},
 	})
+}
+
+func TestArtifactImageBuildConfigGeneratedRequiresFields(t *testing.T) {
+	resp := &tfresource.ValidateConfigResponse{}
+	containerPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(0).
+		AtName("containers").AtListIndex(0)
+	cfg := &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{
+			Source: types.StringValue("generated"),
+		},
+	}
+
+	validateImageBuildConfig(resp, containerPath, cfg, string(client.ArtifactTypeService))
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected validation errors")
+	}
+	if len(resp.Diagnostics.Errors()) != 3 {
+		t.Fatalf("expected 3 validation errors, got %d", len(resp.Diagnostics.Errors()))
+	}
+
+	var combined strings.Builder
+	for _, d := range resp.Diagnostics.Errors() {
+		combined.WriteString(d.Summary())
+		combined.WriteString(d.Detail())
+	}
+	msg := combined.String()
+
+	for _, field := range []string{"execution_environment_id", "execution_environment_version_id", "entrypoint"} {
+		if !strings.Contains(msg, field) {
+			t.Errorf("expected validation to mention %q, got: %s", field, msg)
+		}
+	}
 }
