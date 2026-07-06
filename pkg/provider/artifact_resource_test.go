@@ -1033,3 +1033,49 @@ func TestArtifactImageBuildConfigGeneratedRequiresFields(t *testing.T) {
 		}
 	}
 }
+
+func TestArtifactNimWithCodeRefRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "nim-code-ref"
+  type   = "nim"
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          code_ref = {
+            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
+            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("NIM artifacts cannot include"),
+			},
+		},
+	})
+}
