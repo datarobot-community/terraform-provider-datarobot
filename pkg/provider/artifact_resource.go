@@ -1068,8 +1068,20 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 }
 
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
-	model := ArtifactContainerModel{
-		ImageURI: types.StringValue(c.ImageURI),
+	model := ArtifactContainerModel{}
+
+	if c.ImageURI != nil && *c.ImageURI != "" {
+		model.ImageURI = types.StringValue(*c.ImageURI)
+	} else {
+		model.ImageURI = types.StringNull()
+	}
+
+	if c.ImageBuildConfig != nil {
+		var priorBuild *ArtifactImageBuildConfigModel
+		if prior != nil {
+			priorBuild = prior.ImageBuildConfig
+		}
+		model.ImageBuildConfig = loadImageBuildConfigFromAPI(c.ImageBuildConfig, priorBuild)
 	}
 
 	if c.Name != nil {
@@ -1135,6 +1147,67 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
 
+	return model
+}
+
+func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *ArtifactImageBuildConfigModel) *ArtifactImageBuildConfigModel {
+	if cfg == nil {
+		return nil
+	}
+
+	model := &ArtifactImageBuildConfigModel{}
+	if cfg.CodeRef != nil && cfg.CodeRef.Datarobot != nil {
+		model.CodeRef = &ArtifactCodeRefModel{
+			CatalogID:        types.StringValue(cfg.CodeRef.Datarobot.CatalogID),
+			CatalogVersionID: types.StringValue(cfg.CodeRef.Datarobot.CatalogVersionID),
+		}
+	} else if prior != nil && prior.CodeRef != nil {
+		model.CodeRef = prior.CodeRef
+	}
+
+	if cfg.Dockerfile != nil {
+		model.Dockerfile = loadDockerfileFromAPI(cfg.Dockerfile)
+	} else if prior != nil && prior.Dockerfile != nil {
+		model.Dockerfile = prior.Dockerfile
+	}
+
+	return model
+}
+
+func loadDockerfileFromAPI(df *client.ArtifactDockerfile) *ArtifactDockerfileModel {
+	if df == nil {
+		return nil
+	}
+
+	model := &ArtifactDockerfileModel{
+		Source: types.StringValue(df.Source),
+	}
+
+	if df.Source == "generated" {
+		if df.ExecutionEnvironmentID != "" {
+			model.ExecutionEnvironmentID = types.StringValue(df.ExecutionEnvironmentID)
+		} else {
+			model.ExecutionEnvironmentID = types.StringNull()
+		}
+		if df.ExecutionEnvironmentVersionID != "" {
+			model.ExecutionEnvironmentVersionID = types.StringValue(df.ExecutionEnvironmentVersionID)
+		} else {
+			model.ExecutionEnvironmentVersionID = types.StringNull()
+		}
+		if len(df.Entrypoint) > 0 {
+			model.Entrypoint = make([]types.String, len(df.Entrypoint))
+			for i, e := range df.Entrypoint {
+				model.Entrypoint[i] = types.StringValue(e)
+			}
+		}
+		return model
+	}
+
+	if df.Path != "" {
+		model.Path = types.StringValue(df.Path)
+	} else {
+		model.Path = types.StringNull()
+	}
 	return model
 }
 
