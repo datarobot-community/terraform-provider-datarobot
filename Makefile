@@ -46,10 +46,39 @@ test-coverage:
 	@go tool cover -func=coverage.out | tail -1
 
 testacc:
-	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -parallel=4
+	TF_ACC=1 go test ./... -v $(TESTARGS) -timeout 120m -parallel=6
 
 test-changed:
 	bash scripts/run-changed-tests.sh
+
+# Full-suite test groups for parallel CI execution.
+# Groups are defined by file name prefixes in scripts/run-test-group.sh — edit there,
+# not here. Run all four in parallel Harness stages: ~70 min → ~35 min wall-clock.
+
+# Credentials, datasets, datastores, use cases, infra primitives (~15 min)
+testacc-group-fast:
+	bash scripts/run-test-group.sh fast
+
+# Custom models, registered models, LLM blueprints, vector DB, playground (~40 min)
+testacc-group-models:
+	bash scripts/run-test-group.sh models
+
+# Deployments, custom metrics, retraining policies, workloads (~35 min)
+testacc-group-deployments:
+	bash scripts/run-test-group.sh deployments
+
+# Custom apps, application sources, notebooks, custom jobs, execution envs (~25 min)
+testacc-group-apps:
+	bash scripts/run-test-group.sh apps
+
+# Verify every TestAcc*/TestIntegration* function in pkg/provider/ is assigned to a group.
+testacc-check-groups:
+	bash scripts/run-test-group.sh --check
+
+# Verify every resource/data-source file has a test file with acceptance tests.
+# Static check — no API credentials needed. Add exceptions for known gaps in the script.
+check-resource-tests:
+	bash scripts/check-resource-tests.sh
 
 lint:
 	echo "Running checks for service"

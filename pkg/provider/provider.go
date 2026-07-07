@@ -209,6 +209,8 @@ func (p *Provider) DataSources(ctx context.Context) []func() datasource.DataSour
 	return []func() datasource.DataSource{
 		NewGlobalModelDataSource,
 		NewExecutionEnvironmentDataSource,
+		NewArtifactDataSource,
+		NewArtifactsDataSource,
 	}
 }
 
