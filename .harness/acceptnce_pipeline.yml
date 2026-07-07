@@ -115,7 +115,7 @@ pipeline:
                   build:
                     type: branch
                     spec:
-                      branch: <+trigger.targetBranch>
+                      branch: <+trigger.sourceBranch>
             stages:
               - parallel:
                   - stage:
