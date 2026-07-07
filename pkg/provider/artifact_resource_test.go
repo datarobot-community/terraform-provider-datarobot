@@ -47,8 +47,8 @@ func TestIntegrationArtifactResource(t *testing.T) {
 
 	repoIDPtr := repoID
 
-	initialArtifact := artifactFixture(initialID, &repoIDPtr, name, artifactTestImageURI)
-	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName, artifactTestImageURI)
+	initialArtifact := artifactFixture(initialID, &repoIDPtr, name)
+	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName)
 
 	// Create: CreateArtifact → post-create Read
 	mockService.EXPECT().
@@ -459,15 +459,15 @@ resource "datarobot_artifact" "test" {
 `, name, artifactTestContainerSpecBlock(imageURI))
 }
 
-func artifactFixture(id string, repoID *string, name, imageURI string) *client.Artifact {
-	return artifactFixtureWithStatus(id, repoID, name, imageURI, client.ArtifactStatusLocked)
+func artifactFixture(id string, repoID *string, name string) *client.Artifact {
+	return artifactFixtureWithStatus(id, repoID, name, client.ArtifactStatusLocked)
 }
 
 // artifactTestImageURI is the image used in mock artifact fixtures and Terraform test configs.
 const artifactTestImageURI = "nginx:latest"
 
 // artifactFixture returns a full Workload API artifact response for integration tests.
-func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string, status client.ArtifactStatus) *client.Artifact {
+func artifactFixtureWithStatus(id string, repoID *string, name string, status client.ArtifactStatus) *client.Artifact {
 	port := int64(8080)
 	primary := true
 	containerName := "main"
@@ -491,7 +491,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string,
 		Name:                 name,
 		Description:          "test artifact description",
 		Type:                 client.ArtifactTypeService,
-		Status:               client.ArtifactStatusLocked,
+		Status:               status,
 		Version:              &version,
 		ArtifactRepositoryID: repoID,
 		CreatedAt:            "2026-01-01T00:00:00Z",
@@ -751,11 +751,10 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 	repoIDPtr := repoID
 	name := "draft-artifact-" + uuid.NewString()[:8]
 	updatedName := "updated-" + name
-	imageURI := "nginx:latest"
 
-	draftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, imageURI, client.ArtifactStatusDraft)
-	updatedDraftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, imageURI, client.ArtifactStatusDraft)
-	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, imageURI, client.ArtifactStatusLocked)
+	draftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, client.ArtifactStatusDraft)
+	updatedDraftArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, client.ArtifactStatusDraft)
+	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, updatedName, client.ArtifactStatusLocked)
 
 	getArtifactResponse := draftArtifact
 	mockService.EXPECT().
@@ -844,9 +843,8 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 	repoID := uuid.NewString()
 	repoIDPtr := repoID
 	name := "locked-artifact-" + uuid.NewString()[:8]
-	imageURI := "nginx:latest"
 
-	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, imageURI, client.ArtifactStatusLocked)
+	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, client.ArtifactStatusLocked)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).
