@@ -47,8 +47,8 @@ func TestIntegrationArtifactResource(t *testing.T) {
 
 	repoIDPtr := repoID
 
-	initialArtifact := artifactFixture(initialID, &repoIDPtr, name)
-	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName)
+	initialArtifact := artifactFixture(initialID, &repoIDPtr, name, artifactTestImageURI)
+	updatedArtifact := artifactFixture(updatedID, &repoIDPtr, updatedName, artifactTestImageURI)
 
 	// Create: CreateArtifact → post-create Read
 	mockService.EXPECT().
