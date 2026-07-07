@@ -463,12 +463,11 @@ func artifactFixture(id string, repoID *string, name, imageURI string) *client.A
 	return artifactFixtureWithStatus(id, repoID, name, imageURI, client.ArtifactStatusLocked)
 }
 
-func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string, status client.ArtifactStatus) *client.Artifact {
 // artifactTestImageURI is the image used in mock artifact fixtures and Terraform test configs.
 const artifactTestImageURI = "nginx:latest"
 
 // artifactFixture returns a full Workload API artifact response for integration tests.
-func artifactFixture(id string, repoID *string, name string) *client.Artifact {
+func artifactFixtureWithStatus(id string, repoID *string, name, imageURI string, status client.ArtifactStatus) *client.Artifact {
 	port := int64(8080)
 	primary := true
 	containerName := "main"
