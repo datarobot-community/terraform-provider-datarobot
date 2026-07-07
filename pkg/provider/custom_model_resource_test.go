@@ -47,6 +47,8 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					checkBlueprintInjectedRuntimeParametersPresent(resourceName,
+						"LLM_BLUEPRINT_ID", "PLAYGROUND_ID", "LLM_ID", "CUSTOM_MODEL_WORKERS"),
 				),
 			},
 			// Update name, description
@@ -58,6 +60,8 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					checkBlueprintInjectedRuntimeParametersPresent(resourceName,
+						"LLM_BLUEPRINT_ID", "PLAYGROUND_ID", "LLM_ID", "CUSTOM_MODEL_WORKERS"),
 				),
 			},
 			// Delete is tested automatically
@@ -1842,6 +1846,51 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 		}
 
 		return fmt.Errorf("Custom Model not found")
+	}
+}
+
+// checkBlueprintInjectedRuntimeParametersPresent asserts that blueprint-populated
+// runtime parameters (never declared in config) survive on the custom model version.
+func checkBlueprintInjectedRuntimeParametersPresent(resourceName string, expectedFieldNames ...string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No ID is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = client.NewService(cl)
+
+		traceAPICall("GetCustomModel")
+		customModel, err := p.service.GetCustomModel(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		present := make(map[string]bool, len(customModel.LatestVersion.RuntimeParameters))
+		for _, runtimeParam := range customModel.LatestVersion.RuntimeParameters {
+			present[runtimeParam.FieldName] = true
+		}
+
+		var missing []string
+		for _, fieldName := range expectedFieldNames {
+			if !present[fieldName] {
+				missing = append(missing, fieldName)
+			}
+		}
+
+		if len(missing) > 0 {
+			return fmt.Errorf("blueprint-injected runtime parameters missing from custom model %s: %v", rs.Primary.ID, missing)
+		}
+
+		return nil
 	}
 }
 
