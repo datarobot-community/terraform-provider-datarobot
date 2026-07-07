@@ -743,6 +743,7 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 	})()
 
 	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
@@ -836,6 +837,7 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 	})()
 
 	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
