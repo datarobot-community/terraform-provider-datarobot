@@ -883,38 +883,9 @@ resource "datarobot_artifact" "test" {
   description = "test artifact description"
   type        = "service"
   status      = %q
-
-  spec = {
-    container_groups = [
-      {
-        containers = [
-          {
-            name        = "main"
-            image_uri   = "nginx:latest"
-            description = "main container"
-            primary     = true
-            port        = 8080
-            entrypoint  = ["python", "-m", "app"]
-
-            environment_vars = [
-              {
-                source = "string"
-                name   = "ENV"
-                value  = "production"
-              }
-            ]
-
-            readiness_probe = {
-              path = "/health"
-              port = 8080
-            }
-          }
-        ]
-      }
-    ]
-  }
+%s
 }
-`, name, status)
+`, name, status, artifactTestContainerSpecBlock(artifactTestImageURI))
 }
 
 func TestArtifactCreateRequestStatus(t *testing.T) {
