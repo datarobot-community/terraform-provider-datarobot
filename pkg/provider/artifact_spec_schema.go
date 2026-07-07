@@ -430,6 +430,99 @@ func artifactResourceSpecAttribute(probeAttributes map[string]schema.Attribute) 
 	}
 }
 
+func artifactDataSourceComputedAttributes(probeAttributes map[string]datasourceschema.Attribute) map[string]datasourceschema.Attribute {
+	return map[string]datasourceschema.Attribute{
+		"artifact_id": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "The artifact version ID.",
+		},
+		"name": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "The name of the Artifact.",
+		},
+		"description": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "The description of the Artifact.",
+		},
+		"type": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "The artifact type: `service` or `nim`.",
+		},
+		"status": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Artifact status: `draft` or `locked`.",
+		},
+		"version": datasourceschema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Version number of the artifact. Set only for locked artifacts.",
+		},
+		"artifact_repository_id": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "ID of the artifact repository for versioning.",
+		},
+		"created_at": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Timestamp of when the artifact was created.",
+		},
+		"updated_at": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Timestamp of when the artifact was last updated.",
+		},
+		"creator": datasourceschema.SingleNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "User who created the artifact.",
+			Attributes: map[string]datasourceschema.Attribute{
+				"id": datasourceschema.StringAttribute{
+					Computed:            true,
+					MarkdownDescription: "User ID.",
+				},
+				"full_name": datasourceschema.StringAttribute{
+					Computed:            true,
+					MarkdownDescription: "User's full name.",
+				},
+				"email": datasourceschema.StringAttribute{
+					Computed:            true,
+					MarkdownDescription: "User email address.",
+				},
+				"username": datasourceschema.StringAttribute{
+					Computed:            true,
+					MarkdownDescription: "Username.",
+				},
+				"userhash": datasourceschema.StringAttribute{
+					Computed:            true,
+					MarkdownDescription: "User's gravatar hash.",
+				},
+			},
+		},
+		"tags": datasourceschema.ListNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Tags associated with this artifact.",
+			NestedObject: datasourceschema.NestedAttributeObject{
+				Attributes: map[string]datasourceschema.Attribute{
+					"id": datasourceschema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Tag ID.",
+					},
+					"name": datasourceschema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Tag name.",
+					},
+					"value": datasourceschema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Tag value.",
+					},
+				},
+			},
+		},
+		"permissions": datasourceschema.ListAttribute{
+			Computed:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Effective repository-level permissions for the authenticated user.",
+		},
+		"spec": artifactDataSourceSpecAttribute(probeAttributes),
+	}
+}
+
 func artifactDataSourceSpecAttribute(probeAttributes map[string]datasourceschema.Attribute) datasourceschema.SingleNestedAttribute {
 	containerAttributes := artifactDataSourceContainerAttributes(probeAttributes)
 	return datasourceschema.SingleNestedAttribute{

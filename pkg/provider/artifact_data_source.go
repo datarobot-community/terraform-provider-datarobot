@@ -26,6 +26,11 @@ func (d *ArtifactDataSource) Metadata(ctx context.Context, req datasource.Metada
 
 func (d *ArtifactDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	probeAttributes := artifactDataSourceProbeAttributes()
+	attributes := artifactDataSourceComputedAttributes(probeAttributes)
+	attributes["artifact_id"] = datasourceschema.StringAttribute{
+		Required:            true,
+		MarkdownDescription: "The artifact version ID to look up.",
+	}
 
 	resp.Schema = datasourceschema.Schema{
 		MarkdownDescription: "Look up an existing Workload API artifact by ID. Returns the full artifact definition including spec, status, creator, tags, and permissions.",

@@ -1,6 +1,11 @@
 package client
 
-import "context"
+import (
+	"context"
+	"strings"
+
+	"github.com/google/go-querystring/query"
+)
 
 type WorkloadImportance string
 type ProtonStatus string
@@ -260,6 +265,60 @@ func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *CreateArtifactReq
 
 func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, error) {
 	return Get[Artifact](s.client, ctx, "/artifacts/"+id+"/")
+}
+
+type ListArtifactsRequest struct {
+	Status string `url:"status,omitempty"`
+	Limit  int    `url:"limit,omitempty"`
+}
+
+func (s *ServiceImpl) ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error) {
+	const defaultPageSize = 100
+
+	maxResults := 0
+	pageSize := defaultPageSize
+	status := ""
+
+	if req != nil {
+		status = req.Status
+		if req.Limit > 0 {
+			maxResults = req.Limit
+			pageSize = req.Limit
+		}
+	}
+
+	queryReq := &ListArtifactsRequest{
+		Status: status,
+		Limit:  pageSize,
+	}
+	pathValues, _ := query.Values(queryReq)
+	nextURL := "/artifacts/?" + pathValues.Encode()
+
+	var results []Artifact
+	for nextURL != "" {
+		result, err := Get[PaginatedResponse[Artifact]](s.client, ctx, nextURL)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, result.Data...)
+
+		if maxResults > 0 && len(results) >= maxResults {
+			return results[:maxResults], nil
+		}
+
+		nextURL = result.Next
+		if nextURL != "" {
+			if strings.Contains(nextURL, "?") {
+				query := strings.Split(nextURL, "?")[1]
+				nextURL = "/artifacts/?" + query
+			} else {
+				nextURL = "/artifacts/"
+			}
+		}
+	}
+
+	return results, nil
 }
 
 func (s *ServiceImpl) DeleteArtifactRepository(ctx context.Context, id string) error {
