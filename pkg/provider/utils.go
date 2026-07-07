@@ -509,6 +509,63 @@ func formatRuntimeParameterValuesByManagedKeys(
 	return listValueFromRuntimParameters(ctx, result)
 }
 
+// mergeBlueprintRuntimeParameters restores blueprint-set runtime params the
+// plan doesn't declare. Plan values win on conflict; keys dropped from state
+// to plan stay dropped.
+func mergeBlueprintRuntimeParameters(
+	ctx context.Context,
+	apiParams []client.RuntimeParameter,
+	stateVals, planVals basetypes.ListValue,
+) (basetypes.ListValue, diag.Diagnostics) {
+	declared := make([]RuntimeParameterValue, 0)
+	if IsKnown(planVals) {
+		if diags := planVals.ElementsAs(ctx, &declared, false); diags.HasError() {
+			return basetypes.ListValue{}, diags
+		}
+	}
+	declaredKeys := make(map[string]bool, len(declared))
+	for _, d := range declared {
+		declaredKeys[d.Key.ValueString()] = true
+	}
+
+	stateEntries := make([]RuntimeParameterValue, 0)
+	if IsKnown(stateVals) {
+		if diags := stateVals.ElementsAs(ctx, &stateEntries, false); diags.HasError() {
+			return basetypes.ListValue{}, diags
+		}
+	}
+	stateKeys := make(map[string]bool, len(stateEntries))
+	for _, s := range stateEntries {
+		stateKeys[s.Key.ValueString()] = true
+	}
+
+	carryover := make([]RuntimeParameterValue, 0, len(apiParams))
+	for _, param := range apiParams {
+		key := param.FieldName
+		if declaredKeys[key] {
+			continue
+		}
+		if stateKeys[key] {
+			continue
+		}
+
+		if param.OverrideValue == nil {
+			continue
+		}
+
+		carryover = append(carryover, RuntimeParameterValue{
+			Key:   types.StringValue(key),
+			Type:  types.StringValue(param.Type),
+			Value: types.StringValue(fmt.Sprintf("%v", param.CurrentValue)),
+		})
+	}
+
+	merged := make([]RuntimeParameterValue, 0, len(carryover)+len(declared))
+	merged = append(merged, carryover...)
+	merged = append(merged, declared...)
+	return listValueFromRuntimParameters(ctx, merged)
+}
+
 func isManagedByGuards(param client.RuntimeParameter) bool {
 	return param.FieldName == faithfulnessOpenAiRuntimeParam ||
 		param.FieldName == faithfulnessAzureOpenAiRuntimeParam ||
