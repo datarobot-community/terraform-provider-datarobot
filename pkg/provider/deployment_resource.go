@@ -788,15 +788,41 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		// model replacement is an async operation, separate from waiting for the deployment to be ready
 		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			tflog.Warn(ctx, "Model replacement task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
-				"status_id": statusId,
-				"error":     err.Error(),
-			})
+			// Task polling failure is not immediately fatal: the task endpoint can
+			// return ERROR when the pod fails to start (e.g. bad dependency build,
+			// crash on import). Promote this to a hard error so the operator learns
+			// the replacement did not complete, rather than silently succeeding.
+			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
+			return
 		}
 
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Deployment not ready after model replacement", err.Error())
+			return
+		}
+
+		// Final ground-truth check: confirm the deployment is actually serving the
+		// requested model package. The deployment can return to "active" on the old
+		// version if the new pod failed to start and DataRobot rolled back silently.
+		traceAPICall("GetDeploymentAfterModelReplacement")
+		liveDeployment, err := r.provider.service.GetDeployment(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Error verifying Deployment model after replacement", err.Error())
+			return
+		}
+		if liveDeployment.ModelPackage.ID != plan.RegisteredModelVersionID.ValueString() {
+			resp.Diagnostics.AddError(
+				"Deployment model replacement did not apply",
+				fmt.Sprintf(
+					"Deployment %s is active but still serving model package %s. "+
+						"Expected model package %s. "+
+						"The new version may have failed to start (check the DataRobot UI for startup logs).",
+					id,
+					liveDeployment.ModelPackage.ID,
+					plan.RegisteredModelVersionID.ValueString(),
+				),
+			)
 			return
 		}
 	}
