@@ -1188,7 +1188,7 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 				CodeRef: &client.ArtifactCodeRef{
 					Type:     "datarobot",
 					Provider: "datarobot",
-					Datarobot: &client.ArtifactDataRobotCodeRef{
+					DataRobot: client.ArtifactDataRobotCodeRef{
 						CatalogID:        catalogID,
 						CatalogVersionID: catalogVersionID,
 					},
