@@ -145,7 +145,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"spec": artifactResourceSpecAttribute(probeAttributes),
+			"spec": artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes),
 		},
 	}
 }
