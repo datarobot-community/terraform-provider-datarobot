@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -761,4 +762,85 @@ resource "datarobot_deployment" "test_replacement" {
 	prediction_environment_id   = %q
 }
 `, pkgID, predEnvID)
+}
+
+func TestWaitForDeploymentModelPackageEventuallyConsistent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+	newDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: expectedModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(oldDeployment, nil)
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(newDeployment, nil).AnyTimes()
+
+	deployment, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err != nil {
+		t.Fatalf("expected waitForDeploymentModelPackage to succeed, got error: %v", err)
+	}
+	if deployment == nil {
+		t.Fatal("expected deployment result, got nil")
+	}
+	if deployment.ModelPackage.ID != expectedModelPackageID {
+		t.Fatalf("expected model package ID %s, got %s", expectedModelPackageID, deployment.ModelPackage.ID)
+	}
+}
+
+func TestWaitForDeploymentModelPackageErroredDeployment(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "model_error",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().
+		GetDeployment(gomock.Any(), deploymentID).
+		Return(oldDeployment, nil)
+
+	_, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err == nil {
+		t.Fatal("expected waitForDeploymentModelPackage to return an error")
+	}
+	if !strings.Contains(err.Error(), "entered error status") {
+		t.Fatalf("expected error status message, got: %v", err)
+	}
 }
