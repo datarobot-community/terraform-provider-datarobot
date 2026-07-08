@@ -840,13 +840,13 @@ func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *clien
 	return result
 }
 
-func artifactDockerfileToClient(df *ArtifactDockerfileModel) *client.ArtifactDockerfile {
+func artifactDockerfileToClient(df *ArtifactDockerfileModel) *client.ArtifactDockerfileConfig {
 	source := "provided"
 	if df != nil && !df.Source.IsNull() && !df.Source.IsUnknown() {
 		source = df.Source.ValueString()
 	}
 
-	result := &client.ArtifactDockerfile{Source: source}
+	result := &client.ArtifactDockerfileConfig{Source: source}
 	if source == "generated" {
 		if df == nil {
 			return result
@@ -1052,7 +1052,7 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *Ar
 	return model
 }
 
-func loadDockerfileFromAPI(df *client.ArtifactDockerfile) *ArtifactDockerfileModel {
+func loadDockerfileFromAPI(df *client.ArtifactDockerfileConfig) *ArtifactDockerfileModel {
 	if df == nil {
 		return nil
 	}
