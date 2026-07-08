@@ -1034,7 +1034,7 @@ func (r *DeploymentResource) waitForDeploymentModelPackage(
 		if lastDeployment != nil {
 			if strings.Contains(lastStatus, "error") {
 				return nil, fmt.Errorf(
-					"Deployment %s entered error status %s while waiting for expected model package %s (last model package: %s, elapsed: %s)",
+					"deployment %s entered error status %s while waiting for expected model package %s (last model package: %s, elapsed: %s)",
 					id,
 					lastStatus,
 					expectedModelPackageID,
@@ -1045,7 +1045,7 @@ func (r *DeploymentResource) waitForDeploymentModelPackage(
 
 			if lastStatus == "active" && lastModelPackageID != expectedModelPackageID {
 				return nil, fmt.Errorf(
-					"Deployment %s is active but still serving model package %s after waiting %s. Expected model package %s. The new version may have failed to start (check the DataRobot UI for startup logs).",
+					"deployment %s is active but still serving model package %s after waiting %s; expected model package %s; the new version may have failed to start (check the DataRobot UI for startup logs)",
 					id,
 					lastModelPackageID,
 					elapsed,
@@ -1054,7 +1054,7 @@ func (r *DeploymentResource) waitForDeploymentModelPackage(
 			}
 
 			return nil, fmt.Errorf(
-				"Deployment %s did not stabilize to expected model package %s (last status: %s, last model package: %s, elapsed: %s)",
+				"deployment %s did not stabilize to expected model package %s (last status: %s, last model package: %s, elapsed: %s)",
 				id,
 				expectedModelPackageID,
 				lastStatus,
