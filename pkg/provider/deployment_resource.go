@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1102,10 +1103,15 @@ func (r *DeploymentResource) updateDeploymentSettings(
 		}
 	}
 
-	traceAPICall("UpdateDeploymentSettings")
-	_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
-	if err != nil {
-		return
+	if deploymentSettingsRequestHasUpdates(req) {
+		err = retryOnTransientServerError(func() error {
+			traceAPICall("UpdateDeploymentSettings")
+			_, updateErr := r.provider.service.UpdateDeploymentSettings(ctx, id, req)
+			return updateErr
+		})
+		if err != nil {
+			return
+		}
 	}
 
 	if data.ChallengerReplaySettings != nil {
@@ -1113,8 +1119,11 @@ func (r *DeploymentResource) updateDeploymentSettings(
 			Enabled: data.ChallengerReplaySettings.Enabled.ValueBool(),
 		}
 
-		traceAPICall("UpdateDeploymentChallengerReplaySettings")
-		_, err = r.provider.service.UpdateDeploymentChallengerReplaySettings(ctx, id, req)
+		err = retryOnTransientServerError(func() error {
+			traceAPICall("UpdateDeploymentChallengerReplaySettings")
+			_, updateErr := r.provider.service.UpdateDeploymentChallengerReplaySettings(ctx, id, req)
+			return updateErr
+		})
 		if err != nil {
 			return
 		}
@@ -1182,8 +1191,11 @@ func (r *DeploymentResource) updateDeploymentSettings(
 			}
 		}
 
-		traceAPICall("UpdateDeploymentHealthSettings")
-		_, err = r.provider.service.UpdateDeploymentHealthSettings(ctx, id, req)
+		err = retryOnTransientServerError(func() error {
+			traceAPICall("UpdateDeploymentHealthSettings")
+			_, updateErr := r.provider.service.UpdateDeploymentHealthSettings(ctx, id, req)
+			return updateErr
+		})
 		if err != nil {
 			return
 		}
@@ -1203,13 +1215,60 @@ func (r *DeploymentResource) updateDeploymentSettings(
 			req.Schedule = &schedule
 		}
 
-		traceAPICall("UpdateDeploymentFeatureCacheSettings")
-		_, err = r.provider.service.UpdateDeploymentFeatureCacheSettings(ctx, id, req)
+		err = retryOnTransientServerError(func() error {
+			traceAPICall("UpdateDeploymentFeatureCacheSettings")
+			_, updateErr := r.provider.service.UpdateDeploymentFeatureCacheSettings(ctx, id, req)
+			return updateErr
+		})
 		if err != nil {
 			return
 		}
 	}
 	return
+}
+
+func deploymentSettingsRequestHasUpdates(req *client.DeploymentSettings) bool {
+	if req == nil {
+		return false
+	}
+	return req.AssociationID != nil ||
+		req.BatchMonitoring != nil ||
+		req.BiasAndFairness != nil ||
+		req.ChallengerModels != nil ||
+		req.FeatureDrift != nil ||
+		req.Humility != nil ||
+		req.PredictionsSettings != nil ||
+		req.PredictionsByForecastDate != nil ||
+		req.PredictionsDataCollection != nil ||
+		req.PredictionIntervals != nil ||
+		req.PredictionWarning != nil ||
+		req.SegmentAnalysis != nil ||
+		req.TargetDrift != nil
+}
+
+// transientServerErrorPattern matches the HTTP status in client error messages:
+// "<METHOD> request <url> : response <status> <body>".
+var transientServerErrorPattern = regexp.MustCompile(`: response (502|503|504) `)
+
+func isTransientServerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return transientServerErrorPattern.MatchString(err.Error())
+}
+
+func retryOnTransientServerError(operation func() error) error {
+	expBackoff := getExponentialBackoff()
+	return backoff.Retry(func() error {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+		if isTransientServerError(err) {
+			return err
+		}
+		return backoff.Permanent(err)
+	}, expBackoff)
 }
 
 func (r *DeploymentResource) updateDeploymentSettingsInNotActiveState(
@@ -1226,8 +1285,11 @@ func (r *DeploymentResource) updateDeploymentSettingsInNotActiveState(
 			ResourceBundleID: StringValuePointerOptional(data.PredictionsSettings.ResourceBundleID),
 		}
 
-		traceAPICall("UpdateDeploymentSettings")
-		_, err = r.provider.service.UpdateDeploymentSettings(ctx, id, req)
+		err = retryOnTransientServerError(func() error {
+			traceAPICall("UpdateDeploymentSettings")
+			_, updateErr := r.provider.service.UpdateDeploymentSettings(ctx, id, req)
+			return updateErr
+		})
 		if err != nil {
 			return
 		}
