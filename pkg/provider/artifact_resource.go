@@ -830,7 +830,7 @@ func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *clien
 		result.CodeRef = &client.ArtifactCodeRef{
 			Type:     "datarobot",
 			Provider: "datarobot",
-			Datarobot: &client.ArtifactDataRobotCodeRef{
+			DataRobot: client.ArtifactDataRobotCodeRef{
 				CatalogID:        cfg.CodeRef.CatalogID.ValueString(),
 				CatalogVersionID: cfg.CodeRef.CatalogVersionID.ValueString(),
 			},
@@ -1034,10 +1034,10 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *Ar
 	}
 
 	model := &ArtifactImageBuildConfigModel{}
-	if cfg.CodeRef != nil && cfg.CodeRef.Datarobot != nil {
+	if cfg.CodeRef != nil && (cfg.CodeRef.DataRobot.CatalogID != "" || cfg.CodeRef.DataRobot.CatalogVersionID != "") {
 		model.CodeRef = &ArtifactCodeRefModel{
-			CatalogID:        types.StringValue(cfg.CodeRef.Datarobot.CatalogID),
-			CatalogVersionID: types.StringValue(cfg.CodeRef.Datarobot.CatalogVersionID),
+			CatalogID:        types.StringValue(cfg.CodeRef.DataRobot.CatalogID),
+			CatalogVersionID: types.StringValue(cfg.CodeRef.DataRobot.CatalogVersionID),
 		}
 	} else if prior != nil && prior.CodeRef != nil {
 		model.CodeRef = prior.CodeRef
