@@ -1367,10 +1367,25 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 
 func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("DeactivateDeployment")
-	if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
+	_, statusId, err := r.provider.service.DeactivateDeployment(ctx, id)
+	if err != nil {
 		err = fmt.Errorf("Error deactivating deployment: %w", err)
 		return
 	}
+
+	if statusErr := waitForTaskStatusToComplete(ctx, r.provider.service, statusId); statusErr != nil {
+		var taskFailedErr *TaskFailedError
+		if errors.As(statusErr, &taskFailedErr) {
+			err = fmt.Errorf("Deployment failed to deactivate: %s", taskFailedErr.Message)
+			return
+		}
+
+		tflog.Warn(ctx, "Task status polling failed, checking deployment status directly", map[string]interface{}{
+			"status_id": statusId,
+			"error":     statusErr.Error(),
+		})
+	}
+
 	if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
 		err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
 		return
@@ -1381,10 +1396,25 @@ func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string
 
 func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("ActivateDeployment")
-	if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
+	_, statusId, err := r.provider.service.ActivateDeployment(ctx, id)
+	if err != nil {
 		err = fmt.Errorf("Error activating deployment: %w", err)
 		return
 	}
+
+	if statusErr := waitForTaskStatusToComplete(ctx, r.provider.service, statusId); statusErr != nil {
+		var taskFailedErr *TaskFailedError
+		if errors.As(statusErr, &taskFailedErr) {
+			err = fmt.Errorf("Deployment failed to activate: %s", taskFailedErr.Message)
+			return
+		}
+
+		tflog.Warn(ctx, "Task status polling failed, checking deployment status directly", map[string]interface{}{
+			"status_id": statusId,
+			"error":     statusErr.Error(),
+		})
+	}
+
 	if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
 		err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
 		return
