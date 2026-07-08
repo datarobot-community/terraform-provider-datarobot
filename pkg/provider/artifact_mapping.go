@@ -148,13 +148,13 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 	model.StartupProbe = loadProbeFromAPI(c.StartupProbe)
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
-	model.ImageBuildConfig = loadImageBuildConfigFromAPI(c.ImageBuildConfig)
+	model.ImageBuildConfig = loadImageBuildConfigDSFromAPI(c.ImageBuildConfig)
 	model.Build = loadContainerBuildFromAPI(c.Build)
 	model.SecurityContext = loadSecurityContextFromAPI(c.SecurityContext)
 	return model
 }
 
-func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig) *ArtifactImageBuildConfigModel {
+func loadImageBuildConfigDSFromAPI(cfg *client.ArtifactImageBuildConfig) *ArtifactImageBuildConfigDSModel {
 	if cfg == nil {
 		return nil
 	}
