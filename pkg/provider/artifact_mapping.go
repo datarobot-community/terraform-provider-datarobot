@@ -158,9 +158,9 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig) *Artifact
 	if cfg == nil {
 		return nil
 	}
-	model := &ArtifactImageBuildConfigModel{}
+	model := &ArtifactImageBuildConfigDSModel{}
 	if cfg.CodeRef != nil {
-		model.CodeRef = &ArtifactCodeRefModel{
+		model.CodeRef = &ArtifactCodeRefDSModel{
 			Provider: types.StringValue(cfg.CodeRef.Provider),
 			Type:     types.StringValue(cfg.CodeRef.Type),
 			DataRobot: ArtifactDataRobotCodeModel{

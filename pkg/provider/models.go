@@ -1127,7 +1127,7 @@ type ArtifactContainerDSModel struct {
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
 	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
-	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
+	ImageBuildConfig *ArtifactImageBuildConfigDSModel   `tfsdk:"image_build_config"`
 	Build            *ArtifactContainerBuildModel       `tfsdk:"build"`
 	SecurityContext  *ArtifactSecurityContextModel      `tfsdk:"security_context"`
 }
@@ -1137,12 +1137,12 @@ type ArtifactNimStorageModel struct {
 	PvcSize types.String `tfsdk:"pvc_size"`
 }
 
-type ArtifactImageBuildConfigModel struct {
-	CodeRef    *ArtifactCodeRefModel    `tfsdk:"code_ref"`
+type ArtifactImageBuildConfigDSModel struct {
+	CodeRef    *ArtifactCodeRefDSModel  `tfsdk:"code_ref"`
 	Dockerfile *ArtifactDockerfileModel `tfsdk:"dockerfile"`
 }
 
-type ArtifactCodeRefModel struct {
+type ArtifactCodeRefDSModel struct {
 	Provider  types.String               `tfsdk:"provider"`
 	Type      types.String               `tfsdk:"type"`
 	DataRobot ArtifactDataRobotCodeModel `tfsdk:"datarobot"`
@@ -1151,14 +1151,6 @@ type ArtifactCodeRefModel struct {
 type ArtifactDataRobotCodeModel struct {
 	CatalogID        types.String `tfsdk:"catalog_id"`
 	CatalogVersionID types.String `tfsdk:"catalog_version_id"`
-}
-
-type ArtifactDockerfileModel struct {
-	Source                        types.String   `tfsdk:"source"`
-	Path                          types.String   `tfsdk:"path"`
-	Entrypoint                    []types.String `tfsdk:"entrypoint"`
-	ExecutionEnvironmentID        types.String   `tfsdk:"execution_environment_id"`
-	ExecutionEnvironmentVersionID types.String   `tfsdk:"execution_environment_version_id"`
 }
 
 type ArtifactContainerBuildModel struct {
