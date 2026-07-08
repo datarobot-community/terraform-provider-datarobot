@@ -1193,7 +1193,7 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 						CatalogVersionID: catalogVersionID,
 					},
 				},
-				Dockerfile: &client.ArtifactDockerfile{
+				Dockerfile: &client.ArtifactDockerfileConfig{
 					Source: "provided",
 					Path:   "./Dockerfile",
 				},
@@ -1235,7 +1235,7 @@ func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
 		model := loadContainerFromAPI(client.ArtifactContainer{
 			ImageURI: "registry.example/app:latest",
 			ImageBuildConfig: &client.ArtifactImageBuildConfig{
-				Dockerfile: &client.ArtifactDockerfile{
+				Dockerfile: &client.ArtifactDockerfileConfig{
 					Source:                        "generated",
 					ExecutionEnvironmentID:        eeID,
 					ExecutionEnvironmentVersionID: eeVersionID,
@@ -1358,7 +1358,7 @@ func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 					Primary: func() *bool { v := true; return &v }(),
 					Port:    func() *int64 { v := int64(8080); return &v }(),
 					ImageBuildConfig: &client.ArtifactImageBuildConfig{
-						Dockerfile: &client.ArtifactDockerfile{Source: "provided", Path: "./Dockerfile"},
+						Dockerfile: &client.ArtifactDockerfileConfig{Source: "provided", Path: "./Dockerfile"},
 					},
 				}},
 			}},
