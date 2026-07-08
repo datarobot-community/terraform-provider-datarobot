@@ -743,20 +743,38 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	runtimeParamsChanged := r.deploymentRuntimeParametersChanged(plan, state)
+	resourceBundleChanged := plan.PredictionsSettings != nil && IsKnown(plan.PredictionsSettings.ResourceBundleID) &&
+		(state.PredictionsSettings == nil || plan.PredictionsSettings.ResourceBundleID != state.PredictionsSettings.ResourceBundleID)
+
+	// Runtime parameters and resource bundle updates both require an inactive deployment.
+	// Batch them into a single deactivate/activate cycle to avoid flaky re-activation.
+	deactivatedForInactiveUpdates := false
+	if runtimeParamsChanged || resourceBundleChanged {
+		if err = r.deactivateDeployment(ctx, id); err != nil {
+			resp.Diagnostics.AddError("Error deactivating Deployment", err.Error())
+			return
+		}
+		deactivatedForInactiveUpdates = true
+	}
+
 	// Update runtime parameters before model replacement because
 	// PUT /runtimeParameters/ returns 500 immediately after model replacement.
-	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
-		return
+	if runtimeParamsChanged {
+		err = r.applyDeploymentRuntimeParametersUpdate(ctx, id, plan, state)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
+			return
+		}
 	}
 
 	if plan.RegisteredModelVersionID != state.RegisteredModelVersionID {
-		// Ensure the deployment is active before model replacement,
-		// otherwise the replacement may hang or fail.
-		if err = r.ensureDeploymentActive(ctx, id); err != nil {
-			resp.Diagnostics.AddError("Error activating Deployment for model replacement", err.Error())
-			return
+		if deactivatedForInactiveUpdates {
+			if err = r.activateDeployment(ctx, id); err != nil {
+				resp.Diagnostics.AddError("Error activating Deployment for model replacement", err.Error())
+				return
+			}
+			deactivatedForInactiveUpdates = false
 		}
 
 		traceAPICall("ValidateDeploymentModelReplacement")
@@ -811,26 +829,23 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
-	// Deployment must be inactive in order to update Resource Bundle
-	deactivatedDeployment := false
-	if plan.PredictionsSettings != nil && IsKnown(plan.PredictionsSettings.ResourceBundleID) {
-		// check that Resource Bundle has been modified
-		if state.PredictionsSettings == nil || plan.PredictionsSettings.ResourceBundleID != state.PredictionsSettings.ResourceBundleID {
-			if err = r.deactivateDeployment(ctx, id); err != nil {
-				return
-			}
-			deactivatedDeployment = true
+	if resourceBundleChanged && !deactivatedForInactiveUpdates {
+		if err = r.deactivateDeployment(ctx, id); err != nil {
+			resp.Diagnostics.AddError("Error deactivating Deployment", err.Error())
+			return
 		}
+		deactivatedForInactiveUpdates = true
 	}
-	// deactivate Deployment if Resource Bundle is being updated
+
 	err = r.updateDeploymentSettingsInNotActiveState(ctx, id, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment settings in not active state", err.Error())
 		return
 	}
 
-	if deactivatedDeployment {
+	if deactivatedForInactiveUpdates {
 		if err = r.activateDeployment(ctx, id); err != nil {
+			resp.Diagnostics.AddError("Error activating Deployment", err.Error())
 			return
 		}
 	}
@@ -1336,92 +1351,102 @@ func (r *DeploymentResource) updateRetrainingSettings(
 	return
 }
 
-func (r *DeploymentResource) updateDeploymentRuntimeParameters(
+func (r *DeploymentResource) deploymentRuntimeParametersChanged(
+	plan DeploymentResourceModel,
+	state DeploymentResourceModel,
+) bool {
+	if !IsKnown(plan.RuntimeParameterValues) && !IsKnown(state.RuntimeParameterValues) {
+		return false
+	}
+
+	return !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues)
+}
+
+func (r *DeploymentResource) applyDeploymentRuntimeParametersUpdate(
 	ctx context.Context,
 	id string,
 	plan DeploymentResourceModel,
 	state DeploymentResourceModel,
 ) (err error) {
-	if !IsKnown(plan.RuntimeParameterValues) && !IsKnown(state.RuntimeParameterValues) {
+	if !r.deploymentRuntimeParametersChanged(plan, state) {
 		return
 	}
 
-	if !reflect.DeepEqual(plan.RuntimeParameterValues, state.RuntimeParameterValues) {
-		var stateRuntimeParameterValues []RuntimeParameterValue
-		if diags := state.RuntimeParameterValues.ElementsAs(ctx, &stateRuntimeParameterValues, false); diags.HasError() {
-			err = errors.New("Error converting runtime parameter values")
-			return
-		}
-		var planRuntimeParameterValues []RuntimeParameterValue
-		if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &planRuntimeParameterValues, false); diags.HasError() {
-			err = errors.New("Error converting runtime parameter values")
-			return
-		}
+	var stateRuntimeParameterValues []RuntimeParameterValue
+	if diags := state.RuntimeParameterValues.ElementsAs(ctx, &stateRuntimeParameterValues, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameter values")
+		return
+	}
+	var planRuntimeParameterValues []RuntimeParameterValue
+	if diags := plan.RuntimeParameterValues.ElementsAs(ctx, &planRuntimeParameterValues, false); diags.HasError() {
+		err = errors.New("Error converting runtime parameter values")
+		return
+	}
 
-		// reset runtime parameters that are not in the plan
-		newRuntimeParameterValues := make([]client.RuntimeParameterValueRequest, 0)
-		for _, stateRuntimeParameterValue := range stateRuntimeParameterValues {
-			found := false
-			for _, planRuntimeParameterValue := range planRuntimeParameterValues {
-				if stateRuntimeParameterValue.Key == planRuntimeParameterValue.Key {
-					found = true
-					break
-				}
-			}
-			if !found {
-				newRuntimeParameterValues = append(newRuntimeParameterValues, client.RuntimeParameterValueRequest{
-					FieldName: stateRuntimeParameterValue.Key.ValueString(),
-					Type:      stateRuntimeParameterValue.Type.ValueString(),
-					Value:     nil,
-				})
+	// reset runtime parameters that are not in the plan
+	newRuntimeParameterValues := make([]client.RuntimeParameterValueRequest, 0)
+	for _, stateRuntimeParameterValue := range stateRuntimeParameterValues {
+		found := false
+		for _, planRuntimeParameterValue := range planRuntimeParameterValues {
+			if stateRuntimeParameterValue.Key == planRuntimeParameterValue.Key {
+				found = true
+				break
 			}
 		}
-
-		// add runtime parameters that are in the plan
-		for _, param := range planRuntimeParameterValues {
-			var value any
-			value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
-			if err != nil {
-				return
-			}
+		if !found {
 			newRuntimeParameterValues = append(newRuntimeParameterValues, client.RuntimeParameterValueRequest{
-				FieldName: param.Key.ValueString(),
-				Type:      param.Type.ValueString(),
-				Value:     &value,
+				FieldName: stateRuntimeParameterValue.Key.ValueString(),
+				Type:      stateRuntimeParameterValue.Type.ValueString(),
+				Value:     nil,
 			})
 		}
+	}
 
-		if len(newRuntimeParameterValues) == 0 {
-			return
-		}
-
-		// the Deployment must be inactive in order to update runtime parameters
-		if err = r.deactivateDeployment(ctx, id); err != nil {
-			return
-		}
-
-		var newRuntimeParameterValuesBytes []byte
-		newRuntimeParameterValuesBytes, err = json.Marshal(newRuntimeParameterValues)
+	// add runtime parameters that are in the plan
+	for _, param := range planRuntimeParameterValues {
+		var value any
+		value, err = formatRuntimeParameterValue(param.Type.ValueString(), param.Value.ValueString())
 		if err != nil {
 			return
 		}
+		newRuntimeParameterValues = append(newRuntimeParameterValues, client.RuntimeParameterValueRequest{
+			FieldName: param.Key.ValueString(),
+			Type:      param.Type.ValueString(),
+			Value:     &value,
+		})
+	}
 
-		traceAPICall("UpdateDeploymentRuntimeParameters")
-		if _, err = r.provider.service.UpdateDeploymentRuntimeParameters(ctx, id, &client.UpdateDeploymentRuntimeParametersRequest{
-			RuntimeParameterValues: string(newRuntimeParameterValuesBytes),
-		}); err != nil {
-			return
-		}
+	if len(newRuntimeParameterValues) == 0 {
+		return
+	}
 
-		if err = r.activateDeployment(ctx, id); err != nil {
-			return
-		}
+	var newRuntimeParameterValuesBytes []byte
+	newRuntimeParameterValuesBytes, err = json.Marshal(newRuntimeParameterValues)
+	if err != nil {
+		return
+	}
+
+	traceAPICall("UpdateDeploymentRuntimeParameters")
+	if _, err = r.provider.service.UpdateDeploymentRuntimeParameters(ctx, id, &client.UpdateDeploymentRuntimeParametersRequest{
+		RuntimeParameterValues: string(newRuntimeParameterValuesBytes),
+	}); err != nil {
+		return
 	}
 
 	return
 }
 
 func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string) (err error) {
+	traceAPICall("GetDeployment")
+	deployment, err := r.provider.service.GetDeployment(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("Error getting deployment status: %w", err)
+		return
+	}
+	if deployment.Status == "inactive" {
+		return
+	}
+
 	traceAPICall("DeactivateDeployment")
 	if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
 		err = fmt.Errorf("Error deactivating deployment: %w", err)
