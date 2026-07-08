@@ -610,7 +610,13 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	var taskFailedErr *TaskFailedError
 	if err != nil {
+		if errors.As(err, &taskFailedErr) {
+			resp.Diagnostics.AddError("Deployment failed to create", taskFailedErr.Message)
+			return
+		}
+
 		tflog.Warn(ctx, "Task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
 			"status_id": statusID,
 			"error":     err.Error(),

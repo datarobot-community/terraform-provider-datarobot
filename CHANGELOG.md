@@ -5,6 +5,10 @@
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 
+### Fixed
+
+- `datarobot_deployment` creation no longer hangs for the full timeout when the creation task reports a definitive `ERROR` status (e.g. custom model failed to start). The provider now fails fast with the task's error message instead of blind-polling deployment status, which never resolves in that case.
+
 ## [0.10.42] - 2026-06-30
 
 ### Added
