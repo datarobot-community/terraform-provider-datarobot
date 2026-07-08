@@ -1529,6 +1529,8 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 	}
 	if IsKnown(plan.BaseEnvironmentVersionID) {
 		updateRequest.BaseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
+	} else if updateRequest.BaseEnvironmentID != customModel.LatestVersion.BaseEnvironmentID {
+		updateRequest.BaseEnvironmentVersionID = ""
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
