@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1245,14 +1246,15 @@ func deploymentSettingsRequestHasUpdates(req *client.DeploymentSettings) bool {
 		req.TargetDrift != nil
 }
 
+// transientServerErrorPattern matches the HTTP status in client error messages:
+// "<METHOD> request <url> : response <status> <body>"
+var transientServerErrorPattern = regexp.MustCompile(`: response (502|503|504) `)
+
 func isTransientServerError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "502") ||
-		strings.Contains(msg, "503") ||
-		strings.Contains(msg, "504")
+	return transientServerErrorPattern.MatchString(err.Error())
 }
 
 func retryOnTransientServerError(operation func() error) error {

@@ -318,16 +318,20 @@ func TestIsTransientServerError(t *testing.T) {
 		t.Fatal("expected 502 error to be transient")
 	}
 
-	if !isTransientServerError(fmt.Errorf("response 503 Service Unavailable")) {
+	if !isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 503 Service Unavailable")) {
 		t.Fatal("expected 503 error to be transient")
 	}
 
-	if !isTransientServerError(fmt.Errorf("response 504 Gateway Timeout")) {
+	if !isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 504 Gateway Timeout")) {
 		t.Fatal("expected 504 error to be transient")
 	}
 
-	if isTransientServerError(fmt.Errorf("response 409 Conflict")) {
+	if isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 409 Conflict")) {
 		t.Fatal("expected 409 error to not be transient")
+	}
+
+	if isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 409 Conflict {\"detail\":\"upstream returned 502\"}")) {
+		t.Fatal("expected 409 error with 502 in body to not be transient")
 	}
 }
 
