@@ -6,11 +6,13 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -42,8 +44,29 @@ func (r *MemorySpaceResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "The description of the Memory Space.",
+				MarkdownDescription: "A human-readable description.",
 				Optional:            true,
+			},
+			"llm_model_name": schema.StringAttribute{
+				MarkdownDescription: "An LLM model name associated with the memory space (maximum 200 characters). Non-reasoning models are recommended. Reasoning-capable models are significantly slower for fact extraction without producing meaningfully better results.",
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(200),
+				},
+			},
+			"llm_base_url": schema.StringAttribute{
+				MarkdownDescription: "The chat API URL used for memory extraction. The memory service uses the DataRobot LLM gateway by default; set this only when the default does not work — for example, in air-gapped environments or when the required LLM model is not provided by the gateway and cannot be added.",
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(1, 2083),
+				},
+			},
+			"custom_instructions": schema.StringAttribute{
+				MarkdownDescription: "Custom prompt instructions for fact extraction (maximum 10,000 characters). ``None`` means the default memory extraction prompt is used.",
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(10000),
+				},
 			},
 		},
 	}
@@ -88,6 +111,18 @@ func (r *MemorySpaceResource) Create(ctx context.Context, req resource.CreateReq
 	if !data.Description.IsNull() {
 		desc := data.Description.ValueString()
 		apiReq.Description = &desc
+	}
+	if !data.LLMModelName.IsNull() {
+		v := data.LLMModelName.ValueString()
+		apiReq.LLMModelName = &v
+	}
+	if !data.LLMBaseURL.IsNull() {
+		v := data.LLMBaseURL.ValueString()
+		apiReq.LLMBaseURL = &v
+	}
+	if !data.CustomInstructions.IsNull() {
+		v := data.CustomInstructions.ValueString()
+		apiReq.CustomInstructions = &v
 	}
 
 	traceAPICall("CreateMemorySpace")
@@ -134,6 +169,24 @@ func (r *MemorySpaceResource) Read(ctx context.Context, req resource.ReadRequest
 		data.Description = types.StringNull()
 	}
 
+	if memorySpace.LLMModelName != "" {
+		data.LLMModelName = types.StringValue(memorySpace.LLMModelName)
+	} else if !data.LLMModelName.IsNull() {
+		data.LLMModelName = types.StringNull()
+	}
+
+	if memorySpace.LLMBaseURL != "" {
+		data.LLMBaseURL = types.StringValue(memorySpace.LLMBaseURL)
+	} else if !data.LLMBaseURL.IsNull() {
+		data.LLMBaseURL = types.StringNull()
+	}
+
+	if memorySpace.CustomInstructions != "" {
+		data.CustomInstructions = types.StringValue(memorySpace.CustomInstructions)
+	} else if !data.CustomInstructions.IsNull() {
+		data.CustomInstructions = types.StringNull()
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -146,8 +199,14 @@ func (r *MemorySpaceResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	desc := data.Description.ValueString()
+	llmModelName := data.LLMModelName.ValueString()
+	llmBaseURL := data.LLMBaseURL.ValueString()
+	customInstructions := data.CustomInstructions.ValueString()
 	apiReq := &client.MemorySpaceRequest{
-		Description: &desc,
+		Description:        &desc,
+		LLMModelName:       &llmModelName,
+		LLMBaseURL:         &llmBaseURL,
+		CustomInstructions: &customInstructions,
 	}
 
 	traceAPICall("UpdateMemorySpace")

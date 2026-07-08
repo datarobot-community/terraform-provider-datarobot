@@ -77,3 +77,6 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Root-level Harness pipeline copies (local reference only; tracked versions are in .harness/)
+/*_pipeline.yml
