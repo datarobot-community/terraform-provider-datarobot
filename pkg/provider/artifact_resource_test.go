@@ -462,6 +462,14 @@ resource "datarobot_artifact" "test" {
 `, name, artifactTestContainerSpecBlock(imageURI))
 }
 
+func artifactImageURIValue(c client.ArtifactContainer) string {
+	return c.ImageURI
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
 func artifactFixture(id string, repoID *string, name string) *client.Artifact {
 	return artifactFixtureWithStatus(id, repoID, name, client.ArtifactStatusLocked)
 }
@@ -488,11 +496,6 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 	fullName := "Test User"
 	email := "test@example.com"
 	username := "testuser"
-
-	var imageURIPtr *string
-	if imageURI != "" {
-		imageURIPtr = stringPtr(imageURI)
-	}
 
 	return &client.Artifact{
 		ID:                   id,
@@ -1131,8 +1134,8 @@ func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
 		},
 	})
 
-	if container.ImageURI != nil {
-		t.Fatalf("expected no imageUri, got %q", *container.ImageURI)
+	if container.ImageURI != "" {
+		t.Fatalf("expected no imageUri, got %q", container.ImageURI)
 	}
 	if container.ImageBuildConfig == nil || container.ImageBuildConfig.Dockerfile == nil {
 		t.Fatal("expected imageBuildConfig.dockerfile")
@@ -1230,7 +1233,7 @@ func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
 		)
 
 		model := loadContainerFromAPI(client.ArtifactContainer{
-			ImageURI: stringPtr("registry.example/app:latest"),
+			ImageURI: "registry.example/app:latest",
 			ImageBuildConfig: &client.ArtifactImageBuildConfig{
 				Dockerfile: &client.ArtifactDockerfile{
 					Source:                        "generated",
@@ -1369,8 +1372,8 @@ func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 				t.Errorf("expected draft create, got %q", req.Status)
 			}
 			c := req.Spec.ContainerGroups[0].Containers[0]
-			if c.ImageURI != nil {
-				t.Errorf("expected no imageUri on create, got %q", *c.ImageURI)
+			if c.ImageURI != "" {
+				t.Errorf("expected no imageUri on create, got %q", c.ImageURI)
 			}
 			if c.ImageBuildConfig == nil || c.ImageBuildConfig.Dockerfile == nil {
 				t.Fatal("expected imageBuildConfig on create request")
