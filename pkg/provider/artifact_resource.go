@@ -762,8 +762,7 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	}
 
 	if !c.ImageURI.IsNull() && !c.ImageURI.IsUnknown() && c.ImageURI.ValueString() != "" {
-		uri := c.ImageURI.ValueString()
-		container.ImageURI = &uri
+		container.ImageURI = c.ImageURI.ValueString()
 	}
 
 	if c.ImageBuildConfig != nil {
@@ -949,8 +948,8 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
 	model := ArtifactContainerModel{}
 
-	if c.ImageURI != nil && *c.ImageURI != "" {
-		model.ImageURI = types.StringValue(*c.ImageURI)
+	if c.ImageURI != "" {
+		model.ImageURI = types.StringValue(c.ImageURI)
 	} else {
 		model.ImageURI = types.StringNull()
 	}
