@@ -1983,25 +1983,26 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// Create: applyRuntimeParameterValues — v2 path (RuntimeParameters set)
-	runtimeParamsCall := mockService.EXPECT().
-		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
-		Return(&client.CustomModelVersion{}, nil).
-		After(baseEnvCall)
-
-	// Create: wait after runtime params
-	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
-
-	// Create: replicas/network version
-	mockService.EXPECT().
+	// Create: replicas/network version (runtime parameters are applied last, see custom_model_resource.go)
+	replicasCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
 		Return(&client.CustomModelVersion{}, nil).
-		After(runtimeParamsCall)
+		After(baseEnvCall)
 
 	// Create: wait after replicas
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Create: applyRuntimeParameterValues — v2 path (RuntimeParameters set), applied last
+	runtimeParamsCall := mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
+		Return(&client.CustomModelVersion{}, nil).
+		After(replicasCall)
+
+	// Create: wait after runtime params
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil).
+		After(runtimeParamsCall)
 
 	// Create: final GetCustomModel
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
@@ -2085,11 +2086,21 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
+	// Create: replicas/network version (runtime parameters are applied last, see custom_model_resource.go)
+	replicasCall := mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
+		Return(&client.CustomModelVersion{}, nil).
+		After(baseEnvCall)
+
+	// Create: wait after replicas
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
 	// Create: applyRuntimeParameterValues — v2 attempt fails, triggering v1 fallback
 	v2FailCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
 		Return(nil, fmt.Errorf("runtimeParameters is not allowed key")).
-		After(baseEnvCall)
+		After(replicasCall)
 
 	// Create: v1 fallback succeeds
 	v1Call := mockService.EXPECT().
@@ -2099,17 +2110,8 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 
 	// Create: wait after v1 runtime params
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
-
-	// Create: replicas/network version
-	mockService.EXPECT().
-		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
-		Return(&client.CustomModelVersion{}, nil).
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil).
 		After(v1Call)
-
-	// Create: wait after replicas
-	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
 	// Create: final GetCustomModel
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
