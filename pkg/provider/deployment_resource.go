@@ -1247,7 +1247,7 @@ func deploymentSettingsRequestHasUpdates(req *client.DeploymentSettings) bool {
 }
 
 // transientServerErrorPattern matches the HTTP status in client error messages:
-// "<METHOD> request <url> : response <status> <body>"
+// "<METHOD> request <url> : response <status> <body>".
 var transientServerErrorPattern = regexp.MustCompile(`: response (502|503|504) `)
 
 func isTransientServerError(err error) bool {
