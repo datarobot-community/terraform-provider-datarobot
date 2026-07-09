@@ -2,7 +2,7 @@
 
 ### Added
 
-- `status` attribute on `datarobot_artifact`: `draft` (in-place updates, same `artifact_id`) or `locked` (default; spec changes create a new version). Locking a draft artifact is one-way.
+- `status` attribute on `datarobot_artifact`: `draft` (the artifact in the backend becomes mutable - specific artifact is modified in-place) or `locked` (the artifact in the backend is immutable; every spec change creates a new version of it). Defaults to `locked`. Locking a draft artifact is one-way.
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 
