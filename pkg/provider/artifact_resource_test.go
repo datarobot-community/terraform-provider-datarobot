@@ -870,7 +870,7 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 			},
 			{
 				Config:      artifactResourceConfigWithStatus(name, "draft"),
-				ExpectError: regexp.MustCompile(`Cannot revert a locked artifact to draft`),
+				ExpectError: regexp.MustCompile(`Unlocking of locked artifacts is not allowed`),
 			},
 		},
 	})
