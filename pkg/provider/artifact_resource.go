@@ -179,7 +179,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
 		resp.Diagnostics.AddError(
 			"Invalid status change",
-			"Cannot revert a locked artifact to draft.",
+			"Unlocking of locked artifacts is not allowed.",
 		)
 		return
 	}
@@ -258,7 +258,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
 		resp.Diagnostics.AddError(
 			"Invalid status change",
-			"Cannot revert a locked artifact to draft.",
+			"Unlocking of locked artifacts is not allowed.",
 		)
 		return
 	}
