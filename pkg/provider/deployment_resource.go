@@ -716,11 +716,6 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	id := state.ID.ValueString()
 
-	shouldKeepInactiveForPredictionsSettings := plan.PredictionsSettings != nil &&
-		IsKnown(plan.PredictionsSettings.ResourceBundleID) &&
-		(state.PredictionsSettings == nil ||
-			plan.PredictionsSettings.ResourceBundleID != state.PredictionsSettings.ResourceBundleID)
-
 	traceAPICall("UpdateDeployment")
 	_, err := r.provider.service.UpdateDeployment(ctx,
 		id,
@@ -749,7 +744,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	// Update runtime parameters before model replacement because
 	// PUT /runtimeParameters/ returns 500 immediately after model replacement.
-	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state, shouldKeepInactiveForPredictionsSettings)
+	err = r.updateDeploymentRuntimeParameters(ctx, id, plan, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating Deployment runtime parameters", err.Error())
 		return
@@ -1397,7 +1392,6 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 	id string,
 	plan DeploymentResourceModel,
 	state DeploymentResourceModel,
-	keepInactive bool,
 ) (err error) {
 	if !IsKnown(plan.RuntimeParameterValues) && !IsKnown(state.RuntimeParameterValues) {
 		return
@@ -1470,10 +1464,8 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 			return
 		}
 
-		if !keepInactive {
-			if err = r.activateDeployment(ctx, id); err != nil {
-				return
-			}
+		if err = r.activateDeployment(ctx, id); err != nil {
+			return
 		}
 	}
 
