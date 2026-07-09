@@ -995,14 +995,19 @@ func (r *DeploymentResource) waitForDeploymentModelPackage(
 	startTime := time.Now()
 	lastStatus := ""
 	lastModelPackageID := ""
+	var lastGetDeploymentErr error
 	var lastDeployment *client.Deployment
 
 	operation := func() error {
 		traceAPICall("GetDeployment")
 		deployment, err := r.provider.service.GetDeployment(ctx, id)
 		if err != nil {
+			lastGetDeploymentErr = err
 			return backoff.Permanent(err)
 		}
+
+		// Clear prior transient API error once polling resumes successfully.
+		lastGetDeploymentErr = nil
 
 		lastDeployment = deployment
 		lastStatus = deployment.Status
@@ -1031,6 +1036,16 @@ func (r *DeploymentResource) waitForDeploymentModelPackage(
 
 	if err := backoff.Retry(operation, expBackoff); err != nil {
 		elapsed := time.Since(startTime).Round(time.Second)
+		if lastGetDeploymentErr != nil {
+			return nil, fmt.Errorf(
+				"failed to get deployment %s while waiting for expected model package %s (elapsed: %s): %w",
+				id,
+				expectedModelPackageID,
+				elapsed,
+				lastGetDeploymentErr,
+			)
+		}
+
 		if lastDeployment != nil {
 			if strings.Contains(lastStatus, "error") {
 				return nil, fmt.Errorf(

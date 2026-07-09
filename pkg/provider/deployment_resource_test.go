@@ -844,3 +844,45 @@ func TestWaitForDeploymentModelPackageErroredDeployment(t *testing.T) {
 		t.Fatalf("expected error status message, got: %v", err)
 	}
 }
+
+func TestWaitForDeploymentModelPackageReturnsPermanentGetDeploymentError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+	apiErr := fmt.Errorf("get deployment failed")
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(oldDeployment, nil)
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(nil, apiErr)
+
+	_, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err == nil {
+		t.Fatal("expected waitForDeploymentModelPackage to return an error")
+	}
+	if !strings.Contains(err.Error(), "failed to get deployment") {
+		t.Fatalf("expected GetDeployment failure message, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), apiErr.Error()) {
+		t.Fatalf("expected wrapped API error %q, got: %v", apiErr.Error(), err)
+	}
+	if strings.Contains(err.Error(), "active but still serving model package") {
+		t.Fatalf("expected GetDeployment error to take precedence over stale status, got: %v", err)
+	}
+}
