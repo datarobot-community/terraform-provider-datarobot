@@ -794,15 +794,29 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		// model replacement is an async operation, separate from waiting for the deployment to be ready
 		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			tflog.Warn(ctx, "Model replacement task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
-				"status_id": statusId,
-				"error":     err.Error(),
-			})
+			// Task polling failure is not immediately fatal: the task endpoint can
+			// return ERROR when the pod fails to start (e.g. bad dependency build,
+			// crash on import). Promote this to a hard error so the operator learns
+			// the replacement did not complete, rather than silently succeeding.
+			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
+			return
 		}
 
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Deployment not ready after model replacement", err.Error())
+			return
+		}
+
+		// Final ground-truth check with bounded retries: backend propagation can lag
+		// briefly after the deployment first returns to "active".
+		_, err = r.waitForDeploymentModelPackage(
+			ctx,
+			id,
+			plan.RegisteredModelVersionID.ValueString(),
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Deployment model replacement did not apply", err.Error())
 			return
 		}
 	}
@@ -975,6 +989,105 @@ func (r *DeploymentResource) ImportState(ctx context.Context, req resource.Impor
 
 func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id string) (*client.Deployment, error) {
 	return r.waitForDeploymentStatus(ctx, id, "active")
+}
+
+func (r *DeploymentResource) waitForDeploymentModelPackage(
+	ctx context.Context,
+	id string,
+	expectedModelPackageID string,
+) (*client.Deployment, error) {
+	expBackoff := getExponentialBackoff()
+
+	startTime := time.Now()
+	lastStatus := ""
+	lastModelPackageID := ""
+	var lastGetDeploymentErr error
+	var lastDeployment *client.Deployment
+
+	operation := func() error {
+		traceAPICall("GetDeployment")
+		deployment, err := r.provider.service.GetDeployment(ctx, id)
+		if err != nil {
+			lastGetDeploymentErr = err
+			return backoff.Permanent(err)
+		}
+
+		// Clear prior transient API error once polling resumes successfully.
+		lastGetDeploymentErr = nil
+
+		lastDeployment = deployment
+		lastStatus = deployment.Status
+		lastModelPackageID = deployment.ModelPackage.ID
+
+		if strings.Contains(deployment.Status, "error") {
+			return backoff.Permanent(fmt.Errorf("deployment has errored (status: %s)", deployment.Status))
+		}
+
+		if deployment.Status != "active" {
+			return fmt.Errorf("deployment is not active (current status: %s)", deployment.Status)
+		}
+
+		if deployment.ModelPackage.ID != expectedModelPackageID {
+			tflog.Info(ctx, "Waiting for deployment model package to propagate", map[string]interface{}{
+				"deployment_id":       id,
+				"expected_package_id": expectedModelPackageID,
+				"actual_package_id":   deployment.ModelPackage.ID,
+				"elapsed":             time.Since(startTime).Round(time.Second).String(),
+			})
+			return fmt.Errorf("deployment is active but still serving model package %s", deployment.ModelPackage.ID)
+		}
+
+		return nil
+	}
+
+	if err := backoff.Retry(operation, expBackoff); err != nil {
+		elapsed := time.Since(startTime).Round(time.Second)
+		if lastGetDeploymentErr != nil {
+			return nil, fmt.Errorf(
+				"failed to get deployment %s while waiting for expected model package %s (elapsed: %s): %w",
+				id,
+				expectedModelPackageID,
+				elapsed,
+				lastGetDeploymentErr,
+			)
+		}
+
+		if lastDeployment != nil {
+			if strings.Contains(lastStatus, "error") {
+				return nil, fmt.Errorf(
+					"deployment %s entered error status %s while waiting for expected model package %s (last model package: %s, elapsed: %s)",
+					id,
+					lastStatus,
+					expectedModelPackageID,
+					lastModelPackageID,
+					elapsed,
+				)
+			}
+
+			if lastStatus == "active" && lastModelPackageID != expectedModelPackageID {
+				return nil, fmt.Errorf(
+					"deployment %s is active but still serving model package %s after waiting %s; expected model package %s; the new version may have failed to start (check the DataRobot UI for startup logs)",
+					id,
+					lastModelPackageID,
+					elapsed,
+					expectedModelPackageID,
+				)
+			}
+
+			return nil, fmt.Errorf(
+				"deployment %s did not stabilize to expected model package %s (last status: %s, last model package: %s, elapsed: %s)",
+				id,
+				expectedModelPackageID,
+				lastStatus,
+				lastModelPackageID,
+				elapsed,
+			)
+		}
+
+		return nil, err
+	}
+
+	return lastDeployment, nil
 }
 
 func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id string, status string) (*client.Deployment, error) {
