@@ -73,7 +73,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"status": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Artifact lifecycle status: `draft` (mutable; supports in-place updates and image builds) or `locked` (immutable; spec changes create a new version). Defaults to `locked`. Locking a draft artifact is one-way.",
+				MarkdownDescription: "Artifact lifecycle status: `draft` (the artifact in the backend becomes mutable - specific artifact is modified in-place) or `locked` (the artifact in the backend is immutable; every spec change creates a new version of it). Defaults to `locked`. Locking a draft artifact is one-way.",
 				Default:             stringdefault.StaticString(string(client.ArtifactStatusLocked)),
 				Validators:          ArtifactStatusValidators(),
 				PlanModifiers: []planmodifier.String{
