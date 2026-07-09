@@ -47,7 +47,7 @@ output "example_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
-- `status` (String) Artifact lifecycle status: `draft` (mutable; supports in-place updates and image builds) or `locked` (immutable; spec changes create a new version). Defaults to `locked`. Locking a draft artifact is one-way.
+- `status` (String) Artifact lifecycle status: `draft` (the artifact in the backend becomes mutable - specific artifact is modified in-place) or `locked` (the artifact in the backend is immutable; every spec change creates a new version of it). Defaults to `locked`. Locking a draft artifact is one-way.
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
 ### Read-Only
