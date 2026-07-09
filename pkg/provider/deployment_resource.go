@@ -1369,17 +1369,17 @@ func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string
 	traceAPICall("DeactivateDeployment")
 	_, statusId, err := r.provider.service.DeactivateDeployment(ctx, id)
 	if err != nil {
-		err = fmt.Errorf("Error deactivating deployment: %w", err)
+		err = fmt.Errorf("error deactivating deployment: %w", err)
 		return
 	}
 
 	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
-		err = fmt.Errorf("Deployment failed to deactivate: %s", statusErr.Error())
+		err = fmt.Errorf("deployment failed to deactivate: %s", statusErr.Error())
 		return
 	}
 
 	if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be inactive: %w", err)
 		return
 	}
 
@@ -1390,17 +1390,17 @@ func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) 
 	traceAPICall("ActivateDeployment")
 	_, statusId, err := r.provider.service.ActivateDeployment(ctx, id)
 	if err != nil {
-		err = fmt.Errorf("Error activating deployment: %w", err)
+		err = fmt.Errorf("error activating deployment: %w", err)
 		return
 	}
 
 	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
-		err = fmt.Errorf("Deployment failed to activate: %s", statusErr.Error())
+		err = fmt.Errorf("deployment failed to activate: %s", statusErr.Error())
 		return
 	}
 
 	if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be ready: %w", err)
 		return
 	}
 
