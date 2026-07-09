@@ -6,10 +6,6 @@
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 
-### Fixed
-
-- `datarobot_deployment` no longer sends an empty deployment-settings PATCH on create or update when no settings are configured, and retries transient 5xx errors when updating deployment settings
-
 ## [0.10.42] - 2026-06-30
 
 ### Added

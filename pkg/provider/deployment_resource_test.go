@@ -289,52 +289,6 @@ func TestDeploymentResourceSchema(t *testing.T) {
 	}
 }
 
-func TestDeploymentSettingsRequestHasUpdates(t *testing.T) {
-	t.Parallel()
-
-	if deploymentSettingsRequestHasUpdates(&client.DeploymentSettings{}) {
-		t.Fatal("expected empty deployment settings request to have no updates")
-	}
-
-	if deploymentSettingsRequestHasUpdates(nil) {
-		t.Fatal("expected nil deployment settings request to have no updates")
-	}
-
-	if !deploymentSettingsRequestHasUpdates(&client.DeploymentSettings{
-		BatchMonitoring: &client.BasicSetting{Enabled: true},
-	}) {
-		t.Fatal("expected populated deployment settings request to have updates")
-	}
-}
-
-func TestIsTransientServerError(t *testing.T) {
-	t.Parallel()
-
-	if isTransientServerError(nil) {
-		t.Fatal("expected nil error to not be transient")
-	}
-
-	if !isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 502 Bad Gateway")) {
-		t.Fatal("expected 502 error to be transient")
-	}
-
-	if !isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 503 Service Unavailable")) {
-		t.Fatal("expected 503 error to be transient")
-	}
-
-	if !isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 504 Gateway Timeout")) {
-		t.Fatal("expected 504 error to be transient")
-	}
-
-	if isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 409 Conflict")) {
-		t.Fatal("expected 409 error to not be transient")
-	}
-
-	if isTransientServerError(fmt.Errorf("PATCH request https://example.com : response 409 Conflict {\"detail\":\"upstream returned 502\"}")) {
-		t.Fatal("expected 409 error with 502 in body to not be transient")
-	}
-}
-
 func deploymentResourceConfig(
 	label,
 	importance string,
