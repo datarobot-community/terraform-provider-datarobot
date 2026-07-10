@@ -610,7 +610,13 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	var taskFailedErr *TaskFailedError
 	if err != nil {
+		if errors.As(err, &taskFailedErr) {
+			resp.Diagnostics.AddError("Deployment failed to create", taskFailedErr.Message)
+			return
+		}
+
 		tflog.Warn(ctx, "Task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
 			"status_id": statusID,
 			"error":     err.Error(),
@@ -1474,12 +1480,19 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 
 func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("DeactivateDeployment")
-	if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
-		err = fmt.Errorf("Error deactivating deployment: %w", err)
+	_, statusId, err := r.provider.service.DeactivateDeployment(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("error deactivating deployment: %w", err)
 		return
 	}
+
+	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
+		err = fmt.Errorf("deployment failed to deactivate: %s", statusErr.Error())
+		return
+	}
+
 	if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be inactive: %w", err)
 		return
 	}
 
@@ -1488,16 +1501,47 @@ func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string
 
 func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("ActivateDeployment")
-	if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
-		err = fmt.Errorf("Error activating deployment: %w", err)
+	_, statusId, err := r.provider.service.ActivateDeployment(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("error activating deployment: %w", err)
 		return
 	}
+
+	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
+		err = fmt.Errorf("deployment failed to activate: %s", statusErr.Error())
+		return
+	}
+
 	if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be ready: %w", err)
 		return
 	}
 
 	return
+}
+
+// waitForDeploymentStatusChangeTask waits for the async status-change task
+// spawned by activate/deactivate. A task ERROR is definitive and returned
+// immediately; any other polling failure is ignored so the caller can fall
+// back to polling the deployment status directly.
+func (r *DeploymentResource) waitForDeploymentStatusChangeTask(ctx context.Context, statusId string) error {
+	if statusId == "" {
+		return nil
+	}
+
+	err := waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
+	var taskFailedErr *TaskFailedError
+	if errors.As(err, &taskFailedErr) {
+		return taskFailedErr
+	}
+	if err != nil {
+		tflog.Warn(ctx, "Task status polling failed, checking deployment status directly", map[string]interface{}{
+			"status_id": statusId,
+			"error":     err.Error(),
+		})
+	}
+
+	return nil
 }
 
 // ensureDeploymentActive checks if the deployment is active and activates it if not.

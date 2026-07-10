@@ -145,8 +145,8 @@ type Service interface {
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
 	UpdateDeploymentRuntimeParameters(ctx context.Context, id string, req *UpdateDeploymentRuntimeParametersRequest) (*Deployment, error)
 	ListDeploymentRuntimeParameters(ctx context.Context, id string) ([]RuntimeParameter, error)
-	DeactivateDeployment(ctx context.Context, id string) (*Deployment, error)
-	ActivateDeployment(ctx context.Context, id string) (*Deployment, error)
+	DeactivateDeployment(ctx context.Context, id string) (*Deployment, string, error)
+	ActivateDeployment(ctx context.Context, id string) (*Deployment, string, error)
 	GetDeploymentSettings(ctx context.Context, id string) (*DeploymentSettings, error)
 	UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error)
 	// Deployment: Settings
@@ -879,12 +879,12 @@ func (s *ServiceImpl) ListDeploymentRuntimeParameters(ctx context.Context, id st
 	return GetAllPages[RuntimeParameter](s.client, ctx, "/deployments/"+id+"/runtimeParameters/", nil)
 }
 
-func (s *ServiceImpl) DeactivateDeployment(ctx context.Context, id string) (*Deployment, error) {
-	return Patch[Deployment](s.client, ctx, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "inactive"})
+func (s *ServiceImpl) DeactivateDeployment(ctx context.Context, id string) (*Deployment, string, error) {
+	return ExecuteAndExpectStatus[Deployment](s.client, ctx, http.MethodPatch, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "inactive"})
 }
 
-func (s *ServiceImpl) ActivateDeployment(ctx context.Context, id string) (*Deployment, error) {
-	return Patch[Deployment](s.client, ctx, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "active"})
+func (s *ServiceImpl) ActivateDeployment(ctx context.Context, id string) (*Deployment, string, error) {
+	return ExecuteAndExpectStatus[Deployment](s.client, ctx, http.MethodPatch, "/deployments/"+id+"/status/", &UpdateDeploymentStatusRequest{Status: "active"})
 }
 
 func (s *ServiceImpl) UpdateDeploymentModel(ctx context.Context, id string, req *UpdateDeploymentModelRequest) (*Deployment, string, error) {
