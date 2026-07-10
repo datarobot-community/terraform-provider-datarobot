@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/google/go-querystring/query"
 )
 
 const (
@@ -760,22 +762,29 @@ func (s *ServiceImpl) GetDeployment(ctx context.Context, id string) (*Deployment
 	return Get[Deployment](s.client, ctx, "/deployments/"+id+"/")
 }
 
+func deploymentLogsTailLines() int {
+	tailLines, err := strconv.Atoi(os.Getenv(DeploymentLogsTailLinesEnvVar))
+	if err != nil || tailLines <= 0 {
+		return defaultDeploymentLogsTailLines
+	}
+	return tailLines
+}
+
+type getDeploymentLogsRequest struct {
+	Limit int `url:"limit,omitempty"`
+}
+
 func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	entries, err := GetAllPages[OtelLogEntry](s.client, ctx, "/otel/deployment/"+id+"/logs/", nil)
+	queryReq := &getDeploymentLogsRequest{Limit: deploymentLogsTailLines()}
+	pathValues, _ := query.Values(queryReq)
+
+	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/deployment/"+id+"/logs/?"+pathValues.Encode())
 	if err != nil {
 		return "", err
 	}
 
-	tailLines, err := strconv.Atoi(os.Getenv(DeploymentLogsTailLinesEnvVar))
-	if err != nil || tailLines <= 0 {
-		tailLines = defaultDeploymentLogsTailLines
-	}
-	if len(entries) > tailLines {
-		entries = entries[len(entries)-tailLines:]
-	}
-
-	lines := make([]string, 0, len(entries))
-	for _, entry := range entries {
+	lines := make([]string, 0, len(resp.Data))
+	for _, entry := range resp.Data {
 		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
 		if entry.StackTrace != "" {
 			line += "\n" + entry.StackTrace
