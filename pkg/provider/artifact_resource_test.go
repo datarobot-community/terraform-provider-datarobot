@@ -972,3 +972,79 @@ func TestIntegrationArtifactInvalidStatus(t *testing.T) {
 		},
 	})
 }
+
+func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	initialID := uuid.NewString()
+	updatedID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "locked-spec-" + uuid.NewString()[:8]
+
+	initialArtifact := artifactFixtureWithStatusAndImage(initialID, &repoIDPtr, name, client.ArtifactStatusLocked, "nginx:latest")
+	updatedArtifact := artifactFixtureWithStatusAndImage(updatedID, &repoIDPtr, name, client.ArtifactStatusLocked, "nginx:1.25")
+
+	getArtifactResponse := initialArtifact
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Errorf("expected create status locked, got %q", req.Status)
+			}
+			return initialArtifact, nil
+		})
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, id string) (*client.Artifact, error) {
+			return getArtifactResponse, nil
+		}).AnyTimes()
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Errorf("expected locked version create, got status %q", req.Status)
+			}
+			getArtifactResponse = updatedArtifact
+			return updatedArtifact, nil
+		})
+
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "locked", "nginx:latest"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", initialID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "locked", "nginx:1.25"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", updatedID),
+					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "id"),
+				),
+			},
+		},
+	})
+}
