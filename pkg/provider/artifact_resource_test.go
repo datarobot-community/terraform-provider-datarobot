@@ -1049,6 +1049,76 @@ func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
 	})
 }
 
+func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "draft-spec-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureWithStatusAndImage(artifactID, &repoIDPtr, name, client.ArtifactStatusDraft, "nginx:latest")
+	updatedDraftArtifact := artifactFixtureWithStatusAndImage(artifactID, &repoIDPtr, name, client.ArtifactStatusDraft, "nginx:1.25")
+
+	getArtifactResponse := draftArtifact
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		Return(draftArtifact, nil)
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), artifactID).
+		DoAndReturn(func(context.Context, string) (*client.Artifact, error) {
+			return getArtifactResponse, nil
+		}).AnyTimes()
+	mockService.EXPECT().
+		PatchArtifact(gomock.Any(), artifactID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status != nil {
+				t.Errorf("expected spec-only patch, got status %v", req.Status)
+			}
+			if req.Spec == nil {
+				t.Fatal("expected spec in patch request")
+			}
+			getArtifactResponse = updatedDraftArtifact
+			return updatedDraftArtifact, nil
+		})
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "draft", "nginx:latest"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "draft", "nginx:1.25"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+		},
+	})
+}
+
 func artifactResourceConfigWithStatusAndImage(name, status, imageURI string) string {
 	return fmt.Sprintf(`
 resource "datarobot_artifact" "test" {
