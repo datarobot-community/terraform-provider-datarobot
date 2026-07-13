@@ -43,6 +43,34 @@ func (c *Client) addAuthHeader(req *http.Request) {
 	req.Header.Add("Authorization", "Bearer "+c.cfg.token)
 }
 
+// PrepareAPIRequest sets standard DataRobot API headers on req.
+func (c *Client) PrepareAPIRequest(req *http.Request) {
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("User-Agent", c.cfg.UserAgent)
+	if c.cfg.TraceContext != "" {
+		req.Header.Add("X-DataRobot-Api-Consumer-Trace", c.cfg.TraceContext)
+	}
+	c.addAuthHeader(req)
+}
+
+// APIEndpoint returns the configured API v2 endpoint (e.g. https://app.datarobot.com/api/v2).
+func (c *Client) APIEndpoint() string {
+	return c.cfg.Endpoint
+}
+
+// APIBaseURL returns the scheme and host derived from the API endpoint.
+func (c *Client) APIBaseURL() string {
+	return c.cfg.BaseURL()
+}
+
+// HTTPClient returns the HTTP client used for API requests.
+func (c *Client) HTTPClient() *http.Client {
+	if c.cfg.HTTPClient == nil {
+		return http.DefaultClient
+	}
+	return c.cfg.HTTPClient
+}
+
 func doRequest[T any](c *Client, ctx context.Context, method, apiPath string, body any) (result *T, err error) {
 	result, _, err = doRequestWithResponseHeaders[T](c, ctx, method, apiPath, body)
 	return
