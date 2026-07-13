@@ -1048,3 +1048,21 @@ func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
 		},
 	})
 }
+
+func artifactResourceConfigWithStatusAndImage(name, status, imageURI string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name        = %q
+  description = "test artifact description"
+  type        = "service"
+  status      = %q
+%s
+}
+`, name, status, artifactTestContainerSpecBlock(imageURI))
+}
+
+func artifactFixtureWithStatusAndImage(id string, repoID *string, name string, status client.ArtifactStatus, imageURI string) *client.Artifact {
+	artifact := artifactFixtureWithStatus(id, repoID, name, status)
+	artifact.Spec.ContainerGroups[0].Containers[0].ImageURI = imageURI
+	return artifact
+}
