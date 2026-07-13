@@ -49,7 +49,7 @@ type httpClient struct {
 	transport HTTPTransport
 }
 
-// CLI: drapi.EndpointURL(path, query)
+// CLI: drapi.EndpointURL(path, query).
 func (c *httpClient) endpointURL(path string, query url.Values) string {
 	endpoint := c.transport.APIEndpoint()
 	if len(endpoint) > 0 && endpoint[len(endpoint)-1] == '/' {
@@ -62,7 +62,7 @@ func (c *httpClient) endpointURL(path string, query url.Values) string {
 	return full
 }
 
-// CLI: drapi.AssertNextOnSameHost(rawNextURL)
+// CLI: drapi.AssertNextOnSameHost(rawNextURL).
 func (c *httpClient) assertNextOnSameHost(rawNextURL string) error {
 	next, err := url.Parse(rawNextURL)
 	if err != nil {
@@ -81,7 +81,7 @@ func (c *httpClient) assertNextOnSameHost(rawNextURL string) error {
 	return nil
 }
 
-// CLI: drapi.ErrFromResp(resp, requestURL)
+// CLI: drapi.ErrFromResp(resp, requestURL).
 func errFromResp(resp *http.Response, requestURL string) error {
 	defer func() { _ = resp.Body.Close() }()
 
@@ -162,6 +162,8 @@ func (c *httpClient) deleteJSON(ctx context.Context, requestURL string, body any
 }
 
 // CLI: each call site builds &http.Client{Timeout: ...}; provider reuses transport.Transport with per-call timeout.
+//
+//nolint:unparam // UploadHTTPTimeout and DownloadHTTPTimeout share the same duration today.
 func (c *httpClient) httpClientWithTimeout(timeout time.Duration) *http.Client {
 	base := c.transport.HTTPClient()
 	return &http.Client{
