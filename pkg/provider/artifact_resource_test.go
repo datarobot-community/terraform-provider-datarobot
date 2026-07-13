@@ -1305,6 +1305,40 @@ func TestDockerfileEqual_normalizesProvidedDefaults(t *testing.T) {
 	}
 }
 
+func TestArtifactNeedsNewVersion_dockerfileDefaults(t *testing.T) {
+	base := ArtifactResourceModel{
+		Name:                 types.StringValue("my-artifact"),
+		Description:          types.StringValue("desc"),
+		ArtifactRepositoryID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		Spec: &ArtifactSpecModel{
+			ContainerGroups: []ArtifactContainerGroupModel{{
+				Containers: []ArtifactContainerModel{{
+					Name:     types.StringValue("app"),
+					ImageURI: types.StringValue("registry.example.com/app:v1"),
+					Primary:  types.BoolValue(true),
+					ImageBuildConfig: &ArtifactImageBuildConfigModel{
+						CodeRef: &ArtifactCodeRefModel{
+							CatalogID:        types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+							CatalogVersionID: types.StringValue("cccccccccccccccccccccccc"),
+						},
+					},
+				}},
+			}},
+		},
+	}
+
+	// Plan omits the nested dockerfile block; state was refreshed with API defaults.
+	state := base
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringValue("./Dockerfile"),
+	}
+
+	if artifactNeedsNewVersion(base, state) {
+		t.Fatal("expected omitted dockerfile block to match API-provided defaults")
+	}
+}
+
 func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 	base := ArtifactContainerModel{
 		ImageURI: types.StringValue("nginx:latest"),
