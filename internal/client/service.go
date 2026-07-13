@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 )
 
 type Service interface {
@@ -279,6 +281,9 @@ type Service interface {
 	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)
 	UpdateQuota(ctx context.Context, id string, req *UpdateQuotaRequest) (*Quota, error)
 	DeleteQuota(ctx context.Context, id string) error
+
+	// Files API (catalog upload for artifact source sync)
+	FilesAPI() filesapi.Client
 
 	BaseURL() string
 }
