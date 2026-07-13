@@ -19,10 +19,7 @@ import (
 func (c *httpClient) AllFiles(ctx context.Context, catalogID, versionID string) (map[string]FileMeta, error) {
 	out := make(map[string]FileMeta)
 
-	pageURL, err := allFilesURL(c, catalogID, versionID)
-	if err != nil {
-		return nil, err
-	}
+	pageURL := allFilesURL(c, catalogID, versionID)
 
 	for pageURL != "" {
 		var page AllFilesResp
@@ -56,16 +53,16 @@ func (c *httpClient) AllFiles(ctx context.Context, catalogID, versionID string) 
 	return out, nil
 }
 
-// CLI: allFilesURL(catalogID, versionID string) using drapi.EndpointURL
-func allFilesURL(c *httpClient, catalogID, versionID string) (string, error) {
+// CLI: allFilesURL(catalogID, versionID string) using drapi.EndpointURL.
+func allFilesURL(c *httpClient, catalogID, versionID string) string {
 	if versionID != "" {
 		return c.endpointURL(
 			"/files/"+url.PathEscape(catalogID)+"/versions/"+url.PathEscape(versionID)+"/allFiles/",
 			nil,
-		), nil
+		)
 	}
 
-	return c.endpointURL("/files/"+url.PathEscape(catalogID)+"/allFiles/", nil), nil
+	return c.endpointURL("/files/"+url.PathEscape(catalogID)+"/allFiles/", nil)
 }
 
 func (c *httpClient) DownloadFile(ctx context.Context, catalogID, versionID, path string, w io.Writer) (string, int64, error) {
