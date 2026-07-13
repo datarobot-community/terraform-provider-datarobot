@@ -953,3 +953,22 @@ func TestPatchRequestFromPlan(t *testing.T) {
 		t.Fatalf("expected lock status in patch, got %v", lockPatch.Status)
 	}
 }
+
+func TestIntegrationArtifactInvalidStatus(t *testing.T) {
+	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      artifactResourceConfigWithStatus("invalid-status", "not-a-status"),
+				ExpectError: regexp.MustCompile(`Attribute status value must be one of`),
+			},
+		},
+	})
+}
