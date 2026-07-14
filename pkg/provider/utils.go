@@ -146,6 +146,14 @@ func getExponentialBackoff() backoff.BackOff {
 	return expBackoff
 }
 
+type TaskFailedError struct {
+	Message string
+}
+
+func (e *TaskFailedError) Error() string {
+	return e.Message
+}
+
 func waitForGenAITaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
 	return waitForTaskStatusToCompleteGeneric(ctx, s, id, true)
 }
@@ -178,7 +186,7 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 		}
 
 		if task.Status == "ERROR" {
-			return backoff.Permanent(errors.New(task.Message))
+			return backoff.Permanent(&TaskFailedError{Message: task.Message})
 		}
 
 		if task.Status == "COMPLETED" {
