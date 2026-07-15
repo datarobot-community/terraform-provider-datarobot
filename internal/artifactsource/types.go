@@ -18,6 +18,13 @@ type Options struct {
 	Dir string
 	// CatalogID is an optional existing catalog; empty creates a new catalog on first push.
 	CatalogID string
+	// CatalogVersionID is the catalog version from the last successful push.
+	// When set together with BaseFiles and the tree is unchanged, no API upload runs.
+	CatalogVersionID string
+	// BaseFiles is the per-file manifest from Terraform state after the last
+	// successful push. When set with CatalogID, only added/modified/deleted
+	// files are uploaded or removed remotely.
+	BaseFiles Manifest
 	// Overwrite is the Files API overwrite mode; defaults to REPLACE when empty.
 	Overwrite string
 	// Ignore optionally excludes paths; nil uploads all regular files.
@@ -29,6 +36,10 @@ type Result struct {
 	CatalogID        string
 	CatalogVersionID string
 	SourceHash       string
+	FileHashes       Manifest
 	FileCount        int
 	TotalBytes       int64
+	// Incremental is true when the push updated an existing catalog using
+	// BaseFiles rather than uploading the full tree.
+	Incremental bool
 }
