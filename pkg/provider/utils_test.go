@@ -480,3 +480,200 @@ func TestFormatRuntimeParameterValuesByManagedKeys(t *testing.T) {
 		}
 	})
 }
+
+func TestMergeBlueprintRuntimeParameters(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	nullList := basetypes.NewListNull(runtimeParameterListElemType())
+
+	t.Run("no apiParams returns plan unchanged", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("A"), Type: types.StringValue("string"), Value: types.StringValue("v")},
+		})
+		got, diags := mergeBlueprintRuntimeParameters(ctx, nil, nullList, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 || result[0].Key.ValueString() != "A" {
+			t.Errorf("expected only [A], got %v", result)
+		}
+	})
+
+	t.Run("blueprint override carried over when user does not declare it", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("system_prompt"), Type: types.StringValue("string"), Value: types.StringValue("hi")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "system_prompt", Type: "string", DefaultValue: "", OverrideValue: "blueprint prompt", CurrentValue: "blueprint prompt"},
+			{FieldName: "temperature", Type: "numeric", DefaultValue: 0.7, OverrideValue: 0.7, CurrentValue: 0.7},
+		}
+		got, diags := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 params, got %d: %v", len(result), result)
+		}
+		byKey := map[string]RuntimeParameterValue{}
+		for _, p := range result {
+			byKey[p.Key.ValueString()] = p
+		}
+		if v := byKey["system_prompt"].Value.ValueString(); v != "hi" {
+			t.Errorf("system_prompt: expected user value 'hi', got %q", v)
+		}
+		if v := byKey["temperature"].Value.ValueString(); v != "0.7" {
+			t.Errorf("temperature: expected blueprint carryover '0.7', got %q", v)
+		}
+	})
+
+	t.Run("user declares same key wins on conflict", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("system_prompt"), Type: types.StringValue("string"), Value: types.StringValue("user prompt")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "system_prompt", Type: "string", DefaultValue: "", OverrideValue: "blueprint prompt", CurrentValue: "blueprint prompt"},
+		}
+		got, diags := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 param, got %d: %v", len(result), result)
+		}
+		if result[0].Value.ValueString() != "user prompt" {
+			t.Errorf("expected user value, got %q", result[0].Value.ValueString())
+		}
+	})
+
+	t.Run("key in state but removed from plan is NOT carried over", func(t *testing.T) {
+		t.Parallel()
+		state := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("system_prompt"), Type: types.StringValue("string"), Value: types.StringValue("previous")},
+		})
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "system_prompt", Type: "string", DefaultValue: "", OverrideValue: "still-on-api", CurrentValue: "still-on-api"},
+			{FieldName: "temperature", Type: "numeric", DefaultValue: 0.7, OverrideValue: 0.7, CurrentValue: 0.7},
+		}
+		got, diags := mergeBlueprintRuntimeParameters(ctx, apiParams, state, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		keys := make(map[string]bool)
+		for _, p := range result {
+			keys[p.Key.ValueString()] = true
+		}
+		if keys["system_prompt"] {
+			t.Errorf("system_prompt should not be carried over after user removal, got %v", result)
+		}
+		if !keys["temperature"] {
+			t.Errorf("temperature should be carried over, got %v", result)
+		}
+	})
+
+	t.Run("guard-managed key with blueprint override IS carried over", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: faithfulnessOpenAiRuntimeParam, Type: "string", DefaultValue: "", OverrideValue: "blueprint-guard-key", CurrentValue: "blueprint-guard-key"},
+		}
+		got, diags := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected guard key carryover, got %v", result)
+		}
+	})
+
+	t.Run("credential-typed param is carried over", func(t *testing.T) {
+		t.Parallel()
+		credType := "api_token"
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "OPENAI_API_KEY", Type: "credential", CredentialType: &credType, OverrideValue: "credential-id-abc", CurrentValue: "credential-id-abc"},
+		}
+		got, diags := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		result := extractParams(t, got)
+		if len(result) != 1 {
+			t.Fatalf("expected credential carryover, got %v", result)
+		}
+		if result[0].Value.ValueString() != "credential-id-abc" {
+			t.Errorf("expected credential id 'credential-id-abc', got %q", result[0].Value.ValueString())
+		}
+	})
+
+	t.Run("OverrideValue nil is skipped even when CurrentValue is set", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "PROMPT", Type: "string", DefaultValue: "default", CurrentValue: "default"},
+		}
+		got, _ := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		if len(got.Elements()) != 0 {
+			t.Errorf("expected empty, got %v", extractParams(t, got))
+		}
+	})
+
+	t.Run("OverrideValue equal to DefaultValue is still carried over", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "S", Type: "string", DefaultValue: "same", OverrideValue: "same", CurrentValue: "same"},
+			{FieldName: "N", Type: "numeric", DefaultValue: 3.14, OverrideValue: 3.14, CurrentValue: 3.14},
+			{FieldName: "B", Type: "boolean", DefaultValue: true, OverrideValue: true, CurrentValue: true},
+		}
+		got, _ := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		result := extractParams(t, got)
+		if len(result) != 3 {
+			t.Errorf("expected all 3 carried over, got %v", result)
+		}
+	})
+
+	t.Run("falsy OverrideValue (zero, false, empty string) is still carried over", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "N_ZERO", Type: "numeric", DefaultValue: nil, OverrideValue: 0.0, CurrentValue: 0.0},
+			{FieldName: "B_FALSE", Type: "boolean", DefaultValue: nil, OverrideValue: false, CurrentValue: false},
+			{FieldName: "N_NONZERO", Type: "numeric", DefaultValue: nil, OverrideValue: 1.5, CurrentValue: 1.5},
+		}
+		got, _ := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		result := extractParams(t, got)
+		if len(result) != 3 {
+			t.Errorf("expected all 3 carried over regardless of falsy value, got %v", result)
+		}
+	})
+
+	t.Run("blueprint entries appear before user entries", func(t *testing.T) {
+		t.Parallel()
+		plan := makeParamList(t, []RuntimeParameterValue{
+			{Key: types.StringValue("system_prompt"), Type: types.StringValue("string"), Value: types.StringValue("user")},
+		})
+		apiParams := []client.RuntimeParameter{
+			{FieldName: "temperature", Type: "numeric", DefaultValue: 0.7, OverrideValue: 0.7, CurrentValue: 0.7},
+		}
+		got, _ := mergeBlueprintRuntimeParameters(ctx, apiParams, nullList, plan)
+		result := extractParams(t, got)
+		if len(result) != 2 {
+			t.Fatalf("expected 2, got %v", result)
+		}
+		if result[0].Key.ValueString() != "temperature" {
+			t.Errorf("expected carryover first, got %v", result)
+		}
+		if result[1].Key.ValueString() != "system_prompt" {
+			t.Errorf("expected user entry second, got %v", result)
+		}
+	})
+}

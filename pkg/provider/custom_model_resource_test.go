@@ -47,6 +47,8 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "example_description"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					checkBlueprintInjectedRuntimeParametersPresent(resourceName,
+						"LLM_BLUEPRINT_ID", "PLAYGROUND_ID", "LLM_ID", "CUSTOM_MODEL_WORKERS"),
 				),
 			},
 			// Update name, description
@@ -58,6 +60,8 @@ func TestAccCustomModelFromLlmBlueprintResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "description", "new_example_description"),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+					checkBlueprintInjectedRuntimeParametersPresent(resourceName,
+						"LLM_BLUEPRINT_ID", "PLAYGROUND_ID", "LLM_ID", "CUSTOM_MODEL_WORKERS"),
 				),
 			},
 			// Delete is tested automatically
@@ -1845,6 +1849,51 @@ func checkCustomModelResourceExists(resourceName string) resource.TestCheckFunc 
 	}
 }
 
+// checkBlueprintInjectedRuntimeParametersPresent asserts that blueprint-populated
+// runtime parameters (never declared in config) survive on the custom model version.
+func checkBlueprintInjectedRuntimeParametersPresent(resourceName string, expectedFieldNames ...string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No ID is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = client.NewService(cl)
+
+		traceAPICall("GetCustomModel")
+		customModel, err := p.service.GetCustomModel(context.TODO(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		present := make(map[string]bool, len(customModel.LatestVersion.RuntimeParameters))
+		for _, runtimeParam := range customModel.LatestVersion.RuntimeParameters {
+			present[runtimeParam.FieldName] = true
+		}
+
+		var missing []string
+		for _, fieldName := range expectedFieldNames {
+			if !present[fieldName] {
+				missing = append(missing, fieldName)
+			}
+		}
+
+		if len(missing) > 0 {
+			return fmt.Errorf("blueprint-injected runtime parameters missing from custom model %s: %v", rs.Primary.ID, missing)
+		}
+
+		return nil
+	}
+}
+
 func customModelResourceConfigWithTags(
 	name,
 	targetType,
@@ -1934,25 +1983,26 @@ func TestIntegrationCustomModelResourceRuntimeParameters(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
-	// Create: applyRuntimeParameterValues — v2 path (RuntimeParameters set)
-	runtimeParamsCall := mockService.EXPECT().
-		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
-		Return(&client.CustomModelVersion{}, nil).
-		After(baseEnvCall)
-
-	// Create: wait after runtime params
-	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
-
-	// Create: replicas/network version
-	mockService.EXPECT().
+	// Create: replicas/network version (runtime parameters are applied last, see custom_model_resource.go)
+	replicasCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
 		Return(&client.CustomModelVersion{}, nil).
-		After(runtimeParamsCall)
+		After(baseEnvCall)
 
 	// Create: wait after replicas
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
+	// Create: applyRuntimeParameterValues — v2 path (RuntimeParameters set), applied last
+	runtimeParamsCall := mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
+		Return(&client.CustomModelVersion{}, nil).
+		After(replicasCall)
+
+	// Create: wait after runtime params
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil).
+		After(runtimeParamsCall)
 
 	// Create: final GetCustomModel
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
@@ -2036,11 +2086,21 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
+	// Create: replicas/network version (runtime parameters are applied last, see custom_model_resource.go)
+	replicasCall := mockService.EXPECT().
+		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
+		Return(&client.CustomModelVersion{}, nil).
+		After(baseEnvCall)
+
+	// Create: wait after replicas
+	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
+
 	// Create: applyRuntimeParameterValues — v2 attempt fails, triggering v1 fallback
 	v2FailCall := mockService.EXPECT().
 		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, hasRuntimeParamsMatcher{}).
 		Return(nil, fmt.Errorf("runtimeParameters is not allowed key")).
-		After(baseEnvCall)
+		After(replicasCall)
 
 	// Create: v1 fallback succeeds
 	v1Call := mockService.EXPECT().
@@ -2050,17 +2110,8 @@ func TestIntegrationCustomModelResourceRuntimeParametersOldAPI(t *testing.T) {
 
 	// Create: wait after v1 runtime params
 	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
-
-	// Create: replicas/network version
-	mockService.EXPECT().
-		CreateCustomModelVersionCreateFromLatest(gomock.Any(), modelID, gomock.Any()).
-		Return(&client.CustomModelVersion{}, nil).
+	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil).
 		After(v1Call)
-
-	// Create: wait after replicas
-	mockService.EXPECT().IsCustomModelReady(gomock.Any(), modelID).Return(true, nil)
-	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
 
 	// Create: final GetCustomModel
 	mockService.EXPECT().GetCustomModel(gomock.Any(), modelID).Return(customModel, nil)
