@@ -283,6 +283,10 @@ type Service interface {
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
 	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
+	StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error)
+	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
+	UpdateWorkloadSettings(ctx context.Context, workloadID string, req *UpdateWorkloadSettingsRequest) (*WorkloadReplacement, error)
+	WaitForWorkloadReplacement(ctx context.Context, workloadID string, opts *WaitForWorkloadReplacementOptions) (*WorkloadReplacement, error)
 
 	// Quota
 	CreateQuota(ctx context.Context, req *CreateQuotaRequest) (*Quota, error)
