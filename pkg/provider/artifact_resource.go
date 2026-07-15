@@ -259,29 +259,6 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	var artifact *client.Artifact
-	var err error
-
-	if state.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		traceAPICall("PatchArtifact")
-		artifact, err = r.provider.service.PatchArtifact(
-			ctx,
-			state.ArtifactID.ValueString(),
-			patchRequestFromPlan(plan, state),
-		)
-		if err != nil {
-			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
-			return
-		}
-	} else {
-		traceAPICall("CreateUpdatedArtifact")
-		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
-			return
-		}
-	}
-
 	loadArtifactIntoModel(artifact, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
