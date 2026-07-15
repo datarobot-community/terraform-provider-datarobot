@@ -5,16 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
-
-	"github.com/google/go-querystring/query"
-)
-
-const (
-	DeploymentLogsTailLinesEnvVar  = "DATAROBOT_DEPLOYMENT_LOGS_TAIL_LINES"
-	defaultDeploymentLogsTailLines = 30
 )
 
 type Service interface {
@@ -150,7 +140,6 @@ type Service interface {
 	// Deployment
 	CreateDeploymentFromModelPackage(ctx context.Context, req *CreateDeploymentFromModelPackageRequest) (*DeploymentCreateResponse, string, error)
 	GetDeployment(ctx context.Context, id string) (*Deployment, error)
-	GetDeploymentLogs(ctx context.Context, id string) (string, error)
 	UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error)
 	DeleteDeployment(ctx context.Context, id string) error
 	ValidateDeploymentModelReplacement(ctx context.Context, id string, req *ValidateDeployemntModelReplacementRequest) (*ValidateDeployemntModelReplacementResponse, error)
@@ -761,39 +750,6 @@ func (s *ServiceImpl) CreateDeploymentFromModelPackage(ctx context.Context, req 
 
 func (s *ServiceImpl) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
 	return Get[Deployment](s.client, ctx, "/deployments/"+id+"/")
-}
-
-func deploymentLogsTailLines() int {
-	tailLines, err := strconv.Atoi(os.Getenv(DeploymentLogsTailLinesEnvVar))
-	if err != nil || tailLines <= 0 {
-		return defaultDeploymentLogsTailLines
-	}
-	return tailLines
-}
-
-type getDeploymentLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
-}
-
-func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	queryReq := &getDeploymentLogsRequest{Limit: deploymentLogsTailLines()}
-	pathValues, _ := query.Values(queryReq)
-
-	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/deployment/"+id+"/logs/?"+pathValues.Encode())
-	if err != nil {
-		return "", err
-	}
-
-	lines := make([]string, 0, len(resp.Data))
-	for _, entry := range resp.Data {
-		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
-		if entry.StackTrace != "" {
-			line += "\n" + entry.StackTrace
-		}
-		lines = append(lines, line)
-	}
-
-	return strings.Join(lines, "\n"), nil
 }
 
 func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {

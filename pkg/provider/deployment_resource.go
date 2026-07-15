@@ -27,24 +27,6 @@ import (
 var _ resource.Resource = &DeploymentResource{}
 var _ resource.ResourceWithImportState = &DeploymentResource{}
 
-const deploymentLogsSeparator = "----------------------------------------"
-
-// deploymentErrorMessageWithLogs builds a diagnostic message for a failed
-// deployment, appending retrieved logs (or the log retrieval error) and a
-// link to the full logs in the DataRobot UI.
-func deploymentErrorMessageWithLogs(baseMessage, logs string, logErr error, logsURL string) string {
-	if logErr != nil {
-		return fmt.Sprintf(
-			"%s (failed to retrieve deployment logs: %s)\n%s\nSee full logs at: %s",
-			baseMessage, logErr, deploymentLogsSeparator, logsURL,
-		)
-	}
-	return fmt.Sprintf(
-		"%s\n%s\nCustom Model Deployment logs:\n%s\n%s\nSee full logs at: %s",
-		baseMessage, deploymentLogsSeparator, logs, deploymentLogsSeparator, logsURL,
-	)
-}
-
 func NewDeploymentResource() resource.Resource {
 	return &DeploymentResource{}
 }
@@ -631,11 +613,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	var taskFailedErr *TaskFailedError
 	if err != nil {
 		if errors.As(err, &taskFailedErr) {
-			logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + createResp.ID + "/activity-log/otel-logs"
-
-			traceAPICall("GetDeploymentLogs")
-			logs, logErr := r.provider.service.GetDeploymentLogs(ctx, createResp.ID)
-			resp.Diagnostics.AddError("Deployment failed to create", deploymentErrorMessageWithLogs(taskFailedErr.Message, logs, logErr, logsURL))
+			resp.Diagnostics.AddError("Deployment failed to create", taskFailedErr.Message)
 			return
 		}
 
@@ -1125,18 +1103,11 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 		}
 
 		if deployment.Status == status {
-			tflog.Info(ctx, "Deployment is ready", map[string]interface{}{"deployment_id": id})
 			return nil
 		} else if strings.Contains(deployment.Status, "error") {
-			logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + id + "/activity-log/otel-logs"
-
-			traceAPICall("GetDeploymentLogs")
-			tflog.Error(ctx, "Deployment has errored", map[string]interface{}{"deployment_id": id})
-			logs, logErr := r.provider.service.GetDeploymentLogs(ctx, id)
-			return backoff.Permanent(errors.New(deploymentErrorMessageWithLogs("deployment has errored", logs, logErr, logsURL)))
+			return backoff.Permanent(errors.New("deployment has errored"))
 		}
 
-		tflog.Info(ctx, "Deployment is not ready", map[string]interface{}{"deployment_id": id, "status": deployment.Status})
 		lastStatus = deployment.Status
 
 		return errors.New("deployment is not ready")

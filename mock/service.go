@@ -1539,21 +1539,6 @@ func (mr *MockServiceMockRecorder) GetDeployment(ctx, id interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeployment", reflect.TypeOf((*MockService)(nil).GetDeployment), ctx, id)
 }
 
-// GetDeploymentLogs mocks base method.
-func (m *MockService) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDeploymentLogs", ctx, id)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDeploymentLogs indicates an expected call of GetDeploymentLogs.
-func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentLogs", reflect.TypeOf((*MockService)(nil).GetDeploymentLogs), ctx, id)
-}
-
 // GetDeploymentChallengerReplaySettings mocks base method.
 func (m *MockService) GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*client.DeploymentChallengerReplaySettings, error) {
 	m.ctrl.T.Helper()
