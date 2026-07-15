@@ -827,7 +827,7 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 	})
 }
 
-func TestArtifactLockedToDraftRejected(t *testing.T) {
+func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -841,19 +841,41 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 		t.Setenv(DataRobotApiKeyEnvVar, "fake")
 	}
 
-	artifactID := uuid.NewString()
+	lockedArtifactID := uuid.NewString()
+	draftArtifactID := uuid.NewString()
 	repoID := uuid.NewString()
 	repoIDPtr := repoID
 	name := "locked-artifact-" + uuid.NewString()[:8]
 
-	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, client.ArtifactStatusLocked)
+	lockedArtifact := artifactFixtureWithStatus(lockedArtifactID, &repoIDPtr, name, client.ArtifactStatusLocked)
+	draftArtifact := artifactFixtureWithStatus(draftArtifactID, &repoIDPtr, name, client.ArtifactStatusDraft)
 
 	mockService.EXPECT().
 		CreateArtifact(gomock.Any(), gomock.Any()).
-		Return(lockedArtifact, nil)
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected locked create status, got %q", req.Status)
+			}
+			return lockedArtifact, nil
+		})
 	mockService.EXPECT().
-		GetArtifact(gomock.Any(), artifactID).
+		GetArtifact(gomock.Any(), lockedArtifactID).
 		Return(lockedArtifact, nil).
+		AnyTimes()
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Fatalf("expected draft create status, got %q", req.Status)
+			}
+			if req.ArtifactRepositoryID == nil || *req.ArtifactRepositoryID != repoID {
+				t.Fatalf("expected artifact_repository_id %q, got %v", repoID, req.ArtifactRepositoryID)
+			}
+			return draftArtifact, nil
+		})
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), draftArtifactID).
+		Return(draftArtifact, nil).
 		AnyTimes()
 	mockService.EXPECT().
 		DeleteArtifactRepository(gomock.Any(), repoID).
@@ -867,10 +889,17 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: artifactResourceConfigWithStatus(name, "locked"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", lockedArtifactID),
+				),
 			},
 			{
-				Config:      artifactResourceConfigWithStatus(name, "draft"),
-				ExpectError: regexp.MustCompile(`The Workload API does not support unlocking artifacts`),
+				Config: artifactResourceConfigWithStatus(name, "draft"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", draftArtifactID),
+				),
 			},
 		},
 	})

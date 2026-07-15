@@ -73,7 +73,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"status": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. The Workload API supports `draft` → `locked` but not `locked` → `draft` (locked artifacts cannot be patched or unlocked).",
+				MarkdownDescription: "Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).",
 				Default:             stringdefault.StaticString(string(client.ArtifactStatusLocked)),
 				Validators:          ArtifactStatusValidators(),
 				PlanModifiers: []planmodifier.String{
@@ -175,15 +175,6 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddError(
-			"Invalid status change",
-			"The Workload API does not support unlocking artifacts; changing `status` from `locked` to `draft` is not allowed.",
-		)
-		return
-	}
-
 	var artifact *client.Artifact
 	var err error
 
@@ -255,15 +246,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddError(
-			"Invalid status change",
-			"The Workload API does not support unlocking artifacts; changing `status` from `locked` to `draft` is not allowed.",
-		)
-		return
-	}
-
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) && artifactNeedsNewVersion(plan, state) {
+		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 	}
 }
