@@ -73,7 +73,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"status": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Artifact lifecycle status: `draft` (the artifact in the backend becomes mutable - specific artifact is modified in-place) or `locked` (the artifact in the backend is immutable; every spec change creates a new version of it). Defaults to `locked`. Locking a draft artifact is one-way.",
+				MarkdownDescription: "Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. The Workload API supports `draft` → `locked` but not `locked` → `draft` (locked artifacts cannot be patched or unlocked).",
 				Default:             stringdefault.StaticString(string(client.ArtifactStatusLocked)),
 				Validators:          ArtifactStatusValidators(),
 				PlanModifiers: []planmodifier.String{
@@ -179,7 +179,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
 		resp.Diagnostics.AddError(
 			"Invalid status change",
-			"Unlocking of locked artifacts is not allowed.",
+			"The Workload API does not support unlocking artifacts; changing `status` from `locked` to `draft` is not allowed.",
 		)
 		return
 	}
@@ -258,7 +258,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
 		resp.Diagnostics.AddError(
 			"Invalid status change",
-			"Unlocking of locked artifacts is not allowed.",
+			"The Workload API does not support unlocking artifacts; changing `status` from `locked` to `draft` is not allowed.",
 		)
 		return
 	}
