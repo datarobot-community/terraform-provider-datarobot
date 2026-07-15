@@ -36,12 +36,13 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // ActivateDeployment mocks base method.
-func (m *MockService) ActivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+func (m *MockService) ActivateDeployment(ctx context.Context, id string) (*client.Deployment, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ActivateDeployment", ctx, id)
 	ret0, _ := ret[0].(*client.Deployment)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ActivateDeployment indicates an expected call of ActivateDeployment.
@@ -833,12 +834,13 @@ func (mr *MockServiceMockRecorder) CreateWorkload(ctx, req interface{}) *gomock.
 }
 
 // DeactivateDeployment mocks base method.
-func (m *MockService) DeactivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+func (m *MockService) DeactivateDeployment(ctx context.Context, id string) (*client.Deployment, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeactivateDeployment", ctx, id)
 	ret0, _ := ret[0].(*client.Deployment)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // DeactivateDeployment indicates an expected call of DeactivateDeployment.
@@ -1537,6 +1539,21 @@ func (mr *MockServiceMockRecorder) GetDeployment(ctx, id interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeployment", reflect.TypeOf((*MockService)(nil).GetDeployment), ctx, id)
 }
 
+// GetDeploymentLogs mocks base method.
+func (m *MockService) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentLogs", ctx, id)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentLogs indicates an expected call of GetDeploymentLogs.
+func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentLogs", reflect.TypeOf((*MockService)(nil).GetDeploymentLogs), ctx, id)
+}
+
 // GetDeploymentChallengerReplaySettings mocks base method.
 func (m *MockService) GetDeploymentChallengerReplaySettings(ctx context.Context, id string) (*client.DeploymentChallengerReplaySettings, error) {
 	m.ctrl.T.Helper()
@@ -2047,6 +2064,21 @@ func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
 }
 
+// ListArtifacts mocks base method.
+func (m *MockService) ListArtifacts(ctx context.Context, req *client.ListArtifactsRequest) ([]client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListArtifacts", ctx, req)
+	ret0, _ := ret[0].([]client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArtifacts indicates an expected call of ListArtifacts.
+func (mr *MockServiceMockRecorder) ListArtifacts(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifacts", reflect.TypeOf((*MockService)(nil).ListArtifacts), ctx, req)
+}
+
 // ListCredentials mocks base method.
 func (m *MockService) ListCredentials(ctx context.Context) ([]client.Credential, error) {
 	m.ctrl.T.Helper()
@@ -2120,21 +2152,6 @@ func (m *MockService) ListCustomModels(ctx context.Context) ([]client.CustomMode
 func (mr *MockServiceMockRecorder) ListCustomModels(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModels", reflect.TypeOf((*MockService)(nil).ListCustomModels), ctx)
-}
-
-// ListArtifacts mocks base method.
-func (m *MockService) ListArtifacts(ctx context.Context, req *client.ListArtifactsRequest) ([]client.Artifact, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListArtifacts", ctx, req)
-	ret0, _ := ret[0].([]client.Artifact)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListArtifacts indicates an expected call of ListArtifacts.
-func (mr *MockServiceMockRecorder) ListArtifacts(ctx, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifacts", reflect.TypeOf((*MockService)(nil).ListArtifacts), ctx, req)
 }
 
 // ListDatasources mocks base method.

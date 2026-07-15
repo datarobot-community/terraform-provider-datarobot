@@ -22,6 +22,15 @@ type Deployment struct {
 	Importance            string                `json:"importance"`
 }
 
+type OtelLogEntry struct {
+	Level      string  `json:"level"`
+	Message    string  `json:"message"`
+	Timestamp  string  `json:"timestamp"`
+	SpanID     *string `json:"spanId,omitempty"`
+	TraceID    *string `json:"traceId,omitempty"`
+	StackTrace string  `json:"stacktrace,omitempty"`
+}
+
 type Model struct {
 	ID         string `json:"id"`
 	Type       string `json:"type"`

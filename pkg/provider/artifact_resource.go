@@ -128,11 +128,15 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				},
 			},
 			"status": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Artifact lifecycle status: `draft` (mutable; supports in-place updates and image builds) or `locked` (immutable; spec changes create a new version). Defaults to `locked`. Locking a draft artifact is one-way.",
-				Default:             stringdefault.StaticString(string(client.ArtifactStatusLocked)),
-				Validators:          ArtifactStatusValidators(),
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Artifact lifecycle status: `draft` (the current artifact version is mutable; " +
+					"spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; " +
+					"spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). " +
+					"Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` " +
+					"creates a new draft artifact (the Workload API cannot unlock in place).",
+				Default:    stringdefault.StaticString(string(client.ArtifactStatusLocked)),
+				Validators: ArtifactStatusValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -232,13 +236,27 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddError(
-			"Invalid status change",
-			"Cannot revert a locked artifact to draft.",
+	var artifact *client.Artifact
+	var err error
+
+	if state.Status.ValueString() == string(client.ArtifactStatusDraft) {
+		traceAPICall("PatchArtifact")
+		artifact, err = r.provider.service.PatchArtifact(
+			ctx,
+			state.ArtifactID.ValueString(),
+			patchRequestFromPlan(plan, state),
 		)
-		return
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
+			return
+		}
+	} else {
+		traceAPICall("CreateUpdatedArtifact")
+		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
+			return
+		}
 	}
 
 	var artifact *client.Artifact
@@ -312,15 +330,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddError(
-			"Invalid status change",
-			"Cannot revert a locked artifact to draft.",
-		)
-		return
-	}
-
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) && artifactNeedsNewVersion(plan, state) {
+		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 	}
 }

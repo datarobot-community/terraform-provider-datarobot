@@ -37,10 +37,8 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
 	updatedID := uuid.NewString()
@@ -572,9 +570,8 @@ func TestArtifactTooManyContainerGroups(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -616,9 +613,8 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	cases := []struct {
 		name        string
@@ -753,10 +749,8 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
@@ -847,10 +841,8 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
@@ -965,6 +957,165 @@ func TestPatchRequestFromPlan(t *testing.T) {
 	}
 }
 
+func TestIntegrationArtifactInvalidStatus(t *testing.T) {
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      artifactResourceConfigWithStatus("invalid-status", "not-a-status"),
+				ExpectError: regexp.MustCompile(`Attribute status value must be one of`),
+			},
+		},
+	})
+}
+
+func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	initialID := uuid.NewString()
+	updatedID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "locked-spec-" + uuid.NewString()[:8]
+
+	initialArtifact := artifactFixtureWithStatusAndImage(initialID, &repoIDPtr, name, client.ArtifactStatusLocked, "nginx:latest")
+	updatedArtifact := artifactFixtureWithStatusAndImage(updatedID, &repoIDPtr, name, client.ArtifactStatusLocked, "nginx:1.25")
+
+	getArtifactResponse := initialArtifact
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Errorf("expected create status locked, got %q", req.Status)
+			}
+			return initialArtifact, nil
+		})
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, id string) (*client.Artifact, error) {
+			return getArtifactResponse, nil
+		}).AnyTimes()
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusLocked {
+				t.Errorf("expected locked version create, got status %q", req.Status)
+			}
+			getArtifactResponse = updatedArtifact
+			return updatedArtifact, nil
+		})
+
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "locked", "nginx:latest"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", initialID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "locked", "nginx:1.25"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "locked"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", updatedID),
+					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "draft-spec-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureWithStatusAndImage(artifactID, &repoIDPtr, name, client.ArtifactStatusDraft, "nginx:latest")
+	updatedDraftArtifact := artifactFixtureWithStatusAndImage(artifactID, &repoIDPtr, name, client.ArtifactStatusDraft, "nginx:1.25")
+
+	getArtifactResponse := draftArtifact
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		Return(draftArtifact, nil)
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), artifactID).
+		DoAndReturn(func(context.Context, string) (*client.Artifact, error) {
+			return getArtifactResponse, nil
+		}).AnyTimes()
+	mockService.EXPECT().
+		PatchArtifact(gomock.Any(), artifactID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status != nil {
+				t.Errorf("expected spec-only patch, got status %v", req.Status)
+			}
+			if req.Spec == nil {
+				t.Fatal("expected spec in patch request")
+			}
+			getArtifactResponse = updatedDraftArtifact
+			return updatedDraftArtifact, nil
+		})
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "draft", "nginx:latest"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+			{
+				Config: artifactResourceConfigWithStatusAndImage(name, "draft", "nginx:1.25"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+		},
+	})
+}
+
 func TestArtifactImageSourceRequired(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -974,9 +1125,8 @@ func TestArtifactImageSourceRequired(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -1011,9 +1161,8 @@ func TestArtifactLockedImageBuildConfigWithoutImageURI(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -1086,9 +1235,8 @@ func TestArtifactNimWithCodeRefRejected(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -1370,9 +1518,8 @@ func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
@@ -1455,4 +1602,22 @@ resource "datarobot_artifact" "test" {
 			},
 		},
 	})
+}
+
+func artifactResourceConfigWithStatusAndImage(name, status, imageURI string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name        = %q
+  description = "test artifact description"
+  type        = "service"
+  status      = %q
+%s
+}
+`, name, status, artifactTestContainerSpecBlock(imageURI))
+}
+
+func artifactFixtureWithStatusAndImage(id string, repoID *string, name string, status client.ArtifactStatus, imageURI string) *client.Artifact {
+	artifact := artifactFixtureWithStatus(id, repoID, name, status)
+	artifact.Spec.ContainerGroups[0].Containers[0].ImageURI = imageURI
+	return artifact
 }
