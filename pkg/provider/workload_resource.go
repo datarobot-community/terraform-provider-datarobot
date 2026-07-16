@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 
 	"github.com/cenkalti/backoff/v4"
@@ -12,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -39,13 +40,8 @@ func (r *WorkloadResource) Metadata(ctx context.Context, req resource.MetadataRe
 func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.\n\n" +
-			"Several attributes (including `runtime` and `artifact_id`) trigger replacement when changed. " +
-			"To avoid downtime during replacements, it is recommended to set `create_before_destroy` in the resource lifecycle:\n\n" +
-			"```hcl\n" +
-			"lifecycle {\n" +
-			"  create_before_destroy = true\n" +
-			"}\n" +
-			"```",
+			"Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. " +
+			"The workload ID and endpoint remain stable across artifact and runtime updates.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -71,10 +67,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"artifact_id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value forces a new Workload to be created.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value triggers an in-place workload replacement.",
 			},
 			"endpoint": schema.StringAttribute{
 				Computed:            true,
@@ -92,10 +85,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"runtime": schema.SingleNestedAttribute{
 				Required:            true,
-				MarkdownDescription: "Runtime configuration for the Workload.",
-				PlanModifiers: []planmodifier.Object{
-					objectplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "Runtime configuration for the Workload. Changes trigger an in-place workload replacement.",
 				Attributes: map[string]schema.Attribute{
 					"container_groups": schema.ListNestedAttribute{
 						Optional:            true,
@@ -308,9 +298,9 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	id := state.ID.ValueString()
+	planned := plan
 
 	if workloadMetadataChanged(plan, state) {
-		planned := plan
 		traceAPICall("UpdateWorkload")
 		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(plan))
 		if err != nil {
@@ -318,9 +308,32 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
-		applySentinels(planned, &plan)
 	}
 
+	artifactChanged := !plan.ArtifactID.Equal(state.ArtifactID)
+	runtimeChanged := workloadRuntimeChanged(plan.Runtime, state.Runtime)
+
+	if artifactChanged || runtimeChanged {
+		if err := r.triggerWorkloadReplacement(ctx, id, plan, artifactChanged, runtimeChanged); err != nil {
+			var failedErr *client.ReplacementFailedError
+			if errors.As(err, &failedErr) {
+				resp.Diagnostics.AddError("Workload replacement failed", failedErr.Error())
+			} else {
+				resp.Diagnostics.AddError("Error replacing Workload", err.Error())
+			}
+			return
+		}
+
+		traceAPICall("GetWorkload")
+		workload, err := r.provider.service.GetWorkload(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading Workload after replacement", err.Error())
+			return
+		}
+		loadWorkloadIntoModel(workload, &plan)
+	}
+
+	applySentinels(planned, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -657,6 +670,43 @@ func workloadMetadataChanged(plan, state WorkloadResourceModel) bool {
 	return !plan.Name.Equal(state.Name) ||
 		!plan.Description.Equal(state.Description) ||
 		!plan.Importance.Equal(state.Importance)
+}
+
+func workloadRuntimeChanged(plan, state WorkloadRuntimeModel) bool {
+	return !reflect.DeepEqual(plan, state)
+}
+
+func (r *WorkloadResource) triggerWorkloadReplacement(
+	ctx context.Context,
+	workloadID string,
+	plan WorkloadResourceModel,
+	artifactChanged, runtimeChanged bool,
+) error {
+	if artifactChanged {
+		traceAPICall("StartWorkloadReplacement")
+		req := &client.StartReplacementRequest{
+			ArtifactID: plan.ArtifactID.ValueString(),
+			Strategy:   client.ReplacementStrategyRolling,
+		}
+		if runtimeChanged {
+			runtime := workloadRuntimeToClient(plan.Runtime)
+			req.Runtime = &runtime
+		}
+		if _, err := r.provider.service.StartWorkloadReplacement(ctx, workloadID, req); err != nil {
+			return err
+		}
+	} else if runtimeChanged {
+		traceAPICall("UpdateWorkloadSettings")
+		if _, err := r.provider.service.UpdateWorkloadSettings(ctx, workloadID, &client.UpdateWorkloadSettingsRequest{
+			Runtime: workloadRuntimeToClient(plan.Runtime),
+		}); err != nil {
+			return err
+		}
+	}
+
+	traceAPICall("WaitForWorkloadReplacement")
+	_, err := r.provider.service.WaitForWorkloadReplacement(ctx, workloadID, nil)
+	return err
 }
 
 func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceModel) {
