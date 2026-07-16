@@ -9,6 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -122,10 +123,16 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 										"min_replica_count": schema.Int64Attribute{
 											Required:            true,
 											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(0),
+											},
 										},
 										"max_replica_count": schema.Int64Attribute{
 											Required:            true,
 											MarkdownDescription: "Maximum number of replicas.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(1),
+											},
 										},
 										"policies": schema.ListNestedAttribute{
 											Required:            true,
@@ -394,16 +401,32 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 			!g.ReplicaCount.IsUnknown() &&
 			g.ReplicaCount.ValueInt64() != 0
 
-		autoscalingSet := g.Autoscaling != nil &&
-			!g.Autoscaling.Enabled.IsNull() &&
-			!g.Autoscaling.Enabled.IsUnknown() &&
-			g.Autoscaling.Enabled.ValueBool()
+		// autoscaling.enabled defaults to true, so a present autoscaling block
+		// counts as enabled unless the user explicitly sets enabled = false.
+		autoscalingEnabled := false
+		if g.Autoscaling != nil {
+			explicitlyDisabled := !g.Autoscaling.Enabled.IsNull() &&
+				!g.Autoscaling.Enabled.IsUnknown() &&
+				!g.Autoscaling.Enabled.ValueBool()
+			autoscalingEnabled = !explicitlyDisabled
+		}
 
-		if replicaCountSet && autoscalingSet {
+		if replicaCountSet && autoscalingEnabled {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("runtime").AtName("container_groups").AtListIndex(i),
 				"Conflicting runtime configuration",
-				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
+				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling, or set autoscaling.enabled = false.",
+			)
+		}
+
+		if g.Autoscaling != nil &&
+			!g.Autoscaling.MinReplicaCount.IsNull() && !g.Autoscaling.MinReplicaCount.IsUnknown() &&
+			!g.Autoscaling.MaxReplicaCount.IsNull() && !g.Autoscaling.MaxReplicaCount.IsUnknown() &&
+			g.Autoscaling.MinReplicaCount.ValueInt64() > g.Autoscaling.MaxReplicaCount.ValueInt64() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("runtime").AtName("container_groups").AtListIndex(i).AtName("autoscaling"),
+				"Invalid autoscaling replica bounds",
+				"min_replica_count must be less than or equal to max_replica_count.",
 			)
 		}
 
