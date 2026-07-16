@@ -70,6 +70,20 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"status": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Artifact lifecycle status: `draft` (the current artifact version is mutable; " +
+					"spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; " +
+					"spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). " +
+					"Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` " +
+					"creates a new draft artifact (the Workload API cannot unlock in place).",
+				Default:    stringdefault.StaticString(string(client.ArtifactStatusLocked)),
+				Validators: ArtifactStatusValidators(),
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"artifact_repository_id": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -165,11 +179,27 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
-	traceAPICall("CreateUpdatedArtifact")
-	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
-	if err != nil {
-		resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
-		return
+	var artifact *client.Artifact
+	var err error
+
+	if state.Status.ValueString() == string(client.ArtifactStatusDraft) {
+		traceAPICall("PatchArtifact")
+		artifact, err = r.provider.service.PatchArtifact(
+			ctx,
+			state.ArtifactID.ValueString(),
+			patchRequestFromPlan(plan, state),
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
+			return
+		}
+	} else {
+		traceAPICall("CreateUpdatedArtifact")
+		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
+			return
+		}
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
@@ -219,7 +249,8 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
-	if artifactNeedsNewVersion(plan, state) {
+	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 	}
 }
@@ -396,17 +427,42 @@ func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportS
 }
 
 func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactRequest {
+	status := client.ArtifactStatusLocked
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = client.ArtifactStatus(data.Status.ValueString())
+	}
+
 	req := &client.CreateArtifactRequest{
 		Name:        data.Name.ValueString(),
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
-		Status:      client.ArtifactStatusLocked,
+		Status:      status,
 		Spec:        artifactSpecToClient(*data.Spec),
 	}
 	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
 		repoID := data.ArtifactRepositoryID.ValueString()
 		req.ArtifactRepositoryID = &repoID
 	}
+	return req
+}
+
+func patchRequestFromPlan(plan, state ArtifactResourceModel) *client.PatchArtifactRequest {
+	name := plan.Name.ValueString()
+	description := plan.Description.ValueString()
+	spec := artifactSpecToClient(*plan.Spec)
+
+	req := &client.PatchArtifactRequest{
+		Name:        &name,
+		Description: &description,
+		Spec:        &spec,
+	}
+
+	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+		state.Status.ValueString() == string(client.ArtifactStatusDraft) {
+		locked := client.ArtifactStatusLocked
+		req.Status = &locked
+	}
+
 	return req
 }
 
@@ -527,6 +583,7 @@ func loadArtifactIntoModel(artifact *client.Artifact, data *ArtifactResourceMode
 		data.Description = types.StringNull()
 	}
 	data.Type = types.StringValue(string(artifact.Type))
+	data.Status = types.StringValue(string(artifact.Status))
 
 	if artifact.ArtifactRepositoryID != nil {
 		data.ArtifactRepositoryID = types.StringValue(*artifact.ArtifactRepositoryID)
