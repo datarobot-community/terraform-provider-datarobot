@@ -42,7 +42,7 @@ func TestAccWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", "updated-"+name),
 					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI("updated-"+name, false),
 				),
 			},
@@ -50,7 +50,7 @@ func TestAccWorkloadResource(t *testing.T) {
 				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "2"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI("updated-"+name, false),
 				),
 			},
@@ -124,7 +124,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
 					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
 					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(updatedName, true),
 				),
 			},
@@ -250,7 +250,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
 			},
@@ -316,7 +316,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 3),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "3"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
 			},
@@ -381,7 +381,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 				Config: workloadConfigWithReplicasAndResources(name, "", "low", artifactID, 1, "cpu.large"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.resource_bundles.0", "cpu.large"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
 			},
@@ -446,7 +446,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 2, 5, 70.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "2"),
-					checkWorkloadIDPreserved(resourceName, &initialID),
+					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
 			},
@@ -616,11 +616,12 @@ func checkWorkloadExistsInAPI(expectedName string, isMock bool) resource.TestChe
 	}
 }
 
-func checkWorkloadIDPreserved(resourceName string, initialID *string) resource.TestCheckFunc {
+func checkWorkloadIDPreserved(initialID *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
 		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
+			return fmt.Errorf("resource %s not found in state", rn)
 		}
 		if *initialID != "" && rs.Primary.ID != *initialID {
 			return fmt.Errorf("workload ID changed after in-place update: %q → %q", *initialID, rs.Primary.ID)
