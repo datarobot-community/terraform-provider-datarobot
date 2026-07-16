@@ -1347,6 +1347,54 @@ resource "datarobot_artifact" "test" {
 	})
 }
 
+func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "sidecar-build-config"
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [
+        {
+          name    = "primary"
+          primary = true
+          port    = 8080
+          image_uri = "nginx:1.25"
+        },
+        {
+          name    = "sidecar"
+          primary = false
+          image_build_config = {
+            dockerfile = { source = "provided" }
+          }
+        },
+      ]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Unsupported on non-primary container"),
+			},
+		},
+	})
+}
+
 func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
 	container := artifactContainerToClient(ArtifactContainerModel{
 		Primary: types.BoolValue(true),
