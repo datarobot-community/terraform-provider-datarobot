@@ -559,6 +559,7 @@ func validateArtifactContainer(
 	containerPath path.Path,
 	container ArtifactContainerModel,
 	status, artifactType string,
+	containerCount int,
 ) {
 	hasImageURI := !container.ImageURI.IsNull() &&
 		!container.ImageURI.IsUnknown() &&
@@ -574,6 +575,7 @@ func validateArtifactContainer(
 	}
 
 	if hasBuildConfig {
+		validateImageBuildConfigPrimary(resp, containerPath, container, containerCount)
 		validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
 		if status == string(client.ArtifactStatusLocked) && !hasImageURI {
 			resp.Diagnostics.AddAttributeError(
@@ -611,9 +613,34 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			containerPath := path.Root("spec").
 				AtName("container_groups").AtListIndex(gi).
 				AtName("containers").AtListIndex(ci)
-			validateArtifactContainer(resp, containerPath, container, status, artifactType)
+			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers))
 		}
 	}
+}
+
+func validateImageBuildConfigPrimary(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if container.ImageBuildConfig == nil {
+		return
+	}
+
+	if !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool() {
+		return
+	}
+	if containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown()) {
+		// Workload API auto-marks the sole container as primary when primary is omitted.
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		containerPath.AtName("image_build_config"),
+		"Unsupported on non-primary container",
+		"`image_build_config` is only permitted on the primary container.",
+	)
 }
 
 func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPath path.Path, cfg *ArtifactImageBuildConfigModel, artifactType string) {
