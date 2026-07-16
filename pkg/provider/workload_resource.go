@@ -300,9 +300,12 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	id := state.ID.ValueString()
 	planned := plan
 
-	if workloadMetadataChanged(plan, state) {
+	artifactChanged := !planned.ArtifactID.Equal(state.ArtifactID)
+	runtimeChanged := workloadRuntimeChanged(planned.Runtime, state.Runtime)
+
+	if workloadMetadataChanged(planned, state) {
 		traceAPICall("UpdateWorkload")
-		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(plan))
+		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(planned))
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Workload", err.Error())
 			return
@@ -310,11 +313,8 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	artifactChanged := !plan.ArtifactID.Equal(state.ArtifactID)
-	runtimeChanged := workloadRuntimeChanged(plan.Runtime, state.Runtime)
-
 	if artifactChanged || runtimeChanged {
-		if err := r.triggerWorkloadReplacement(ctx, id, plan, artifactChanged, runtimeChanged); err != nil {
+		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, runtimeChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
 			if errors.As(err, &failedErr) {
 				resp.Diagnostics.AddError("Workload replacement failed", failedErr.Error())
