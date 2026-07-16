@@ -258,6 +258,74 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 	})
 }
 
+func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	updatedName := "updated-" + name
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	metadataWorkload := workloadFixture(id, artifactID1, updatedName, "new description", client.WorkloadImportanceHigh, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, updatedName, "new description", client.WorkloadImportanceHigh, &replicaCount, &endpoint)
+
+	// Step 1: Create
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+
+	// Pre-update plan refresh
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+
+	// Step 2: metadata + artifact in same apply
+	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, gomock.Any()).Return(metadataWorkload, nil)
+	expectWorkloadArtifactReplacement(mockService, id, workload2)
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload2, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				Config: workloadConfigWithReplicas(updatedName, "new description", "high", artifactID2, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
