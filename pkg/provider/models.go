@@ -1178,6 +1178,12 @@ type WorkloadResourceModel struct {
 
 type WorkloadRuntimeModel struct {
 	ContainerGroups []WorkloadGroupRuntimeModel `tfsdk:"container_groups"`
+	Rollout         *WorkloadRolloutModel       `tfsdk:"rollout"`
+}
+
+type WorkloadRolloutModel struct {
+	WarmupMinutes         types.Int64 `tfsdk:"warmup_minutes"`
+	KeepOldVersionMinutes types.Int64 `tfsdk:"keep_old_version_minutes"`
 }
 
 type WorkloadGroupRuntimeModel struct {
