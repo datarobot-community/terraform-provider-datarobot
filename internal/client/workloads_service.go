@@ -31,14 +31,13 @@ const (
 type AutoscalingPolicy struct {
 	ScalingMetric string  `json:"scalingMetric"`
 	Target        float64 `json:"target"`
-	MinCount      int64   `json:"minCount"`
-	MaxCount      int64   `json:"maxCount"`
-	Priority      *int64  `json:"priority,omitempty"`
 }
 
 type AutoscalingProperties struct {
-	Enabled  *bool               `json:"enabled,omitempty"`
-	Policies []AutoscalingPolicy `json:"policies"`
+	Enabled         *bool               `json:"enabled,omitempty"`
+	MinReplicaCount int64               `json:"minReplicaCount"`
+	MaxReplicaCount int64               `json:"maxReplicaCount"`
+	Policies        []AutoscalingPolicy `json:"policies"`
 }
 
 type ResourceAllocation struct {

@@ -62,6 +62,8 @@ Read-Only:
 
 Required:
 
+- `max_replica_count` (Number) Maximum number of replicas.
+- `min_replica_count` (Number) Minimum number of replicas. Set to `0` to allow scale-to-zero.
 - `policies` (Attributes List) Scaling policies that define when and how to scale. (see [below for nested schema](#nestedatt--runtime--container_groups--autoscaling--policies))
 
 Optional:
@@ -73,14 +75,8 @@ Optional:
 
 Required:
 
-- `max_count` (Number) Maximum number of replicas.
-- `min_count` (Number) Minimum number of replicas.
 - `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.
 - `target` (Number) Target value for the scaling metric.
-
-Optional:
-
-- `priority` (Number) Policy priority when multiple policies are defined.
 
 
 

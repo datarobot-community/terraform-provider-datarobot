@@ -119,6 +119,14 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												boolplanmodifier.UseStateForUnknown(),
 											},
 										},
+										"min_replica_count": schema.Int64Attribute{
+											Required:            true,
+											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero.",
+										},
+										"max_replica_count": schema.Int64Attribute{
+											Required:            true,
+											MarkdownDescription: "Maximum number of replicas.",
+										},
 										"policies": schema.ListNestedAttribute{
 											Required:            true,
 											MarkdownDescription: "Scaling policies that define when and how to scale.",
@@ -131,22 +139,6 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 													"target": schema.Float64Attribute{
 														Required:            true,
 														MarkdownDescription: "Target value for the scaling metric.",
-													},
-													"min_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Minimum number of replicas.",
-													},
-													"max_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Maximum number of replicas.",
-													},
-													"priority": schema.Int64Attribute{
-														Optional:            true,
-														Computed:            true,
-														MarkdownDescription: "Policy priority when multiple policies are defined.",
-														PlanModifiers: []planmodifier.Int64{
-															int64planmodifier.UseStateForUnknown(),
-														},
 													},
 												},
 											},
@@ -549,19 +541,14 @@ func groupRuntimeToClient(g WorkloadGroupRuntimeModel) client.GroupRuntime {
 			enabled := g.Autoscaling.Enabled.ValueBool()
 			gr.Autoscaling.Enabled = &enabled
 		}
+		gr.Autoscaling.MinReplicaCount = g.Autoscaling.MinReplicaCount.ValueInt64()
+		gr.Autoscaling.MaxReplicaCount = g.Autoscaling.MaxReplicaCount.ValueInt64()
 		gr.Autoscaling.Policies = make([]client.AutoscalingPolicy, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := client.AutoscalingPolicy{
+			gr.Autoscaling.Policies[i] = client.AutoscalingPolicy{
 				ScalingMetric: p.ScalingMetric.ValueString(),
 				Target:        p.Target.ValueFloat64(),
-				MinCount:      p.MinCount.ValueInt64(),
-				MaxCount:      p.MaxCount.ValueInt64(),
 			}
-			if !p.Priority.IsNull() && !p.Priority.IsUnknown() {
-				v := p.Priority.ValueInt64()
-				policy.Priority = &v
-			}
-			gr.Autoscaling.Policies[i] = policy
 		}
 	}
 
@@ -771,20 +758,14 @@ func loadGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadGroupRuntimeModel {
 		} else {
 			autoscaling.Enabled = types.BoolNull()
 		}
+		autoscaling.MinReplicaCount = types.Int64Value(g.Autoscaling.MinReplicaCount)
+		autoscaling.MaxReplicaCount = types.Int64Value(g.Autoscaling.MaxReplicaCount)
 		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := WorkloadAutoscalingPolicyModel{
+			autoscaling.Policies[i] = WorkloadAutoscalingPolicyModel{
 				ScalingMetric: types.StringValue(p.ScalingMetric),
 				Target:        types.Float64Value(p.Target),
-				MinCount:      types.Int64Value(p.MinCount),
-				MaxCount:      types.Int64Value(p.MaxCount),
 			}
-			if p.Priority != nil {
-				policy.Priority = types.Int64Value(*p.Priority)
-			} else {
-				policy.Priority = types.Int64Null()
-			}
-			autoscaling.Policies[i] = policy
 		}
 		m.Autoscaling = autoscaling
 	}

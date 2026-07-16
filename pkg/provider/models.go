@@ -1214,16 +1214,15 @@ type WorkloadResourceAllocationModel struct {
 }
 
 type WorkloadAutoscalingModel struct {
-	Enabled  types.Bool                       `tfsdk:"enabled"`
-	Policies []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
+	Enabled         types.Bool                       `tfsdk:"enabled"`
+	MinReplicaCount types.Int64                      `tfsdk:"min_replica_count"`
+	MaxReplicaCount types.Int64                      `tfsdk:"max_replica_count"`
+	Policies        []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
 }
 
 type WorkloadAutoscalingPolicyModel struct {
 	ScalingMetric types.String  `tfsdk:"scaling_metric"`
 	Target        types.Float64 `tfsdk:"target"`
-	MinCount      types.Int64   `tfsdk:"min_count"`
-	MaxCount      types.Int64   `tfsdk:"max_count"`
-	Priority      types.Int64   `tfsdk:"priority"`
 }
 
 // QuotaResourceModel describes the datarobot_quota resource. default_rules is a set

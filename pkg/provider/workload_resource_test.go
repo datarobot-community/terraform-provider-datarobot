@@ -505,7 +505,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 1, 3, 50.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.min_replica_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -513,7 +513,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 			{
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 2, 5, 70.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "2"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.min_replica_count", "2"),
 					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -787,13 +787,13 @@ resource "datarobot_workload" "test" {
       {
         resource_bundles = ["cpu.small"]
         autoscaling = {
-          enabled = true
+          enabled           = true
+          min_replica_count = %d
+          max_replica_count = %d
           policies = [
             {
               scaling_metric = "cpuAverageUtilization"
               target         = %g
-              min_count      = %d
-              max_count      = %d
             }
           ]
         }
@@ -801,7 +801,7 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, importance, artifactID, desc, target, minCount, maxCount)
+`, name, importance, artifactID, desc, minCount, maxCount, target)
 }
 
 func workloadConfigConflictingRuntime(artifactID string) string {
@@ -814,13 +814,13 @@ resource "datarobot_workload" "test" {
       {
         replica_count = 2
         autoscaling = {
-          enabled = true
+          enabled           = true
+          min_replica_count = 1
+          max_replica_count = 4
           policies = [
             {
               scaling_metric = "cpuAverageUtilization"
               target         = 50
-              min_count      = 1
-              max_count      = 4
             }
           ]
         }
@@ -916,13 +916,13 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 					Name:            "default",
 					ResourceBundles: []string{"cpu.small"},
 					Autoscaling: &client.AutoscalingProperties{
-						Enabled: &enabled,
+						Enabled:         &enabled,
+						MinReplicaCount: minCount,
+						MaxReplicaCount: maxCount,
 						Policies: []client.AutoscalingPolicy{
 							{
 								ScalingMetric: "cpuAverageUtilization",
 								Target:        target,
-								MinCount:      minCount,
-								MaxCount:      maxCount,
 							},
 						},
 					},
