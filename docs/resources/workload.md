@@ -4,24 +4,14 @@ page_title: "datarobot_workload Resource - datarobot"
 subcategory: ""
 description: |-
   A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
-  Several attributes (including runtime and artifact_id) trigger replacement when changed. To avoid downtime during replacements, it is recommended to set create_before_destroy in the resource lifecycle:
-  
-  lifecycle {
-    create_before_destroy = true
-  }
+  Changes to artifact_id or runtime trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
 ---
 
 # datarobot_workload (Resource)
 
 A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
 
-Several attributes (including `runtime` and `artifact_id`) trigger replacement when changed. To avoid downtime during replacements, it is recommended to set `create_before_destroy` in the resource lifecycle:
-
-```hcl
-lifecycle {
-  create_before_destroy = true
-}
-```
+Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
 
 
 
@@ -30,9 +20,9 @@ lifecycle {
 
 ### Required
 
-- `artifact_id` (String) ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value forces a new Workload to be created.
+- `artifact_id` (String) ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value triggers an in-place workload replacement.
 - `name` (String) The name of the Workload.
-- `runtime` (Attributes) Runtime configuration for the Workload. (see [below for nested schema](#nestedatt--runtime))
+- `runtime` (Attributes) Runtime configuration for the Workload. Changes trigger an in-place workload replacement. (see [below for nested schema](#nestedatt--runtime))
 
 ### Optional
 
