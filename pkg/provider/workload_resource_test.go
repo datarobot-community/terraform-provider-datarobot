@@ -771,7 +771,7 @@ resource "datarobot_workload" "test" {
 `, name, importance, artifactID, desc, replicaCount, resourceBundleID)
 }
 
-func workloadConfigWithAutoscaling(name, description, importance, artifactID string, minCount, maxCount int64, target float64) string {
+func workloadConfigWithAutoscaling(name, description, importance, artifactID string, minReplicaCount, maxReplicaCount int64, target float64) string {
 	desc := ""
 	if description != "" {
 		desc = fmt.Sprintf("description = %q", description)
@@ -801,7 +801,7 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, importance, artifactID, desc, minCount, maxCount, target)
+`, name, importance, artifactID, desc, minReplicaCount, maxReplicaCount, target)
 }
 
 func workloadConfigConflictingRuntime(artifactID string) string {
@@ -901,7 +901,7 @@ func workloadFixtureWithResources(id, artifactID, name string, replicaCount *int
 	return w
 }
 
-func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *string, minCount, maxCount int64, target float64) *client.Workload {
+func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *string, minReplicaCount, maxReplicaCount int64, target float64) *client.Workload {
 	enabled := true
 	return &client.Workload{
 		ID:         id,
@@ -917,8 +917,8 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 					ResourceBundles: []string{"cpu.small"},
 					Autoscaling: &client.AutoscalingProperties{
 						Enabled:         &enabled,
-						MinReplicaCount: minCount,
-						MaxReplicaCount: maxCount,
+						MinReplicaCount: minReplicaCount,
+						MaxReplicaCount: maxReplicaCount,
 						Policies: []client.AutoscalingPolicy{
 							{
 								ScalingMetric: "cpuAverageUtilization",
