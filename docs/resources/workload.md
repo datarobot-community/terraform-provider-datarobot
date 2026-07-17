@@ -62,13 +62,13 @@ Read-Only:
 
 Required:
 
-- `max_replica_count` (Number) Maximum number of replicas.
-- `min_replica_count` (Number) Minimum number of replicas. Set to `0` to allow scale-to-zero.
 - `policies` (Attributes List) Scaling policies that define when and how to scale. (see [below for nested schema](#nestedatt--runtime--container_groups--autoscaling--policies))
 
 Optional:
 
 - `enabled` (Boolean) Whether autoscaling is enabled. Defaults to true.
+- `max_replica_count` (Number) Maximum number of replicas. Defaults to `1`.
+- `min_replica_count` (Number) Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.
 
 <a id="nestedatt--runtime--container_groups--autoscaling--policies"></a>
 ### Nested Schema for `runtime.container_groups.autoscaling.policies`

@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -121,15 +122,19 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 											},
 										},
 										"min_replica_count": schema.Int64Attribute{
-											Required:            true,
-											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero.",
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(0),
+											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.",
 											Validators: []validator.Int64{
 												int64validator.AtLeast(0),
 											},
 										},
 										"max_replica_count": schema.Int64Attribute{
-											Required:            true,
-											MarkdownDescription: "Maximum number of replicas.",
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(1),
+											MarkdownDescription: "Maximum number of replicas. Defaults to `1`.",
 											Validators: []validator.Int64{
 												int64validator.AtLeast(1),
 											},
