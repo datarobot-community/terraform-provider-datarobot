@@ -208,9 +208,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 						},
 					},
-					"rollout": schema.SingleNestedAttribute{
+					"replacement_policy": schema.SingleNestedAttribute{
 						Optional:            true,
-						MarkdownDescription: "Rollout configuration for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when rollout settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom rollout timing (WAPI uses platform defaults).",
+						MarkdownDescription: "Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults).",
 						Attributes: map[string]schema.Attribute{
 							"warmup_minutes": schema.Int64Attribute{
 								Optional:            true,
@@ -271,7 +271,7 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 
 	planned := data
 	loadWorkloadIntoModel(workload, &data)
-	preserveWorkloadRollout(planned, &data)
+	preserveWorkloadReplacementPolicy(planned, &data)
 	applySentinels(planned, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -306,7 +306,7 @@ func (r *WorkloadResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	prior := data
 	loadWorkloadIntoModel(workload, &data)
-	preserveWorkloadRollout(prior, &data)
+	preserveWorkloadReplacementPolicy(prior, &data)
 	applySentinels(prior, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -325,7 +325,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 
 	artifactChanged := !planned.ArtifactID.Equal(state.ArtifactID)
 	containerGroupsChanged := workloadContainerGroupsChanged(planned.Runtime, state.Runtime)
-	rolloutChanged := workloadRolloutChanged(planned.Runtime, state.Runtime)
+	replacementPolicyChanged := workloadReplacementPolicyChanged(planned.Runtime, state.Runtime)
 
 	if workloadMetadataChanged(planned, state) {
 		traceAPICall("UpdateWorkload")
@@ -337,8 +337,8 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	if artifactChanged || containerGroupsChanged || rolloutChanged {
-		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, containerGroupsChanged, rolloutChanged); err != nil {
+	if artifactChanged || containerGroupsChanged || replacementPolicyChanged {
+		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, containerGroupsChanged, replacementPolicyChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
 			if errors.As(err, &failedErr) {
 				resp.Diagnostics.AddError("Workload replacement failed", failedErr.Error())
@@ -355,7 +355,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
-		preserveWorkloadRollout(planned, &plan)
+		preserveWorkloadReplacementPolicy(planned, &plan)
 	}
 
 	applySentinels(planned, &plan)
@@ -701,24 +701,24 @@ func workloadContainerGroupsChanged(plan, state WorkloadRuntimeModel) bool {
 	return !reflect.DeepEqual(plan.ContainerGroups, state.ContainerGroups)
 }
 
-func workloadRolloutChanged(plan, state WorkloadRuntimeModel) bool {
-	return !reflect.DeepEqual(plan.Rollout, state.Rollout)
+func workloadReplacementPolicyChanged(plan, state WorkloadRuntimeModel) bool {
+	return !reflect.DeepEqual(plan.ReplacementPolicy, state.ReplacementPolicy)
 }
 
-func preserveWorkloadRollout(prior WorkloadResourceModel, data *WorkloadResourceModel) {
-	data.Runtime.Rollout = prior.Runtime.Rollout
+func preserveWorkloadReplacementPolicy(prior WorkloadResourceModel, data *WorkloadResourceModel) {
+	data.Runtime.ReplacementPolicy = prior.Runtime.ReplacementPolicy
 }
 
-func rolloutConfigFromPlan(rollout *WorkloadRolloutModel) client.ReplacementConfig {
+func replacementConfigFromPlan(policy *WorkloadReplacementPolicyModel) client.ReplacementConfig {
 	cfg := client.ReplacementConfig{}
-	if rollout == nil {
+	if policy == nil {
 		return cfg
 	}
-	if !rollout.WarmupMinutes.IsNull() && !rollout.WarmupMinutes.IsUnknown() {
-		cfg.WarmupDurationMinutes = rollout.WarmupMinutes.ValueInt64()
+	if !policy.WarmupMinutes.IsNull() && !policy.WarmupMinutes.IsUnknown() {
+		cfg.WarmupDurationMinutes = policy.WarmupMinutes.ValueInt64()
 	}
-	if !rollout.KeepOldVersionMinutes.IsNull() && !rollout.KeepOldVersionMinutes.IsUnknown() {
-		cfg.KeepOldVersionMinutes = rollout.KeepOldVersionMinutes.ValueInt64()
+	if !policy.KeepOldVersionMinutes.IsNull() && !policy.KeepOldVersionMinutes.IsUnknown() {
+		cfg.KeepOldVersionMinutes = policy.KeepOldVersionMinutes.ValueInt64()
 	}
 	return cfg
 }
@@ -727,16 +727,16 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
 	plan WorkloadResourceModel,
-	artifactChanged, containerGroupsChanged, rolloutChanged bool,
+	artifactChanged, containerGroupsChanged, replacementPolicyChanged bool,
 ) error {
-	useReplacementAPI := artifactChanged || rolloutChanged
+	useReplacementAPI := artifactChanged || replacementPolicyChanged
 
 	if useReplacementAPI {
 		traceAPICall("StartWorkloadReplacement")
 		req := &client.StartReplacementRequest{
 			ArtifactID: plan.ArtifactID.ValueString(),
 			Strategy:   client.ReplacementStrategyRolling,
-			Config:     rolloutConfigFromPlan(plan.Runtime.Rollout),
+			Config:     replacementConfigFromPlan(plan.Runtime.ReplacementPolicy),
 		}
 		if containerGroupsChanged {
 			runtime := workloadRuntimeToClient(plan.Runtime)

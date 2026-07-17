@@ -258,7 +258,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 	})
 }
 
-func TestIntegrationWorkloadReplaceWithRolloutConfigOnArtifactChange(t *testing.T) {
+func TestIntegrationWorkloadReplaceWithReplacementPolicyOnArtifactChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -307,14 +307,14 @@ func TestIntegrationWorkloadReplaceWithRolloutConfigOnArtifactChange(t *testing.
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: workloadConfigWithRollout(name, artifactID1, 1, 5, 10),
+				Config: workloadConfigWithReplacementPolicy(name, artifactID1, 1, 5, 10),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.rollout.warmup_minutes", "5"),
-					resource.TestCheckResourceAttr(resourceName, "runtime.rollout.keep_old_version_minutes", "10"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
 				),
 			},
 			{
-				Config: workloadConfigWithRollout(name, artifactID2, 1, 5, 10),
+				Config: workloadConfigWithReplacementPolicy(name, artifactID2, 1, 5, 10),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
 				),
@@ -323,7 +323,7 @@ func TestIntegrationWorkloadReplaceWithRolloutConfigOnArtifactChange(t *testing.
 	})
 }
 
-func TestIntegrationWorkloadReplaceOnRolloutChange(t *testing.T) {
+func TestIntegrationWorkloadReplaceOnReplacementPolicyChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -372,9 +372,9 @@ func TestIntegrationWorkloadReplaceOnRolloutChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
 			},
 			{
-				Config: workloadConfigWithRollout(name, artifactID, 1, 15, 0),
+				Config: workloadConfigWithReplacementPolicy(name, artifactID, 1, 15, 0),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.rollout.warmup_minutes", "15"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "15"),
 				),
 			},
 		},
@@ -905,7 +905,7 @@ resource "datarobot_workload" "test" {
 `, name, importance, artifactID, desc, replicaCount)
 }
 
-func workloadConfigWithRollout(name, artifactID string, replicaCount, warmupMinutes, keepOldVersionMinutes int64) string {
+func workloadConfigWithReplacementPolicy(name, artifactID string, replicaCount, warmupMinutes, keepOldVersionMinutes int64) string {
 	return fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
@@ -918,7 +918,7 @@ resource "datarobot_workload" "test" {
         resource_bundles = ["cpu.small"]
       }
     ]
-    rollout = {
+    replacement_policy = {
       warmup_minutes           = %d
       keep_old_version_minutes = %d
     }
