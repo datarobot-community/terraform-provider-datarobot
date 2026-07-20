@@ -166,7 +166,7 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	}
 }
 
-func artifactResourceContainerAttributes(probeAttributes map[string]schema.Attribute) map[string]schema.Attribute {
+func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttributes map[string]schema.Attribute) map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"name": schema.StringAttribute{
 			Optional:            true,
@@ -177,8 +177,16 @@ func artifactResourceContainerAttributes(probeAttributes map[string]schema.Attri
 			},
 		},
 		"image_uri": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Docker image URI.",
+			Optional:            true,
+			MarkdownDescription: "Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
+		},
+		"image_build_config": schema.SingleNestedAttribute{
+			Optional:            true,
+			MarkdownDescription: "Configuration for server-side image builds from source code.",
+			Attributes:          imageBuildConfigAttributes,
 		},
 		"primary": schema.BoolAttribute{
 			Optional:            true,
@@ -405,8 +413,8 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 	}
 }
 
-func artifactResourceSpecAttribute(probeAttributes map[string]schema.Attribute) schema.SingleNestedAttribute {
-	containerAttributes := artifactResourceContainerAttributes(probeAttributes)
+func artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes map[string]schema.Attribute) schema.SingleNestedAttribute {
+	containerAttributes := artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttributes)
 	return schema.SingleNestedAttribute{
 		Required:            true,
 		MarkdownDescription: "The artifact specification containing container group definitions.",

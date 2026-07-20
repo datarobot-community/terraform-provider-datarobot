@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -34,10 +37,8 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
 	updatedID := uuid.NewString()
@@ -244,7 +245,7 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 		if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
 			return fmt.Errorf("artifact has no containers")
 		}
-		if got := artifact.Spec.ContainerGroups[0].Containers[0].ImageURI; got != expectedImageURI {
+		if got := artifactImageURIValue(artifact.Spec.ContainerGroups[0].Containers[0]); got != expectedImageURI {
 			return fmt.Errorf("expected image_uri %q, got %q", expectedImageURI, got)
 		}
 
@@ -459,6 +460,14 @@ resource "datarobot_artifact" "test" {
 `, name, artifactTestContainerSpecBlock(imageURI))
 }
 
+func artifactImageURIValue(c client.ArtifactContainer) string {
+	return c.ImageURI
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
 func artifactFixture(id string, repoID *string, name string) *client.Artifact {
 	return artifactFixtureWithStatus(id, repoID, name, client.ArtifactStatusLocked)
 }
@@ -561,9 +570,8 @@ func TestArtifactTooManyContainerGroups(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -605,9 +613,8 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	cases := []struct {
 		name        string
@@ -742,10 +749,8 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
@@ -836,10 +841,8 @@ func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	lockedArtifactID := uuid.NewString()
 	draftArtifactID := uuid.NewString()
@@ -900,6 +903,53 @@ func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", draftArtifactID),
 				),
+			},
+		},
+	})
+}
+
+func TestArtifactLockedToDraftRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "locked-artifact-" + uuid.NewString()[:8]
+
+	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, client.ArtifactStatusLocked)
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		Return(lockedArtifact, nil)
+	mockService.EXPECT().
+		GetArtifact(gomock.Any(), artifactID).
+		Return(lockedArtifact, nil).
+		AnyTimes()
+	mockService.EXPECT().
+		DeleteArtifactRepository(gomock.Any(), repoID).
+		Return(nil).
+		AnyTimes()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactResourceConfigWithStatus(name, "locked"),
+			},
+			{
+				Config:      artifactResourceConfigWithStatus(name, "draft"),
+				ExpectError: regexp.MustCompile(`Cannot revert a locked artifact to draft`),
 			},
 		},
 	})
@@ -984,10 +1034,8 @@ func TestPatchRequestFromPlan(t *testing.T) {
 }
 
 func TestIntegrationArtifactInvalidStatus(t *testing.T) {
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -1011,10 +1059,8 @@ func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
 	updatedID := uuid.NewString()
@@ -1087,10 +1133,8 @@ func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		globalTestCfg.ApiKey = "fake"
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
@@ -1139,6 +1183,542 @@ func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
 			},
 			{
 				Config: artifactResourceConfigWithStatusAndImage(name, "draft", "nginx:1.25"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),
+				),
+			},
+		},
+	})
+}
+
+func TestArtifactImageSourceRequired(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name = "missing-image-source"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Missing image source"),
+			},
+		},
+	})
+}
+
+func TestArtifactLockedImageBuildConfigWithoutImageURI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "locked-build-config"
+  status = "locked"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Incomplete build configuration for locked artifact"),
+			},
+		},
+	})
+}
+
+func TestArtifactImageBuildConfigGeneratedRequiresFields(t *testing.T) {
+	resp := &tfresource.ValidateConfigResponse{}
+	containerPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(0).
+		AtName("containers").AtListIndex(0)
+	cfg := &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{
+			Source: types.StringValue("generated"),
+		},
+	}
+
+	validateImageBuildConfig(resp, containerPath, cfg, string(client.ArtifactTypeService))
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected validation errors")
+	}
+	if len(resp.Diagnostics.Errors()) != 3 {
+		t.Fatalf("expected 3 validation errors, got %d", len(resp.Diagnostics.Errors()))
+	}
+
+	var combined strings.Builder
+	for _, d := range resp.Diagnostics.Errors() {
+		combined.WriteString(d.Summary())
+		combined.WriteString(d.Detail())
+	}
+	msg := combined.String()
+
+	for _, field := range []string{"execution_environment_id", "execution_environment_version_id", "entrypoint"} {
+		if !strings.Contains(msg, field) {
+			t.Errorf("expected validation to mention %q, got: %s", field, msg)
+		}
+	}
+}
+
+func TestArtifactNimWithCodeRefRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "nim-code-ref"
+  type   = "nim"
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          code_ref = {
+            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
+            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("NIM artifacts cannot include"),
+			},
+		},
+	})
+}
+
+func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name   = "sidecar-build-config"
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [
+        {
+          name    = "primary"
+          primary = true
+          port    = 8080
+          image_uri = "nginx:1.25"
+        },
+        {
+          name    = "sidecar"
+          primary = false
+          image_build_config = {
+            dockerfile = { source = "provided" }
+          }
+        },
+      ]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Unsupported on non-primary container"),
+			},
+		},
+	})
+}
+
+func TestArtifactImageBuildConfigToClient_provided(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		Primary: types.BoolValue(true),
+		Port:    types.Int64Value(8080),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source: types.StringValue("provided"), // path omitted on purpose: defaults to ./Dockerfile in artifactDockerfileToClient
+			},
+		},
+	})
+
+	if container.ImageURI != "" {
+		t.Fatalf("expected no imageUri, got %q", container.ImageURI)
+	}
+	if container.ImageBuildConfig == nil || container.ImageBuildConfig.Dockerfile == nil {
+		t.Fatal("expected imageBuildConfig.dockerfile")
+	}
+	if container.ImageBuildConfig.Dockerfile.Source != "provided" {
+		t.Fatalf("expected provided source, got %q", container.ImageBuildConfig.Dockerfile.Source)
+	}
+	if container.ImageBuildConfig.Dockerfile.Path != "./Dockerfile" {
+		t.Fatalf("expected default dockerfile path, got %q", container.ImageBuildConfig.Dockerfile.Path)
+	}
+}
+
+func TestArtifactImageBuildConfigToClient_generated(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/app:latest"),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source:                        types.StringValue("generated"),
+				ExecutionEnvironmentID:        types.StringValue("eeeeeeeeeeeeeeeeeeeeeeee"),
+				ExecutionEnvironmentVersionID: types.StringValue("ffffffffffffffffffffffff"),
+				Entrypoint:                    []types.String{types.StringValue("python"), types.StringValue("app.py")},
+			},
+		},
+	})
+
+	cfg := container.ImageBuildConfig
+	if cfg == nil || cfg.Dockerfile == nil {
+		t.Fatal("expected imageBuildConfig")
+	}
+	if cfg.Dockerfile.ExecutionEnvironmentID != "eeeeeeeeeeeeeeeeeeeeeeee" {
+		t.Fatalf("unexpected executionEnvironmentId: %q", cfg.Dockerfile.ExecutionEnvironmentID)
+	}
+	if cfg.Dockerfile.ExecutionEnvironmentVersionID != "ffffffffffffffffffffffff" {
+		t.Fatalf("unexpected executionEnvironmentVersionID: %q", cfg.Dockerfile.ExecutionEnvironmentVersionID)
+	}
+	if len(cfg.Dockerfile.Entrypoint) != 2 || cfg.Dockerfile.Entrypoint[0] != "python" {
+		t.Fatalf("unexpected entrypoint: %v", cfg.Dockerfile.Entrypoint)
+	}
+}
+
+func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
+	t.Run("provided dockerfile with code_ref", func(t *testing.T) {
+		const (
+			catalogID        = "aaaaaaaaaaaaaaaaaaaaaaaa"
+			catalogVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
+		)
+
+		model := loadContainerFromAPI(client.ArtifactContainer{
+			ImageBuildConfig: &client.ArtifactImageBuildConfig{
+				CodeRef: &client.ArtifactCodeRef{
+					Type:     "datarobot",
+					Provider: "datarobot",
+					DataRobot: client.ArtifactDataRobotCodeRef{
+						CatalogID:        catalogID,
+						CatalogVersionID: catalogVersionID,
+					},
+				},
+				Dockerfile: &client.ArtifactDockerfileConfig{
+					Source: "provided",
+					Path:   "./Dockerfile",
+				},
+			},
+		}, nil)
+
+		cfg := model.ImageBuildConfig
+		if cfg == nil {
+			t.Fatal("expected image_build_config in state model")
+		}
+		if cfg.CodeRef == nil {
+			t.Fatal("expected code_ref in state model")
+		}
+		if got := cfg.CodeRef.CatalogID.ValueString(); got != catalogID {
+			t.Fatalf("catalog_id: got %q, want %q", got, catalogID)
+		}
+		if got := cfg.CodeRef.CatalogVersionID.ValueString(); got != catalogVersionID {
+			t.Fatalf("catalog_version_id: got %q, want %q", got, catalogVersionID)
+		}
+		if cfg.Dockerfile == nil {
+			t.Fatal("expected dockerfile in state model")
+		}
+		if got := cfg.Dockerfile.Source.ValueString(); got != "provided" {
+			t.Fatalf("dockerfile.source: got %q, want %q", got, "provided")
+		}
+		if got := cfg.Dockerfile.Path.ValueString(); got != "./Dockerfile" {
+			t.Fatalf("dockerfile.path: got %q, want %q", got, "./Dockerfile")
+		}
+	})
+}
+
+func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
+	t.Run("generated dockerfile", func(t *testing.T) {
+		const (
+			eeID        = "eeeeeeeeeeeeeeeeeeeeeeee"
+			eeVersionID = "ffffffffffffffffffffffff"
+		)
+
+		model := loadContainerFromAPI(client.ArtifactContainer{
+			ImageURI: "registry.example/app:latest",
+			ImageBuildConfig: &client.ArtifactImageBuildConfig{
+				Dockerfile: &client.ArtifactDockerfileConfig{
+					Source:                        "generated",
+					ExecutionEnvironmentID:        eeID,
+					ExecutionEnvironmentVersionID: eeVersionID,
+					Entrypoint:                    []string{"python", "app.py"},
+				},
+			},
+		}, nil)
+
+		cfg := model.ImageBuildConfig
+		if cfg == nil || cfg.Dockerfile == nil {
+			t.Fatal("expected image_build_config.dockerfile in state model")
+		}
+		if got := cfg.Dockerfile.Source.ValueString(); got != "generated" {
+			t.Fatalf("dockerfile.source: got %q, want %q", got, "generated")
+		}
+		if got := cfg.Dockerfile.ExecutionEnvironmentID.ValueString(); got != eeID {
+			t.Fatalf("execution_environment_id: got %q, want %q", got, eeID)
+		}
+		if got := cfg.Dockerfile.ExecutionEnvironmentVersionID.ValueString(); got != eeVersionID {
+			t.Fatalf("execution_environment_version_id: got %q, want %q", got, eeVersionID)
+		}
+		if len(cfg.Dockerfile.Entrypoint) != 2 {
+			t.Fatalf("entrypoint length: got %d, want 2", len(cfg.Dockerfile.Entrypoint))
+		}
+		if got := cfg.Dockerfile.Entrypoint[0].ValueString(); got != "python" {
+			t.Fatalf("entrypoint[0]: got %q, want %q", got, "python")
+		}
+		if got := cfg.Dockerfile.Entrypoint[1].ValueString(); got != "app.py" {
+			t.Fatalf("entrypoint[1]: got %q, want %q", got, "app.py")
+		}
+		if model.ImageURI.ValueString() != "registry.example/app:latest" {
+			t.Fatalf("image_uri: got %q", model.ImageURI.ValueString())
+		}
+	})
+}
+
+func TestDockerfileEqual_normalizesProvidedDefaults(t *testing.T) {
+	providedDefaults := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringValue("./Dockerfile"),
+	}
+	providedNoPath := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringNull(),
+	}
+	providedSourceOnly := &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+	}
+
+	cases := []struct {
+		name string
+		a    *ArtifactDockerfileModel
+		b    *ArtifactDockerfileModel
+	}{
+		{name: "nil vs nil", a: nil, b: nil},
+		{name: "nil vs provided defaults", a: nil, b: providedDefaults},
+		{name: "source only vs defaults", a: providedSourceOnly, b: providedDefaults},
+		{name: "null path vs defaults", a: providedNoPath, b: providedDefaults},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !dockerfileEqual(tc.a, tc.b) {
+				t.Fatal("expected normalized dockerfile configs to be equal")
+			}
+		})
+	}
+}
+
+func TestArtifactNeedsNewVersion_dockerfileDefaults(t *testing.T) {
+	base := ArtifactResourceModel{
+		Name:                 types.StringValue("my-artifact"),
+		Description:          types.StringValue("desc"),
+		ArtifactRepositoryID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		Spec: &ArtifactSpecModel{
+			ContainerGroups: []ArtifactContainerGroupModel{{
+				Containers: []ArtifactContainerModel{{
+					Name:     types.StringValue("app"),
+					ImageURI: types.StringValue("registry.example.com/app:v1"),
+					Primary:  types.BoolValue(true),
+					ImageBuildConfig: &ArtifactImageBuildConfigModel{
+						CodeRef: &ArtifactCodeRefModel{
+							CatalogID:        types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+							CatalogVersionID: types.StringValue("cccccccccccccccccccccccc"),
+						},
+					},
+				}},
+			}},
+		},
+	}
+
+	// Plan omits the nested dockerfile block; state was refreshed with API defaults.
+	state := base
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{
+		Source: types.StringValue("provided"),
+		Path:   types.StringValue("./Dockerfile"),
+	}
+
+	if artifactNeedsNewVersion(base, state) {
+		t.Fatal("expected omitted dockerfile block to match API-provided defaults")
+	}
+}
+
+func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
+	base := ArtifactContainerModel{
+		ImageURI: types.StringValue("nginx:latest"),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+		},
+	}
+	changed := base
+	changed.ImageBuildConfig = &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{
+			Source:                        types.StringValue("generated"),
+			ExecutionEnvironmentID:        types.StringValue("eeeeeeeeeeeeeeeeeeeeeeee"),
+			ExecutionEnvironmentVersionID: types.StringValue("ffffffffffffffffffffffff"),
+			Entrypoint:                    []types.String{types.StringValue("python")},
+		},
+	}
+
+	if containersEqual(base, changed) {
+		t.Fatal("expected image_build_config change to make containers unequal")
+	}
+}
+
+func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "draft-build-" + uuid.NewString()[:8]
+
+	draftArtifact := &client.Artifact{
+		ID:                   artifactID,
+		Name:                 name,
+		Type:                 client.ArtifactTypeService,
+		Status:               client.ArtifactStatusDraft,
+		ArtifactRepositoryID: &repoIDPtr,
+		Spec: client.ArtifactSpec{
+			ContainerGroups: []client.ArtifactContainerGroup{{
+				Containers: []client.ArtifactContainer{{
+					Name:    stringPtr("main"),
+					Primary: func() *bool { v := true; return &v }(),
+					Port:    func() *int64 { v := int64(8080); return &v }(),
+					ImageBuildConfig: &client.ArtifactImageBuildConfig{
+						Dockerfile: &client.ArtifactDockerfileConfig{Source: "provided", Path: "./Dockerfile"},
+					},
+				}},
+			}},
+		},
+	}
+
+	mockService.EXPECT().
+		CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Errorf("expected draft create, got %q", req.Status)
+			}
+			c := req.Spec.ContainerGroups[0].Containers[0]
+			if c.ImageURI != "" {
+				t.Errorf("expected no imageUri on create, got %q", c.ImageURI)
+			}
+			if c.ImageBuildConfig == nil || c.ImageBuildConfig.Dockerfile == nil {
+				t.Fatal("expected imageBuildConfig on create request")
+			}
+			if c.ImageBuildConfig.Dockerfile.Source != "provided" {
+				t.Fatalf("expected provided dockerfile, got %q", c.ImageBuildConfig.Dockerfile.Source)
+			}
+			if c.ImageBuildConfig.Dockerfile.Path != "./Dockerfile" {
+				t.Fatalf("expected dockerfile path, got %q", c.ImageBuildConfig.Dockerfile.Path)
+			}
+			return draftArtifact, nil
+		})
+
+	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(draftArtifact, nil).AnyTimes()
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "main"
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "status", "draft"),
 					resource.TestCheckResourceAttr("datarobot_artifact.test", "artifact_id", artifactID),

@@ -35,6 +35,63 @@ func (r *ArtifactResource) Metadata(ctx context.Context, req resource.MetadataRe
 func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	probeAttributes := artifactResourceProbeAttributes()
 
+	dockerfileAttributes := map[string]schema.Attribute{
+		"source": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			Default:             stringdefault.StaticString("provided"),
+			MarkdownDescription: "How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.",
+			Validators:          ArtifactDockerfileSourceValidators(),
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
+		},
+		"path": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			Default:             stringdefault.StaticString("./Dockerfile"),
+			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
+		},
+		"execution_environment_id": schema.StringAttribute{
+			Optional:            true,
+			MarkdownDescription: "Execution environment ID for the base Docker image. Required when source is `generated`.",
+		},
+		"execution_environment_version_id": schema.StringAttribute{
+			Optional:            true,
+			MarkdownDescription: "Execution environment version ID that pins the base image. Required when source is `generated`.",
+		},
+		"entrypoint": schema.ListAttribute{
+			Optional:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.",
+		},
+	}
+
+	imageBuildConfigAttributes := map[string]schema.Attribute{
+		"code_ref": schema.SingleNestedAttribute{
+			Optional:            true,
+			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock.",
+			Attributes: map[string]schema.Attribute{
+				"catalog_id": schema.StringAttribute{
+					Required:            true,
+					MarkdownDescription: "Files API catalog ID (24-character hex).",
+				},
+				"catalog_version_id": schema.StringAttribute{
+					Required:            true,
+					MarkdownDescription: "Files API catalog version ID (24-character hex).",
+				},
+			},
+		},
+		"dockerfile": schema.SingleNestedAttribute{
+			Optional:            true,
+			MarkdownDescription: "How the Dockerfile is obtained for the image build. Defaults to using `./Dockerfile` from the source code.",
+			Attributes:          dockerfileAttributes,
+		},
+	}
+
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.",
 
@@ -92,7 +149,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"spec": artifactResourceSpecAttribute(probeAttributes),
+			"spec": artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes),
 		},
 	}
 }
@@ -297,6 +354,7 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
+		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig) ||
 		!probesEqual(a.StartupProbe, b.StartupProbe) ||
 		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
 		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
@@ -325,6 +383,94 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 	return true
 }
 
+func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if !codeRefEqual(a.CodeRef, b.CodeRef) {
+		return false
+	}
+	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
+}
+
+func codeRefEqual(a, b *ArtifactCodeRefModel) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.CatalogID.Equal(b.CatalogID) && a.CatalogVersionID.Equal(b.CatalogVersionID)
+}
+
+func dockerfileEqual(a, b *ArtifactDockerfileModel) bool {
+	aNorm := normalizeDockerfileForEqual(a)
+	bNorm := normalizeDockerfileForEqual(b)
+
+	if !aNorm.Source.Equal(bNorm.Source) ||
+		!aNorm.Path.Equal(bNorm.Path) ||
+		!aNorm.ExecutionEnvironmentID.Equal(bNorm.ExecutionEnvironmentID) ||
+		!aNorm.ExecutionEnvironmentVersionID.Equal(bNorm.ExecutionEnvironmentVersionID) {
+		return false
+	}
+	if len(aNorm.Entrypoint) != len(bNorm.Entrypoint) {
+		return false
+	}
+	for i := range aNorm.Entrypoint {
+		if !aNorm.Entrypoint[i].Equal(bNorm.Entrypoint[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// normalizeDockerfileForEqual applies API/schema defaults so omitted provided-dockerfile
+// blocks and null path in state compare equal to explicit {source: provided, path: ./Dockerfile}.
+func normalizeDockerfileForEqual(df *ArtifactDockerfileModel) ArtifactDockerfileModel {
+	if df == nil {
+		return defaultProvidedDockerfileModel()
+	}
+
+	source := "provided"
+	if !df.Source.IsNull() && !df.Source.IsUnknown() {
+		source = df.Source.ValueString()
+	}
+
+	if source == "generated" {
+		return ArtifactDockerfileModel{
+			Source:                        types.StringValue("generated"),
+			Path:                          types.StringNull(),
+			ExecutionEnvironmentID:        df.ExecutionEnvironmentID,
+			ExecutionEnvironmentVersionID: df.ExecutionEnvironmentVersionID,
+			Entrypoint:                    df.Entrypoint,
+		}
+	}
+
+	path := "./Dockerfile"
+	if !df.Path.IsNull() && !df.Path.IsUnknown() && df.Path.ValueString() != "" {
+		path = df.Path.ValueString()
+	}
+
+	return ArtifactDockerfileModel{
+		Source:                        types.StringValue("provided"),
+		Path:                          types.StringValue(path),
+		ExecutionEnvironmentID:        types.StringNull(),
+		ExecutionEnvironmentVersionID: types.StringNull(),
+	}
+}
+
+func defaultProvidedDockerfileModel() ArtifactDockerfileModel {
+	return ArtifactDockerfileModel{
+		Source:                        types.StringValue("provided"),
+		Path:                          types.StringValue("./Dockerfile"),
+		ExecutionEnvironmentID:        types.StringNull(),
+		ExecutionEnvironmentVersionID: types.StringNull(),
+	}
+}
+
 func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 	if a == nil && b == nil {
 		return true
@@ -342,82 +488,222 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.FailureThreshold.Equal(b.FailureThreshold)
 }
 
-func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data ArtifactResourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() || data.Spec == nil {
-		return
-	}
-	if len(data.Spec.ContainerGroups) == 0 {
+func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
+	if len(groups) == 0 {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("spec").AtName("container_groups"),
 			"Missing container groups",
 			"At least one container group must be defined in the artifact spec.",
 		)
-	} else if len(data.Spec.ContainerGroups) > 1 {
+	} else if len(groups) > 1 {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("spec").AtName("container_groups"),
 			"Too many container groups",
 			"Currently, Workload API supports only 1 container group.",
 		)
 	}
+}
+
+func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPath path.Path, ev ArtifactEnvironmentVariableModel) {
+	if ev.Source.IsUnknown() {
+		return
+	}
+
+	source := ev.Source.ValueString()
+	if ev.Source.IsNull() {
+		source = client.EnvironmentVariableSourceString
+	}
+
+	switch source {
+	case client.EnvironmentVariableSourceString:
+		if ev.Value.IsNull() || ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Missing value",
+				`"value" is required when source is "string".`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "string".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "string".`)
+		}
+	case client.EnvironmentVariableSourceCredential:
+		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Missing dr_credential_id",
+				`"dr_credential_id" is required when source is "dr-credential".`)
+		}
+		if ev.Key.IsNull() || ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Missing key",
+				`"key" is required when source is "dr-credential".`)
+		}
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "dr-credential".`)
+		}
+	default:
+		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
+			"Invalid source",
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+	}
+}
+
+func validateArtifactContainer(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	status, artifactType string,
+	containerCount int,
+) {
+	hasImageURI := !container.ImageURI.IsNull() &&
+		!container.ImageURI.IsUnknown() &&
+		container.ImageURI.ValueString() != ""
+	hasBuildConfig := container.ImageBuildConfig != nil
+
+	if !hasImageURI && !hasBuildConfig {
+		resp.Diagnostics.AddAttributeError(
+			containerPath,
+			"Missing image source",
+			"Each container must set `image_uri`, `image_build_config`, or both.",
+		)
+	}
+
+	if hasBuildConfig {
+		validateImageBuildConfigPrimary(resp, containerPath, container, containerCount)
+		validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
+		if status == string(client.ArtifactStatusLocked) && !hasImageURI {
+			resp.Diagnostics.AddAttributeError(
+				containerPath.AtName("image_build_config"),
+				"Incomplete build configuration for locked artifact",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` for pre-build artifacts.",
+			)
+		}
+	}
+
+	for ei, ev := range container.EnvironmentVars {
+		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ArtifactResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() || data.Spec == nil {
+		return
+	}
+	validateArtifactContainerGroupsCount(resp, data.Spec.ContainerGroups)
+
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	artifactType := "service"
+	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+		artifactType = data.Type.ValueString()
+	}
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
-			for ei, ev := range container.EnvironmentVars {
-				if ev.Source.IsUnknown() {
-					continue
-				}
-				evPath := path.Root("spec").
-					AtName("container_groups").AtListIndex(gi).
-					AtName("containers").AtListIndex(ci).
-					AtName("environment_vars").AtListIndex(ei)
-
-				source := ev.Source.ValueString()
-				if ev.Source.IsNull() {
-					source = client.EnvironmentVariableSourceString
-				}
-
-				switch source {
-				case client.EnvironmentVariableSourceString:
-					if ev.Value.IsNull() || ev.Value.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
-							"Missing value",
-							`"value" is required when source is "string".`)
-					}
-					if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
-							"Unexpected field",
-							`"dr_credential_id" must not be set when source is "string".`)
-					}
-					if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
-							"Unexpected field",
-							`"key" must not be set when source is "string".`)
-					}
-				case client.EnvironmentVariableSourceCredential:
-					if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
-							"Missing dr_credential_id",
-							`"dr_credential_id" is required when source is "dr-credential".`)
-					}
-					if ev.Key.IsNull() || ev.Key.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
-							"Missing key",
-							`"key" is required when source is "dr-credential".`)
-					}
-					if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
-						resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
-							"Unexpected field",
-							`"value" must not be set when source is "dr-credential".`)
-					}
-				default:
-					resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
-						"Invalid source",
-						fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
-				}
-			}
+			containerPath := path.Root("spec").
+				AtName("container_groups").AtListIndex(gi).
+				AtName("containers").AtListIndex(ci)
+			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers))
 		}
+	}
+}
+
+func validateImageBuildConfigPrimary(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if container.ImageBuildConfig == nil {
+		return
+	}
+
+	if !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool() {
+		return
+	}
+	if containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown()) {
+		// Workload API auto-marks the sole container as primary when primary is omitted.
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		containerPath.AtName("image_build_config"),
+		"Unsupported on non-primary container",
+		"`image_build_config` is only permitted on the primary container.",
+	)
+}
+
+func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPath path.Path, cfg *ArtifactImageBuildConfigModel, artifactType string) {
+	if cfg == nil {
+		return
+	}
+
+	if cfg.CodeRef != nil &&
+		!cfg.CodeRef.CatalogID.IsNull() &&
+		!cfg.CodeRef.CatalogVersionID.IsNull() &&
+		artifactType == string(client.ArtifactTypeNim) {
+		resp.Diagnostics.AddAttributeError(
+			containerPath.AtName("image_build_config").AtName("code_ref"),
+			"Unsupported code reference",
+			"NIM artifacts cannot include `code_ref` in `image_build_config`.",
+		)
+	}
+
+	source := "provided"
+	if cfg.Dockerfile != nil && !cfg.Dockerfile.Source.IsNull() && !cfg.Dockerfile.Source.IsUnknown() {
+		source = cfg.Dockerfile.Source.ValueString()
+	}
+
+	dockerfilePath := containerPath.AtName("image_build_config").AtName("dockerfile")
+	switch source {
+	case "generated":
+		if cfg.Dockerfile == nil {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath,
+				"Incomplete generated dockerfile",
+				"`execution_environment_id`, `execution_environment_version_id`, and `entrypoint` are required when source is `generated`.",
+			)
+			return
+		}
+		if cfg.Dockerfile.ExecutionEnvironmentID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("execution_environment_id"),
+				"Missing execution environment ID",
+				"`execution_environment_id` is required when dockerfile source is `generated`.",
+			)
+		}
+		if cfg.Dockerfile.ExecutionEnvironmentVersionID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentVersionID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("execution_environment_version_id"),
+				"Missing execution environment version ID",
+				"`execution_environment_version_id` is required when dockerfile source is `generated`.",
+			)
+		}
+		if len(cfg.Dockerfile.Entrypoint) == 0 {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("entrypoint"),
+				"Missing entrypoint",
+				"`entrypoint` is required when dockerfile source is `generated`.",
+			)
+		}
+	case "provided":
+		// path defaults to ./Dockerfile at marshal time
+	default:
+		resp.Diagnostics.AddAttributeError(
+			dockerfilePath.AtName("source"),
+			"Invalid dockerfile source",
+			fmt.Sprintf("Invalid dockerfile source %q. Allowed values: \"provided\", \"generated\".", source),
+		)
 	}
 }
 
@@ -486,8 +772,15 @@ func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.Artifa
 
 func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContainer {
 	container := client.ArtifactContainer{
-		ImageURI:    c.ImageURI.ValueString(),
 		Description: c.Description.ValueString(),
+	}
+
+	if !c.ImageURI.IsNull() && !c.ImageURI.IsUnknown() && c.ImageURI.ValueString() != "" {
+		container.ImageURI = c.ImageURI.ValueString()
+	}
+
+	if c.ImageBuildConfig != nil {
+		container.ImageBuildConfig = artifactImageBuildConfigToClient(c.ImageBuildConfig)
 	}
 
 	if !c.Name.IsNull() && !c.Name.IsUnknown() {
@@ -534,6 +827,61 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	container.LivenessProbe = artifactProbeToClient(c.LivenessProbe)
 
 	return container
+}
+
+func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *client.ArtifactImageBuildConfig {
+	if cfg == nil {
+		return nil
+	}
+
+	result := &client.ArtifactImageBuildConfig{
+		Dockerfile: artifactDockerfileToClient(cfg.Dockerfile),
+	}
+
+	if cfg.CodeRef != nil &&
+		!cfg.CodeRef.CatalogID.IsNull() && !cfg.CodeRef.CatalogID.IsUnknown() &&
+		!cfg.CodeRef.CatalogVersionID.IsNull() && !cfg.CodeRef.CatalogVersionID.IsUnknown() {
+		result.CodeRef = &client.ArtifactCodeRef{
+			Type:     "datarobot",
+			Provider: "datarobot",
+			DataRobot: client.ArtifactDataRobotCodeRef{
+				CatalogID:        cfg.CodeRef.CatalogID.ValueString(),
+				CatalogVersionID: cfg.CodeRef.CatalogVersionID.ValueString(),
+			},
+		}
+	}
+
+	return result
+}
+
+func artifactDockerfileToClient(df *ArtifactDockerfileModel) *client.ArtifactDockerfileConfig {
+	source := "provided"
+	if df != nil && !df.Source.IsNull() && !df.Source.IsUnknown() {
+		source = df.Source.ValueString()
+	}
+
+	result := &client.ArtifactDockerfileConfig{Source: source}
+	if source == "generated" {
+		if df == nil {
+			return result
+		}
+		result.ExecutionEnvironmentID = df.ExecutionEnvironmentID.ValueString()
+		result.ExecutionEnvironmentVersionID = df.ExecutionEnvironmentVersionID.ValueString()
+		if len(df.Entrypoint) > 0 {
+			result.Entrypoint = make([]string, len(df.Entrypoint))
+			for i, e := range df.Entrypoint {
+				result.Entrypoint[i] = e.ValueString()
+			}
+		}
+		return result
+	}
+
+	path := "./Dockerfile"
+	if df != nil && !df.Path.IsNull() && !df.Path.IsUnknown() && df.Path.ValueString() != "" {
+		path = df.Path.ValueString()
+	}
+	result.Path = path
+	return result
 }
 
 func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProbeConfig {
@@ -612,8 +960,20 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 }
 
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
-	model := ArtifactContainerModel{
-		ImageURI: types.StringValue(c.ImageURI),
+	model := ArtifactContainerModel{}
+
+	if c.ImageURI != "" {
+		model.ImageURI = types.StringValue(c.ImageURI)
+	} else {
+		model.ImageURI = types.StringNull()
+	}
+
+	if c.ImageBuildConfig != nil {
+		var priorBuild *ArtifactImageBuildConfigModel
+		if prior != nil {
+			priorBuild = prior.ImageBuildConfig
+		}
+		model.ImageBuildConfig = loadImageBuildConfigFromAPI(c.ImageBuildConfig, priorBuild)
 	}
 
 	if c.Name != nil {
@@ -679,6 +1039,67 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
 
+	return model
+}
+
+func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *ArtifactImageBuildConfigModel) *ArtifactImageBuildConfigModel {
+	if cfg == nil {
+		return nil
+	}
+
+	model := &ArtifactImageBuildConfigModel{}
+	if cfg.CodeRef != nil && (cfg.CodeRef.DataRobot.CatalogID != "" || cfg.CodeRef.DataRobot.CatalogVersionID != "") {
+		model.CodeRef = &ArtifactCodeRefModel{
+			CatalogID:        types.StringValue(cfg.CodeRef.DataRobot.CatalogID),
+			CatalogVersionID: types.StringValue(cfg.CodeRef.DataRobot.CatalogVersionID),
+		}
+	} else if prior != nil && prior.CodeRef != nil {
+		model.CodeRef = prior.CodeRef
+	}
+
+	if cfg.Dockerfile != nil {
+		model.Dockerfile = loadDockerfileFromAPI(cfg.Dockerfile)
+	} else if prior != nil && prior.Dockerfile != nil {
+		model.Dockerfile = prior.Dockerfile
+	}
+
+	return model
+}
+
+func loadDockerfileFromAPI(df *client.ArtifactDockerfileConfig) *ArtifactDockerfileModel {
+	if df == nil {
+		return nil
+	}
+
+	model := &ArtifactDockerfileModel{
+		Source: types.StringValue(df.Source),
+	}
+
+	if df.Source == "generated" {
+		if df.ExecutionEnvironmentID != "" {
+			model.ExecutionEnvironmentID = types.StringValue(df.ExecutionEnvironmentID)
+		} else {
+			model.ExecutionEnvironmentID = types.StringNull()
+		}
+		if df.ExecutionEnvironmentVersionID != "" {
+			model.ExecutionEnvironmentVersionID = types.StringValue(df.ExecutionEnvironmentVersionID)
+		} else {
+			model.ExecutionEnvironmentVersionID = types.StringNull()
+		}
+		if len(df.Entrypoint) > 0 {
+			model.Entrypoint = make([]types.String, len(df.Entrypoint))
+			for i, e := range df.Entrypoint {
+				model.Entrypoint[i] = types.StringValue(e)
+			}
+		}
+		return model
+	}
+
+	if df.Path != "" {
+		model.Path = types.StringValue(df.Path)
+	} else {
+		model.Path = types.StringValue("./Dockerfile")
+	}
 	return model
 }
 
