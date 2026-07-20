@@ -5,6 +5,7 @@
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 - `datarobot_deployment` now surfaces deployment logs in the error message when a deployment fails to create
+- `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL` and `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT` environment variables to tune workload replacement polling (defaults: `5s` and `30m`; Go duration syntax)
 
 ### Fixed
 
