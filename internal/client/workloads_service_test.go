@@ -255,6 +255,52 @@ func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
 	}
 }
 
+func TestWorkloadReplacementPollSettings(t *testing.T) {
+	t.Run("uses env var override for interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "7s")
+		if got := workloadReplacementPollInterval(); got != 7*time.Second {
+			t.Errorf("expected 7s, got %s", got)
+		}
+	})
+
+	t.Run("uses env var override for timeout", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollTimeoutEnvVar, "45m")
+		if got := workloadReplacementPollTimeout(); got != 45*time.Minute {
+			t.Errorf("expected 45m, got %s", got)
+		}
+	})
+
+	t.Run("falls back to default on invalid interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "not-a-duration")
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+	})
+
+	t.Run("falls back to default on non-positive interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "0s")
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+	})
+
+	t.Run("falls back to default on non-positive timeout", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollTimeoutEnvVar, "0s")
+		if got := workloadReplacementPollTimeout(); got != defaultReplacementPollTimeout {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollTimeout, got)
+		}
+	})
+
+	t.Run("falls back to default when unset", func(t *testing.T) {
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+		if got := workloadReplacementPollTimeout(); got != defaultReplacementPollTimeout {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollTimeout, got)
+		}
+	})
+}
+
 func TestReplacementStatusHelpers(t *testing.T) {
 	if !IsReplacementTerminal(ReplacementStatusCompleted) {
 		t.Fatal("completed should be terminal")

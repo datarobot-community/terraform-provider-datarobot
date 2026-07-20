@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -124,9 +125,34 @@ const (
 )
 
 const (
+	WorkloadReplacementPollIntervalEnvVar = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL"
+	WorkloadReplacementPollTimeoutEnvVar  = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT"
+
 	defaultReplacementPollInterval = 5 * time.Second
 	defaultReplacementPollTimeout  = 30 * time.Minute
 )
+
+func workloadReplacementPollInterval() time.Duration {
+	return durationFromEnv(WorkloadReplacementPollIntervalEnvVar, defaultReplacementPollInterval)
+}
+
+func workloadReplacementPollTimeout() time.Duration {
+	return durationFromEnv(WorkloadReplacementPollTimeoutEnvVar, defaultReplacementPollTimeout)
+}
+
+func durationFromEnv(envVar string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(envVar)
+	if raw == "" {
+		return fallback
+	}
+
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+
+	return d
+}
 
 type ReplacementConfig struct {
 	WarmupDurationMinutes int64 `json:"warmupDurationMinutes,omitempty"`
@@ -193,8 +219,8 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 	workloadID string,
 	opts *WaitForWorkloadReplacementOptions,
 ) (*WorkloadReplacement, error) {
-	pollInterval := defaultReplacementPollInterval
-	timeout := defaultReplacementPollTimeout
+	pollInterval := workloadReplacementPollInterval()
+	timeout := workloadReplacementPollTimeout()
 	if opts != nil {
 		if opts.PollInterval > 0 {
 			pollInterval = opts.PollInterval
