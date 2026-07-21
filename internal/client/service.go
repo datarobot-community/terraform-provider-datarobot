@@ -282,7 +282,7 @@ type Service interface {
 	// Workload (Workload API)
 	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
-	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
+	UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
 	StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error)
 	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
