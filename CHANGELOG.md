@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- updated autoscaling object scheme on workload resources according to the new API version
+
 ## [0.10.43] - 2026-07-15
 
 ### Added
