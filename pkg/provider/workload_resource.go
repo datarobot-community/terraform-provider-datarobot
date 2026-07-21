@@ -305,7 +305,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 
 	if workloadMetadataChanged(planned, state) {
 		traceAPICall("UpdateWorkload")
-		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(planned))
+		workload, err := r.provider.service.UpdateWorkloadMetadata(ctx, id, workloadUpdateRequest(planned))
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Workload", err.Error())
 			return
