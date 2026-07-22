@@ -285,11 +285,14 @@ const (
 const (
 	EnvironmentVariableSourceString     = "string"
 	EnvironmentVariableSourceCredential = "dr-credential"
+	EnvironmentVariableSourceAPIKey     = "api-key"
 )
 
 type ArtifactEnvironmentVariable struct {
-	Source         string `json:"source,omitempty"`
-	Name           string `json:"name"`
+	Source string `json:"source,omitempty"`
+	// Name is optional for the api-key source (the platform resolves an
+	// omitted name to DATAROBOT_API_TOKEN and stores it as absent).
+	Name           string `json:"name,omitempty"`
 	Value          string `json:"value,omitempty"`
 	DrCredentialID string `json:"drCredentialId,omitempty"`
 	Key            string `json:"key,omitempty"`

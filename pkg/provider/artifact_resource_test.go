@@ -413,6 +413,9 @@ func artifactTestContainerSpecBlock(imageURI string) string {
                 source = "string"
                 name   = "ENV"
                 value  = "production"
+              },
+              {
+                source = "api-key"
               }
             ]
 
@@ -528,6 +531,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 							Entrypoint:  []string{"python", "-m", "app"},
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
 								{Source: client.EnvironmentVariableSourceString, Name: "ENV", Value: "production"},
+								{Source: client.EnvironmentVariableSourceAPIKey},
 							},
 							StartupProbe: &client.ArtifactProbeConfig{
 								Path:                "/startup",
@@ -642,6 +646,26 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 			expectError: `"value" is required`,
 		},
 		{
+			name:        "string env var missing name",
+			config:      artifactConfigWithStringEnvVarMissingName(),
+			expectError: `"name" is required`,
+		},
+		{
+			name:        "api-key env var with unexpected value",
+			config:      artifactConfigWithAPIKeyEnvVar(`value = "should-not-be-here"`),
+			expectError: `"value" must not be set`,
+		},
+		{
+			name:        "api-key env var with unexpected dr_credential_id",
+			config:      artifactConfigWithAPIKeyEnvVar(`dr_credential_id = "cred-abc"`),
+			expectError: `"dr_credential_id" must not be set`,
+		},
+		{
+			name:        "api-key env var with unexpected key",
+			config:      artifactConfigWithAPIKeyEnvVar(`key = "token"`),
+			expectError: `"key" must not be set`,
+		},
+		{
 			name:        "invalid source type",
 			config:      artifactConfigWithInvalidSource(),
 			expectError: `Invalid source`,
@@ -718,6 +742,46 @@ resource "datarobot_artifact" "test" {
   }
 }
 `
+}
+
+func artifactConfigWithStringEnvVarMissingName() string {
+	return `
+resource "datarobot_artifact" "test" {
+  name = "missing-name-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "string"
+          value  = "foo"
+        }]
+      }]
+    }]
+  }
+}
+`
+}
+
+// artifactConfigWithAPIKeyEnvVar builds a config with an api-key env var plus
+// an extra attribute line that should be rejected by validation.
+func artifactConfigWithAPIKeyEnvVar(extraLine string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name = "api-key-env-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "api-key"
+          %s
+        }]
+      }]
+    }]
+  }
+}
+`, extraLine)
 }
 
 func artifactConfigWithInvalidSource() string {

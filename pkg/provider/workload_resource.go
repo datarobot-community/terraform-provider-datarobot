@@ -9,6 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -146,11 +147,14 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												Attributes: map[string]schema.Attribute{
 													"scaling_metric": schema.StringAttribute{
 														Required:            true,
-														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.",
+														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.",
 													},
 													"target": schema.Float64Attribute{
 														Required:            true,
-														MarkdownDescription: "Target value for the scaling metric.",
+														MarkdownDescription: "Target value for the scaling metric. Must be non-negative.",
+														Validators: []validator.Float64{
+															float64validator.AtLeast(0),
+														},
 													},
 												},
 											},
@@ -433,6 +437,27 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 				"Invalid autoscaling replica bounds",
 				"min_replica_count must be less than or equal to max_replica_count.",
 			)
+		}
+
+		// cpuAverageUtilization scaling cannot scale from zero; the API
+		// requires min_replica_count > 0 for it. min_replica_count defaults
+		// to 0, so an omitted value fails the same way as an explicit 0.
+		if g.Autoscaling != nil && autoscalingEnabled {
+			minIsZero := g.Autoscaling.MinReplicaCount.IsNull() ||
+				(!g.Autoscaling.MinReplicaCount.IsUnknown() && g.Autoscaling.MinReplicaCount.ValueInt64() == 0)
+			if minIsZero {
+				for pi, p := range g.Autoscaling.Policies {
+					if !p.ScalingMetric.IsNull() && !p.ScalingMetric.IsUnknown() &&
+						p.ScalingMetric.ValueString() == "cpuAverageUtilization" {
+						resp.Diagnostics.AddAttributeError(
+							path.Root("runtime").AtName("container_groups").AtListIndex(i).
+								AtName("autoscaling").AtName("policies").AtListIndex(pi).AtName("scaling_metric"),
+							"Invalid autoscaling configuration",
+							"min_replica_count must be greater than 0 when using cpuAverageUtilization scaling (it defaults to 0).",
+						)
+					}
+				}
+			}
 		}
 
 		if len(g.ResourceBundles) == 0 {

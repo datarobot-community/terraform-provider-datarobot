@@ -75,8 +75,8 @@ Optional:
 
 Required:
 
-- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.
-- `target` (Number) Target value for the scaling metric.
+- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.
+- `target` (Number) Target value for the scaling metric. Must be non-negative.
 
 
 

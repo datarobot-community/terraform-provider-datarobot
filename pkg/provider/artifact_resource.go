@@ -516,6 +516,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "string".`)
+		}
 		if ev.Value.IsNull() || ev.Value.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
@@ -532,6 +537,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "dr-credential".`)
+		}
 		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
@@ -547,10 +557,26 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Unexpected field",
 				`"value" must not be set when source is "dr-credential".`)
 		}
+	case client.EnvironmentVariableSourceAPIKey:
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "api-key"; the platform resolves the token value.`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "api-key".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "api-key".`)
+		}
 	default:
 		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
 			"Invalid source",
-			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential", "api-key".`, source))
 	}
 }
 
@@ -812,10 +838,14 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 				Source: ev.Source.ValueString(),
 				Name:   ev.Name.ValueString(),
 			}
-			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
+			switch ev.Source.ValueString() {
+			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
-			} else {
+			case client.EnvironmentVariableSourceAPIKey:
+				// Only source (and name, when set) are sent; the platform
+				// resolves the token value.
+			default:
 				envVar.Value = ev.Value.ValueString()
 			}
 			container.EnvironmentVars[i] = envVar
@@ -1016,20 +1046,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			m := ArtifactEnvironmentVariableModel{
-				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
-				Value:          types.StringNull(),
-				DrCredentialID: types.StringNull(),
-				Key:            types.StringNull(),
-			}
-			if ev.Source == client.EnvironmentVariableSourceCredential {
-				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
-				m.Key = types.StringValue(ev.Key)
-			} else {
-				m.Value = types.StringValue(ev.Value)
-			}
-			model.EnvironmentVars[i] = m
+			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}

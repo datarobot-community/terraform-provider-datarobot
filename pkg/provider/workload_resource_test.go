@@ -610,6 +610,35 @@ func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 	})
 }
 
+func TestWorkloadCPUScalingRequiresNonZeroMinReplicas(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// min_replica_count = 0 (scale to zero) is invalid with cpuAverageUtilization.
+				Config:      workloadConfigWithAutoscaling("cpu-min-zero-test", "", "low", artifactID, 0, 3, 70),
+				ExpectError: regexp.MustCompile("min_replica_count must be greater than 0"),
+			},
+		},
+	})
+}
+
 func TestWorkloadTooManyContainerGroups(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
