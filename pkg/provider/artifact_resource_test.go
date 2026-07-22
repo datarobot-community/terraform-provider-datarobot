@@ -1542,9 +1542,11 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 		cfg := model.ImageBuildConfig
 		if cfg == nil {
 			t.Fatal("expected image_build_config in state model")
+			return
 		}
 		if cfg.CodeRef == nil {
 			t.Fatal("expected code_ref in state model")
+			return
 		}
 		if got := cfg.CodeRef.CatalogID.ValueString(); got != catalogID {
 			t.Fatalf("catalog_id: got %q, want %q", got, catalogID)
@@ -1554,6 +1556,7 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 		}
 		if cfg.Dockerfile == nil {
 			t.Fatal("expected dockerfile in state model")
+			return
 		}
 		if got := cfg.Dockerfile.Source.ValueString(); got != "provided" {
 			t.Fatalf("dockerfile.source: got %q, want %q", got, "provided")
