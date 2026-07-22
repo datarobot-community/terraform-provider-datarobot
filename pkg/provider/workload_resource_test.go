@@ -93,6 +93,42 @@ func TestAccWorkloadResource(t *testing.T) {
 	})
 }
 
+func TestAccWorkloadMetadataPreservesReplacementPolicy(t *testing.T) {
+	t.Parallel()
+	resourceName := "datarobot_workload.test"
+	name := "workload-metadata-rp-" + nameSalt
+	updatedName := "updated-" + name
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadAccConfigWithReplacementPolicy(name, "", "low", 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+					captureAttr(resourceName, "id", &initialID),
+					checkWorkloadExistsInAPI(name, false),
+				),
+			},
+			{
+				Config: workloadAccConfigWithReplacementPolicy(updatedName, "", "low", 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+					checkWorkloadIDPreserved(&initialID),
+					checkWorkloadExistsInAPI(updatedName, false),
+				),
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -478,6 +514,64 @@ func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
 					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadUpdateMetadataPreservesReplacementPolicy(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	updatedName := "updated-" + name
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload1 := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	metadataWorkload := workloadFixture(id, artifactID, updatedName, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, gomock.Any()).Return(metadataWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(metadataWorkload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplacementPolicy(name, artifactID, 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+				),
+			},
+			{
+				Config: workloadConfigWithReplacementPolicy(updatedName, artifactID, 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
 				),
 			},
 		},
@@ -1275,6 +1369,55 @@ resource "datarobot_workload" "test" {
   }
 }
 `, artifactName, imageURI, name, importance, desc, replicaCount)
+}
+
+func workloadAccConfigWithReplacementPolicy(name, description, importance string, replicaCount, warmupMinutes, keepOldVersionMinutes int64) string {
+	artifactName := "acc-artifact-" + nameSalt
+	desc := ""
+	if description != "" {
+		desc = fmt.Sprintf("description = %q", description)
+	}
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test_artifact" {
+  name = %q
+  type = "service"
+
+  spec = {
+    container_groups = [
+      {
+        containers = [
+          {
+            name       = "main"
+            image_uri  = "containous/whoami:latest"
+            port       = 8080
+            primary    = true
+            entrypoint = ["/whoami", "--port", "8080"]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = %q
+  artifact_id = datarobot_artifact.test_artifact.artifact_id
+  %s
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = %d
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+    replacement_policy = {
+      warmup_minutes           = %d
+      keep_old_version_minutes = %d
+    }
+  }
+}
+`, artifactName, name, importance, desc, replicaCount, warmupMinutes, keepOldVersionMinutes)
 }
 
 // ─── fixture helpers ───────────────────────────────────────────────────────────
