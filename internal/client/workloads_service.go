@@ -308,6 +308,7 @@ type ArtifactProbeConfig struct {
 	PeriodSeconds       *int64            `json:"periodSeconds,omitempty"`
 	TimeoutSeconds      *int64            `json:"timeoutSeconds,omitempty"`
 	FailureThreshold    *int64            `json:"failureThreshold,omitempty"`
+	SuccessThreshold    *int64            `json:"successThreshold,omitempty"`
 }
 
 type ArtifactCapabilities struct {

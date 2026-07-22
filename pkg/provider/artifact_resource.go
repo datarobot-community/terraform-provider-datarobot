@@ -485,7 +485,8 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.InitialDelaySeconds.Equal(b.InitialDelaySeconds) &&
 		a.PeriodSeconds.Equal(b.PeriodSeconds) &&
 		a.TimeoutSeconds.Equal(b.TimeoutSeconds) &&
-		a.FailureThreshold.Equal(b.FailureThreshold)
+		a.FailureThreshold.Equal(b.FailureThreshold) &&
+		a.SuccessThreshold.Equal(b.SuccessThreshold)
 }
 
 func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
@@ -949,6 +950,10 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 		v := probe.FailureThreshold.ValueInt64()
 		p.FailureThreshold = &v
 	}
+	if !probe.SuccessThreshold.IsNull() && !probe.SuccessThreshold.IsUnknown() {
+		v := probe.SuccessThreshold.ValueInt64()
+		p.SuccessThreshold = &v
+	}
 	return p
 }
 
@@ -1161,6 +1166,11 @@ func loadProbeFromAPI(probe *client.ArtifactProbeConfig) *ArtifactProbeConfigMod
 		m.FailureThreshold = types.Int64Value(*probe.FailureThreshold)
 	} else {
 		m.FailureThreshold = types.Int64Null()
+	}
+	if probe.SuccessThreshold != nil {
+		m.SuccessThreshold = types.Int64Value(*probe.SuccessThreshold)
+	} else {
+		m.SuccessThreshold = types.Int64Null()
 	}
 	return m
 }

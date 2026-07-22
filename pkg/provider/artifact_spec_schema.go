@@ -74,6 +74,14 @@ func artifactResourceProbeAttributes() map[string]schema.Attribute {
 				int64planmodifier.UseStateForUnknown(),
 			},
 		},
+		"success_threshold": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
+			PlanModifiers: []planmodifier.Int64{
+				int64planmodifier.UseStateForUnknown(),
+			},
+		},
 	}
 }
 
@@ -110,6 +118,10 @@ func artifactDataSourceProbeAttributes() map[string]datasourceschema.Attribute {
 		"failure_threshold": datasourceschema.Int64Attribute{
 			Computed:            true,
 			MarkdownDescription: "Minimum consecutive failures for the probe to be considered failed.",
+		},
+		"success_threshold": datasourceschema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
 		},
 	}
 }

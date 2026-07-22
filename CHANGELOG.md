@@ -5,6 +5,7 @@
 - updated autoscaling object scheme on workload resources according to the new API version
 - new `api-key` source for artifact container `environment_vars`, injecting a platform-managed DataRobot API token (`name` is optional and defaults to `DATAROBOT_API_TOKEN`)
 - plan-time validation aligned with the Workload API OpenAPI schema: `cpuAverageUtilization` scaling requires `min_replica_count > 0`, and policy `target` must be non-negative
+- `success_threshold` on `datarobot_artifact` container probes (`startup_probe`, `readiness_probe`, `liveness_probe`): minimum consecutive successes for the probe to be considered successful after a failure (matches `ProbeConfig.successThreshold`)
 
 ## [0.10.43] - 2026-07-15
 

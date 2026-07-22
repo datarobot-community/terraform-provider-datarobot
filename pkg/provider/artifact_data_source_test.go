@@ -137,6 +137,7 @@ func artifactDataSourceChecks(dataSourceName, name, imageURI string, isMock bool
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.period_seconds", "15"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.timeout_seconds", "5"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.failure_threshold", "3"),
+		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.success_threshold", "1"),
 
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".readiness_probe.path", "/health"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".readiness_probe.port", "8080"),

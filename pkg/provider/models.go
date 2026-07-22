@@ -1065,6 +1065,7 @@ type ArtifactProbeConfigModel struct {
 	PeriodSeconds       types.Int64  `tfsdk:"period_seconds"`
 	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
 	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
+	SuccessThreshold    types.Int64  `tfsdk:"success_threshold"`
 }
 
 // ArtifactDataSourceModel describes the read-only artifact data source.

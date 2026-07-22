@@ -181,6 +181,7 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -199,6 +200,7 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -217,4 +219,5 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.

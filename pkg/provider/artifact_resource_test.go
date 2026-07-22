@@ -427,6 +427,7 @@ func artifactTestContainerSpecBlock(imageURI string) string {
               period_seconds        = 15
               timeout_seconds       = 5
               failure_threshold     = 3
+              success_threshold     = 1
             }
 
             readiness_probe = {
@@ -486,6 +487,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 	containerDesc := "main container"
 	probeScheme := "HTTP"
 	probeFailureThreshold := int64(3)
+	probeSuccessThreshold := int64(1)
 	probeInitialDelay := int64(10)
 	probePeriod := int64(15)
 	probeTimeout := int64(5)
@@ -541,6 +543,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 								PeriodSeconds:       &probePeriod,
 								TimeoutSeconds:      &probeTimeout,
 								FailureThreshold:    &probeFailureThreshold,
+								SuccessThreshold:    &probeSuccessThreshold,
 							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
 								Path:                "/health",
