@@ -16,6 +16,9 @@ import (
 
 func TestAccWorkloadResource(t *testing.T) {
 	t.Parallel()
+
+	t.Skip("Skipping workload acceptance test until replacement endpoint is fixed")
+
 	resourceName := "datarobot_workload.test"
 	name := "workload-" + nameSalt
 	var initialID string
