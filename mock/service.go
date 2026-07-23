@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	filesapi "github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -1267,6 +1268,20 @@ func (m *MockService) DeleteWorkload(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
+}
+
+// FilesAPI mocks base method.
+func (m *MockService) FilesAPI() filesapi.Client {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilesAPI")
+	ret0, _ := ret[0].(filesapi.Client)
+	return ret0
+}
+
+// FilesAPI indicates an expected call of FilesAPI.
+func (mr *MockServiceMockRecorder) FilesAPI() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilesAPI", reflect.TypeOf((*MockService)(nil).FilesAPI))
 }
 
 // GetAppOAuthProvider mocks base method.
