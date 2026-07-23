@@ -117,26 +117,26 @@ type ResolvedBundle struct {
 }
 
 type Workload struct {
-	ID           string                `json:"id"`
-	Name         string                `json:"name"`
-	Description  *string               `json:"description"`
-	CreatedAt    string                `json:"createdAt"`
-	UpdatedAt    string                `json:"updatedAt"`
-	Creator      *UserData             `json:"creator,omitempty"`
-	ProtonID     *string               `json:"protonId,omitempty"`
-	ArtifactID   *string               `json:"artifactId,omitempty"`
-	Artifact     *WorkloadArtifactInfo `json:"artifact,omitempty"`
-	Type         ArtifactType          `json:"type"`
-	Status       ProtonStatus          `json:"status"`
-	Importance   WorkloadImportance    `json:"importance"`
+	ID           string                   `json:"id"`
+	Name         string                   `json:"name"`
+	Description  *string                  `json:"description"`
+	CreatedAt    string                   `json:"createdAt"`
+	UpdatedAt    string                   `json:"updatedAt"`
+	Creator      *UserData                `json:"creator,omitempty"`
+	ProtonID     *string                  `json:"protonId,omitempty"`
+	ArtifactID   *string                  `json:"artifactId,omitempty"`
+	Artifact     *WorkloadArtifactInfo    `json:"artifact,omitempty"`
+	Type         ArtifactType             `json:"type"`
+	Status       ProtonStatus             `json:"status"`
+	Importance   WorkloadImportance       `json:"importance"`
 	Replacement  *WorkloadReplacementInfo `json:"replacement,omitempty"`
-	Runtime      WorkloadRuntime       `json:"runtime"`
-	Permissions  []string              `json:"permissions"`
-	RequestStats *RequestStats         `json:"requestStats,omitempty"`
-	Tags         []TagInfo             `json:"tags"`
-	Endpoint     *string               `json:"endpoint,omitempty"`
-	LastResponse *string               `json:"lastResponse,omitempty"`
-	Owners       []UserData            `json:"owners"`
+	Runtime      WorkloadRuntime          `json:"runtime"`
+	Permissions  []string                 `json:"permissions"`
+	RequestStats *RequestStats            `json:"requestStats,omitempty"`
+	Tags         []TagInfo                `json:"tags"`
+	Endpoint     *string                  `json:"endpoint,omitempty"`
+	LastResponse *string                  `json:"lastResponse,omitempty"`
+	Owners       []UserData               `json:"owners"`
 }
 
 type CreateWorkloadRequest struct {
