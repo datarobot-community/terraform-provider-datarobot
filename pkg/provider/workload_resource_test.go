@@ -90,7 +90,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil)
 
 	// Update metadata
-	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, gomock.Any()).Return(updatedWorkload, nil)
+	mockService.EXPECT().UpdateWorkloadMetadata(gomock.Any(), id, gomock.Any()).Return(updatedWorkload, nil)
 
 	// Destroy
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(updatedWorkload, nil) // pre-destroy plan refresh
@@ -161,7 +161,7 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 
 	// Step 2: Remove description — expect PATCH with description="" to clear it
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withDesc, nil) // pre-update plan refresh
-	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, updateDescriptionMatcher("")).Return(withoutDesc, nil)
+	mockService.EXPECT().UpdateWorkloadMetadata(gomock.Any(), id, updateDescriptionMatcher("")).Return(withoutDesc, nil)
 
 	// Destroy
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(withoutDesc, nil) // pre-destroy plan refresh
@@ -415,7 +415,7 @@ func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
 
 	// Step 2: metadata + artifact in same apply
-	mockService.EXPECT().UpdateWorkload(gomock.Any(), id, gomock.Any()).Return(metadataWorkload, nil)
+	mockService.EXPECT().UpdateWorkloadMetadata(gomock.Any(), id, gomock.Any()).Return(metadataWorkload, nil)
 	expectWorkloadArtifactReplacement(mockService, id, workload2)
 
 	// Destroy
@@ -878,6 +878,22 @@ func (m startReplacementMatcher) String() string {
 		"StartReplacementRequest{artifactId=%q strategy=%q warmup=%d keepOld=%d}",
 		m.artifactID, m.strategy, m.warmupDurationMinutes, m.keepOldVersionMinutes,
 	)
+}
+
+func expectWorkloadArtifactReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
+	replacement := workloadReplacementFixture(workloadID)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
+}
+
+func expectWorkloadRuntimeReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
+	replacement := workloadReplacementFixture(workloadID)
+	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
 }
 
 // ─── config helpers ────────────────────────────────────────────────────────────

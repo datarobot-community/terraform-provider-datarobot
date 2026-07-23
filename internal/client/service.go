@@ -274,6 +274,7 @@ type Service interface {
 
 	// Artifact (Workload API)
 	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
+	PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
@@ -281,7 +282,7 @@ type Service interface {
 	// Workload (Workload API)
 	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
-	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
+	UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
 	StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error)
 	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
