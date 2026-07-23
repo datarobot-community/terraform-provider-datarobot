@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -545,5 +549,340 @@ func checkRetrainingSettingsUpdate() resource.TestCheckFunc {
 		}
 
 		return nil
+	}
+}
+
+// TestUnitDeploymentModelReplacementSuccess verifies that model replacement succeeds when the
+// backend confirms the deployment is serving the expected model package after replacement.
+func TestUnitDeploymentModelReplacementSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	depID := uuid.NewString()
+	predEnvID := uuid.NewString()
+	oldPkgID := uuid.NewString()
+	newPkgID := uuid.NewString()
+	createTaskID := uuid.NewString()
+	updateTaskID := uuid.NewString()
+
+	oldDeployment := &client.Deployment{
+		ID:     depID,
+		Label:  "test-label",
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldPkgID,
+		},
+		PredictionEnvironment: client.PredictionEnvironment{
+			ID: predEnvID,
+		},
+		Importance: "MODERATE",
+	}
+	newDeployment := &client.Deployment{
+		ID:     depID,
+		Label:  "test-label",
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: newPkgID,
+		},
+		PredictionEnvironment: client.PredictionEnvironment{
+			ID: predEnvID,
+		},
+		Importance: "MODERATE",
+	}
+
+	// GetDeployment returns oldDeployment until model replacement completes, then newDeployment.
+	replacementApplied := false
+	mockService.EXPECT().
+		GetDeployment(gomock.Any(), depID).
+		DoAndReturn(func(_ context.Context, _ string) (*client.Deployment, error) {
+			if replacementApplied {
+				return newDeployment, nil
+			}
+			return oldDeployment, nil
+		}).
+		AnyTimes()
+
+	// Create
+	mockService.EXPECT().
+		CreateDeploymentFromModelPackage(gomock.Any(), gomock.Any()).
+		Return(&client.DeploymentCreateResponse{ID: depID}, createTaskID, nil)
+	mockService.EXPECT().
+		GetTaskStatus(gomock.Any(), createTaskID).
+		Return(&client.TaskStatusResponse{Status: "COMPLETED"}, nil)
+	mockService.EXPECT().
+		UpdateDeploymentSettings(gomock.Any(), depID, gomock.Any()).
+		Return(&client.DeploymentSettings{}, nil)
+
+	// Update: model replacement succeeds and backend confirms new package
+	mockService.EXPECT().
+		UpdateDeployment(gomock.Any(), depID, gomock.Any()).
+		Return(oldDeployment, nil)
+	mockService.EXPECT().
+		ValidateDeploymentModelReplacement(gomock.Any(), depID, gomock.Any()).
+		Return(&client.ValidateDeployemntModelReplacementResponse{Status: "passing"}, nil)
+	mockService.EXPECT().
+		UpdateDeploymentModel(gomock.Any(), depID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, _ *client.UpdateDeploymentModelRequest) (*client.Deployment, string, error) {
+			replacementApplied = true
+			return nil, updateTaskID, nil
+		})
+	mockService.EXPECT().
+		GetTaskStatus(gomock.Any(), updateTaskID).
+		Return(&client.TaskStatusResponse{Status: "COMPLETED"}, nil)
+	mockService.EXPECT().
+		UpdateDeploymentSettings(gomock.Any(), depID, gomock.Any()).
+		Return(&client.DeploymentSettings{}, nil)
+
+	// Destroy
+	mockService.EXPECT().DeleteDeployment(gomock.Any(), depID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: deploymentModelReplacementConfig(predEnvID, oldPkgID),
+			},
+			{
+				Config: deploymentModelReplacementConfig(predEnvID, newPkgID),
+				Check: resource.TestCheckResourceAttr(
+					"datarobot_deployment.test_replacement",
+					"registered_model_version_id",
+					newPkgID,
+				),
+			},
+		},
+	})
+}
+
+// TestUnitDeploymentModelReplacementMismatch verifies that model replacement fails with a clear
+// error when the deployment is active but still serving the old model package after replacement.
+func TestUnitDeploymentModelReplacementMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		globalTestCfg.ApiKey = "fake"
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	depID := uuid.NewString()
+	predEnvID := uuid.NewString()
+	oldPkgID := uuid.NewString()
+	newPkgID := uuid.NewString()
+	createTaskID := uuid.NewString()
+	updateTaskID := uuid.NewString()
+
+	// The backend stays on oldDeployment even after replacement (simulates silent rollback).
+	oldDeployment := &client.Deployment{
+		ID:     depID,
+		Label:  "test-label",
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldPkgID,
+		},
+		PredictionEnvironment: client.PredictionEnvironment{
+			ID: predEnvID,
+		},
+		Importance: "MODERATE",
+	}
+
+	mockService.EXPECT().
+		GetDeployment(gomock.Any(), depID).
+		Return(oldDeployment, nil).
+		AnyTimes()
+
+	// Create
+	mockService.EXPECT().
+		CreateDeploymentFromModelPackage(gomock.Any(), gomock.Any()).
+		Return(&client.DeploymentCreateResponse{ID: depID}, createTaskID, nil)
+	mockService.EXPECT().
+		GetTaskStatus(gomock.Any(), createTaskID).
+		Return(&client.TaskStatusResponse{Status: "COMPLETED"}, nil)
+	mockService.EXPECT().
+		UpdateDeploymentSettings(gomock.Any(), depID, gomock.Any()).
+		Return(&client.DeploymentSettings{}, nil)
+
+	// Update: task completes but backend still serves old package → provider returns error
+	mockService.EXPECT().
+		UpdateDeployment(gomock.Any(), depID, gomock.Any()).
+		Return(oldDeployment, nil)
+	mockService.EXPECT().
+		ValidateDeploymentModelReplacement(gomock.Any(), depID, gomock.Any()).
+		Return(&client.ValidateDeployemntModelReplacementResponse{Status: "passing"}, nil)
+	mockService.EXPECT().
+		UpdateDeploymentModel(gomock.Any(), depID, gomock.Any()).
+		Return(nil, updateTaskID, nil)
+	mockService.EXPECT().
+		GetTaskStatus(gomock.Any(), updateTaskID).
+		Return(&client.TaskStatusResponse{Status: "COMPLETED"}, nil)
+	// No UpdateDeploymentSettings: update returns error before reaching that point
+
+	// Destroy (cleanup after failed update step)
+	mockService.EXPECT().DeleteDeployment(gomock.Any(), depID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: deploymentModelReplacementConfig(predEnvID, oldPkgID),
+			},
+			{
+				Config:      deploymentModelReplacementConfig(predEnvID, newPkgID),
+				ExpectError: regexp.MustCompile("Deployment model replacement did not apply"),
+			},
+		},
+	})
+}
+
+func deploymentModelReplacementConfig(predEnvID, pkgID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_deployment" "test_replacement" {
+	label                       = "test-label"
+	importance                  = "MODERATE"
+	registered_model_version_id = %q
+	prediction_environment_id   = %q
+}
+`, pkgID, predEnvID)
+}
+
+func TestWaitForDeploymentModelPackageEventuallyConsistent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+	newDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: expectedModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(oldDeployment, nil)
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(newDeployment, nil).AnyTimes()
+
+	deployment, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err != nil {
+		t.Fatalf("expected waitForDeploymentModelPackage to succeed, got error: %v", err)
+	}
+	if deployment == nil {
+		t.Fatal("expected deployment result, got nil")
+	}
+	if deployment.ModelPackage.ID != expectedModelPackageID {
+		t.Fatalf("expected model package ID %s, got %s", expectedModelPackageID, deployment.ModelPackage.ID)
+	}
+}
+
+func TestWaitForDeploymentModelPackageErroredDeployment(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "model_error",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().
+		GetDeployment(gomock.Any(), deploymentID).
+		Return(oldDeployment, nil)
+
+	_, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err == nil {
+		t.Fatal("expected waitForDeploymentModelPackage to return an error")
+	}
+	if !strings.Contains(err.Error(), "entered error status") {
+		t.Fatalf("expected error status message, got: %v", err)
+	}
+}
+
+func TestWaitForDeploymentModelPackageReturnsPermanentGetDeploymentError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &DeploymentResource{provider: &Provider{service: mockService}}
+
+	deploymentID := uuid.NewString()
+	expectedModelPackageID := uuid.NewString()
+	oldModelPackageID := uuid.NewString()
+	apiErr := fmt.Errorf("get deployment failed")
+
+	oldDeployment := &client.Deployment{
+		ID:     deploymentID,
+		Status: "active",
+		ModelPackage: client.ModelPackage{
+			ID: oldModelPackageID,
+		},
+	}
+
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(oldDeployment, nil)
+	mockService.EXPECT().GetDeployment(gomock.Any(), deploymentID).Return(nil, apiErr)
+
+	_, err := resource.waitForDeploymentModelPackage(
+		context.Background(),
+		deploymentID,
+		expectedModelPackageID,
+	)
+	if err == nil {
+		t.Fatal("expected waitForDeploymentModelPackage to return an error")
+	}
+	if !strings.Contains(err.Error(), "failed to get deployment") {
+		t.Fatalf("expected GetDeployment failure message, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), apiErr.Error()) {
+		t.Fatalf("expected wrapped API error %q, got: %v", apiErr.Error(), err)
+	}
+	if strings.Contains(err.Error(), "active but still serving model package") {
+		t.Fatalf("expected GetDeployment error to take precedence over stale status, got: %v", err)
 	}
 }

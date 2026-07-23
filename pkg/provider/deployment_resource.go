@@ -27,6 +27,24 @@ import (
 var _ resource.Resource = &DeploymentResource{}
 var _ resource.ResourceWithImportState = &DeploymentResource{}
 
+const deploymentLogsSeparator = "----------------------------------------"
+
+// deploymentErrorMessageWithLogs builds a diagnostic message for a failed
+// deployment, appending retrieved logs (or the log retrieval error) and a
+// link to the full logs in the DataRobot UI.
+func deploymentErrorMessageWithLogs(baseMessage, logs string, logErr error, logsURL string) string {
+	if logErr != nil {
+		return fmt.Sprintf(
+			"%s (failed to retrieve deployment logs: %s)\n%s\nSee full logs at: %s",
+			baseMessage, logErr, deploymentLogsSeparator, logsURL,
+		)
+	}
+	return fmt.Sprintf(
+		"%s\n%s\nCustom Model Deployment logs:\n%s\n%s\nSee full logs at: %s",
+		baseMessage, deploymentLogsSeparator, logs, deploymentLogsSeparator, logsURL,
+	)
+}
+
 func NewDeploymentResource() resource.Resource {
 	return &DeploymentResource{}
 }
@@ -610,7 +628,17 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	err = waitForTaskStatusToComplete(ctx, r.provider.service, statusID)
+	var taskFailedErr *TaskFailedError
 	if err != nil {
+		if errors.As(err, &taskFailedErr) {
+			logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + createResp.ID + "/activity-log/otel-logs"
+
+			traceAPICall("GetDeploymentLogs")
+			logs, logErr := r.provider.service.GetDeploymentLogs(ctx, createResp.ID)
+			resp.Diagnostics.AddError("Deployment failed to create", deploymentErrorMessageWithLogs(taskFailedErr.Message, logs, logErr, logsURL))
+			return
+		}
+
 		tflog.Warn(ctx, "Task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
 			"status_id": statusID,
 			"error":     err.Error(),
@@ -788,15 +816,29 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		// model replacement is an async operation, separate from waiting for the deployment to be ready
 		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			tflog.Warn(ctx, "Model replacement task status polling failed, checking if deployment is ready anyway", map[string]interface{}{
-				"status_id": statusId,
-				"error":     err.Error(),
-			})
+			// Task polling failure is not immediately fatal: the task endpoint can
+			// return ERROR when the pod fails to start (e.g. bad dependency build,
+			// crash on import). Promote this to a hard error so the operator learns
+			// the replacement did not complete, rather than silently succeeding.
+			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
+			return
 		}
 
 		_, err = r.waitForDeploymentToBeReady(ctx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Deployment not ready after model replacement", err.Error())
+			return
+		}
+
+		// Final ground-truth check with bounded retries: backend propagation can lag
+		// briefly after the deployment first returns to "active".
+		_, err = r.waitForDeploymentModelPackage(
+			ctx,
+			id,
+			plan.RegisteredModelVersionID.ValueString(),
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Deployment model replacement did not apply", err.Error())
 			return
 		}
 	}
@@ -971,6 +1013,105 @@ func (r *DeploymentResource) waitForDeploymentToBeReady(ctx context.Context, id 
 	return r.waitForDeploymentStatus(ctx, id, "active")
 }
 
+func (r *DeploymentResource) waitForDeploymentModelPackage(
+	ctx context.Context,
+	id string,
+	expectedModelPackageID string,
+) (*client.Deployment, error) {
+	expBackoff := getExponentialBackoff()
+
+	startTime := time.Now()
+	lastStatus := ""
+	lastModelPackageID := ""
+	var lastGetDeploymentErr error
+	var lastDeployment *client.Deployment
+
+	operation := func() error {
+		traceAPICall("GetDeployment")
+		deployment, err := r.provider.service.GetDeployment(ctx, id)
+		if err != nil {
+			lastGetDeploymentErr = err
+			return backoff.Permanent(err)
+		}
+
+		// Clear prior transient API error once polling resumes successfully.
+		lastGetDeploymentErr = nil
+
+		lastDeployment = deployment
+		lastStatus = deployment.Status
+		lastModelPackageID = deployment.ModelPackage.ID
+
+		if strings.Contains(deployment.Status, "error") {
+			return backoff.Permanent(fmt.Errorf("deployment has errored (status: %s)", deployment.Status))
+		}
+
+		if deployment.Status != "active" {
+			return fmt.Errorf("deployment is not active (current status: %s)", deployment.Status)
+		}
+
+		if deployment.ModelPackage.ID != expectedModelPackageID {
+			tflog.Info(ctx, "Waiting for deployment model package to propagate", map[string]interface{}{
+				"deployment_id":       id,
+				"expected_package_id": expectedModelPackageID,
+				"actual_package_id":   deployment.ModelPackage.ID,
+				"elapsed":             time.Since(startTime).Round(time.Second).String(),
+			})
+			return fmt.Errorf("deployment is active but still serving model package %s", deployment.ModelPackage.ID)
+		}
+
+		return nil
+	}
+
+	if err := backoff.Retry(operation, expBackoff); err != nil {
+		elapsed := time.Since(startTime).Round(time.Second)
+		if lastGetDeploymentErr != nil {
+			return nil, fmt.Errorf(
+				"failed to get deployment %s while waiting for expected model package %s (elapsed: %s): %w",
+				id,
+				expectedModelPackageID,
+				elapsed,
+				lastGetDeploymentErr,
+			)
+		}
+
+		if lastDeployment != nil {
+			if strings.Contains(lastStatus, "error") {
+				return nil, fmt.Errorf(
+					"deployment %s entered error status %s while waiting for expected model package %s (last model package: %s, elapsed: %s)",
+					id,
+					lastStatus,
+					expectedModelPackageID,
+					lastModelPackageID,
+					elapsed,
+				)
+			}
+
+			if lastStatus == "active" && lastModelPackageID != expectedModelPackageID {
+				return nil, fmt.Errorf(
+					"deployment %s is active but still serving model package %s after waiting %s; expected model package %s; the new version may have failed to start (check the DataRobot UI for startup logs)",
+					id,
+					lastModelPackageID,
+					elapsed,
+					expectedModelPackageID,
+				)
+			}
+
+			return nil, fmt.Errorf(
+				"deployment %s did not stabilize to expected model package %s (last status: %s, last model package: %s, elapsed: %s)",
+				id,
+				expectedModelPackageID,
+				lastStatus,
+				lastModelPackageID,
+				elapsed,
+			)
+		}
+
+		return nil, err
+	}
+
+	return lastDeployment, nil
+}
+
 func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id string, status string) (*client.Deployment, error) {
 	expBackoff := getExponentialBackoff()
 
@@ -984,11 +1125,18 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 		}
 
 		if deployment.Status == status {
+			tflog.Info(ctx, "Deployment is ready", map[string]interface{}{"deployment_id": id})
 			return nil
 		} else if strings.Contains(deployment.Status, "error") {
-			return backoff.Permanent(errors.New("deployment has errored"))
+			logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + id + "/activity-log/otel-logs"
+
+			traceAPICall("GetDeploymentLogs")
+			tflog.Error(ctx, "Deployment has errored", map[string]interface{}{"deployment_id": id})
+			logs, logErr := r.provider.service.GetDeploymentLogs(ctx, id)
+			return backoff.Permanent(errors.New(deploymentErrorMessageWithLogs("deployment has errored", logs, logErr, logsURL)))
 		}
 
+		tflog.Info(ctx, "Deployment is not ready", map[string]interface{}{"deployment_id": id, "status": deployment.Status})
 		lastStatus = deployment.Status
 
 		return errors.New("deployment is not ready")
@@ -1361,12 +1509,19 @@ func (r *DeploymentResource) updateDeploymentRuntimeParameters(
 
 func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("DeactivateDeployment")
-	if _, err = r.provider.service.DeactivateDeployment(ctx, id); err != nil {
-		err = fmt.Errorf("Error deactivating deployment: %w", err)
+	_, statusId, err := r.provider.service.DeactivateDeployment(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("error deactivating deployment: %w", err)
 		return
 	}
+
+	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
+		err = fmt.Errorf("deployment failed to deactivate: %s", statusErr.Error())
+		return
+	}
+
 	if _, err = r.waitForDeploymentStatus(ctx, id, "inactive"); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be inactive: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be inactive: %w", err)
 		return
 	}
 
@@ -1375,16 +1530,47 @@ func (r *DeploymentResource) deactivateDeployment(ctx context.Context, id string
 
 func (r *DeploymentResource) activateDeployment(ctx context.Context, id string) (err error) {
 	traceAPICall("ActivateDeployment")
-	if _, err = r.provider.service.ActivateDeployment(ctx, id); err != nil {
-		err = fmt.Errorf("Error activating deployment: %w", err)
+	_, statusId, err := r.provider.service.ActivateDeployment(ctx, id)
+	if err != nil {
+		err = fmt.Errorf("error activating deployment: %w", err)
 		return
 	}
+
+	if statusErr := r.waitForDeploymentStatusChangeTask(ctx, statusId); statusErr != nil {
+		err = fmt.Errorf("deployment failed to activate: %s", statusErr.Error())
+		return
+	}
+
 	if _, err = r.waitForDeploymentToBeReady(ctx, id); err != nil {
-		err = fmt.Errorf("Error waiting for deployment to be ready: %w", err)
+		err = fmt.Errorf("error waiting for deployment to be ready: %w", err)
 		return
 	}
 
 	return
+}
+
+// waitForDeploymentStatusChangeTask waits for the async status-change task
+// spawned by activate/deactivate. A task ERROR is definitive and returned
+// immediately; any other polling failure is ignored so the caller can fall
+// back to polling the deployment status directly.
+func (r *DeploymentResource) waitForDeploymentStatusChangeTask(ctx context.Context, statusId string) error {
+	if statusId == "" {
+		return nil
+	}
+
+	err := waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
+	var taskFailedErr *TaskFailedError
+	if errors.As(err, &taskFailedErr) {
+		return taskFailedErr
+	}
+	if err != nil {
+		tflog.Warn(ctx, "Task status polling failed, checking deployment status directly", map[string]interface{}{
+			"status_id": statusId,
+			"error":     err.Error(),
+		})
+	}
+
+	return nil
 }
 
 // ensureDeploymentActive checks if the deployment is active and activates it if not.

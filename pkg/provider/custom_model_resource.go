@@ -28,6 +28,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -562,15 +563,6 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.IsProxy = types.BoolValue(customModel.IsProxyModel)
 	state.DeploymentsCount = types.Int64Value(customModel.DeploymentsCount)
 
-	if IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0 {
-		customModel, err = r.applyRuntimeParameterValues(ctx, customModelID, baseEnvironmentID, baseEnvironmentVersionID, plan)
-		if err != nil {
-			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
-			return
-		}
-		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
-	}
-
 	if len(plan.GuardConfigurations) > 0 {
 		if err = r.createCustomModelVersionFromGuards(ctx, plan, customModelID, customModel.LatestVersion.ID, plan.GuardConfigurations, []GuardConfiguration{}); err != nil {
 			resp.Diagnostics.AddError("Error creating Custom Model version from Guards", err.Error())
@@ -605,7 +597,7 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 	state.Replicas = plan.Replicas
 	state.NetworkAccess = plan.NetworkAccess
 
-	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
+	if _, err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
 		return
 	}
@@ -615,6 +607,41 @@ func (r *CustomModelResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 	state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+
+	// Applied last: unlike the guard/resource-settings/bundle version-creates
+	// above, this one sends runtimeParameters, which the API treats as a full
+	// replacement. Doing it earlier would let a later step revert it. For
+	// blueprint models, also merge in params the user didn't declare so they
+	// survive that replacement.
+	planHasRuntimeParams := IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
+	if planHasRuntimeParams {
+		runtimeParamsToApply := plan.RuntimeParameterValues
+		if IsKnown(plan.SourceLLMBlueprintID) && len(customModel.LatestVersion.RuntimeParameters) > 0 {
+			merged, mDiags := mergeBlueprintRuntimeParameters(
+				ctx,
+				customModel.LatestVersion.RuntimeParameters,
+				types.ListNull(runtimeParameterListElemType()),
+				plan.RuntimeParameterValues,
+			)
+			resp.Diagnostics.Append(mDiags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			runtimeParamsToApply = merged
+		}
+		customModel, err = r.applyRuntimeParameterValues(
+			ctx,
+			customModelID,
+			customModel.LatestVersion.BaseEnvironmentID,
+			customModel.LatestVersion.BaseEnvironmentVersionID,
+			runtimeParamsToApply,
+		)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating Custom Model version with runtime parameters", err.Error())
+			return
+		}
+		state.VersionID = types.StringValue(customModel.LatestVersion.ID)
+	}
 
 	if len(customModel.LatestVersion.Dependencies) > 0 {
 		traceAPICall("CreateDependencyBuild")
@@ -778,12 +805,15 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	initialRuntimeParams := customModel.LatestVersion.RuntimeParameters
+
 	if err := r.updateCustomModel(ctx, customModel, &state, plan); err != nil {
 		resp.Diagnostics.AddError("Error updating Custom Model", err.Error())
 		return
 	}
 
-	if err = r.createNewCustomModelVersion(ctx, plan, customModel); err != nil {
+	newVersionCreated, err := r.createNewCustomModelVersion(ctx, plan, customModel)
+	if err != nil {
 		resp.Diagnostics.AddError("Error creating Custom Model version", err.Error())
 		return
 	}
@@ -795,7 +825,8 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 	state.BaseEnvironmentID = types.StringValue(customModel.LatestVersion.BaseEnvironmentID)
 	state.BaseEnvironmentVersionID = types.StringValue(customModel.LatestVersion.BaseEnvironmentVersionID)
 
-	if err = r.updateRemoteRepositories(ctx, customModel, &state, plan); err != nil {
+	remoteReposVersionCreated, err := r.updateRemoteRepositories(ctx, customModel, &state, plan)
+	if err != nil {
 		resp.Diagnostics.AddError("Error updating remote repositories", err.Error())
 		return
 	}
@@ -806,22 +837,27 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err = r.updateGuardConfigurations(ctx, &state, plan); err != nil {
+	guardsVersionCreated, err := r.updateGuardConfigurations(ctx, &state, plan)
+	if err != nil {
 		resp.Diagnostics.AddError("Error updating guard configurations", err.Error())
 		return
 	}
 
-	if err = r.updateResourceSettings(ctx, customModel, &state, plan); err != nil {
+	resourceSettingsVersionCreated, err := r.updateResourceSettings(ctx, customModel, &state, plan)
+	if err != nil {
 		resp.Diagnostics.AddError("Error updating resource settings", err.Error())
 		return
 	}
 
-	if err = r.addResourceBundle(ctx, customModel, &state, plan); err != nil {
+	resourceBundleVersionCreated, err := r.addResourceBundle(ctx, customModel, &state, plan)
+	if err != nil {
 		resp.Diagnostics.AddError("Error adding resource bundle", err.Error())
 		return
 	}
 
-	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, state, plan, localFilesUpdated); err != nil {
+	versionModifiedInApply := newVersionCreated || remoteReposVersionCreated || localFilesUpdated || guardsVersionCreated || resourceSettingsVersionCreated || resourceBundleVersionCreated
+
+	if err = r.updateRuntimeParameterValuesUnified(ctx, customModel, state, plan, initialRuntimeParams, versionModifiedInApply); err != nil {
 		resp.Diagnostics.AddError("Error updating runtime parameter values", err.Error())
 		return
 	}
@@ -1464,6 +1500,7 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 	plan CustomModelResourceModel,
 	customModel *client.CustomModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
 	// check for major version update
@@ -1479,22 +1516,28 @@ func (r *CustomModelResource) createNewCustomModelVersion(
 		if err != nil {
 			return
 		}
+		versionCreated = true
 	}
 
 	updateRequest := &client.CreateCustomModelVersionFromLatestRequest{
-		IsMajorUpdate: "false",
+		IsMajorUpdate:            "false",
+		BaseEnvironmentID:        customModel.LatestVersion.BaseEnvironmentID,
+		BaseEnvironmentVersionID: customModel.LatestVersion.BaseEnvironmentVersionID,
 	}
 	if IsKnown(plan.BaseEnvironmentID) {
 		updateRequest.BaseEnvironmentID = plan.BaseEnvironmentID.ValueString()
 	}
 	if IsKnown(plan.BaseEnvironmentVersionID) {
 		updateRequest.BaseEnvironmentVersionID = plan.BaseEnvironmentVersionID.ValueString()
+	} else if updateRequest.BaseEnvironmentID != customModel.LatestVersion.BaseEnvironmentID {
+		updateRequest.BaseEnvironmentVersionID = ""
 	}
 
 	traceAPICall("CreateCustomModelVersionCreateFromLatest")
 	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, updateRequest); err != nil {
 		return
 	}
+	versionCreated = true
 
 	return
 }
@@ -1598,35 +1641,54 @@ func (r *CustomModelResource) updateRuntimeParameterValuesUnified(
 	ctx context.Context,
 	customModel *client.CustomModel,
 	state, plan CustomModelResourceModel,
-	localFilesUpdated bool,
+	initialRuntimeParams []client.RuntimeParameter,
+	versionModifiedInApply bool,
 ) error {
+	isBlueprint := IsKnown(state.SourceLLMBlueprintID) || IsKnown(plan.SourceLLMBlueprintID)
 	runtimeParamsChanged := !plan.RuntimeParameterValues.Equal(state.RuntimeParameterValues)
-	reapplyAfterLocalFiles := localFilesUpdated &&
-		IsKnown(plan.RuntimeParameterValues) &&
-		len(plan.RuntimeParameterValues.Elements()) > 0
-	if !runtimeParamsChanged && !reapplyAfterLocalFiles {
+	planHasRuntimeParams := IsKnown(plan.RuntimeParameterValues) && len(plan.RuntimeParameterValues.Elements()) > 0
+
+	needsReapplyAfterVersionCreate := versionModifiedInApply && planHasRuntimeParams
+	needsBlueprintRestore := isBlueprint && versionModifiedInApply
+
+	if !runtimeParamsChanged && !needsReapplyAfterVersionCreate && !needsBlueprintRestore {
 		return nil
 	}
+
+	runtimeParamsToApply := plan.RuntimeParameterValues
+	if isBlueprint && len(initialRuntimeParams) > 0 {
+		merged, mDiags := mergeBlueprintRuntimeParameters(
+			ctx,
+			initialRuntimeParams,
+			state.RuntimeParameterValues,
+			plan.RuntimeParameterValues,
+		)
+		if mDiags.HasError() {
+			return fmt.Errorf("merging blueprint runtime parameters: %s", mDiags.Errors()[0].Detail())
+		}
+		runtimeParamsToApply = merged
+	}
+
 	return r.createVersionWithRuntimeParams(
 		ctx,
 		customModel.ID,
 		customModel.LatestVersion.BaseEnvironmentID,
 		customModel.LatestVersion.BaseEnvironmentVersionID,
 		state.RuntimeParameterValues,
-		plan.RuntimeParameterValues,
+		runtimeParamsToApply,
 	)
 }
 
 func (r *CustomModelResource) applyRuntimeParameterValues(
 	ctx context.Context,
 	customModelID, baseEnvironmentID, baseEnvironmentVersionID string,
-	plan CustomModelResourceModel,
+	planRuntimeParams basetypes.ListValue,
 ) (*client.CustomModel, error) {
 	if err := r.createVersionWithRuntimeParams(
 		ctx,
 		customModelID, baseEnvironmentID, baseEnvironmentVersionID,
 		types.ListNull(runtimeParameterListElemType()),
-		plan.RuntimeParameterValues,
+		planRuntimeParams,
 	); err != nil {
 		return nil, err
 	}
@@ -1640,6 +1702,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
 	if !reflect.DeepEqual(plan.SourceRemoteRepositories, state.SourceRemoteRepositories) {
@@ -1687,6 +1750,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 			if err != nil {
 				return
 			}
+			versionCreated = true
 		}
 
 		for _, newSourceRemoteRepository := range plan.SourceRemoteRepositories {
@@ -1717,6 +1781,7 @@ func (r *CustomModelResource) updateRemoteRepositories(
 				); err != nil {
 					return
 				}
+				versionCreated = true
 			}
 		}
 		state.SourceRemoteRepositories = plan.SourceRemoteRepositories
@@ -1784,6 +1849,7 @@ func (r *CustomModelResource) updateGuardConfigurations(
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
 	if reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) &&
@@ -1835,6 +1901,7 @@ func (r *CustomModelResource) updateGuardConfigurations(
 	); err != nil {
 		return
 	}
+	versionCreated = true
 	state.GuardConfigurations = plan.GuardConfigurations
 	state.OverallModerationConfiguration = plan.OverallModerationConfiguration
 
@@ -1847,6 +1914,7 @@ func (r *CustomModelResource) updateResourceSettings(
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
 	payload := &client.CreateCustomModelVersionFromLatestRequest{
@@ -1866,6 +1934,7 @@ func (r *CustomModelResource) updateResourceSettings(
 	if _, err = r.provider.service.CreateCustomModelVersionCreateFromLatest(ctx, customModel.ID, payload); err != nil {
 		return
 	}
+	versionCreated = true
 	state.Replicas = plan.Replicas
 	state.NetworkAccess = plan.NetworkAccess
 
@@ -1916,6 +1985,7 @@ func (r *CustomModelResource) addResourceBundle(
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
 ) (
+	versionCreated bool,
 	err error,
 ) {
 	if IsKnown(plan.ResourceBundleID) {
@@ -1928,6 +1998,7 @@ func (r *CustomModelResource) addResourceBundle(
 		}); err != nil {
 			return
 		}
+		versionCreated = true
 	}
 
 	state.ResourceBundleID = plan.ResourceBundleID

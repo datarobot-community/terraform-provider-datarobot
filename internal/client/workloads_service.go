@@ -2,7 +2,10 @@ package client
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 )
@@ -158,12 +161,177 @@ func (s *ServiceImpl) GetWorkload(ctx context.Context, id string) (*Workload, er
 	return Get[Workload](s.client, ctx, "/workloads/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error) {
+func (s *ServiceImpl) UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error) {
 	return Patch[Workload](s.client, ctx, "/workloads/"+id+"/", req)
 }
 
 func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/workloads/"+id+"/")
+}
+
+type ReplacementStrategy string
+type ReplacementStatus string
+
+const (
+	ReplacementStrategyRolling ReplacementStrategy = "rolling"
+
+	ReplacementStatusUnknown      ReplacementStatus = "unknown"
+	ReplacementStatusSubmitted    ReplacementStatus = "submitted"
+	ReplacementStatusInitializing ReplacementStatus = "initializing"
+	ReplacementStatusStaged       ReplacementStatus = "staged"
+	ReplacementStatusPromoting    ReplacementStatus = "promoting"
+	ReplacementStatusCanceling    ReplacementStatus = "canceling"
+	ReplacementStatusFinalizing   ReplacementStatus = "finalizing"
+	ReplacementStatusCompleted    ReplacementStatus = "completed"
+	ReplacementStatusErrored      ReplacementStatus = "errored"
+)
+
+const (
+	WorkloadReplacementPollIntervalEnvVar = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL"
+	WorkloadReplacementPollTimeoutEnvVar  = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT"
+
+	defaultReplacementPollInterval = 5 * time.Second
+	defaultReplacementPollTimeout  = 30 * time.Minute
+)
+
+func workloadReplacementPollInterval() time.Duration {
+	return durationFromEnv(WorkloadReplacementPollIntervalEnvVar, defaultReplacementPollInterval)
+}
+
+func workloadReplacementPollTimeout() time.Duration {
+	return durationFromEnv(WorkloadReplacementPollTimeoutEnvVar, defaultReplacementPollTimeout)
+}
+
+func durationFromEnv(envVar string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(envVar)
+	if raw == "" {
+		return fallback
+	}
+
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+
+	return d
+}
+
+type ReplacementConfig struct {
+	WarmupDurationMinutes int64 `json:"warmupDurationMinutes,omitempty"`
+	KeepOldVersionMinutes int64 `json:"keepOldVersionMinutes,omitempty"`
+}
+
+type StartReplacementRequest struct {
+	ArtifactID string              `json:"artifactId"`
+	Strategy   ReplacementStrategy `json:"strategy"`
+	Config     ReplacementConfig   `json:"config,omitempty"`
+	Runtime    *WorkloadRuntime    `json:"runtime,omitempty"`
+}
+
+type UpdateWorkloadSettingsRequest struct {
+	Runtime WorkloadRuntime `json:"runtime"`
+}
+
+type WorkloadReplacement struct {
+	ID                  string              `json:"id"`
+	WorkloadID          string              `json:"workloadId"`
+	CandidateArtifactID string              `json:"candidateArtifactId"`
+	Status              ReplacementStatus   `json:"status"`
+	Strategy            ReplacementStrategy `json:"strategy"`
+	Config              ReplacementConfig   `json:"config,omitempty"`
+	Runtime             WorkloadRuntime     `json:"runtime,omitempty"`
+	Message             *string             `json:"message,omitempty"`
+}
+
+type WaitForWorkloadReplacementOptions struct {
+	PollInterval time.Duration
+	Timeout      time.Duration
+}
+
+type ReplacementFailedError struct {
+	Message string
+}
+
+func (e *ReplacementFailedError) Error() string {
+	return e.Message
+}
+
+func IsReplacementTerminal(status ReplacementStatus) bool {
+	return status == ReplacementStatusCompleted || status == ReplacementStatusErrored
+}
+
+func IsReplacementActive(status ReplacementStatus) bool {
+	return !IsReplacementTerminal(status)
+}
+
+func (s *ServiceImpl) StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error) {
+	return Post[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/replacement", req)
+}
+
+func (s *ServiceImpl) GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error) {
+	return Get[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/replacement")
+}
+
+func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID string, req *UpdateWorkloadSettingsRequest) (*WorkloadReplacement, error) {
+	return Patch[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/settings", req)
+}
+
+func (s *ServiceImpl) WaitForWorkloadReplacement(
+	ctx context.Context,
+	workloadID string,
+	opts *WaitForWorkloadReplacementOptions,
+) (*WorkloadReplacement, error) {
+	pollInterval := workloadReplacementPollInterval()
+	timeout := workloadReplacementPollTimeout()
+	if opts != nil {
+		if opts.PollInterval > 0 {
+			pollInterval = opts.PollInterval
+		}
+		if opts.Timeout > 0 {
+			timeout = opts.Timeout
+		}
+	}
+
+	deadline := time.Now().Add(timeout)
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		replacement, err := s.GetWorkloadReplacement(ctx, workloadID)
+		if err != nil {
+			return nil, err
+		}
+
+		if IsReplacementTerminal(replacement.Status) {
+			if replacement.Status == ReplacementStatusErrored {
+				message := "workload replacement failed"
+				if replacement.Message != nil && *replacement.Message != "" {
+					message = *replacement.Message
+				}
+				return replacement, &ReplacementFailedError{Message: message}
+			}
+			return replacement, nil
+		}
+
+		if time.Now().After(deadline) {
+			return replacement, fmt.Errorf(
+				"timeout waiting for workload %s replacement after %s (last status: %s)",
+				workloadID,
+				timeout,
+				replacement.Status,
+			)
+		}
+
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 type ArtifactStatus string
@@ -321,8 +489,19 @@ type CreateArtifactRequest struct {
 	ArtifactRepositoryID *string        `json:"artifactRepositoryId,omitempty"`
 }
 
+type PatchArtifactRequest struct {
+	Name        *string         `json:"name,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Status      *ArtifactStatus `json:"status,omitempty"`
+	Spec        *ArtifactSpec   `json:"spec,omitempty"`
+}
+
 func (s *ServiceImpl) CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error) {
 	return Post[Artifact](s.client, ctx, "/artifacts/", req)
+}
+
+func (s *ServiceImpl) PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error) {
+	return Patch[Artifact](s.client, ctx, "/artifacts/"+id+"/", req)
 }
 
 func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, error) {
