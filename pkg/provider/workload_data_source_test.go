@@ -280,7 +280,7 @@ func workloadDataSourceFixture() *client.Workload {
 		},
 		Type:   client.ArtifactTypeService,
 		Status: client.ProtonStatusRunning,
-		Replacement: &client.WorkloadReplacement{
+		Replacement: &client.WorkloadReplacementInfo{
 			Status:             "in_progress",
 			CandidateProtonIDs: []string{uuid.NewString()},
 			Strategy:           "rolling",

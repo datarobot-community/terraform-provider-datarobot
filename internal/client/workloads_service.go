@@ -91,7 +91,7 @@ type WorkloadArtifactInfo struct {
 	TemplateID           *string         `json:"templateId,omitempty"`
 }
 
-type WorkloadReplacement struct {
+type WorkloadReplacementInfo struct {
 	Status             string   `json:"status"`
 	CandidateProtonIDs []string `json:"candidateProtonIds"`
 	Strategy           string   `json:"strategy"`
@@ -129,7 +129,7 @@ type Workload struct {
 	Type         ArtifactType          `json:"type"`
 	Status       ProtonStatus          `json:"status"`
 	Importance   WorkloadImportance    `json:"importance"`
-	Replacement  *WorkloadReplacement  `json:"replacement,omitempty"`
+	Replacement  *WorkloadReplacementInfo `json:"replacement,omitempty"`
 	Runtime      WorkloadRuntime       `json:"runtime"`
 	Permissions  []string              `json:"permissions"`
 	RequestStats *RequestStats         `json:"requestStats,omitempty"`

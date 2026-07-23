@@ -57,7 +57,7 @@ func TestLoadWorkloadIntoDataSourceModel(t *testing.T) {
 		},
 		Type:   client.ArtifactTypeService,
 		Status: client.ProtonStatusRunning,
-		Replacement: &client.WorkloadReplacement{
+		Replacement: &client.WorkloadReplacementInfo{
 			Status:             "in_progress",
 			CandidateProtonIDs: []string{"674a1b2c3d4e5f6789017000"},
 			Strategy:           "rolling",
@@ -213,6 +213,18 @@ func TestLoadWorkloadIntoDataSourceModel(t *testing.T) {
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("loadWorkloadIntoDataSourceModel() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestLoadWorkloadDataSourceGroupRuntimeFromAPI_NullBundleSelectionPolicy(t *testing.T) {
+	t.Parallel()
+
+	got := loadWorkloadDataSourceGroupRuntimeFromAPI(client.GroupRuntime{
+		Name: "default",
+	})
+
+	if !got.BundleSelectionPolicy.IsNull() {
+		t.Errorf("BundleSelectionPolicy = %v, want null", got.BundleSelectionPolicy)
 	}
 }
 

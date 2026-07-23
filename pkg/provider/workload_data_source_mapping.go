@@ -76,7 +76,7 @@ func loadWorkloadArtifactInfoModel(artifact *client.WorkloadArtifactInfo) *Workl
 	return model
 }
 
-func loadWorkloadReplacementModel(replacement *client.WorkloadReplacement) *WorkloadReplacementModel {
+func loadWorkloadReplacementModel(replacement *client.WorkloadReplacementInfo) *WorkloadReplacementModel {
 	if replacement == nil {
 		return nil
 	}
@@ -179,11 +179,11 @@ func loadWorkloadDataSourceGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadDa
 	} else {
 		m.ReplicaCount = types.Int64Null()
 	}
-	bundleSelectionPolicy := "availability"
 	if g.BundleSelectionPolicy != nil {
-		bundleSelectionPolicy = *g.BundleSelectionPolicy
+		m.BundleSelectionPolicy = types.StringValue(*g.BundleSelectionPolicy)
+	} else {
+		m.BundleSelectionPolicy = types.StringNull()
 	}
-	m.BundleSelectionPolicy = types.StringValue(bundleSelectionPolicy)
 	if g.Autoscaling != nil {
 		autoscaling := &WorkloadAutoscalingModel{}
 		if g.Autoscaling.Enabled != nil {
