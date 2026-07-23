@@ -355,9 +355,9 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
-		preserveWorkloadReplacementPolicy(planned, &plan)
 	}
 
+	preserveWorkloadReplacementPolicy(planned, &plan)
 	applySentinels(planned, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
