@@ -148,7 +148,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 		return result, &resp.Header, nil
 	}
 
-	if req.Method == http.MethodPatch && resp.StatusCode == http.StatusAccepted {
+	if req.Method == http.MethodPatch && resp.StatusCode == http.StatusAccepted && len(respBody) == 0 {
 		return result, &resp.Header, nil
 	}
 

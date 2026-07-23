@@ -37,12 +37,13 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // ActivateDeployment mocks base method.
-func (m *MockService) ActivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+func (m *MockService) ActivateDeployment(ctx context.Context, id string) (*client.Deployment, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ActivateDeployment", ctx, id)
 	ret0, _ := ret[0].(*client.Deployment)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ActivateDeployment indicates an expected call of ActivateDeployment.
@@ -834,12 +835,13 @@ func (mr *MockServiceMockRecorder) CreateWorkload(ctx, req interface{}) *gomock.
 }
 
 // DeactivateDeployment mocks base method.
-func (m *MockService) DeactivateDeployment(ctx context.Context, id string) (*client.Deployment, error) {
+func (m *MockService) DeactivateDeployment(ctx context.Context, id string) (*client.Deployment, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeactivateDeployment", ctx, id)
 	ret0, _ := ret[0].(*client.Deployment)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // DeactivateDeployment indicates an expected call of DeactivateDeployment.
@@ -1597,6 +1599,21 @@ func (mr *MockServiceMockRecorder) GetDeploymentHealthSettings(ctx, id interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentHealthSettings", reflect.TypeOf((*MockService)(nil).GetDeploymentHealthSettings), ctx, id)
 }
 
+// GetDeploymentLogs mocks base method.
+func (m *MockService) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentLogs", ctx, id)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeploymentLogs indicates an expected call of GetDeploymentLogs.
+func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentLogs", reflect.TypeOf((*MockService)(nil).GetDeploymentLogs), ctx, id)
+}
+
 // GetDeploymentRetrainingSettings mocks base method.
 func (m *MockService) GetDeploymentRetrainingSettings(ctx context.Context, deploymentID string) (*client.RetrainingSettingsRetrieve, error) {
 	m.ctrl.T.Helper()
@@ -1987,6 +2004,21 @@ func (mr *MockServiceMockRecorder) GetWorkload(ctx, id interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkload", reflect.TypeOf((*MockService)(nil).GetWorkload), ctx, id)
 }
 
+// GetWorkloadReplacement mocks base method.
+func (m *MockService) GetWorkloadReplacement(ctx context.Context, workloadID string) (*client.WorkloadReplacement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkloadReplacement", ctx, workloadID)
+	ret0, _ := ret[0].(*client.WorkloadReplacement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkloadReplacement indicates an expected call of GetWorkloadReplacement.
+func (mr *MockServiceMockRecorder) GetWorkloadReplacement(ctx, workloadID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkloadReplacement", reflect.TypeOf((*MockService)(nil).GetWorkloadReplacement), ctx, workloadID)
+}
+
 // ImportNotebookFromFile mocks base method.
 func (m *MockService) ImportNotebookFromFile(ctx context.Context, fileName string, content []byte, useCaseID string) (*client.ImportNotebookResponse, error) {
 	m.ctrl.T.Helper()
@@ -2062,6 +2094,21 @@ func (mr *MockServiceMockRecorder) IsVectorDatabaseReady(ctx, id interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVectorDatabaseReady", reflect.TypeOf((*MockService)(nil).IsVectorDatabaseReady), ctx, id)
 }
 
+// ListArtifacts mocks base method.
+func (m *MockService) ListArtifacts(ctx context.Context, req *client.ListArtifactsRequest) ([]client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListArtifacts", ctx, req)
+	ret0, _ := ret[0].([]client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArtifacts indicates an expected call of ListArtifacts.
+func (mr *MockServiceMockRecorder) ListArtifacts(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifacts", reflect.TypeOf((*MockService)(nil).ListArtifacts), ctx, req)
+}
+
 // ListCredentials mocks base method.
 func (m *MockService) ListCredentials(ctx context.Context) ([]client.Credential, error) {
 	m.ctrl.T.Helper()
@@ -2135,21 +2182,6 @@ func (m *MockService) ListCustomModels(ctx context.Context) ([]client.CustomMode
 func (mr *MockServiceMockRecorder) ListCustomModels(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCustomModels", reflect.TypeOf((*MockService)(nil).ListCustomModels), ctx)
-}
-
-// ListArtifacts mocks base method.
-func (m *MockService) ListArtifacts(ctx context.Context, req *client.ListArtifactsRequest) ([]client.Artifact, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListArtifacts", ctx, req)
-	ret0, _ := ret[0].([]client.Artifact)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListArtifacts indicates an expected call of ListArtifacts.
-func (mr *MockServiceMockRecorder) ListArtifacts(ctx, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifacts", reflect.TypeOf((*MockService)(nil).ListArtifacts), ctx, req)
 }
 
 // ListDatasources mocks base method.
@@ -2299,6 +2331,21 @@ func (m *MockService) RemoveEntityFromUseCase(ctx context.Context, useCaseID, en
 func (mr *MockServiceMockRecorder) RemoveEntityFromUseCase(ctx, useCaseID, entityType, entityID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveEntityFromUseCase", reflect.TypeOf((*MockService)(nil).RemoveEntityFromUseCase), ctx, useCaseID, entityType, entityID)
+}
+
+// StartWorkloadReplacement mocks base method.
+func (m *MockService) StartWorkloadReplacement(ctx context.Context, workloadID string, req *client.StartReplacementRequest) (*client.WorkloadReplacement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartWorkloadReplacement", ctx, workloadID, req)
+	ret0, _ := ret[0].(*client.WorkloadReplacement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartWorkloadReplacement indicates an expected call of StartWorkloadReplacement.
+func (mr *MockServiceMockRecorder) StartWorkloadReplacement(ctx, workloadID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkloadReplacement", reflect.TypeOf((*MockService)(nil).StartWorkloadReplacement), ctx, workloadID, req)
 }
 
 // TestDataStoreConnection mocks base method.
@@ -2917,19 +2964,34 @@ func (mr *MockServiceMockRecorder) UpdateVectorDatabase(ctx, id, req interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVectorDatabase", reflect.TypeOf((*MockService)(nil).UpdateVectorDatabase), ctx, id, req)
 }
 
-// UpdateWorkload mocks base method.
-func (m *MockService) UpdateWorkload(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
+// UpdateWorkloadMetadata mocks base method.
+func (m *MockService) UpdateWorkloadMetadata(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkload", ctx, id, req)
+	ret := m.ctrl.Call(m, "UpdateWorkloadMetadata", ctx, id, req)
 	ret0, _ := ret[0].(*client.Workload)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkload indicates an expected call of UpdateWorkload.
-func (mr *MockServiceMockRecorder) UpdateWorkload(ctx, id, req interface{}) *gomock.Call {
+// UpdateWorkloadMetadata indicates an expected call of UpdateWorkloadMetadata.
+func (mr *MockServiceMockRecorder) UpdateWorkloadMetadata(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkload", reflect.TypeOf((*MockService)(nil).UpdateWorkload), ctx, id, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadMetadata", reflect.TypeOf((*MockService)(nil).UpdateWorkloadMetadata), ctx, id, req)
+}
+
+// UpdateWorkloadSettings mocks base method.
+func (m *MockService) UpdateWorkloadSettings(ctx context.Context, workloadID string, req *client.UpdateWorkloadSettingsRequest) (*client.WorkloadReplacement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkloadSettings", ctx, workloadID, req)
+	ret0, _ := ret[0].(*client.WorkloadReplacement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkloadSettings indicates an expected call of UpdateWorkloadSettings.
+func (mr *MockServiceMockRecorder) UpdateWorkloadSettings(ctx, workloadID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadSettings", reflect.TypeOf((*MockService)(nil).UpdateWorkloadSettings), ctx, workloadID, req)
 }
 
 // ValidateDeploymentModelReplacement mocks base method.
@@ -2945,4 +3007,19 @@ func (m *MockService) ValidateDeploymentModelReplacement(ctx context.Context, id
 func (mr *MockServiceMockRecorder) ValidateDeploymentModelReplacement(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateDeploymentModelReplacement", reflect.TypeOf((*MockService)(nil).ValidateDeploymentModelReplacement), ctx, id, req)
+}
+
+// WaitForWorkloadReplacement mocks base method.
+func (m *MockService) WaitForWorkloadReplacement(ctx context.Context, workloadID string, opts *client.WaitForWorkloadReplacementOptions) (*client.WorkloadReplacement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForWorkloadReplacement", ctx, workloadID, opts)
+	ret0, _ := ret[0].(*client.WorkloadReplacement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForWorkloadReplacement indicates an expected call of WaitForWorkloadReplacement.
+func (mr *MockServiceMockRecorder) WaitForWorkloadReplacement(ctx, workloadID, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForWorkloadReplacement", reflect.TypeOf((*MockService)(nil).WaitForWorkloadReplacement), ctx, workloadID, opts)
 }

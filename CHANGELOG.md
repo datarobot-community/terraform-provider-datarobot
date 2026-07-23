@@ -1,12 +1,22 @@
-## [Unreleased]
+## [0.10.43] - 2026-07-15
 
 ### Added
 
-- `internal/client/filesapi` package: context-aware Files API client (catalog create, staged upload, zip upload, async status polling, manifest listing) ported from the DR CLI for upcoming `datarobot_artifact` `source { dir }` support
-- `status` attribute on `datarobot_artifact`: `draft` (in-place updates, same `artifact_id`) or `locked` (default; spec changes create a new version). Locking a draft artifact is one-way.
-- `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locked artifacts require `image_uri` when `image_build_config` is set.
+- `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locking requires a completed build so workload-api has populated `image_uri`.
+- `status` attribute on `datarobot_artifact`: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
+- `datarobot_deployment` now surfaces deployment logs in the error message when a deployment fails to create
+- `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL` and `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT` environment variables to tune workload replacement polling (defaults: `5s` and `30m`; Go duration syntax)
+
+### Fixed
+
+- `datarobot_deployment` creation no longer hangs for the full timeout when the creation task reports a definitive `ERROR` status (e.g. custom model failed to start). The provider now fails fast with the task's error message instead of blind-polling deployment status, which never resolves in that case.
+- `datarobot_deployment` activation and deactivation (e.g. around runtime parameter updates) now track the async status-change task and fail fast with the task's error message when it reports `ERROR`, instead of blind-polling deployment status until the timeout.
+- Deployment model replacement updates now wait for backend `modelPackageId` propagation after the deployment returns to `active`, reducing false positives from short consistency delays. The update now fails only after a bounded wait if the deployment still serves the previous model package, and reports a clear mismatch error instead of writing incorrect planned state.
+- Added integration-style mock tests for deployment model replacement success and mismatch scenarios to validate backend `modelPackageId` verification behavior.
+- Bumped the Go toolchain target from `1.26.4` to `1.26.5` to pick up the standard-library `crypto/tls` fix for `GO-2026-5856` detected by `govulncheck`.
+- when custom model is created with `source_llm_blueprint_id` and user defines `runtime_parameter_values` on the resource, default LLM blueprint runtime parameters are not removed overwritten anymore
 
 ## [0.10.42] - 2026-06-30
 

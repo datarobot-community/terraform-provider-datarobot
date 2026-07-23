@@ -85,7 +85,7 @@ output "from_source_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
-- `status` (String) Artifact lifecycle status: `draft` (mutable; supports in-place updates and image builds) or `locked` (immutable; spec changes create a new version). Defaults to `locked`. Locking a draft artifact is one-way.
+- `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
 ### Read-Only
