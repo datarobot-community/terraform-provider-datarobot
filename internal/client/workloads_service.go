@@ -99,7 +99,7 @@ func (s *ServiceImpl) GetWorkload(ctx context.Context, id string) (*Workload, er
 	return Get[Workload](s.client, ctx, "/workloads/"+id+"/")
 }
 
-func (s *ServiceImpl) UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error) {
+func (s *ServiceImpl) UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error) {
 	return Patch[Workload](s.client, ctx, "/workloads/"+id+"/", req)
 }
 

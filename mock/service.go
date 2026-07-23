@@ -2949,19 +2949,19 @@ func (mr *MockServiceMockRecorder) UpdateVectorDatabase(ctx, id, req interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVectorDatabase", reflect.TypeOf((*MockService)(nil).UpdateVectorDatabase), ctx, id, req)
 }
 
-// UpdateWorkload mocks base method.
-func (m *MockService) UpdateWorkload(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
+// UpdateWorkloadMetadata mocks base method.
+func (m *MockService) UpdateWorkloadMetadata(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkload", ctx, id, req)
+	ret := m.ctrl.Call(m, "UpdateWorkloadMetadata", ctx, id, req)
 	ret0, _ := ret[0].(*client.Workload)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkload indicates an expected call of UpdateWorkload.
-func (mr *MockServiceMockRecorder) UpdateWorkload(ctx, id, req interface{}) *gomock.Call {
+// UpdateWorkloadMetadata indicates an expected call of UpdateWorkloadMetadata.
+func (mr *MockServiceMockRecorder) UpdateWorkloadMetadata(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkload", reflect.TypeOf((*MockService)(nil).UpdateWorkload), ctx, id, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadMetadata", reflect.TypeOf((*MockService)(nil).UpdateWorkloadMetadata), ctx, id, req)
 }
 
 // UpdateWorkloadSettings mocks base method.
