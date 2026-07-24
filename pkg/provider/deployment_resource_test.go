@@ -22,18 +22,6 @@ import (
 )
 
 func TestAccDeploymentResource(t *testing.T) {
-	// TODO(RAPTOR-16424): re-enable once the LRS operator force-deletes deployment
-	// pods on stop. Step 2 updates runtime_parameter_values, which deactivates then
-	// reactivates the deployment. On staging the old LRS pod honors a ~5min preStop
-	// sleep + 600s grace period, so its k8s object lingers in "Terminating"; the
-	// reactivation's start task times out waiting for it to disappear and the
-	// deployment never leaves "inactive". The force-delete fix exists in the lrs
-	// operator (RAPTOR-16424) but is gated behind forceDeletionEnabled, which
-	// defaults to false and is off in the regression env. Unrelated to this PR.
-	// Deployment create/replacement/schema stay covered by TestAccDeploymentRetrainingPolicyResource,
-	// TestAccLLMBlueprintDeployment, and the TestUnit*/TestWaitForDeployment* tests.
-	t.Skip("skipped pending RAPTOR-16424 (LRS force-delete on stop); deactivate/reactivate around runtime parameter updates hangs in the regression env")
-
 	t.Parallel()
 
 	resourceName := "datarobot_deployment.test"
