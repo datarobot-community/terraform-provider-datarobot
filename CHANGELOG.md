@@ -17,6 +17,8 @@
 
 ### Added
 
+- `internal/client/filesapi` package: context-aware Files API client (catalog create, staged upload, zip upload, async status polling, manifest listing) ported from the DR CLI for upcoming `datarobot_artifact` `source { dir }` support
+- `internal/artifactsource` package: push-only directory upload orchestration (`PushDirectory`) over the Files API client (walk, hash, stage/zip routing, async poll) for upcoming `datarobot_artifact` `source { dir }` support
 - `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locking requires a completed build so workload-api has populated `image_uri`.
 - `status` attribute on `datarobot_artifact`: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
