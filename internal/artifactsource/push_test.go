@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
@@ -15,6 +16,8 @@ import (
 )
 
 type mockFilesAPI struct {
+	mu sync.Mutex
+
 	createCatalogCalls      int
 	createStageCalls        int
 	uploadToStagePaths      []string
@@ -46,11 +49,15 @@ func (m *mockFilesAPI) CreateStage(_ context.Context, catalogID string) (*filesa
 }
 
 func (m *mockFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int64, _ io.Reader) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.uploadToStagePaths = append(m.uploadToStagePaths, name)
 	return nil
 }
 
 func (m *mockFilesAPI) ApplyStage(_ context.Context, catalogID, _, _ string) (*filesapi.ApplyStageResp, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.applyStageCalls++
 	m.version++
 	return &filesapi.ApplyStageResp{CatalogID: catalogID, CatalogVersionID: versionID(m.version), NumFiles: len(m.uploadToStagePaths)}, nil
