@@ -10,6 +10,7 @@
 ### Fixed
 
 - `datarobot_workload` updates (artifact or runtime changes) no longer intermittently fail with `Error replacing Workload ... not found`. The provider now waits for the replacement by polling the workload record (`workload.replacement`) instead of the `/replacement` endpoint. The Workload API cleans up a `completed` replacement record almost immediately (~1s), so a `GET /replacement` between polls could 404 and was treated as a failure; the workload record makes completion (`replacement` cleared while `running`) and failure (`replacement.status == errored`, which persists) unambiguous and race-free.
+- `datarobot_deployment`: the "deployment is not ready" timeout error now includes the deployment id and a console activity-log URL, so a failed activation/deactivation can be traced to the specific deployment and its logs.
 
 ## [0.10.43] - 2026-07-15
 
