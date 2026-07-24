@@ -107,23 +107,28 @@ func TestSetPrimaryCodeRefInRawArtifact(t *testing.T) {
 			t.Fatalf("setPrimaryCodeRefInRawArtifact: %v", err)
 		}
 
-		containers := raw["spec"].(map[string]any)["containerGroups"].([]any)[0].(map[string]any)["containers"].([]any)
-		sidecar := containers[0].(map[string]any)
-		primary := containers[1].(map[string]any)
+		spec := mustMap(t, raw["spec"])
+		groups := mustSlice(t, spec["containerGroups"])
+		group := mustMap(t, groups[0])
+		containers := mustSlice(t, group["containers"])
+		sidecar := mustMap(t, containers[0])
+		primary := mustMap(t, containers[1])
 
-		primaryIBC := primary["imageBuildConfig"].(map[string]any)
-		dr := primaryIBC["codeRef"].(map[string]any)["datarobot"].(map[string]any)
+		primaryIBC := mustMap(t, primary["imageBuildConfig"])
+		codeRef := mustMap(t, primaryIBC["codeRef"])
+		dr := mustMap(t, codeRef["datarobot"])
 		if dr["catalogId"] != "new-cat" || dr["catalogVersionId"] != "new-ver" {
 			t.Fatalf("primary codeRef = %#v, want new-cat/new-ver", dr)
 		}
 
-		df := primaryIBC["dockerfile"].(map[string]any)
+		df := mustMap(t, primaryIBC["dockerfile"])
 		if df["source"] != "generated" || df["executionEnvironmentId"] != "env-1" {
 			t.Fatalf("primary dockerfile mutated: %#v", df)
 		}
 
-		sidecarIBC := sidecar["imageBuildConfig"].(map[string]any)
-		sidecarDR := sidecarIBC["codeRef"].(map[string]any)["datarobot"].(map[string]any)
+		sidecarIBC := mustMap(t, sidecar["imageBuildConfig"])
+		sidecarCodeRef := mustMap(t, sidecarIBC["codeRef"])
+		sidecarDR := mustMap(t, sidecarCodeRef["datarobot"])
 		if sidecarDR["catalogId"] != "sidecar-cat" || sidecarDR["catalogVersionId"] != "sidecar-ver" {
 			t.Fatalf("sidecar codeRef changed: %#v", sidecarDR)
 		}
@@ -147,12 +152,16 @@ func TestSetPrimaryCodeRefInRawArtifact(t *testing.T) {
 			t.Fatalf("setPrimaryCodeRefInRawArtifact: %v", err)
 		}
 
-		containers := raw["spec"].(map[string]any)["containerGroups"].([]any)[0].(map[string]any)["containers"].([]any)
-		first := containers[0].(map[string]any)
-		second := containers[1].(map[string]any)
+		spec := mustMap(t, raw["spec"])
+		groups := mustSlice(t, spec["containerGroups"])
+		group := mustMap(t, groups[0])
+		containers := mustSlice(t, group["containers"])
+		first := mustMap(t, containers[0])
+		second := mustMap(t, containers[1])
 
-		ibc := first["imageBuildConfig"].(map[string]any)
-		dr := ibc["codeRef"].(map[string]any)["datarobot"].(map[string]any)
+		ibc := mustMap(t, first["imageBuildConfig"])
+		codeRef := mustMap(t, ibc["codeRef"])
+		dr := mustMap(t, codeRef["datarobot"])
 		if dr["catalogId"] != "new-cat" || dr["catalogVersionId"] != "new-ver" {
 			t.Fatalf("first container codeRef = %#v", dr)
 		}
@@ -270,10 +279,13 @@ func TestPatchArtifactCodeRef_GetPatchGet(t *testing.T) {
 	if !ok {
 		t.Fatalf("patch body spec = %#v", patchBody)
 	}
-	groups := spec["containerGroups"].([]any)
-	container := groups[0].(map[string]any)["containers"].([]any)[0].(map[string]any)
-	ibc := container["imageBuildConfig"].(map[string]any)
-	dr := ibc["codeRef"].(map[string]any)["datarobot"].(map[string]any)
+	groups := mustSlice(t, spec["containerGroups"])
+	group := mustMap(t, groups[0])
+	containers := mustSlice(t, group["containers"])
+	container := mustMap(t, containers[0])
+	ibc := mustMap(t, container["imageBuildConfig"])
+	patchCodeRef := mustMap(t, ibc["codeRef"])
+	dr := mustMap(t, patchCodeRef["datarobot"])
 	if dr["catalogId"] != "cat-new" || dr["catalogVersionId"] != "ver-new" {
 		t.Fatalf("patched codeRef = %#v", dr)
 	}
@@ -282,4 +294,22 @@ func TestPatchArtifactCodeRef_GetPatchGet(t *testing.T) {
 	if codeRef == nil || codeRef.CatalogID != "cat-new" || codeRef.CatalogVersionID != "ver-new" {
 		t.Fatalf("returned artifact codeRef = %#v", codeRef)
 	}
+}
+
+func mustMap(t *testing.T, raw any) map[string]any {
+	t.Helper()
+	m, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T (%#v)", raw, raw)
+	}
+	return m
+}
+
+func mustSlice(t *testing.T, raw any) []any {
+	t.Helper()
+	s, ok := raw.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T (%#v)", raw, raw)
+	}
+	return s
 }
