@@ -52,7 +52,7 @@ func TestDiffPushOnly_BaseOnlyFileSchedulesDeleteNotUpload(t *testing.T) {
 	// For that path the upload list stays empty: there is nothing local to push,
 	// and we never pull remote-only files into the plan.
 	base := Manifest{
-		"keep.txt":       {Hash: "same", Size: 4},
+		"keep.txt":        {Hash: "same", Size: 4},
 		"remote-only.txt": {Hash: "remote", Size: 6},
 	}
 	local := Manifest{

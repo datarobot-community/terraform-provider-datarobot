@@ -69,11 +69,11 @@ func (m *stageClientMock) UploadToStage(_ context.Context, _, _, name string, _ 
 	defer m.activeUploads.Add(-1)
 
 	for {
-		max := m.maxConcurrent.Load()
-		if current <= max {
+		prevMax := m.maxConcurrent.Load()
+		if current <= prevMax {
 			break
 		}
-		if m.maxConcurrent.CompareAndSwap(max, current) {
+		if m.maxConcurrent.CompareAndSwap(prevMax, current) {
 			break
 		}
 	}
@@ -136,7 +136,7 @@ func stageVersionID(n int) string {
 	return fmt.Sprintf("ver-%d", n)
 }
 
-func writeStageTestFiles(t *testing.T, names ...string) ([]LocalFile, string) {
+func writeStageTestFiles(t *testing.T, names ...string) []LocalFile {
 	t.Helper()
 	root := t.TempDir()
 	files := make([]LocalFile, 0, len(names))
@@ -146,7 +146,7 @@ func writeStageTestFiles(t *testing.T, names ...string) ([]LocalFile, string) {
 		require.NoError(t, os.WriteFile(abs, []byte("x"), 0o644))
 		files = append(files, LocalFile{RelPath: name, AbsPath: abs, Size: 1})
 	}
-	return files, root
+	return files
 }
 
 func TestUploadFilesParallel_Empty(t *testing.T) {
@@ -161,7 +161,7 @@ func TestUploadFilesParallel_Empty(t *testing.T) {
 func TestUploadFilesParallel_AllSucceed(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "a.txt", "b.txt", "c.txt")
+	files := writeStageTestFiles(t, "a.txt", "b.txt", "c.txt")
 	mock := &stageClientMock{}
 
 	err := uploadFilesParallel(context.Background(), mock, "cat", "stage", files)
@@ -172,7 +172,7 @@ func TestUploadFilesParallel_AllSucceed(t *testing.T) {
 func TestUploadFilesParallel_OneUploadFails(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "ok.txt", "bad.txt", "also-ok.txt")
+	files := writeStageTestFiles(t, "ok.txt", "bad.txt", "also-ok.txt")
 	wantErr := errors.New("upload failed")
 	mock := &stageClientMock{
 		uploadErrForPath: map[string]error{"bad.txt": wantErr},
@@ -187,7 +187,7 @@ func TestUploadFilesParallel_OneUploadFails(t *testing.T) {
 func TestUploadFilesParallel_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "slow-1.txt", "slow-2.txt", "slow-3.txt", "slow-4.txt", "slow-5.txt")
+	files := writeStageTestFiles(t, "slow-1.txt", "slow-2.txt", "slow-3.txt", "slow-4.txt", "slow-5.txt")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -210,7 +210,7 @@ func TestUploadFilesParallel_RespectsConcurrencyLimit(t *testing.T) {
 	for i := range names {
 		names[i] = fmt.Sprintf("file-%02d.txt", i)
 	}
-	files, _ := writeStageTestFiles(t, names...)
+	files := writeStageTestFiles(t, names...)
 
 	started := make(chan struct{}, len(files))
 	release := make(chan struct{})
@@ -249,7 +249,7 @@ func TestUploadFilesParallel_RespectsConcurrencyLimit(t *testing.T) {
 func TestStageUploader_CreatesCatalogAndAppliesStage(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "only.txt")
+	files := writeStageTestFiles(t, "only.txt")
 	mock := &stageClientMock{}
 	up := stageUploader{}
 
@@ -267,7 +267,7 @@ func TestStageUploader_CreatesCatalogAndAppliesStage(t *testing.T) {
 func TestStageUploader_ExistingCatalogSkipsCreate(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "only.txt")
+	files := writeStageTestFiles(t, "only.txt")
 	mock := &stageClientMock{catalogID: "cat-existing"}
 	up := stageUploader{}
 
@@ -282,7 +282,7 @@ func TestStageUploader_ExistingCatalogSkipsCreate(t *testing.T) {
 func TestStageUploader_CreateCatalogFails(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "only.txt")
+	files := writeStageTestFiles(t, "only.txt")
 	mock := &stageClientMock{createCatalogErr: errors.New("create catalog failed")}
 	up := stageUploader{}
 
@@ -295,7 +295,7 @@ func TestStageUploader_CreateCatalogFails(t *testing.T) {
 func TestStageUploader_CreateStageFails(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "only.txt")
+	files := writeStageTestFiles(t, "only.txt")
 	mock := &stageClientMock{
 		catalogID:      "cat-existing",
 		createStageErr: errors.New("create stage failed"),
@@ -311,7 +311,7 @@ func TestStageUploader_CreateStageFails(t *testing.T) {
 func TestStageUploader_ParallelUploadFailsBeforeApply(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "good.txt", "bad.txt")
+	files := writeStageTestFiles(t, "good.txt", "bad.txt")
 	mock := &stageClientMock{
 		catalogID:        "cat-existing",
 		uploadErrForPath: map[string]error{"bad.txt": errors.New("stage upload failed")},
@@ -327,7 +327,7 @@ func TestStageUploader_ParallelUploadFailsBeforeApply(t *testing.T) {
 func TestStageUploader_ApplyStageFailsAfterUploads(t *testing.T) {
 	t.Parallel()
 
-	files, _ := writeStageTestFiles(t, "a.txt", "b.txt")
+	files := writeStageTestFiles(t, "a.txt", "b.txt")
 	mock := &stageClientMock{
 		catalogID:     "cat-existing",
 		applyStageErr: errors.New("apply stage failed"),
