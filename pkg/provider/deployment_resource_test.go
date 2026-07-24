@@ -803,6 +803,7 @@ func TestWaitForDeploymentModelPackageEventuallyConsistent(t *testing.T) {
 	}
 	if deployment == nil {
 		t.Fatal("expected deployment result, got nil")
+		return
 	}
 	if deployment.ModelPackage.ID != expectedModelPackageID {
 		t.Fatalf("expected model package ID %s, got %s", expectedModelPackageID, deployment.ModelPackage.ID)

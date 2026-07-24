@@ -102,6 +102,33 @@ func loadArtifactSpecIntoDataSourceModel(spec client.ArtifactSpec) ArtifactSpecD
 	return model
 }
 
+// environmentVarModelFromAPI maps an API environment variable to the shared
+// Terraform model. The name may be absent for api-key entries (the platform
+// stores an omitted name as absent and injects DATAROBOT_API_TOKEN), so an
+// empty name maps to null rather than "".
+func environmentVarModelFromAPI(ev client.ArtifactEnvironmentVariable) ArtifactEnvironmentVariableModel {
+	m := ArtifactEnvironmentVariableModel{
+		Source:         types.StringValue(ev.Source),
+		Name:           types.StringNull(),
+		Value:          types.StringNull(),
+		DrCredentialID: types.StringNull(),
+		Key:            types.StringNull(),
+	}
+	if ev.Name != "" {
+		m.Name = types.StringValue(ev.Name)
+	}
+	switch ev.Source {
+	case client.EnvironmentVariableSourceCredential:
+		m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+		m.Key = types.StringValue(ev.Key)
+	case client.EnvironmentVariableSourceAPIKey:
+		// No value or credential fields; the platform resolves the token.
+	default:
+		m.Value = types.StringValue(ev.Value)
+	}
+	return m
+}
+
 func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContainerDSModel {
 	model := ArtifactContainerDSModel{
 		Name:        optionalStringValue(c.Name),
@@ -127,20 +154,7 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			m := ArtifactEnvironmentVariableModel{
-				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
-				Value:          types.StringNull(),
-				DrCredentialID: types.StringNull(),
-				Key:            types.StringNull(),
-			}
-			if ev.Source == client.EnvironmentVariableSourceCredential {
-				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
-				m.Key = types.StringValue(ev.Key)
-			} else {
-				m.Value = types.StringValue(ev.Value)
-			}
-			model.EnvironmentVars[i] = m
+			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
 		}
 	} else {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
