@@ -961,6 +961,89 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 	}
 }
 
+// workloadConfigScalingUnspecified is a workload whose container group sets
+// neither replica_count nor autoscaling (only resource_bundles) — the case where
+// the backend supplies a cluster-dependent scaling default.
+func workloadConfigScalingUnspecified(name, artifactID string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, name, artifactID)
+}
+
+// TestIntegrationWorkloadNoDriftWhenScalingUnspecified guards the ModifyPlan
+// drift fix: when the config specifies neither replica_count nor autoscaling and
+// the backend fills in an autoscaling block, subsequent plans must be empty (no
+// perpetual drift). The framework runs an automatic empty-plan check after the
+// apply step; without ModifyPlan the backend-populated autoscaling would diff
+// against the empty config and fail it.
+func TestIntegrationWorkloadNoDriftWhenScalingUnspecified(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	endpoint := "https://workloads.example.com/" + id
+
+	// The user configured neither replica_count nor autoscaling; the backend
+	// responds with a scale-to-zero autoscaling block (min=0, max=1).
+	workload := workloadFixtureWithAutoscaling(id, artifactID, name, &endpoint, 0, 1, 1000.0)
+
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(_ context.Context, _ string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return workload, nil
+		}).AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(_ context.Context, _ string) error {
+			deleted = true
+			return nil
+		})
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigScalingUnspecified(name, artifactID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("datarobot_workload.test", "id"),
+					// The backend-supplied scaling is kept out of state (sentinel), so
+					// it matches the empty config. No-drift is asserted automatically
+					// by the framework's post-apply empty-plan check.
+					resource.TestCheckNoResourceAttr("datarobot_workload.test", "runtime.container_groups.0.autoscaling"),
+					resource.TestCheckNoResourceAttr("datarobot_workload.test", "runtime.container_groups.0.replica_count"),
+				),
+			},
+		},
+	})
+}
+
 func TestWorkloadMissingResourceConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

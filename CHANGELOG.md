@@ -11,6 +11,7 @@
 
 - `datarobot_workload` updates (artifact or runtime changes) no longer intermittently fail with `Error replacing Workload ... not found`. The provider now waits for the replacement by polling the workload record (`workload.replacement`) instead of the `/replacement` endpoint. The Workload API cleans up a `completed` replacement record almost immediately (~1s), so a `GET /replacement` between polls could 404 and was treated as a failure; the workload record makes completion (`replacement` cleared while `running`) and failure (`replacement.status == errored`, which persists) unambiguous and race-free.
 - `datarobot_deployment`: the "deployment is not ready" timeout error now includes the deployment id and a console activity-log URL, so a failed activation/deactivation can be traced to the specific deployment and its logs.
+- `datarobot_workload`: a container group that sets neither `replica_count` nor `autoscaling` no longer shows perpetual plan drift. The Workload API fills in a cluster-dependent scaling default (a scale-to-zero `autoscaling` block where `KEDA_DEFAULT_SCALE_TO_ZERO_ENABLED` is on, otherwise `replica_count`); that backend-owned `autoscaling` is now kept out of state so it matches the empty config, mirroring how `resource_bundles` and `bundle_selection_policy` are handled.
 
 ## [0.10.43] - 2026-07-15
 

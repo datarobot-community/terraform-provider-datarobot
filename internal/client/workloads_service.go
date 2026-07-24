@@ -215,27 +215,14 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 	return Patch[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/settings", req)
 }
 
-// WaitForWorkloadReplacement polls the workload record until its in-flight
-// replacement settles.
-//
-// It reads workload.replacement (via GetWorkload) rather than polling the
-// /replacement endpoint directly, because the two terminal states are
-// asymmetric on the API (verified against staging): a "completed" replacement
-// record is cleaned up almost immediately — workload.replacement flips to null
-// (and GET /replacement 404s) within ~1s of finishing — while an "errored"
-// record persists. Polling /replacement therefore races the cleanup and
-// surfaces a spurious "not found" whenever a fast replacement finishes between
-// two polls. The workload record makes both outcomes unambiguous and race-free:
-//
-//   - replacement.status == errored           -> failure (record persists, always caught)
-//   - replacement == nil && status == running  -> completed. A nil replacement can
-//     only mean "settled and cleaned up", since an errored record would still be
-//     present. The proton switch also lands before the record clears, so the new
-//     version is already live by the time we observe nil.
-//
-// A nil replacement is only treated as "done" once an active replacement has
-// been observed (seenActive); before that it is just the brief gap between the
-// start call and the API creating the record, so we keep polling.
+// WaitForWorkloadReplacement polls workload.replacement (via GetWorkload) until
+// the in-flight replacement settles. It avoids the /replacement endpoint because
+// a "completed" record is deleted within ~1s (so /replacement 404s and races the
+// poll) while an "errored" record persists. That asymmetry makes the workload
+// record unambiguous: errored => failure; nil-while-running => completed (nil
+// can't be a masked failure, and the proton switch lands before nil appears).
+// A nil is only "done" after an active replacement was seen (seenActive) —
+// otherwise it's the brief gap before the API creates the record, so keep polling.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,

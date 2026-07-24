@@ -673,6 +673,13 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 		if dg.ResourceBundles == nil {
 			data.Runtime.ContainerGroups[i].ResourceBundles = nil
 		}
+		// When the user did not configure autoscaling, the backend may fill in a
+		// cluster-dependent default (a scale-to-zero autoscaling block). Keep it
+		// out of state so it matches the empty config and does not drift.
+		// (replica_count is Optional+Computed and absorbs its own default.)
+		if dg.Autoscaling == nil {
+			data.Runtime.ContainerGroups[i].Autoscaling = nil
+		}
 		data.Runtime.ContainerGroups[i].BundleSelectionPolicy = dg.BundleSelectionPolicy
 		for j := range dg.Containers {
 			if j >= len(data.Runtime.ContainerGroups[i].Containers) {
