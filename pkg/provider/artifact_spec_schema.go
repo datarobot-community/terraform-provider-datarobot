@@ -136,7 +136,7 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 		},
 		"name": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.`,
+			MarkdownDescription: "Name of the environment variable. Required when source is `string` or `dr-credential`. Optional for `api-key`: when omitted, the platform injects the token as `DATAROBOT_API_TOKEN`.",
 		},
 		"value": schema.StringAttribute{
 			Optional:            true,
@@ -161,7 +161,7 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: `Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.`,
+			MarkdownDescription: "Name of the environment variable. For `api-key` entries without an explicit name, the platform injects the token as `DATAROBOT_API_TOKEN`.",
 		},
 		"value": datasourceschema.StringAttribute{
 			Computed:            true,
