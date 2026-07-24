@@ -1145,7 +1145,11 @@ func (r *DeploymentResource) waitForDeploymentStatus(ctx context.Context, id str
 	// Retry the operation using the backoff strategy
 	err := backoff.Retry(operation, expBackoff)
 	if err != nil {
-		return nil, fmt.Errorf("%w (last status: %s, elapsed: %s)", err, lastStatus, time.Since(startTime).Round(time.Second))
+		logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + id + "/activity-log/otel-logs"
+		return nil, fmt.Errorf(
+			"%w (deployment id: %s, last status: %s, elapsed: %s, logs: %s)",
+			err, id, lastStatus, time.Since(startTime).Round(time.Second), logsURL,
+		)
 	}
 
 	traceAPICall("GetDeployment")

@@ -113,8 +113,8 @@ Read-Only:
 
 - `dr_credential_id` (String) DataRobot credential ID when source is "dr-credential".
 - `key` (String) Key within the credential when source is "dr-credential".
-- `name` (String) Name of the environment variable.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials.
+- `name` (String) Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.
 - `value` (String) Value of the environment variable when source is "string".
 
 
@@ -170,6 +170,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -185,6 +186,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -229,6 +231,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
