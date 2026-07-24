@@ -7,6 +7,10 @@
 - plan-time validation aligned with the Workload API OpenAPI schema: `cpuAverageUtilization` scaling requires `min_replica_count > 0`, and policy `target` must be non-negative
 - `success_threshold` on `datarobot_artifact` container probes (`startup_probe`, `readiness_probe`, `liveness_probe`): minimum consecutive successes for the probe to be considered successful after a failure (matches `ProbeConfig.successThreshold`)
 
+### Fixed
+
+- `datarobot_workload` updates (artifact or runtime changes) no longer intermittently fail with `Error replacing Workload ... not found`. The provider now waits for the replacement by polling the workload record (`workload.replacement`) instead of the `/replacement` endpoint. The Workload API cleans up a `completed` replacement record almost immediately (~1s), so a `GET /replacement` between polls could 404 and was treated as a failure; the workload record makes completion (`replacement` cleared while `running`) and failure (`replacement.status == errored`, which persists) unambiguous and race-free.
+
 ## [0.10.43] - 2026-07-15
 
 ### Added

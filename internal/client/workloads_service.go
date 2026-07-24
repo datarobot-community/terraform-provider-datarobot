@@ -66,14 +66,16 @@ type WorkloadRuntime struct {
 }
 
 type Workload struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Status      ProtonStatus       `json:"status"`
-	Importance  WorkloadImportance `json:"importance"`
-	ArtifactID  *string            `json:"artifactId"`
-	Endpoint    *string            `json:"endpoint"`
-	Runtime     WorkloadRuntime    `json:"runtime"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Status      ProtonStatus         `json:"status"`
+	Importance  WorkloadImportance   `json:"importance"`
+	ArtifactID  *string              `json:"artifactId"`
+	Endpoint    *string              `json:"endpoint"`
+	Runtime     WorkloadRuntime      `json:"runtime"`
+	ProtonID    *string              `json:"protonId"`
+	Replacement *WorkloadReplacement `json:"replacement"`
 }
 
 type CreateWorkloadRequest struct {
@@ -213,6 +215,27 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 	return Patch[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/settings", req)
 }
 
+// WaitForWorkloadReplacement polls the workload record until its in-flight
+// replacement settles.
+//
+// It reads workload.replacement (via GetWorkload) rather than polling the
+// /replacement endpoint directly, because the two terminal states are
+// asymmetric on the API (verified against staging): a "completed" replacement
+// record is cleaned up almost immediately — workload.replacement flips to null
+// (and GET /replacement 404s) within ~1s of finishing — while an "errored"
+// record persists. Polling /replacement therefore races the cleanup and
+// surfaces a spurious "not found" whenever a fast replacement finishes between
+// two polls. The workload record makes both outcomes unambiguous and race-free:
+//
+//   - replacement.status == errored           -> failure (record persists, always caught)
+//   - replacement == nil && status == running  -> completed. A nil replacement can
+//     only mean "settled and cleaned up", since an errored record would still be
+//     present. The proton switch also lands before the record clears, so the new
+//     version is already live by the time we observe nil.
+//
+// A nil replacement is only treated as "done" once an active replacement has
+// been observed (seenActive); before that it is just the brief gap between the
+// start call and the API creating the record, so we keep polling.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
@@ -230,34 +253,48 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 	}
 
 	deadline := time.Now().Add(timeout)
+	seenActive := false
+	var lastReplacement *WorkloadReplacement
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		replacement, err := s.GetWorkloadReplacement(ctx, workloadID)
+		workload, err := s.GetWorkload(ctx, workloadID)
 		if err != nil {
-			return nil, err
+			return lastReplacement, err
 		}
+		replacement := workload.Replacement
 
-		if IsReplacementTerminal(replacement.Status) {
-			if replacement.Status == ReplacementStatusErrored {
-				message := "workload replacement failed"
-				if replacement.Message != nil && *replacement.Message != "" {
-					message = *replacement.Message
-				}
-				return replacement, &ReplacementFailedError{Message: message}
+		switch {
+		case replacement != nil && replacement.Status == ReplacementStatusErrored:
+			message := "workload replacement failed"
+			if replacement.Message != nil && *replacement.Message != "" {
+				message = *replacement.Message
 			}
-			return replacement, nil
+			return replacement, &ReplacementFailedError{Message: message}
+
+		case replacement != nil:
+			lastReplacement = replacement
+			if replacement.Status == ReplacementStatusCompleted {
+				// Rarely observable (cleaned up within ~1s), but accept it when caught.
+				return replacement, nil
+			}
+			seenActive = true
+
+		default: // replacement == nil
+			if seenActive && workload.Status == ProtonStatusRunning {
+				return lastReplacement, nil
+			}
 		}
 
 		if time.Now().After(deadline) {
-			return replacement, fmt.Errorf(
-				"timeout waiting for workload %s replacement after %s (last status: %s)",
+			return lastReplacement, fmt.Errorf(
+				"timeout waiting for workload %s replacement after %s (workload status: %s)",
 				workloadID,
 				timeout,
-				replacement.Status,
+				workload.Status,
 			)
 		}
 
