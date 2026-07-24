@@ -85,6 +85,7 @@ output "from_source_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
+- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. Requires `status = "draft"`. (see [below for nested schema](#nestedatt--source))
 - `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
@@ -144,7 +145,7 @@ Optional:
 
 Optional:
 
-- `code_ref` (Attributes) Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config--code_ref))
+- `code_ref` (Attributes) Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. When `source` is set, the provider uploads `source.dir` and populates this block. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config--code_ref))
 - `dockerfile` (Attributes) How the Dockerfile is obtained for the image build. Defaults to using `./Dockerfile` from the source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config--dockerfile))
 
 <a id="nestedatt--spec--container_groups--containers--image_build_config--code_ref"></a>
@@ -221,3 +222,18 @@ Optional:
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
+
+
+
+
+
+<a id="nestedatt--source"></a>
+### Nested Schema for `source`
+
+Required:
+
+- `dir` (String) Path to the local directory containing application source files to upload.
+
+Read-Only:
+
+- `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.
