@@ -15,7 +15,7 @@ import (
 
 	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	filesapi "github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
-	gomock "go.uber.org/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockService is a mock of Service interface.
