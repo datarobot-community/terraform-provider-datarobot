@@ -203,8 +203,18 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	if artifactSourceConfigured(&data) {
+		artifact, err = r.syncArtifactSource(ctx, &data, nil, artifact, "")
+		if err != nil {
+			r.rollbackArtifactCreate(ctx, artifact)
+			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			return
+		}
+	}
+
 	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
+	refreshArtifactSourceDirHash(&data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -237,6 +247,7 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
+	refreshArtifactSourceDirHash(&data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -256,6 +267,8 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
+	priorArtifactID := state.ArtifactID.ValueString()
+
 	var artifact *client.Artifact
 	var err error
 
@@ -263,7 +276,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		traceAPICall("PatchArtifact")
 		artifact, err = r.provider.service.PatchArtifact(
 			ctx,
-			state.ArtifactID.ValueString(),
+			priorArtifactID,
 			patchRequestFromPlan(plan, state),
 		)
 		if err != nil {
@@ -279,7 +292,16 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+	if artifactSourceConfigured(&plan) {
+		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			return
+		}
+	}
+
 	loadArtifactIntoModel(artifact, &plan)
+	refreshArtifactSourceDirHash(&plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
