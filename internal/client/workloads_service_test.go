@@ -171,17 +171,57 @@ func TestUpdateWorkloadSettingsPatchesExpectedPayload(t *testing.T) {
 	}
 }
 
-func TestWaitForWorkloadReplacementCompletesOnTerminalStatus(t *testing.T) {
+// workloadJSON builds a GET /workloads/{id}/ response body. Pass replacement as
+// nil to represent a cleared/absent replacement (JSON null).
+func workloadJSON(status ProtonStatus, replacement map[string]any) map[string]any {
+	return map[string]any{
+		"id":          "wl-1",
+		"name":        "wl-1",
+		"status":      status,
+		"importance":  WorkloadImportanceLow,
+		"runtime":     map[string]any{},
+		"replacement": replacement,
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsWhenRecordClearsAfterActive(t *testing.T) {
+	// The real-world completion path: an active record is observed, then it is
+	// cleaned up to null while the workload is running. The transient
+	// "completed" status is gone before we can see it, but null-after-active on
+	// a running workload unambiguously means done.
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		status := ReplacementStatusPromoting
-		if calls >= 2 {
-			status = ReplacementStatusCompleted
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(status, ""))
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusPromoting, "")))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected the active record to be observed before it cleared, got %d calls", calls)
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsOnCompletedStatus(t *testing.T) {
+	// If the brief "completed" window happens to be caught, that is also success.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusCompleted, "")))
 	}))
 	defer server.Close()
 
@@ -196,18 +236,53 @@ func TestWaitForWorkloadReplacementCompletesOnTerminalStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
 	}
-	if resp.Status != ReplacementStatusCompleted {
-		t.Fatalf("expected completed status, got %s", resp.Status)
+	if resp == nil || resp.Status != ReplacementStatusCompleted {
+		t.Fatalf("expected completed replacement, got %+v", resp)
 	}
-	if calls < 2 {
-		t.Fatalf("expected at least 2 polls, got %d", calls)
+}
+
+func TestWaitForWorkloadReplacementIgnoresInitialNullGap(t *testing.T) {
+	// A null replacement on the first poll is the gap before the API creates
+	// the record, not a completed replacement, so it must not short-circuit to
+	// success: null -> active -> null(running) still waits for the active
+	// record before settling.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		switch calls {
+		case 1:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+		case 2:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusInitializing, replacementJSON(ReplacementStatusInitializing, "")))
+		default:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+		}
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+	if calls < 3 {
+		t.Fatalf("expected the initial null to be ignored (>=3 calls), got %d", calls)
 	}
 }
 
 func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
+	// An errored replacement record persists on the workload and must surface as
+	// a ReplacementFailedError (it never clears to null).
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(ReplacementStatusErrored, "candidate proton failed health checks"))
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusErrored, "candidate proton failed health checks")))
 	}))
 	defer server.Close()
 
@@ -233,9 +308,10 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 }
 
 func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
+	// A replacement that never settles (stuck non-terminal) must time out.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(ReplacementStatusFinalizing, ""))
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusInitializing, replacementJSON(ReplacementStatusFinalizing, "")))
 	}))
 	defer server.Close()
 
