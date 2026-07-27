@@ -1,7 +1,24 @@
+## [Unreleased]
+
+### Added
+
+- updated autoscaling object scheme on workload resources according to the new API version
+- new `api-key` source for artifact container `environment_vars`, injecting a platform-managed DataRobot API token (`name` is optional and defaults to `DATAROBOT_API_TOKEN`)
+- plan-time validation aligned with the Workload API OpenAPI schema: `cpuAverageUtilization` scaling requires `min_replica_count > 0`, and policy `target` must be non-negative
+- `success_threshold` on `datarobot_artifact` container probes (`startup_probe`, `readiness_probe`, `liveness_probe`): minimum consecutive successes for the probe to be considered successful after a failure (matches `ProbeConfig.successThreshold`)
+
+### Fixed
+
+- `datarobot_workload` updates (artifact or runtime changes) no longer intermittently fail with `Error replacing Workload ... not found`. The provider now waits for the replacement by polling the workload record (`workload.replacement`) instead of the `/replacement` endpoint. The Workload API cleans up a `completed` replacement record almost immediately (~1s), so a `GET /replacement` between polls could 404 and was treated as a failure; the workload record makes completion (`replacement` cleared while `running`) and failure (`replacement.status == errored`, which persists) unambiguous and race-free.
+- `datarobot_deployment`: the "deployment is not ready" timeout error now includes the deployment id and a console activity-log URL, so a failed activation/deactivation can be traced to the specific deployment and its logs.
+- `datarobot_workload`: a container group that sets neither `replica_count` nor `autoscaling` no longer shows perpetual plan drift. The Workload API fills in a cluster-dependent scaling default (a scale-to-zero `autoscaling` block where `KEDA_DEFAULT_SCALE_TO_ZERO_ENABLED` is on, otherwise `replica_count`); that backend-owned `autoscaling` is now kept out of state so it matches the empty config, mirroring how `resource_bundles` and `bundle_selection_policy` are handled.
+
 ## [0.10.43] - 2026-07-15
 
 ### Added
 
+- `internal/client/filesapi` package: context-aware Files API client (catalog create, staged upload, zip upload, async status polling, manifest listing) ported from the DR CLI for upcoming `datarobot_artifact` `source { dir }` support
+- `internal/artifactsource` package: push-only directory upload orchestration (`PushDirectory`) over the Files API client (walk, hash, stage/zip routing, async poll) for upcoming `datarobot_artifact` `source { dir }` support
 - `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locking requires a completed build so workload-api has populated `image_uri`.
 - `status` attribute on `datarobot_artifact`: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
