@@ -45,6 +45,13 @@ func deploymentErrorMessageWithLogs(baseMessage, logs string, logErr error, logs
 	)
 }
 
+func (r *DeploymentResource) deploymentErrorWithLogs(ctx context.Context, id, baseMessage string) string {
+	logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + id + "/activity-log/otel-logs"
+	traceAPICall("GetDeploymentLogs")
+	logs, logErr := r.provider.service.GetDeploymentLogs(ctx, id)
+	return deploymentErrorMessageWithLogs(baseMessage, logs, logErr, logsURL)
+}
+
 func NewDeploymentResource() resource.Resource {
 	return &DeploymentResource{}
 }
@@ -628,11 +635,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	var taskFailedErr *TaskFailedError
 	if err != nil {
 		if errors.As(err, &taskFailedErr) {
-			logsURL := r.provider.service.BaseURL() + "/console-nextgen/deployments/" + createResp.ID + "/activity-log/otel-logs"
-
-			traceAPICall("GetDeploymentLogs")
-			logs, logErr := r.provider.service.GetDeploymentLogs(ctx, createResp.ID)
-			resp.Diagnostics.AddError("Deployment failed to create", deploymentErrorMessageWithLogs(taskFailedErr.Message, logs, logErr, logsURL))
+			resp.Diagnostics.AddError("Deployment failed to create", r.deploymentErrorWithLogs(ctx, createResp.ID, taskFailedErr.Message))
 			return
 		}
 
@@ -812,7 +815,12 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 
 		err = waitForModelReplacementTaskToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
+			var taskFailedErr *TaskFailedError
+			baseMessage := err.Error()
+			if errors.As(err, &taskFailedErr) {
+				baseMessage = taskFailedErr.Message
+			}
+			resp.Diagnostics.AddError("Deployment model replacement task not completed", r.deploymentErrorWithLogs(ctx, id, baseMessage))
 			return
 		}
 
