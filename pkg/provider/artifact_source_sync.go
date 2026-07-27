@@ -7,6 +7,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 func artifactSourceConfigured(data *ArtifactResourceModel) bool {
@@ -137,4 +138,90 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if err == nil {
 		data.Source.DirHash = dirHash
 	}
+}
+
+func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+	if !artifactSourceConfigured(plan) || plan.Spec == nil || artifactHasManualCodeRef(plan.Spec) {
+		return
+	}
+
+	needsUnknown := sourceManagedCodeRefNeedsUnknown(plan, state, isCreate)
+
+	for gi := range plan.Spec.ContainerGroups {
+		group := plan.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if container.ImageBuildConfig == nil {
+				continue
+			}
+			if !artifactContainerIsPrimary(*container, group) {
+				continue
+			}
+			if codeRefManuallySet(container.ImageBuildConfig.CodeRef) {
+				continue
+			}
+
+			if needsUnknown {
+				container.ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+					CatalogID:        types.StringUnknown(),
+					CatalogVersionID: types.StringUnknown(),
+				}
+				continue
+			}
+
+			// If the state has a known catalog ID and doesn't needUnknown, copy it into new plan
+			if state != nil &&
+				gi < len(state.Spec.ContainerGroups) &&
+				ci < len(state.Spec.ContainerGroups[gi].Containers) {
+				stateContainer := state.Spec.ContainerGroups[gi].Containers[ci]
+				if stateContainer.ImageBuildConfig != nil &&
+					stateContainer.ImageBuildConfig.CodeRef != nil &&
+					IsKnown(stateContainer.ImageBuildConfig.CodeRef.CatalogID) {
+					container.ImageBuildConfig.CodeRef = stateContainer.ImageBuildConfig.CodeRef
+				}
+			}
+		}
+	}
+}
+
+func sourceManagedCodeRefNeedsUnknown(plan, state *ArtifactResourceModel, isCreate bool) bool {
+	if isCreate || state == nil {
+		return true
+	}
+
+	priorArtifactID := state.ArtifactID.ValueString()
+	newArtifactID := priorArtifactID
+	if !plan.ArtifactID.IsNull() && !plan.ArtifactID.IsUnknown() {
+		newArtifactID = plan.ArtifactID.ValueString()
+	} else if plan.ArtifactID.IsUnknown() {
+		return true
+	}
+
+	if artifactSourceNeedsUpload(plan, state, priorArtifactID, newArtifactID) {
+		return true
+	}
+
+	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func codeRefManuallySet(ref *ArtifactCodeRefModel) bool {
+	if ref == nil {
+		return false
+	}
+	return IsKnown(ref.CatalogID) || IsKnown(ref.CatalogVersionID)
+}
+
+func artifactContainerIsPrimary(container ArtifactContainerModel, group ArtifactContainerGroupModel) bool {
+	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+	if !isPrimary && len(group.Containers) == 1 &&
+		(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+		isPrimary = true
+	}
+	return isPrimary
 }
