@@ -737,3 +737,392 @@ func (m *syncTestFilesAPI) ListVersions(context.Context, string, int) ([]filesap
 func syncTestVersionID(n int) string {
 	return fmt.Sprintf("ver-%d", n)
 }
+
+func testSourcePlanModel(t *testing.T, dir string, spec *ArtifactSpecModel, opts ...func(*ArtifactResourceModel)) *ArtifactResourceModel {
+	t.Helper()
+
+	model := &ArtifactResourceModel{
+		Status: types.StringValue("draft"),
+		Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		Spec:   spec,
+	}
+	for _, opt := range opts {
+		opt(model)
+	}
+	return model
+}
+
+func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactContainerModel {
+	container := ArtifactContainerModel{
+		Primary: primary,
+		Port:    types.Int64Value(8080),
+		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+		},
+	}
+	if name != "" {
+		container.Name = types.StringValue(name)
+	}
+	return container
+}
+
+func testPrimaryWithBuildConfig() ArtifactContainerModel {
+	return testDraftImageBuildContainer(types.BoolValue(true), "primary")
+}
+
+func testSidecarWithBuildConfig() ArtifactContainerModel {
+	return testDraftImageBuildContainer(types.BoolValue(false), "sidecar")
+}
+
+func testSoleWithBuildConfig() ArtifactContainerModel {
+	return testDraftImageBuildContainer(types.BoolNull(), "")
+}
+
+func testPrimaryWithCodeRef(codeRef *ArtifactCodeRefModel) ArtifactContainerModel {
+	container := testPrimaryWithBuildConfig()
+	container.ImageBuildConfig.CodeRef = codeRef
+	return container
+}
+
+func testDraftSourceSpec(containers ...ArtifactContainerModel) *ArtifactSpecModel {
+	return &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: containers,
+		}},
+	}
+}
+
+func TestCodeRefManuallySet(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ref  *ArtifactCodeRefModel
+		want bool
+	}{
+		{name: "nil", ref: nil, want: false},
+		{name: "empty block", ref: &ArtifactCodeRefModel{}, want: false},
+		{
+			name: "catalog id only",
+			ref:  &ArtifactCodeRefModel{CatalogID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa")},
+			want: true,
+		},
+		{
+			name: "catalog version id only",
+			ref:  &ArtifactCodeRefModel{CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb")},
+			want: true,
+		},
+		{
+			name: "both ids",
+			ref: &ArtifactCodeRefModel{
+				CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+				CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := codeRefManuallySet(tt.ref); got != tt.want {
+				t.Fatalf("codeRefManuallySet() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactContainerIsPrimary(t *testing.T) {
+	t.Parallel()
+
+	soleContainer := ArtifactContainerGroupModel{
+		Containers: []ArtifactContainerModel{{Primary: types.BoolNull()}},
+	}
+	explicitPrimary := ArtifactContainerGroupModel{
+		Containers: []ArtifactContainerModel{
+			{Primary: types.BoolValue(true)},
+			{Primary: types.BoolValue(false)},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		container ArtifactContainerModel
+		group     ArtifactContainerGroupModel
+		want      bool
+	}{
+		{name: "sole container without primary flag", container: soleContainer.Containers[0], group: soleContainer, want: true},
+		{name: "explicit primary", container: explicitPrimary.Containers[0], group: explicitPrimary, want: true},
+		{name: "explicit non-primary", container: explicitPrimary.Containers[1], group: explicitPrimary, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := artifactContainerIsPrimary(tt.container, tt.group); got != tt.want {
+				t.Fatalf("artifactContainerIsPrimary() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	hashA := types.StringValue("hash-a")
+	hashB := types.StringValue("hash-b")
+
+	draftSpec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+
+	withSource := func(status, name string, dirHash, artifactID types.String, spec *ArtifactSpecModel) *ArtifactResourceModel {
+		model := &ArtifactResourceModel{
+			Status: types.StringValue(status),
+			Name:   types.StringValue(name),
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: dirHash,
+			},
+			Spec: spec,
+		}
+		if !artifactID.IsNull() && !artifactID.IsUnknown() {
+			model.ArtifactID = artifactID
+		} else if artifactID.IsUnknown() {
+			model.ArtifactID = types.StringUnknown()
+		}
+		return model
+	}
+
+	artifactOne := types.StringValue("artifact-1")
+	artifactTwo := types.StringValue("artifact-2")
+
+	tests := []struct {
+		name     string
+		plan     *ArtifactResourceModel
+		state    *ArtifactResourceModel
+		isCreate bool
+		want     bool
+	}{
+		{
+			name:     "create always needs unknown code_ref",
+			plan:     withSource("draft", "app", hashA, types.StringNull(), draftSpec),
+			state:    nil,
+			isCreate: true,
+			want:     true,
+		},
+		{
+			name:     "nil state on update needs unknown",
+			plan:     withSource("draft", "app", hashA, artifactOne, draftSpec),
+			state:    nil,
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name:     "draft update with unchanged source skips unknown",
+			plan:     withSource("draft", "app", hashA, artifactOne, draftSpec),
+			state:    withSource("draft", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     false,
+		},
+		{
+			name:     "draft update with changed dir_hash needs unknown",
+			plan:     withSource("draft", "app", hashB, artifactOne, draftSpec),
+			state:    withSource("draft", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name:     "plan artifact_id unknown needs unknown",
+			plan:     withSource("draft", "app", hashA, types.StringUnknown(), draftSpec),
+			state:    withSource("draft", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name:     "new artifact version id needs unknown",
+			plan:     withSource("locked", "app", hashA, artifactTwo, draftSpec),
+			state:    withSource("locked", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name:     "locked to draft transition needs unknown",
+			plan:     withSource("draft", "app", hashA, artifactOne, draftSpec),
+			state:    withSource("locked", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name: "locked spec change needs unknown",
+			plan: withSource("locked", "app-v2", hashA, artifactOne, draftSpec),
+			state: withSource("locked", "app", hashA, artifactOne, &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						Primary:  types.BoolValue(true),
+						Port:     types.Int64Value(8080),
+						ImageURI: types.StringValue("nginx:latest"),
+					}},
+				}},
+			}),
+			isCreate: false,
+			want:     true,
+		},
+		{
+			name:     "locked unchanged spec and source skips unknown",
+			plan:     withSource("locked", "app", hashA, artifactOne, draftSpec),
+			state:    withSource("locked", "app", hashA, artifactOne, draftSpec),
+			isCreate: false,
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := sourceManagedCodeRefNeedsUnknown(tt.plan, tt.state, tt.isCreate); got != tt.want {
+				t.Fatalf("sourceManagedCodeRefNeedsUnknown() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dirHashA := types.StringValue("hash-a")
+	dirHashB := types.StringValue("hash-b")
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+	}
+
+	tests := []struct {
+		name     string
+		plan     *ArtifactResourceModel
+		state    *ArtifactResourceModel
+		isCreate bool
+		check    func(t *testing.T, plan *ArtifactResourceModel)
+	}{
+		{
+			name: "create sets unknown on primary",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig())),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil || !codeRef.CatalogID.IsUnknown() || !codeRef.CatalogVersionID.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary, got %#v", codeRef)
+				}
+			},
+			isCreate: true,
+		},
+		{
+			name: "create sets unknown on sole container without primary flag",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSoleWithBuildConfig())),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil || !codeRef.CatalogID.IsUnknown() {
+					t.Fatal("expected sole container to receive unknown code_ref")
+				}
+			},
+			isCreate: true,
+		},
+		{
+			name: "create skips non-primary container",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary, got %#v", primaryCodeRef)
+				}
+				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if sidecarCodeRef != nil {
+					t.Fatalf("expected no code_ref on non-primary container, got %#v", sidecarCodeRef)
+				}
+			},
+			isCreate: true,
+		},
+		{
+			name: "update with unchanged source copies code_ref from state to primary only",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+					t.Fatalf("expected primary code_ref copied from state, got %#v", primaryCodeRef)
+				}
+				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if sidecarCodeRef != nil {
+					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
+				}
+			},
+		},
+		{
+			name: "update with changed dir_hash sets unknown on primary only",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashB
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary after source change, got %#v", primaryCodeRef)
+				}
+				if plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef != nil {
+					t.Fatal("expected non-primary container to remain without code_ref")
+				}
+			},
+		},
+		{
+			name: "no-op without source block",
+			plan: &ArtifactResourceModel{
+				Spec: testDraftSourceSpec(testPrimaryWithBuildConfig()),
+			},
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				if plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef != nil {
+					t.Fatal("expected no code_ref changes without source")
+				}
+			},
+		},
+		{
+			name: "no-op when manual code_ref is set",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef))),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil || codeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+					t.Fatalf("expected manual code_ref to be untouched, got %#v", codeRef)
+				}
+			},
+			isCreate: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := tt.plan
+			applySourceManagedCodeRefsToPlan(plan, tt.state, tt.isCreate)
+			tt.check(t, plan)
+		})
+	}
+}
