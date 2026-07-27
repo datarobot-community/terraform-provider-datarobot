@@ -810,13 +810,8 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 			resp.Diagnostics.AddError("Unable to find Deployment model replacement task", "Status ID is empty")
 		}
 
-		// model replacement is an async operation, separate from waiting for the deployment to be ready
-		err = waitForTaskStatusToComplete(ctx, r.provider.service, statusId)
+		err = waitForModelReplacementTaskToComplete(ctx, r.provider.service, statusId)
 		if err != nil {
-			// Task polling failure is not immediately fatal: the task endpoint can
-			// return ERROR when the pod fails to start (e.g. bad dependency build,
-			// crash on import). Promote this to a hard error so the operator learns
-			// the replacement did not complete, rather than silently succeeding.
 			resp.Diagnostics.AddError("Deployment model replacement task not completed", err.Error())
 			return
 		}
