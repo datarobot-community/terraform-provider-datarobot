@@ -315,3 +315,40 @@ func TestReplacementStatusHelpers(t *testing.T) {
 		t.Fatal("finalizing should be active")
 	}
 }
+
+func TestArtifactContainerOmitsEmptyImageURI(t *testing.T) {
+	t.Parallel()
+
+	container := ArtifactContainer{
+		Primary: func() *bool { v := true; return &v }(),
+		Port:    func() *int64 { v := int64(8080); return &v }(),
+		ImageBuildConfig: &ArtifactImageBuildConfig{
+			Dockerfile: &ArtifactDockerfileConfig{Source: "provided", Path: "./Dockerfile"},
+		},
+	}
+
+	raw, err := json.Marshal(container)
+	if err != nil {
+		t.Fatalf("marshal container: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal container: %v", err)
+	}
+	if _, ok := payload["imageUri"]; ok {
+		t.Fatalf("expected imageUri to be omitted, got payload: %s", string(raw))
+	}
+
+	container.ImageURI = "nginx:latest"
+	raw, err = json.Marshal(container)
+	if err != nil {
+		t.Fatalf("marshal container with imageUri: %v", err)
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal container with imageUri: %v", err)
+	}
+	if payload["imageUri"] != "nginx:latest" {
+		t.Fatalf("imageUri = %v, want %q", payload["imageUri"], "nginx:latest")
+	}
+}

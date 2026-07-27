@@ -357,7 +357,7 @@ type ArtifactContainerBuildInfo struct {
 
 type ArtifactContainer struct {
 	Name             *string                       `json:"name,omitempty"`
-	ImageURI         string                        `json:"imageUri"`
+	ImageURI         string                        `json:"imageUri,omitempty"`
 	Primary          *bool                         `json:"primary,omitempty"`
 	Description      string                        `json:"description,omitempty"`
 	Port             *int64                        `json:"port,omitempty"`
