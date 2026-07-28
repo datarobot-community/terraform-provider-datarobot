@@ -8,8 +8,11 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -191,7 +194,7 @@ func (r *ArtifactResource) Configure(ctx context.Context, req resource.Configure
 func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, nil, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -204,12 +207,13 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if artifactSourceConfigured(&data) {
-		artifact, err = r.syncArtifactSource(ctx, &data, nil, artifact, "")
+		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, artifact, "")
 		if err != nil {
 			r.rollbackArtifactCreate(ctx, artifact)
 			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
@@ -254,8 +258,8 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, &state, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -293,11 +297,12 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	if artifactSourceConfigured(&plan) {
-		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		syncedArtifact, err := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
 		if err != nil {
 			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
@@ -333,8 +338,18 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	var statePtr *ArtifactResourceModel
+	var state ArtifactResourceModel
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		statePtr = &state
+	}
+
 	var plan ArtifactResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, statePtr, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -352,31 +367,136 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.Source.DirHash = dirHash
 	}
 
-	if req.State.Raw.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
+	isCreate := req.State.Raw.IsNull()
+	if !isCreate {
+		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
+			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+		}
+
+		if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+			(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
+			plan.ArtifactID = types.StringUnknown()
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+		}
 	}
 
-	var state ArtifactResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
-	// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
-	// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
-	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
-		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
-	}
-
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
-	}
+	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+func decodePlanArtifactModel(ctx context.Context, plan tfsdk.Plan, state *ArtifactResourceModel, data *ArtifactResourceModel) diag.Diagnostics {
+	var modifyResp resource.ModifyPlanResponse
+	modifyResp.Plan = plan
+
+	var diags diag.Diagnostics
+	diags.Append(nullUnknownCodeRefsForDecode(ctx, modifyResp.Plan, &modifyResp, state)...)
+	if diags.HasError() {
+		return diags
+	}
+	diags.Append(modifyResp.Plan.Get(ctx, data)...)
+	return diags
+}
+
+func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *resource.ModifyPlanResponse, state *ArtifactResourceModel) diag.Diagnostics {
+	return walkPlanCodeRefPaths(ctx, plan, func(codeRefPath path.Path, gi, ci int) diag.Diagnostics {
+		var codeRef types.Object
+		var diags diag.Diagnostics
+		diags.Append(plan.GetAttribute(ctx, codeRefPath, &codeRef)...)
+		if diags.HasError() || !codeRef.IsUnknown() {
+			return diags
+		}
+
+		if state != nil && state.Spec != nil &&
+			gi < len(state.Spec.ContainerGroups) && ci < len(state.Spec.ContainerGroups[gi].Containers) {
+			container := state.Spec.ContainerGroups[gi].Containers[ci]
+			if container.ImageBuildConfig != nil && container.ImageBuildConfig.CodeRef != nil {
+				ref := container.ImageBuildConfig.CodeRef
+				codeRefValue, valueDiags := types.ObjectValue(artifactCodeRefObjectType.AttrTypes, map[string]attr.Value{
+					"catalog_id":         ref.CatalogID,
+					"catalog_version_id": ref.CatalogVersionID,
+				})
+				diags.Append(valueDiags...)
+				if diags.HasError() {
+					return diags
+				}
+				diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, codeRefValue)...)
+				return diags
+			}
+		}
+
+		diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, types.ObjectNull(artifactCodeRefObjectType.AttrTypes))...)
+		return diags
+	})
+}
+
+func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Path, int, int) diag.Diagnostics) diag.Diagnostics {
+	var spec types.Object
+	diags := plan.GetAttribute(ctx, path.Root("spec"), &spec)
+	if diags.HasError() || spec.IsNull() || spec.IsUnknown() {
+		return diags
+	}
+
+	specAttrs := spec.Attributes()
+	groupsAttr, ok := specAttrs["container_groups"]
+	if !ok {
+		return diags
+	}
+	groups, ok := groupsAttr.(types.List)
+	if !ok || groups.IsNull() || groups.IsUnknown() {
+		return diags
+	}
+
+	for gi, groupElem := range groups.Elements() {
+		group, ok := groupElem.(types.Object)
+		if !ok || group.IsNull() || group.IsUnknown() {
+			continue
+		}
+		groupAttrs := group.Attributes()
+		containersAttr, ok := groupAttrs["containers"]
+		if !ok {
+			continue
+		}
+		containers, ok := containersAttr.(types.List)
+		if !ok || containers.IsNull() || containers.IsUnknown() {
+			continue
+		}
+
+		for ci, containerElem := range containers.Elements() {
+			container, ok := containerElem.(types.Object)
+			if !ok || container.IsNull() || container.IsUnknown() {
+				continue
+			}
+			containerAttrs := container.Attributes()
+			buildConfigAttr, ok := containerAttrs["image_build_config"]
+			if !ok {
+				continue
+			}
+			buildConfig, ok := buildConfigAttr.(types.Object)
+			if !ok || buildConfig.IsNull() || buildConfig.IsUnknown() {
+				continue
+			}
+
+			codeRefPath := path.Root("spec").
+				AtName("container_groups").AtListIndex(gi).
+				AtName("containers").AtListIndex(ci).
+				AtName("image_build_config").AtName("code_ref")
+			diags.Append(fn(codeRefPath, gi, ci)...)
+			if diags.HasError() {
+				return diags
+			}
+		}
+	}
+
+	return diags
+}
+
+var artifactCodeRefObjectType = types.ObjectType{
+	AttrTypes: map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	},
 }
 
 func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
