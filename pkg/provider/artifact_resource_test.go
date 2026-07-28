@@ -1661,6 +1661,108 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 	})
 }
 
+func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schema := testArtifactResourceSchema(t)
+	dir := t.TempDir()
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	tests := []struct {
+		name      string
+		planModel *ArtifactResourceModel
+		state     *ArtifactResourceModel
+		check     func(t *testing.T, decoded ArtifactResourceModel)
+	}{
+		{
+			name: "create decodes unknown code_ref as null",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("create-decode")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef != nil && (IsKnown(codeRef.CatalogID) || IsKnown(codeRef.CatalogVersionID)) {
+					t.Fatalf("expected null code_ref on create, got %#v", codeRef)
+				}
+			},
+		},
+		{
+			name: "update decodes unknown code_ref from state",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-b")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+				if got := codeRef.CatalogVersionID.ValueString(); got != artifactSourceTestVersionID {
+					t.Fatalf("catalog_version_id = %q, want %q", got, artifactSourceTestVersionID)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
+
+			var decoded ArtifactResourceModel
+			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
+				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
+			}
+
+			tt.check(t, decoded)
+		})
+	}
+}
+
+func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schema schema.Schema, model *ArtifactResourceModel) tfsdk.Plan {
+	t.Helper()
+
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, model); diags.HasError() {
+		t.Fatalf("plan.Set: %s", diagErrorSummary(diags))
+	}
+
+	codeRefPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(0).
+		AtName("containers").AtListIndex(0).
+		AtName("image_build_config").AtName("code_ref")
+	if diags := plan.SetAttribute(ctx, codeRefPath, types.ObjectUnknown(artifactCodeRefObjectType.AttrTypes)); diags.HasError() {
+		t.Fatalf("plan.SetAttribute(code_ref): %s", diagErrorSummary(diags))
+	}
+
+	return plan
+}
+
+func testArtifactResourceSchema(t *testing.T) schema.Schema {
+	t.Helper()
+
+	schemaResponse := &tfresource.SchemaResponse{}
+	NewArtifactResource().Schema(context.Background(), tfresource.SchemaRequest{}, schemaResponse)
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("artifact schema: %s", diagErrorSummary(schemaResponse.Diagnostics))
+	}
+	return schemaResponse.Schema
+}
+
 func TestArtifactSourceConfigValidation(t *testing.T) {
 	t.Parallel()
 
