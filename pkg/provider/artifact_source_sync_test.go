@@ -1126,3 +1126,133 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 		})
 	}
 }
+
+func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
+	t.Parallel()
+
+	hashA := types.StringValue("hash-a")
+	hashB := types.StringValue("hash-b")
+	dir := t.TempDir()
+	draftSpec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+	artifactOne := types.StringValue("artifact-1")
+
+	modelWithSource := func(status string, hash types.String) ArtifactResourceModel {
+		return ArtifactResourceModel{
+			Status:     types.StringValue(status),
+			Name:       types.StringValue("app"),
+			ArtifactID: artifactOne,
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: hash,
+			},
+			Spec: draftSpec,
+		}
+	}
+
+	tests := []struct {
+		name  string
+		plan  ArtifactResourceModel
+		state ArtifactResourceModel
+		want  bool
+	}{
+		{
+			name:  "locked source change needs clone",
+			plan:  modelWithSource("locked", hashB),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
+			name:  "locked unchanged source skips clone",
+			plan:  modelWithSource("locked", hashA),
+			state: modelWithSource("locked", hashA),
+			want:  false,
+		},
+		{
+			name:  "draft source change does not use locked clone",
+			plan:  modelWithSource("draft", hashB),
+			state: modelWithSource("draft", hashA),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := artifactLockedSourceCloneNeeded(tt.plan, tt.state); got != tt.want {
+				t.Fatalf("artifactLockedSourceCloneNeeded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactModifyPlanNeedsUnknownArtifactID(t *testing.T) {
+	t.Parallel()
+
+	hashA := types.StringValue("hash-a")
+	hashB := types.StringValue("hash-b")
+	dir := t.TempDir()
+	draftSpec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+	artifactOne := types.StringValue("artifact-1")
+
+	modelWithSource := func(status string, hash types.String) ArtifactResourceModel {
+		return ArtifactResourceModel{
+			Status:     types.StringValue(status),
+			Name:       types.StringValue("app"),
+			ArtifactID: artifactOne,
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: hash,
+			},
+			Spec: draftSpec,
+		}
+	}
+
+	tests := []struct {
+		name  string
+		plan  ArtifactResourceModel
+		state ArtifactResourceModel
+		want  bool
+	}{
+		{
+			name:  "locked source-only change needs unknown artifact_id",
+			plan:  modelWithSource("locked", hashB),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
+			name:  "locked unchanged source and spec skips unknown",
+			plan:  modelWithSource("locked", hashA),
+			state: modelWithSource("locked", hashA),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := artifactModifyPlanNeedsUnknownArtifactID(tt.plan, tt.state); got != tt.want {
+				t.Fatalf("artifactModifyPlanNeedsUnknownArtifactID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
