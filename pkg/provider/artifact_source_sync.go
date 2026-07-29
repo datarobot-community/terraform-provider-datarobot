@@ -130,6 +130,57 @@ func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact 
 	_ = r.provider.service.DeleteArtifactRepository(ctx, *artifact.ArtifactRepositoryID)
 }
 
+// artifactSourcePendingUpload reports whether the planned source tree differs from state.
+func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifactID string) bool {
+	return artifactSourceConfigured(plan) &&
+		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
+}
+
+// artifactLockedSourceCloneNeeded is true when a locked artifact needs a new code upload.
+// Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
+// then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
+func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
+	if state.Status.ValueString() != string(client.ArtifactStatusLocked) {
+		return false
+	}
+	return artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+}
+
+// artifactSourceDeferLock is true when a draft→locked transition must wait until after source upload.
+func artifactSourceDeferLock(plan, state ArtifactResourceModel) bool {
+	if state.Status.ValueString() != string(client.ArtifactStatusDraft) {
+		return false
+	}
+	if plan.Status.ValueString() != string(client.ArtifactStatusLocked) {
+		return false
+	}
+	return artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+}
+
+// artifactModifyPlanNeedsUnknownArtifactID is true when apply will produce a new artifact version.
+func artifactModifyPlanNeedsUnknownArtifactID(plan, state ArtifactResourceModel) bool {
+	if state.Status.ValueString() != string(client.ArtifactStatusLocked) {
+		return false
+	}
+	if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+		return true
+	}
+	if artifactNeedsNewVersion(plan, state) {
+		return true
+	}
+	return artifactLockedSourceCloneNeeded(plan, state)
+}
+
+// lockArtifact promotes a draft artifact to locked via PATCH {"status": "locked"}.
+// Ported from CLI LockArtifact in cli/internal/workload/artifact.go.
+func (r *ArtifactResource) lockArtifact(ctx context.Context, artifactID string) (*client.Artifact, error) {
+	locked := client.ArtifactStatusLocked
+	traceAPICall("PatchArtifact")
+	return r.provider.service.PatchArtifact(ctx, artifactID, &client.PatchArtifactRequest{
+		Status: &locked,
+	})
+}
+
 func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if !artifactSourceConfigured(data) {
 		return
