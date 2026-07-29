@@ -154,8 +154,9 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"spec": artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes),
 			"source": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. Requires `status = \"draft\"`.",
+				Optional: true,
+				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
+					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -196,8 +197,14 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	createReq := artifactCreateRequest(data)
+	targetLocked := createReq.Status == client.ArtifactStatusLocked
+	if artifactSourceConfigured(&data) && targetLocked {
+		createReq.Status = client.ArtifactStatusDraft
+	}
+
 	traceAPICall("CreateArtifact")
-	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(data))
+	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating Artifact", err.Error())
 		return
@@ -208,6 +215,15 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		if err != nil {
 			r.rollbackArtifactCreate(ctx, artifact)
 			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			return
+		}
+	}
+
+	if targetLocked && artifactSourceConfigured(&data) {
+		artifact, err = r.lockArtifact(ctx, artifact.ID)
+		if err != nil {
+			r.rollbackArtifactCreate(ctx, artifact)
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
 			return
 		}
 	}
@@ -268,22 +284,34 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	priorArtifactID := state.ArtifactID.ValueString()
+	pendingSourceUpload := artifactSourcePendingUpload(&plan, &state, priorArtifactID)
+	deferLock := artifactSourceDeferLock(plan, state)
 
 	var artifact *client.Artifact
 	var err error
 
-	if state.Status.ValueString() == string(client.ArtifactStatusDraft) {
+	switch {
+	case state.Status.ValueString() == string(client.ArtifactStatusDraft):
 		traceAPICall("PatchArtifact")
 		artifact, err = r.provider.service.PatchArtifact(
 			ctx,
 			priorArtifactID,
-			patchRequestFromPlan(plan, state),
+			patchRequestFromPlan(plan, state, deferLock),
 		)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
 		}
-	} else {
+	case pendingSourceUpload:
+		createReq := artifactCreateRequest(plan)
+		createReq.Status = client.ArtifactStatusDraft
+		traceAPICall("CreateUpdatedArtifact")
+		artifact, err = r.provider.service.CreateArtifact(ctx, createReq)
+		if err != nil {
+			resp.Diagnostics.AddError("Error creating draft Artifact for source update", err.Error())
+			return
+		}
+	default:
 		traceAPICall("CreateUpdatedArtifact")
 		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
 		if err != nil {
@@ -296,6 +324,16 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
 		if err != nil {
 			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			return
+		}
+	}
+
+	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+		artifact.Status != client.ArtifactStatusLocked &&
+		(deferLock || pendingSourceUpload) {
+		artifact, err = r.lockArtifact(ctx, artifact.ID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
 			return
 		}
 	}
@@ -371,8 +409,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
+	if artifactModifyPlanNeedsUnknownArtifactID(plan, state) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 	}
 
@@ -627,6 +664,7 @@ func validateArtifactContainer(
 	container ArtifactContainerModel,
 	status, artifactType string,
 	containerCount int,
+	sourceConfigured bool,
 ) {
 	hasImageURI := !container.ImageURI.IsNull() &&
 		!container.ImageURI.IsUnknown() &&
@@ -644,11 +682,11 @@ func validateArtifactContainer(
 	if hasBuildConfig {
 		validateImageBuildConfigPrimary(resp, containerPath, container, containerCount)
 		validateImageBuildConfig(resp, containerPath, container.ImageBuildConfig, artifactType)
-		if status == string(client.ArtifactStatusLocked) && !hasImageURI {
+		if status == string(client.ArtifactStatusLocked) && !hasImageURI && !sourceConfigured {
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` for pre-build artifacts.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking), unless `source` is set (the provider uploads code via a draft clone before locking). Use `status = \"draft\"` for pre-build artifacts without `source`.",
 			)
 		}
 	}
@@ -680,13 +718,14 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if !data.Type.IsNull() && !data.Type.IsUnknown() {
 		artifactType = data.Type.ValueString()
 	}
+	sourceConfigured := artifactSourceConfigured(&data)
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
 			containerPath := path.Root("spec").
 				AtName("container_groups").AtListIndex(gi).
 				AtName("containers").AtListIndex(ci)
-			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers))
+			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
 		}
 	}
 }
@@ -742,18 +781,6 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 			fmt.Sprintf("%q is not a directory.", absDir),
 		)
 		return
-	}
-
-	status := string(client.ArtifactStatusLocked)
-	if !data.Status.IsNull() && !data.Status.IsUnknown() {
-		status = data.Status.ValueString()
-	}
-	if status != string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Source requires draft status",
-			"`source` is only supported when `status` is `draft`. Locked artifact code updates require the clone workflow.",
-		)
 	}
 
 	artifactType := string(client.ArtifactTypeService)
@@ -939,7 +966,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 	return req
 }
 
-func patchRequestFromPlan(plan, state ArtifactResourceModel) *client.PatchArtifactRequest {
+func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *client.PatchArtifactRequest {
 	name := plan.Name.ValueString()
 	description := plan.Description.ValueString()
 	spec := artifactSpecToClient(*plan.Spec)
@@ -950,7 +977,8 @@ func patchRequestFromPlan(plan, state ArtifactResourceModel) *client.PatchArtifa
 		Spec:        &spec,
 	}
 
-	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+	if !deferLock &&
+		plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		state.Status.ValueString() == string(client.ArtifactStatusDraft) {
 		locked := client.ArtifactStatusLocked
 		req.Status = &locked
