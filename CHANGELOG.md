@@ -4,7 +4,6 @@
 
 - Bumped `google.golang.org/grpc` from `1.79.3` to `1.82.1` to resolve `GO-2026-6061` (xDS RBAC authorization engine and HTTP/2 server transport) detected by `govulncheck`. The advisory is reachable from the provider's plugin gRPC server (`providerserver.Serve` → `transport.NewServerTransport`), not merely imported. Dependency-only change; no provider behavior change.
 
-
 ## [0.10.45] - 2026-07-27
 
 ### Added
