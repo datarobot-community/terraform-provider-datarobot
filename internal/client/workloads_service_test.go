@@ -236,11 +236,44 @@ func TestWaitForWorkloadReplacementSucceedsOnCompletedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
 	}
-	if resp.Status != ReplacementStatusCompleted {
-		t.Fatalf("expected completed status, got %s", resp.Status)
+	if resp == nil || resp.Status != ReplacementStatusCompleted {
+		t.Fatalf("expected completed replacement, got %+v", resp)
 	}
-	if calls < 2 {
-		t.Fatalf("expected at least 2 polls, got %d", calls)
+}
+
+func TestWaitForWorkloadReplacementIgnoresInitialNullGap(t *testing.T) {
+	// A null replacement on the first poll is the gap before the API creates
+	// the record, not a completed replacement, so it must not short-circuit to
+	// success: null -> active -> null(running) still waits for the active
+	// record before settling.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		switch calls {
+		case 1:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+		case 2:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusInitializing, replacementJSON(ReplacementStatusInitializing, "")))
+		default:
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+		}
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+	if calls < 3 {
+		t.Fatalf("expected the initial null to be ignored (>=3 calls), got %d", calls)
 	}
 }
 
