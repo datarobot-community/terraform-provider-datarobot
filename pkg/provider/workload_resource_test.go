@@ -994,6 +994,21 @@ func checkWorkloadExistsInAPI(expectedName string, isMock bool) resource.TestChe
 	}
 }
 
+func checkWorkloadArtifactIDChanged(initialArtifactID *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", rn)
+		}
+		newArtifactID := rs.Primary.Attributes["artifact_id"]
+		if *initialArtifactID != "" && newArtifactID == *initialArtifactID {
+			return fmt.Errorf("workload artifact_id unchanged after artifact spec update: still %q", newArtifactID)
+		}
+		return nil
+	}
+}
+
 func checkWorkloadIDPreserved(initialID *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		const rn = "datarobot_workload.test"
@@ -1006,65 +1021,6 @@ func checkWorkloadIDPreserved(initialID *string) resource.TestCheckFunc {
 		}
 		return nil
 	}
-}
-
-func workloadReplacementFixture(workloadID string) *client.WorkloadReplacement {
-	return &client.WorkloadReplacement{
-		ID:         uuid.NewString(),
-		WorkloadID: workloadID,
-		Status:     client.ReplacementStatusCompleted,
-		Strategy:   client.ReplacementStrategyRolling,
-	}
-}
-
-func expectWorkloadArtifactReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
-	replacement := workloadReplacementFixture(workloadID)
-	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
-}
-
-func expectWorkloadRuntimeReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
-	replacement := workloadReplacementFixture(workloadID)
-	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
-	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
-}
-
-type startReplacementMatcher struct {
-	artifactID            string
-	strategy              client.ReplacementStrategy
-	warmupDurationMinutes int64
-	keepOldVersionMinutes int64
-}
-
-func (m startReplacementMatcher) Matches(x any) bool {
-	req, ok := x.(*client.StartReplacementRequest)
-	if !ok || req == nil {
-		return false
-	}
-	if req.ArtifactID != m.artifactID || req.Strategy != m.strategy {
-		return false
-	}
-	if req.Config.WarmupDurationMinutes != m.warmupDurationMinutes {
-		return false
-	}
-	if m.keepOldVersionMinutes != 0 && req.Config.KeepOldVersionMinutes != m.keepOldVersionMinutes {
-		return false
-	}
-	if m.keepOldVersionMinutes == 0 && req.Config.KeepOldVersionMinutes != 0 {
-		return false
-	}
-	return true
-}
-
-func (m startReplacementMatcher) String() string {
-	return fmt.Sprintf(
-		"StartReplacementRequest{artifactId=%q strategy=%q warmup=%d keepOld=%d}",
-		m.artifactID, m.strategy, m.warmupDurationMinutes, m.keepOldVersionMinutes,
-	)
 }
 
 func workloadReplacementFixture(workloadID string) *client.WorkloadReplacement {
