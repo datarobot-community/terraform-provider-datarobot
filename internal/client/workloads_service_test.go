@@ -171,17 +171,57 @@ func TestUpdateWorkloadSettingsPatchesExpectedPayload(t *testing.T) {
 	}
 }
 
-func TestWaitForWorkloadReplacementCompletesOnTerminalStatus(t *testing.T) {
+// workloadJSON builds a GET /workloads/{id}/ response body. Pass replacement as
+// nil to represent a cleared/absent replacement (JSON null).
+func workloadJSON(status ProtonStatus, replacement map[string]any) map[string]any {
+	return map[string]any{
+		"id":          "wl-1",
+		"name":        "wl-1",
+		"status":      status,
+		"importance":  WorkloadImportanceLow,
+		"runtime":     map[string]any{},
+		"replacement": replacement,
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsWhenRecordClearsAfterActive(t *testing.T) {
+	// The real-world completion path: an active record is observed, then it is
+	// cleaned up to null while the workload is running. The transient
+	// "completed" status is gone before we can see it, but null-after-active on
+	// a running workload unambiguously means done.
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		status := ReplacementStatusPromoting
-		if calls >= 2 {
-			status = ReplacementStatusCompleted
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(status, ""))
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusPromoting, "")))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, nil))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected the active record to be observed before it cleared, got %d calls", calls)
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsOnCompletedStatus(t *testing.T) {
+	// If the brief "completed" window happens to be caught, that is also success.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusCompleted, "")))
 	}))
 	defer server.Close()
 
@@ -205,9 +245,11 @@ func TestWaitForWorkloadReplacementCompletesOnTerminalStatus(t *testing.T) {
 }
 
 func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
+	// An errored replacement record persists on the workload and must surface as
+	// a ReplacementFailedError (it never clears to null).
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(ReplacementStatusErrored, "candidate proton failed health checks"))
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusRunning, replacementJSON(ReplacementStatusErrored, "candidate proton failed health checks")))
 	}))
 	defer server.Close()
 
@@ -233,9 +275,10 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 }
 
 func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
+	// A replacement that never settles (stuck non-terminal) must time out.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(replacementJSON(ReplacementStatusFinalizing, ""))
+		_ = json.NewEncoder(w).Encode(workloadJSON(ProtonStatusInitializing, replacementJSON(ReplacementStatusFinalizing, "")))
 	}))
 	defer server.Close()
 
@@ -253,6 +296,52 @@ func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
 	if !strings.Contains(err.Error(), "timeout waiting for workload wl-1 replacement") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestWorkloadReplacementPollSettings(t *testing.T) {
+	t.Run("uses env var override for interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "7s")
+		if got := workloadReplacementPollInterval(); got != 7*time.Second {
+			t.Errorf("expected 7s, got %s", got)
+		}
+	})
+
+	t.Run("uses env var override for timeout", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollTimeoutEnvVar, "45m")
+		if got := workloadReplacementPollTimeout(); got != 45*time.Minute {
+			t.Errorf("expected 45m, got %s", got)
+		}
+	})
+
+	t.Run("falls back to default on invalid interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "not-a-duration")
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+	})
+
+	t.Run("falls back to default on non-positive interval", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollIntervalEnvVar, "0s")
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+	})
+
+	t.Run("falls back to default on non-positive timeout", func(t *testing.T) {
+		t.Setenv(WorkloadReplacementPollTimeoutEnvVar, "0s")
+		if got := workloadReplacementPollTimeout(); got != defaultReplacementPollTimeout {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollTimeout, got)
+		}
+	})
+
+	t.Run("falls back to default when unset", func(t *testing.T) {
+		if got := workloadReplacementPollInterval(); got != defaultReplacementPollInterval {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollInterval, got)
+		}
+		if got := workloadReplacementPollTimeout(); got != defaultReplacementPollTimeout {
+			t.Errorf("expected default %s, got %s", defaultReplacementPollTimeout, got)
+		}
+	})
 }
 
 func TestReplacementStatusHelpers(t *testing.T) {

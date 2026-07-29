@@ -90,6 +90,7 @@ pipeline:
                               MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
                       when:
                         stageStatus: Failure
+                        condition: <+pipeline.variables.notifyOnFailure> == "true"
               caching:
                 enabled: false
               buildIntelligence:
@@ -161,6 +162,7 @@ pipeline:
                               MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
                       when:
                         stageStatus: Failure
+                        condition: <+pipeline.variables.notifyOnFailure> == "true"
               caching:
                 enabled: false
               buildIntelligence:
@@ -232,6 +234,7 @@ pipeline:
                               MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
                       when:
                         stageStatus: Failure
+                        condition: <+pipeline.variables.notifyOnFailure> == "true"
               caching:
                 enabled: false
               buildIntelligence:
@@ -303,6 +306,7 @@ pipeline:
                               MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
                       when:
                         stageStatus: Failure
+                        condition: <+pipeline.variables.notifyOnFailure> == "true"
               caching:
                 enabled: false
               buildIntelligence:
@@ -320,3 +324,8 @@ pipeline:
       description: ""
       required: false
       value: <+input>.default(dr_staging_api_key).allowedValues(dr_staging_api_key,dr_app_charts_r10p2_api_key,dr_private_ca_api_key)
+    - name: notifyOnFailure
+      type: String
+      description: Set to false to suppress Slack notifications when run as the PR pipelines child.
+      required: false
+      value: <+input>.default("true")
