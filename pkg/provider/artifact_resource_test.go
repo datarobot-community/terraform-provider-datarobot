@@ -1786,7 +1786,6 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 	return &patched
 }
 
-
 func artifactResourceModelWithSource(name, dir string) ArtifactResourceModel {
 	return ArtifactResourceModel{
 		Name:   types.StringValue(name),
