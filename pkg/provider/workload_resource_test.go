@@ -37,7 +37,7 @@ func TestAccWorkloadArtifactReplacement(t *testing.T) {
 				),
 			},
 			{
-				Config: workloadAccConfigWithImage(name, "", "low", "containous/whoami:v1.10.4", 1),
+				Config: workloadAccConfigWithImage(name, "", "low", "containous/whoami:v1.5.0", 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkWorkloadIDPreserved(&initialWorkloadID),
 					checkWorkloadArtifactIDChanged(&initialArtifactID),
