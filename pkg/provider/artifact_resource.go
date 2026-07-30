@@ -8,9 +8,11 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -72,10 +74,16 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 	}
 
+	codeRefAttrTypes := map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	}
+
 	imageBuildConfigAttributes := map[string]schema.Attribute{
 		"code_ref": schema.SingleNestedAttribute{
 			Optional:            true,
 			Computed:            true,
+			Default:             objectdefault.StaticValue(types.ObjectNull(codeRefAttrTypes)),
 			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. When `source` is set, the provider uploads `source.dir` and populates this block.",
 			Attributes: map[string]schema.Attribute{
 				"catalog_id": schema.StringAttribute{
@@ -373,7 +381,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+		plan.ArtifactID = types.StringUnknown()
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
@@ -552,7 +560,8 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.InitialDelaySeconds.Equal(b.InitialDelaySeconds) &&
 		a.PeriodSeconds.Equal(b.PeriodSeconds) &&
 		a.TimeoutSeconds.Equal(b.TimeoutSeconds) &&
-		a.FailureThreshold.Equal(b.FailureThreshold)
+		a.FailureThreshold.Equal(b.FailureThreshold) &&
+		a.SuccessThreshold.Equal(b.SuccessThreshold)
 }
 
 func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
@@ -583,6 +592,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "string".`)
+		}
 		if ev.Value.IsNull() || ev.Value.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
@@ -599,6 +613,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "dr-credential".`)
+		}
 		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
@@ -614,10 +633,26 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Unexpected field",
 				`"value" must not be set when source is "dr-credential".`)
 		}
+	case client.EnvironmentVariableSourceAPIKey:
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "api-key"; the platform resolves the token value.`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "api-key".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "api-key".`)
+		}
 	default:
 		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
 			"Invalid source",
-			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential", "api-key".`, source))
 	}
 }
 
@@ -1019,10 +1054,14 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 				Source: ev.Source.ValueString(),
 				Name:   ev.Name.ValueString(),
 			}
-			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
+			switch ev.Source.ValueString() {
+			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
-			} else {
+			case client.EnvironmentVariableSourceAPIKey:
+				// Only source (and name, when set) are sent; the platform
+				// resolves the token value.
+			default:
 				envVar.Value = ev.Value.ValueString()
 			}
 			container.EnvironmentVars[i] = envVar
@@ -1126,6 +1165,10 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 		v := probe.FailureThreshold.ValueInt64()
 		p.FailureThreshold = &v
 	}
+	if !probe.SuccessThreshold.IsNull() && !probe.SuccessThreshold.IsUnknown() {
+		v := probe.SuccessThreshold.ValueInt64()
+		p.SuccessThreshold = &v
+	}
 	return p
 }
 
@@ -1223,20 +1266,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			m := ArtifactEnvironmentVariableModel{
-				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
-				Value:          types.StringNull(),
-				DrCredentialID: types.StringNull(),
-				Key:            types.StringNull(),
-			}
-			if ev.Source == client.EnvironmentVariableSourceCredential {
-				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
-				m.Key = types.StringValue(ev.Key)
-			} else {
-				m.Value = types.StringValue(ev.Value)
-			}
-			model.EnvironmentVars[i] = m
+			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
@@ -1351,6 +1381,11 @@ func loadProbeFromAPI(probe *client.ArtifactProbeConfig) *ArtifactProbeConfigMod
 		m.FailureThreshold = types.Int64Value(*probe.FailureThreshold)
 	} else {
 		m.FailureThreshold = types.Int64Null()
+	}
+	if probe.SuccessThreshold != nil {
+		m.SuccessThreshold = types.Int64Value(*probe.SuccessThreshold)
+	} else {
+		m.SuccessThreshold = types.Int64Null()
 	}
 	return m
 }

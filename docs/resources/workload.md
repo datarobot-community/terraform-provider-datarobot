@@ -41,6 +41,7 @@ Changes to `artifact_id` or `runtime` trigger an in-place workload replacement v
 Optional:
 
 - `container_groups` (Attributes List) Per-group runtime configuration. (see [below for nested schema](#nestedatt--runtime--container_groups))
+- `replacement_policy` (Attributes) Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults). (see [below for nested schema](#nestedatt--runtime--replacement_policy))
 
 <a id="nestedatt--runtime--container_groups"></a>
 ### Nested Schema for `runtime.container_groups`
@@ -67,20 +68,16 @@ Required:
 Optional:
 
 - `enabled` (Boolean) Whether autoscaling is enabled. Defaults to true.
+- `max_replica_count` (Number) Maximum number of replicas. Defaults to `1`.
+- `min_replica_count` (Number) Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.
 
 <a id="nestedatt--runtime--container_groups--autoscaling--policies"></a>
 ### Nested Schema for `runtime.container_groups.autoscaling.policies`
 
 Required:
 
-- `max_count` (Number) Maximum number of replicas.
-- `min_count` (Number) Minimum number of replicas.
-- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.
-- `target` (Number) Target value for the scaling metric.
-
-Optional:
-
-- `priority` (Number) Policy priority when multiple policies are defined.
+- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.
+- `target` (Number) Target value for the scaling metric. Must be non-negative.
 
 
 
@@ -104,3 +101,14 @@ Optional:
 - `gpu` (Number) GPUs allocated to this container.
 - `gpu_memory` (String) GPU VRAM allocated. Accepts human-readable strings (e.g. `"15GB"`, `"512MB"`, `"4096Mi"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.
 - `memory` (String) RAM allocated. Accepts human-readable strings (e.g. `"8GB"`, `"512MB"`, `"4096Mi"`) or raw byte integers. 1000-based suffixes: KB, MB, GB, TB. 1024-based suffixes: Ki/KiB, Mi/MiB, Gi/GiB.
+
+
+
+
+<a id="nestedatt--runtime--replacement_policy"></a>
+### Nested Schema for `runtime.replacement_policy`
+
+Optional:
+
+- `keep_old_version_minutes` (Number) Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`.
+- `warmup_minutes` (Number) Duration in minutes for the warmup phase during replacement. Maps to WAPI `config.warmupDurationMinutes`.
