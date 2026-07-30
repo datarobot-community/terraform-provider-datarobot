@@ -3,12 +3,16 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -70,10 +74,17 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 	}
 
+	codeRefAttrTypes := map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	}
+
 	imageBuildConfigAttributes := map[string]schema.Attribute{
 		"code_ref": schema.SingleNestedAttribute{
 			Optional:            true,
-			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock.",
+			Computed:            true,
+			Default:             objectdefault.StaticValue(types.ObjectNull(codeRefAttrTypes)),
+			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. When `source` is set, the provider uploads `source.dir` and populates this block.",
 			Attributes: map[string]schema.Attribute{
 				"catalog_id": schema.StringAttribute{
 					Required:            true,
@@ -150,6 +161,23 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				},
 			},
 			"spec": artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes),
+			"source": schema.SingleNestedAttribute{
+				Optional:            true,
+				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. Requires `status = \"draft\"`.",
+				Attributes: map[string]schema.Attribute{
+					"dir": schema.StringAttribute{
+						Required:            true,
+						MarkdownDescription: "Path to the local directory containing application source files to upload.",
+					},
+					"dir_hash": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -287,12 +315,35 @@ func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteReques
 }
 
 func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 
-	var plan, state ArtifactResourceModel
+	var plan ArtifactResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.Source != nil && IsKnown(plan.Source.Dir) {
+		dirHash, err := computeFolderHash(plan.Source.Dir)
+		if err != nil {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("source").AtName("dir"),
+				"Error calculating source directory hash",
+				err.Error(),
+			)
+			return
+		}
+		plan.Source.DirHash = dirHash
+	}
+
+	if req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+		return
+	}
+
+	var state ArtifactResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -308,8 +359,10 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+		plan.ArtifactID = types.StringUnknown()
 	}
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
@@ -621,7 +674,13 @@ func validateArtifactContainer(
 func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var data ArtifactResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() || data.Spec == nil {
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	validateArtifactSource(resp, data)
+
+	if data.Spec == nil {
 		return
 	}
 	validateArtifactContainerGroupsCount(resp, data.Spec.ContainerGroups)
@@ -643,6 +702,140 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers))
 		}
 	}
+}
+
+func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Source == nil {
+		return
+	}
+
+	sourcePath := path.Root("source")
+
+	if !IsKnown(data.Source.Dir) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Missing source directory",
+			"`source.dir` is required when the `source` block is set.",
+		)
+		return
+	}
+
+	dir := data.Source.Dir.ValueString()
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory path",
+			fmt.Sprintf("Could not resolve %q to an absolute path: %s", dir, err),
+		)
+		return
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not found",
+				fmt.Sprintf("Directory %q does not exist.", absDir),
+			)
+		} else {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not accessible",
+				fmt.Sprintf("Could not access %q: %s", absDir, err),
+			)
+		}
+		return
+	}
+	if !info.IsDir() {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory",
+			fmt.Sprintf("%q is not a directory.", absDir),
+		)
+		return
+	}
+
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	if status != string(client.ArtifactStatusDraft) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Source requires draft status",
+			"`source` is only supported when `status` is `draft`. Locked artifact code updates require the clone workflow.",
+		)
+	}
+
+	artifactType := string(client.ArtifactTypeService)
+	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+		artifactType = data.Type.ValueString()
+	}
+	if artifactType == string(client.ArtifactTypeNim) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Unsupported source on NIM artifacts",
+			"NIM artifacts cannot use `source`; upload code through the NIM workflow instead.",
+		)
+	}
+
+	if data.Spec == nil {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Missing image build target",
+			"`source` requires a primary container with `image_build_config` in `spec`.",
+		)
+		return
+	}
+
+	if !artifactHasPrimaryImageBuildConfig(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Missing image build target",
+			"`source` requires a primary container with `image_build_config` in `spec`.",
+		)
+	}
+
+	if artifactHasManualCodeRef(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Conflicting code_ref",
+			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
+		)
+	}
+}
+
+func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+			if !isPrimary && len(group.Containers) == 1 &&
+				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+				isPrimary = true
+			}
+			if isPrimary && container.ImageBuildConfig != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func artifactHasManualCodeRef(spec *ArtifactSpecModel) bool {
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+				continue
+			}
+			codeRef := container.ImageBuildConfig.CodeRef
+			if IsKnown(codeRef.CatalogID) && IsKnown(codeRef.CatalogVersionID) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateImageBuildConfigPrimary(

@@ -107,28 +107,28 @@ func TestSetPrimaryCodeRefInRawArtifact(t *testing.T) {
 			t.Fatalf("setPrimaryCodeRefInRawArtifact: %v", err)
 		}
 
-		spec := mustMap(t, raw["spec"])
-		groups := mustSlice(t, spec["containerGroups"])
-		group := mustMap(t, groups[0])
-		containers := mustSlice(t, group["containers"])
-		sidecar := mustMap(t, containers[0])
-		primary := mustMap(t, containers[1])
+		spec := mustMap(t, raw["spec"], "raw.spec")
+		groups := mustSlice(t, spec["containerGroups"], "spec.containerGroups")
+		group := mustMap(t, groups[0], "spec.containerGroups[0]")
+		containers := mustSlice(t, group["containers"], "containers")
+		sidecar := mustMap(t, containers[0], "containers[0]")
+		primary := mustMap(t, containers[1], "containers[1]")
 
-		primaryIBC := mustMap(t, primary["imageBuildConfig"])
-		codeRef := mustMap(t, primaryIBC["codeRef"])
-		dr := mustMap(t, codeRef["datarobot"])
+		primaryIBC := mustMap(t, primary["imageBuildConfig"], "primary.imageBuildConfig")
+		primaryCodeRef := mustMap(t, primaryIBC["codeRef"], "primary.codeRef")
+		dr := mustMap(t, primaryCodeRef["datarobot"], "primary.codeRef.datarobot")
 		if dr["catalogId"] != "new-cat" || dr["catalogVersionId"] != "new-ver" {
 			t.Fatalf("primary codeRef = %#v, want new-cat/new-ver", dr)
 		}
 
-		df := mustMap(t, primaryIBC["dockerfile"])
+		df := mustMap(t, primaryIBC["dockerfile"], "primary.dockerfile")
 		if df["source"] != "generated" || df["executionEnvironmentId"] != "env-1" {
 			t.Fatalf("primary dockerfile mutated: %#v", df)
 		}
 
-		sidecarIBC := mustMap(t, sidecar["imageBuildConfig"])
-		sidecarCodeRef := mustMap(t, sidecarIBC["codeRef"])
-		sidecarDR := mustMap(t, sidecarCodeRef["datarobot"])
+		sidecarIBC := mustMap(t, sidecar["imageBuildConfig"], "sidecar.imageBuildConfig")
+		sidecarCodeRef := mustMap(t, sidecarIBC["codeRef"], "sidecar.codeRef")
+		sidecarDR := mustMap(t, sidecarCodeRef["datarobot"], "sidecar.codeRef.datarobot")
 		if sidecarDR["catalogId"] != "sidecar-cat" || sidecarDR["catalogVersionId"] != "sidecar-ver" {
 			t.Fatalf("sidecar codeRef changed: %#v", sidecarDR)
 		}
@@ -152,16 +152,16 @@ func TestSetPrimaryCodeRefInRawArtifact(t *testing.T) {
 			t.Fatalf("setPrimaryCodeRefInRawArtifact: %v", err)
 		}
 
-		spec := mustMap(t, raw["spec"])
-		groups := mustSlice(t, spec["containerGroups"])
-		group := mustMap(t, groups[0])
-		containers := mustSlice(t, group["containers"])
-		first := mustMap(t, containers[0])
-		second := mustMap(t, containers[1])
+		spec := mustMap(t, raw["spec"], "raw.spec")
+		groups := mustSlice(t, spec["containerGroups"], "spec.containerGroups")
+		group := mustMap(t, groups[0], "spec.containerGroups[0]")
+		containers := mustSlice(t, group["containers"], "containers")
+		first := mustMap(t, containers[0], "containers[0]")
+		second := mustMap(t, containers[1], "containers[1]")
 
-		ibc := mustMap(t, first["imageBuildConfig"])
-		codeRef := mustMap(t, ibc["codeRef"])
-		dr := mustMap(t, codeRef["datarobot"])
+		ibc := mustMap(t, first["imageBuildConfig"], "first.imageBuildConfig")
+		codeRef := mustMap(t, ibc["codeRef"], "first.codeRef")
+		dr := mustMap(t, codeRef["datarobot"], "first.codeRef.datarobot")
 		if dr["catalogId"] != "new-cat" || dr["catalogVersionId"] != "new-ver" {
 			t.Fatalf("first container codeRef = %#v", dr)
 		}
@@ -279,13 +279,13 @@ func TestPatchArtifactCodeRef_GetPatchGet(t *testing.T) {
 	if !ok {
 		t.Fatalf("patch body spec = %#v", patchBody)
 	}
-	groups := mustSlice(t, spec["containerGroups"])
-	group := mustMap(t, groups[0])
-	containers := mustSlice(t, group["containers"])
-	container := mustMap(t, containers[0])
-	ibc := mustMap(t, container["imageBuildConfig"])
-	patchCodeRef := mustMap(t, ibc["codeRef"])
-	dr := mustMap(t, patchCodeRef["datarobot"])
+	groups := mustSlice(t, spec["containerGroups"], "patch.spec.containerGroups")
+	group := mustMap(t, groups[0], "patch.spec.containerGroups[0]")
+	containers := mustSlice(t, group["containers"], "patch.containers")
+	container := mustMap(t, containers[0], "patch.containers[0]")
+	ibc := mustMap(t, container["imageBuildConfig"], "patch.imageBuildConfig")
+	patchCodeRef := mustMap(t, ibc["codeRef"], "patch.codeRef")
+	dr := mustMap(t, patchCodeRef["datarobot"], "patch.codeRef.datarobot")
 	if dr["catalogId"] != "cat-new" || dr["catalogVersionId"] != "ver-new" {
 		t.Fatalf("patched codeRef = %#v", dr)
 	}
@@ -296,20 +296,24 @@ func TestPatchArtifactCodeRef_GetPatchGet(t *testing.T) {
 	}
 }
 
-func mustMap(t *testing.T, raw any) map[string]any {
+func mustMap(t *testing.T, v any, label string) map[string]any {
 	t.Helper()
-	m, ok := raw.(map[string]any)
+
+	m, ok := v.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map[string]any, got %T (%#v)", raw, raw)
+		t.Fatalf("%s: expected map[string]any, got %T (%#v)", label, v, v)
 	}
+
 	return m
 }
 
-func mustSlice(t *testing.T, raw any) []any {
+func mustSlice(t *testing.T, v any, label string) []any {
 	t.Helper()
-	s, ok := raw.([]any)
+
+	s, ok := v.([]any)
 	if !ok {
-		t.Fatalf("expected []any, got %T (%#v)", raw, raw)
+		t.Fatalf("%s: expected []any, got %T (%#v)", label, v, v)
 	}
+
 	return s
 }

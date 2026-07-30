@@ -998,14 +998,21 @@ type UserMCPResourceMetadataResourceModel struct {
 
 // ArtifactResourceModel describes the Workload API artifact resource.
 type ArtifactResourceModel struct {
-	ID                   types.String       `tfsdk:"id"`
-	ArtifactID           types.String       `tfsdk:"artifact_id"`
-	Name                 types.String       `tfsdk:"name"`
-	Description          types.String       `tfsdk:"description"`
-	Type                 types.String       `tfsdk:"type"`
-	Status               types.String       `tfsdk:"status"`
-	ArtifactRepositoryID types.String       `tfsdk:"artifact_repository_id"`
-	Spec                 *ArtifactSpecModel `tfsdk:"spec"`
+	ID                   types.String         `tfsdk:"id"`
+	ArtifactID           types.String         `tfsdk:"artifact_id"`
+	Name                 types.String         `tfsdk:"name"`
+	Description          types.String         `tfsdk:"description"`
+	Type                 types.String         `tfsdk:"type"`
+	Status               types.String         `tfsdk:"status"`
+	ArtifactRepositoryID types.String         `tfsdk:"artifact_repository_id"`
+	Source               *ArtifactSourceModel `tfsdk:"source"`
+	Spec                 *ArtifactSpecModel   `tfsdk:"spec"`
+}
+
+// ArtifactSourceModel describes the local source tree uploaded to Files API.
+type ArtifactSourceModel struct {
+	Dir     types.String `tfsdk:"dir"`
+	DirHash types.String `tfsdk:"dir_hash"`
 }
 
 type ArtifactSpecModel struct {

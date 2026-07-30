@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -1412,6 +1414,465 @@ resource "datarobot_artifact" "test" {
 			},
 		},
 	})
+}
+
+func TestValidateArtifactSource(t *testing.T) {
+	t.Parallel()
+
+	validDir := t.TempDir()
+	missingDir := filepath.Join(validDir, "does-not-exist")
+	filePath := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	buildConfig := &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+	}
+	specWithBuildConfig := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary:          types.BoolValue(true),
+				Port:             types.Int64Value(8080),
+				ImageBuildConfig: buildConfig,
+			}},
+		}},
+	}
+	specWithImageURIOnly := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary:  types.BoolValue(true),
+				Port:     types.Int64Value(8080),
+				ImageURI: types.StringValue("nginx:latest"),
+			}},
+		}},
+	}
+	specWithManualCodeRef := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					CodeRef: &ArtifactCodeRefModel{
+						CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+						CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+					},
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+
+	tests := []struct {
+		name        string
+		data        ArtifactResourceModel
+		wantSummary string
+	}{
+		{
+			name: "valid draft source",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithBuildConfig,
+			},
+		},
+		{
+			name: "missing dir",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringNull()},
+				Spec:   specWithBuildConfig,
+			},
+			wantSummary: "Missing source directory",
+		},
+		{
+			name: "dir not found",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(missingDir)},
+				Spec:   specWithBuildConfig,
+			},
+			wantSummary: "Source directory not found",
+		},
+		{
+			name: "dir is file",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(filePath)},
+				Spec:   specWithBuildConfig,
+			},
+			wantSummary: "Invalid source directory",
+		},
+		{
+			name: "locked status",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("locked"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithBuildConfig,
+			},
+			wantSummary: "Source requires draft status",
+		},
+		{
+			name: "nim artifact",
+			data: ArtifactResourceModel{
+				Type:   types.StringValue("nim"),
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithBuildConfig,
+			},
+			wantSummary: "Unsupported source on NIM artifacts",
+		},
+		{
+			name: "missing spec",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+			},
+			wantSummary: "Missing image build target",
+		},
+		{
+			name: "primary without image_build_config",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithImageURIOnly,
+			},
+			wantSummary: "Missing image build target",
+		},
+		{
+			name: "manual code_ref conflict",
+			data: ArtifactResourceModel{
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithManualCodeRef,
+			},
+			wantSummary: "Conflicting code_ref",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &tfresource.ValidateConfigResponse{}
+			validateArtifactSource(resp, tt.data)
+
+			if tt.wantSummary == "" {
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("expected no errors, got: %v", resp.Diagnostics.Errors())
+				}
+				return
+			}
+
+			if !resp.Diagnostics.HasError() {
+				t.Fatalf("expected validation error %q", tt.wantSummary)
+			}
+			if !strings.Contains(resp.Diagnostics.Errors()[0].Summary(), tt.wantSummary) {
+				t.Fatalf("expected summary %q, got %q", tt.wantSummary, resp.Diagnostics.Errors()[0].Summary())
+			}
+		})
+	}
+}
+
+func TestArtifactHasPrimaryImageBuildConfig(t *testing.T) {
+	t.Parallel()
+
+	buildConfig := &ArtifactImageBuildConfigModel{
+		Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+	}
+
+	tests := []struct {
+		name string
+		spec *ArtifactSpecModel
+		want bool
+	}{
+		{
+			name: "explicit primary with build config",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						Primary:          types.BoolValue(true),
+						ImageBuildConfig: buildConfig,
+					}},
+				}},
+			},
+			want: true,
+		},
+		{
+			name: "sole container without primary flag",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						ImageBuildConfig: buildConfig,
+					}},
+				}},
+			},
+			want: true,
+		},
+		{
+			name: "primary with image_uri only",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						Primary:  types.BoolValue(true),
+						ImageURI: types.StringValue("nginx:latest"),
+					}},
+				}},
+			},
+			want: false,
+		},
+		{
+			name: "build config on non-primary sidecar",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{
+						{Primary: types.BoolValue(true), Port: types.Int64Value(8080)},
+						{Primary: types.BoolValue(false), ImageBuildConfig: buildConfig},
+					},
+				}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := artifactHasPrimaryImageBuildConfig(tt.spec); got != tt.want {
+				t.Fatalf("artifactHasPrimaryImageBuildConfig() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactHasManualCodeRef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		spec *ArtifactSpecModel
+		want bool
+	}{
+		{
+			name: "both catalog ids set",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						ImageBuildConfig: &ArtifactImageBuildConfigModel{
+							CodeRef: &ArtifactCodeRefModel{
+								CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+								CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+							},
+						},
+					}},
+				}},
+			},
+			want: true,
+		},
+		{
+			name: "empty code_ref block",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						ImageBuildConfig: &ArtifactImageBuildConfigModel{
+							CodeRef: &ArtifactCodeRefModel{},
+						},
+					}},
+				}},
+			},
+			want: false,
+		},
+		{
+			name: "no image_build_config",
+			spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{
+						ImageURI: types.StringValue("nginx:latest"),
+					}},
+				}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := artifactHasManualCodeRef(tt.spec); got != tt.want {
+				t.Fatalf("artifactHasManualCodeRef() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
+	t.Parallel()
+
+	validDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(validDir, "main.py"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:   artifactConfigWithSource("plan-hash", "draft", validDir),
+				PlanOnly: true,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "source.dir_hash"),
+				),
+			},
+		},
+	})
+}
+
+func TestArtifactSourceConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	validDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	globalTestCfg.ApiKey = "fake"
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	tests := []struct {
+		name        string
+		config      string
+		expectError *regexp.Regexp
+	}{
+		{
+			name:        "locked with source",
+			config:      artifactConfigWithSource("locked-source", "locked", validDir),
+			expectError: regexp.MustCompile("Source requires draft status"),
+		},
+		{
+			name:        "nim with source",
+			config:      artifactConfigWithSourceType("nim-source", "draft", "nim", validDir),
+			expectError: regexp.MustCompile("Unsupported source on NIM artifacts"),
+		},
+		{
+			name:        "source with manual code_ref",
+			config:      artifactConfigWithSourceAndCodeRef(validDir),
+			expectError: regexp.MustCompile("Conflicting code_ref"),
+		},
+		{
+			name:        "missing source dir",
+			config:      artifactConfigWithSource("missing-dir", "draft", filepath.Join(validDir, "missing")),
+			expectError: regexp.MustCompile("Source directory not found"),
+		},
+		{
+			name:        "primary without image_build_config",
+			config:      artifactConfigWithSourceImageURIONly(validDir),
+			expectError: regexp.MustCompile("Missing image build target"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tt.config,
+						ExpectError: tt.expectError,
+					},
+				},
+			})
+		})
+	}
+}
+
+func artifactConfigWithSource(name, status, dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = %q
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name, status, dir)
+}
+
+func artifactConfigWithSourceType(name, status, artifactType, dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  type   = %q
+  status = %q
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name, artifactType, status, dir)
+}
+
+func artifactConfigWithSourceAndCodeRef(dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = "source-code-ref-conflict"
+  status = "draft"
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          code_ref = {
+            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
+            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, dir)
+}
+
+func artifactConfigWithSourceImageURIONly(dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = "source-image-uri-only"
+  status = "draft"
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = "nginx:latest"
+      }]
+    }]
+  }
+}`, dir)
 }
 
 func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
