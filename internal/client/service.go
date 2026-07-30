@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	"github.com/google/go-querystring/query"
 )
 
@@ -274,6 +275,8 @@ type Service interface {
 
 	// Artifact (Workload API)
 	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
+	PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error)
+	PatchArtifactCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
@@ -281,7 +284,7 @@ type Service interface {
 	// Workload (Workload API)
 	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
-	UpdateWorkload(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
+	UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
 	StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error)
 	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
@@ -293,6 +296,9 @@ type Service interface {
 	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)
 	UpdateQuota(ctx context.Context, id string, req *UpdateQuotaRequest) (*Quota, error)
 	DeleteQuota(ctx context.Context, id string) error
+
+	// Files API (catalog upload for artifact source sync)
+	FilesAPI() filesapi.Client
 
 	BaseURL() string
 }

@@ -161,20 +161,16 @@ Required:
 Optional:
 
 - `enabled` (Boolean) Whether autoscaling is enabled. Defaults to true.
+- `max_replica_count` (Number) Maximum number of replicas. Defaults to `1`.
+- `min_replica_count` (Number) Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.
 
 <a id="nestedatt--runtime--container_groups--autoscaling--policies"></a>
 ### Nested Schema for `runtime.container_groups.autoscaling.policies`
 
 Required:
 
-- `max_count` (Number) Maximum number of replicas.
-- `min_count` (Number) Minimum number of replicas.
-- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.
-- `target` (Number) Target value for the scaling metric.
-
-Optional:
-
-- `priority` (Number) Policy priority when multiple policies are defined.
+- `scaling_metric` (String) Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.
+- `target` (Number) Target value for the scaling metric. Must be non-negative.
 
 
 
