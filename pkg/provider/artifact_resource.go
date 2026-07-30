@@ -377,6 +377,17 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	isCreate := req.State.Raw.IsNull()
+	var state *ArtifactResourceModel
+	if !isCreate {
+		var stateVal ArtifactResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &stateVal)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state = &stateVal
+	}
+
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
 		dirHash, err := computeFolderHash(plan.Source.Dir)
 		if err != nil {
@@ -390,27 +401,20 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.Source.DirHash = dirHash
 	}
 
-	if req.State.Raw.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
-	}
+	applySourceManagedCodeRefsToPlan(&plan, state, isCreate)
 
-	var state ArtifactResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	if !isCreate {
+		// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
+		// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
+		// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
+		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
+			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+		}
 
-	// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
-	// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
-	// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
-	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
-		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
-	}
-
-	if artifactModifyPlanNeedsUnknownArtifactID(plan, state) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+		if artifactModifyPlanNeedsUnknownArtifactID(plan, *state) {
+			plan.ArtifactID = types.StringUnknown()
+		}
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
@@ -494,7 +498,7 @@ func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if !codeRefEqual(a.CodeRef, b.CodeRef) {
+	if !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
 		return false
 	}
 	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
@@ -840,11 +844,11 @@ func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
 func artifactHasManualCodeRef(spec *ArtifactSpecModel) bool {
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			codeRef := container.ImageBuildConfig.CodeRef
-			if IsKnown(codeRef.CatalogID) && IsKnown(codeRef.CatalogVersionID) {
+			if IsKnown(ref.CatalogID) && IsKnown(ref.CatalogVersionID) {
 				return true
 			}
 		}
@@ -882,9 +886,9 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 		return
 	}
 
-	if cfg.CodeRef != nil &&
-		!cfg.CodeRef.CatalogID.IsNull() &&
-		!cfg.CodeRef.CatalogVersionID.IsNull() &&
+	if ref := imageBuildConfigCodeRef(cfg); ref != nil &&
+		!ref.CatalogID.IsNull() &&
+		!ref.CatalogVersionID.IsNull() &&
 		artifactType == string(client.ArtifactTypeNim) {
 		resp.Diagnostics.AddAttributeError(
 			containerPath.AtName("image_build_config").AtName("code_ref"),
@@ -1073,15 +1077,15 @@ func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *clien
 		Dockerfile: artifactDockerfileToClient(cfg.Dockerfile),
 	}
 
-	if cfg.CodeRef != nil &&
-		!cfg.CodeRef.CatalogID.IsNull() && !cfg.CodeRef.CatalogID.IsUnknown() &&
-		!cfg.CodeRef.CatalogVersionID.IsNull() && !cfg.CodeRef.CatalogVersionID.IsUnknown() {
+	if ref := imageBuildConfigCodeRef(cfg); ref != nil &&
+		!ref.CatalogID.IsNull() && !ref.CatalogID.IsUnknown() &&
+		!ref.CatalogVersionID.IsNull() && !ref.CatalogVersionID.IsUnknown() {
 		result.CodeRef = &client.ArtifactCodeRef{
 			Type:     "datarobot",
 			Provider: "datarobot",
 			DataRobot: client.ArtifactDataRobotCodeRef{
-				CatalogID:        cfg.CodeRef.CatalogID.ValueString(),
-				CatalogVersionID: cfg.CodeRef.CatalogVersionID.ValueString(),
+				CatalogID:        ref.CatalogID.ValueString(),
+				CatalogVersionID: ref.CatalogVersionID.ValueString(),
 			},
 		}
 	}
@@ -1282,13 +1286,15 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *Ar
 		return nil
 	}
 
-	model := &ArtifactImageBuildConfigModel{}
+	model := &ArtifactImageBuildConfigModel{
+		CodeRef: types.ObjectNull(artifactCodeRefAttrTypes()),
+	}
 	if cfg.CodeRef != nil && (cfg.CodeRef.DataRobot.CatalogID != "" || cfg.CodeRef.DataRobot.CatalogVersionID != "") {
-		model.CodeRef = &ArtifactCodeRefModel{
+		_ = setImageBuildConfigCodeRef(model, &ArtifactCodeRefModel{
 			CatalogID:        types.StringValue(cfg.CodeRef.DataRobot.CatalogID),
 			CatalogVersionID: types.StringValue(cfg.CodeRef.DataRobot.CatalogVersionID),
-		}
-	} else if prior != nil && prior.CodeRef != nil {
+		})
+	} else if prior != nil && !prior.CodeRef.IsNull() {
 		model.CodeRef = prior.CodeRef
 	}
 
