@@ -690,7 +690,7 @@ func validateArtifactContainer(
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking), unless `source` is set (the provider uploads code via a draft clone before locking). Use `status = \"draft\"` for pre-build artifacts without `source`.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). With `source`, the provider uploads code and sets `code_ref`, but lock still fails until workload-api has populated `image_uri` from a completed build. Use `status = \"draft\"` until the image build finishes.",
 			)
 		}
 	}
