@@ -1294,7 +1294,7 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *Ar
 			CatalogID:        types.StringValue(cfg.CodeRef.DataRobot.CatalogID),
 			CatalogVersionID: types.StringValue(cfg.CodeRef.DataRobot.CatalogVersionID),
 		})
-	} else if prior != nil && !prior.CodeRef.IsNull() {
+	} else if prior != nil && !prior.CodeRef.IsNull() && !prior.CodeRef.IsUnknown() {
 		model.CodeRef = prior.CodeRef
 	}
 
