@@ -33,11 +33,12 @@ func catalogIDFromModel(data *ArtifactResourceModel) string {
 	}
 	for _, group := range data.Spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
-				return container.ImageBuildConfig.CodeRef.CatalogID.ValueString()
+			if IsKnown(ref.CatalogID) {
+				return ref.CatalogID.ValueString()
 			}
 		}
 	}
@@ -50,11 +51,12 @@ func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
 	}
 	for _, group := range data.Spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogVersionID) {
-				return container.ImageBuildConfig.CodeRef.CatalogVersionID.ValueString()
+			if IsKnown(ref.CatalogVersionID) {
+				return ref.CatalogVersionID.ValueString()
 			}
 		}
 	}
@@ -208,15 +210,12 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 			if !artifactContainerIsPrimary(*container, group) {
 				continue
 			}
-			if codeRefManuallySet(container.ImageBuildConfig.CodeRef) {
+			if codeRefManuallySet(imageBuildConfigCodeRef(container.ImageBuildConfig)) {
 				continue
 			}
 
 			if needsUnknown {
-				container.ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
-					CatalogID:        types.StringUnknown(),
-					CatalogVersionID: types.StringUnknown(),
-				}
+				container.ImageBuildConfig.CodeRef = types.ObjectUnknown(artifactCodeRefAttrTypes())
 				continue
 			}
 
@@ -226,8 +225,8 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 				ci < len(state.Spec.ContainerGroups[gi].Containers) {
 				stateContainer := state.Spec.ContainerGroups[gi].Containers[ci]
 				if stateContainer.ImageBuildConfig != nil &&
-					stateContainer.ImageBuildConfig.CodeRef != nil &&
-					IsKnown(stateContainer.ImageBuildConfig.CodeRef.CatalogID) {
+					!stateContainer.ImageBuildConfig.CodeRef.IsNull() &&
+					!stateContainer.ImageBuildConfig.CodeRef.IsUnknown() {
 					container.ImageBuildConfig.CodeRef = stateContainer.ImageBuildConfig.CodeRef
 				}
 			}
@@ -253,7 +252,13 @@ func sourceManagedCodeRefNeedsUnknown(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
-		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+			return true
+		}
+		if artifactSourceConfigured(plan) {
+			return artifactLockedSourceCloneNeeded(*plan, *state)
+		}
+		if artifactNeedsNewVersion(*plan, *state) {
 			return true
 		}
 	}
