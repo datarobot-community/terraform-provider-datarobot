@@ -361,6 +361,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if req.State.Raw.IsNull() {
+		applySourceManagedCodeRefsToPlan(&plan, nil, true)
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
@@ -384,6 +385,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.ArtifactID = types.StringUnknown()
 	}
 
+	applySourceManagedCodeRefsToPlan(&plan, &state, false)
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
