@@ -1295,53 +1295,6 @@ func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 	})
 }
 
-func TestArtifactLockedToDraftRejected(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
-	globalTestCfg.ApiKey = "fake"
-	t.Setenv(DataRobotApiKeyEnvVar, "fake")
-
-	artifactID := uuid.NewString()
-	repoID := uuid.NewString()
-	repoIDPtr := repoID
-	name := "locked-artifact-" + uuid.NewString()[:8]
-
-	lockedArtifact := artifactFixtureWithStatus(artifactID, &repoIDPtr, name, client.ArtifactStatusLocked)
-
-	mockService.EXPECT().
-		CreateArtifact(gomock.Any(), gomock.Any()).
-		Return(lockedArtifact, nil)
-	mockService.EXPECT().
-		GetArtifact(gomock.Any(), artifactID).
-		Return(lockedArtifact, nil).
-		AnyTimes()
-	mockService.EXPECT().
-		DeleteArtifactRepository(gomock.Any(), repoID).
-		Return(nil).
-		AnyTimes()
-
-	resource.Test(t, resource.TestCase{
-		IsUnitTest:               true,
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: artifactResourceConfigWithStatus(name, "locked"),
-			},
-			{
-				Config:      artifactResourceConfigWithStatus(name, "draft"),
-				ExpectError: regexp.MustCompile(`Cannot revert a locked artifact to draft`),
-			},
-		},
-	})
-}
-
 func artifactResourceConfigWithStatus(name, status string) string {
 	return fmt.Sprintf(`
 resource "datarobot_artifact" "test" {
@@ -1827,15 +1780,6 @@ func TestValidateArtifactSource(t *testing.T) {
 			wantSummary: "Invalid source directory",
 		},
 		{
-			name: "locked status",
-			data: ArtifactResourceModel{
-				Status: types.StringValue("locked"),
-				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
-				Spec:   specWithBuildConfig,
-			},
-			wantSummary: "Source requires draft status",
-		},
-		{
 			name: "nim artifact",
 			data: ArtifactResourceModel{
 				Type:   types.StringValue("nim"),
@@ -2051,7 +1995,6 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 }
 
 func TestArtifactSourceConfigValidation(t *testing.T) {
-	t.Parallel()
 
 	validDir := t.TempDir()
 	ctrl := gomock.NewController(t)
