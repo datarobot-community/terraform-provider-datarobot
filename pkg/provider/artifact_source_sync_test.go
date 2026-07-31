@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -385,9 +386,12 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := &client.Artifact{ID: artifactID}
 
-		got, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID)
+		got, uploaded, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID)
 		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if uploaded {
+			t.Fatal("expected upload to be skipped when dir_hash unchanged")
 		}
 		if got != artifact {
 			t.Fatal("expected same artifact pointer when upload is skipped")
@@ -410,8 +414,12 @@ func TestSyncArtifactSource(t *testing.T) {
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+		_, uploaded, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "")
+		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if !uploaded {
+			t.Fatal("expected upload during create")
 		}
 		if filesAPI.createCatalogCalls == 0 && filesAPI.uploadFromZipNewCalls == 0 {
 			t.Fatal("expected Files API upload during create")
@@ -446,7 +454,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Spec: artifactSpecWithCodeRef(catalogID, versionID),
 		}
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if filesAPI.catalogID != catalogID {
@@ -481,7 +489,7 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := artifactWithCodeRef(artifactID, catalogID, versionID)
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 	})
@@ -509,7 +517,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
 		if err == nil {
 			t.Fatal("expected upload error")
 		}
@@ -540,9 +548,239 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
 		if err == nil {
 			t.Fatal("expected patch error")
+		}
+	})
+}
+
+func TestSyncArtifactSourceAndBuild(t *testing.T) {
+	t.Parallel()
+
+	const artifactID = "artifact-1"
+
+	t.Run("uploads source and waits for build on create", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "create"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()))
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if artifactPrimaryContainerImageURI(got) != artifactSourceTestImageURI {
+			t.Fatalf("image_uri = %q, want %q", artifactPrimaryContainerImageURI(got), artifactSourceTestImageURI)
+		}
+	})
+
+	t.Run("skips build when source upload is skipped", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+		hash, err := computeFolderHash(types.StringValue(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		spec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		plan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+		})
+		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+		artifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			state,
+			artifact,
+			artifactID,
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if got != artifact {
+			t.Fatal("expected same artifact when upload and build are skipped")
+		}
+	})
+
+	t.Run("skips build when plan has no image build config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID, Status: client.ArtifactStatusDraft}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "no-build"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(ArtifactContainerModel{
+			Primary:  types.BoolValue(true),
+			Port:     types.Int64Value(8080),
+			ImageURI: types.StringValue("nginx:latest"),
+		}))
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			&client.Artifact{ID: artifactID, Status: client.ArtifactStatusDraft},
+			"",
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if got.ID != artifactID {
+			t.Fatalf("artifact_id = %q, want %q", got.ID, artifactID)
+		}
+	})
+
+	t.Run("wait_for_build false triggers build without waiting", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+		builtArtifact := artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		expectArtifactBuildTriggerOnly(mockService, artifactID, builtArtifact)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "trigger-only"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.WaitForBuild = types.BoolValue(false)
+		})
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if artifactPrimaryContainerImageURI(got) != artifactSourceTestImageURI {
+			t.Fatalf("image_uri = %q, want %q", artifactPrimaryContainerImageURI(got), artifactSourceTestImageURI)
+		}
+	})
+
+	t.Run("upload failure is returned without build sync error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		filesAPI.uploadErr = fmt.Errorf("upload failed")
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "fail"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+		})
+		state := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("old-hash")
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+
+		_, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			state,
+			artifactFixtureDraftWithBuildConfig(artifactID, nil, "app"),
+			artifactID,
+		)
+		if err == nil {
+			t.Fatal("expected upload error")
+		}
+		var buildErr *artifactBuildSyncError
+		if errors.As(err, &buildErr) {
+			t.Fatal("expected upload error, not artifactBuildSyncError")
+		}
+	})
+
+	t.Run("build failure wraps artifactBuildSyncError", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+		buildErr := &client.ArtifactBuildFailedError{
+			BuildID: artifactSourceTestBuildID,
+			Status:  client.ArtifactBuildStatusFailed,
+		}
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		gomock.InOrder(
+			mockService.EXPECT().
+				TriggerArtifactBuild(gomock.Any(), artifactID).
+				Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+			mockService.EXPECT().
+				WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
+				Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+		)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "build-fail"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()))
+
+		_, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+		)
+		if err == nil {
+			t.Fatal("expected build error")
+		}
+		var syncBuildErr *artifactBuildSyncError
+		if !errors.As(err, &syncBuildErr) {
+			t.Fatalf("expected artifactBuildSyncError, got %T: %v", err, err)
+		}
+		var failedErr *client.ArtifactBuildFailedError
+		if !errors.As(syncBuildErr, &failedErr) {
+			t.Fatalf("expected wrapped ArtifactBuildFailedError, got %T: %v", syncBuildErr.Unwrap(), syncBuildErr.Unwrap())
+		}
+		if failedErr.BuildID != artifactSourceTestBuildID {
+			t.Fatalf("build_id = %q, want %q", failedErr.BuildID, artifactSourceTestBuildID)
 		}
 	})
 }
