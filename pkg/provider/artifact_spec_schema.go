@@ -178,7 +178,8 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 		},
 		"image_uri": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: "Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.",
+			Computed:            true,
+			MarkdownDescription: "Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.",
 			PlanModifiers: []planmodifier.String{
 				stringplanmodifier.UseStateForUnknown(),
 			},
