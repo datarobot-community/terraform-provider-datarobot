@@ -270,6 +270,10 @@ Required:
 
 - `dir` (String) Path to the local directory containing application source files to upload.
 
+Optional:
+
+- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
+
 Read-Only:
 
 - `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.
