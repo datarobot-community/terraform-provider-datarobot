@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -365,11 +366,13 @@ func testArtifactSourceUpload(t *testing.T, isMock bool, mockService ...*mock_cl
 		svc.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil).Times(1)
 		svc.EXPECT().FilesAPI().Return(filesAPI).Times(2)
 		svc.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).DoAndReturn(patchCodeRef).Times(2)
+		expectArtifactBuildAfterUploadFromLatest(svc, artifactID, &currentArtifact)
+		expectArtifactBuildAfterUploadFromLatest(svc, artifactID, &currentArtifact)
 		svc.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(draftArtifact, nil).Times(1)
 		svc.EXPECT().GetArtifact(gomock.Any(), artifactID).DoAndReturn(
 			func(_ context.Context, id string) (*client.Artifact, error) {
 				if currentArtifact != nil {
-					return currentArtifact, nil
+					return artifactSourceBuiltForRead(currentArtifact), nil
 				}
 				return draftArtifact, nil
 			},
@@ -483,8 +486,9 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*m
 				}),
 			svc.EXPECT().FilesAPI().Return(filesAPI),
 			svc.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftArtifactID, gomock.Any(), gomock.Any()).DoAndReturn(patchCodeRef),
-			svc.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).DoAndReturn(lockArtifact(lockedArtifactID, client.ArtifactStatusLocked)),
 		)
+		expectArtifactBuildAfterUploadFromLatest(svc, draftArtifactID, &latestArtifact)
+		svc.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).DoAndReturn(lockArtifact(lockedArtifactID, client.ArtifactStatusLocked))
 		svc.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
 				if req.Status != client.ArtifactStatusDraft {
@@ -498,18 +502,19 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*m
 		gomock.InOrder(
 			svc.EXPECT().FilesAPI().Return(filesAPI),
 			svc.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).DoAndReturn(patchCodeRef),
-			svc.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(lockArtifact(newLockedArtifactID, client.ArtifactStatusLocked)),
 		)
+		expectArtifactBuildAfterUploadFromLatest(svc, draftCloneID, &latestArtifact)
+		svc.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(lockArtifact(newLockedArtifactID, client.ArtifactStatusLocked))
 		svc.EXPECT().GetArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, id string) (*client.Artifact, error) {
 				if latestArtifact != nil && id == latestArtifact.ID {
-					return latestArtifact, nil
+					return artifactSourceBuiltForRead(latestArtifact), nil
 				}
 				if id == draftArtifactID {
-					return draftArtifact, nil
+					return artifactSourceBuiltForRead(draftArtifact), nil
 				}
 				if id == draftCloneID {
-					return draftClone, nil
+					return artifactSourceBuiltForRead(draftClone), nil
 				}
 				return nil, fmt.Errorf("GetArtifact(%s): not found", id)
 			},
@@ -2061,6 +2066,8 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 const (
 	artifactSourceTestCatalogID = "aaaaaaaaaaaaaaaaaaaaaaaa"
 	artifactSourceTestVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
+	artifactSourceTestBuildID   = "eeeeeeeeeeeeeeeeeeeeeeee"
+	artifactSourceTestImageURI  = "registry.example.com/app:test"
 )
 
 func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string) *client.Artifact {
@@ -2118,6 +2125,89 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 	return &patched
 }
 
+func artifactFixtureWithImageURI(base *client.Artifact, imageURI string) *client.Artifact {
+	built := *base
+	primary := true
+	built.Spec = base.Spec
+	groups := make([]client.ArtifactContainerGroup, len(base.Spec.ContainerGroups))
+	for gi, group := range base.Spec.ContainerGroups {
+		containers := make([]client.ArtifactContainer, len(group.Containers))
+		for ci, container := range group.Containers {
+			containers[ci] = container
+			isPrimary := container.Primary != nil && *container.Primary
+			if isPrimary || (container.Primary == nil && ci == 0) {
+				containers[ci].ImageURI = imageURI
+				containers[ci].Primary = &primary
+			}
+		}
+		groups[gi] = client.ArtifactContainerGroup{Containers: containers}
+	}
+	built.Spec.ContainerGroups = groups
+	return &built
+}
+
+func expectArtifactBuildAfterUpload(mockService *mock_client.MockService, artifactID string, builtArtifact *client.Artifact) {
+	expectArtifactBuildAfterUploadWithLatest(mockService, artifactID, builtArtifact, nil)
+}
+
+func expectArtifactBuildAfterUploadFromLatest(mockService *mock_client.MockService, artifactID string, latest **client.Artifact) {
+	gomock.InOrder(
+		mockService.EXPECT().
+			TriggerArtifactBuild(gomock.Any(), artifactID).
+			Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+		mockService.EXPECT().
+			WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
+			Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusCompleted}, nil),
+		mockService.EXPECT().
+			GetArtifact(gomock.Any(), artifactID).
+			DoAndReturn(func(_ context.Context, id string) (*client.Artifact, error) {
+				if latest == nil || *latest == nil {
+					panic("expected artifact before build refresh")
+				}
+				built := artifactFixtureWithImageURI(*latest, artifactSourceTestImageURI)
+				*latest = built
+				return built, nil
+			}),
+	)
+}
+
+func expectArtifactBuildAfterUploadWithLatest(mockService *mock_client.MockService, artifactID string, builtArtifact *client.Artifact, latest **client.Artifact) {
+	gomock.InOrder(
+		mockService.EXPECT().
+			TriggerArtifactBuild(gomock.Any(), artifactID).
+			Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+		mockService.EXPECT().
+			WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
+			Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusCompleted}, nil),
+		mockService.EXPECT().
+			GetArtifact(gomock.Any(), artifactID).
+			DoAndReturn(func(_ context.Context, id string) (*client.Artifact, error) {
+				if latest != nil {
+					*latest = builtArtifact
+				}
+				return builtArtifact, nil
+			}),
+	)
+}
+
+func artifactSourceBuiltForRead(artifact *client.Artifact) *client.Artifact {
+	if artifact == nil || client.ExtractCodeRef(artifact) == nil {
+		return artifact
+	}
+	return artifactFixtureWithImageURI(artifact, artifactSourceTestImageURI)
+}
+
+func expectArtifactBuildTriggerOnly(mockService *mock_client.MockService, artifactID string, builtArtifact *client.Artifact) {
+	gomock.InOrder(
+		mockService.EXPECT().
+			TriggerArtifactBuild(gomock.Any(), artifactID).
+			Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+		mockService.EXPECT().
+			GetArtifact(gomock.Any(), artifactID).
+			Return(builtArtifact, nil),
+	)
+}
+
 func artifactResourceModelWithSource(name, dir string) ArtifactResourceModel {
 	return ArtifactResourceModel{
 		Name:   types.StringValue(name),
@@ -2157,10 +2247,15 @@ func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data Arti
 	}
 
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, artifact, "")
+		syncedArtifact, err := r.syncArtifactSourceAndBuild(ctx, &data, nil, artifact, "")
 		if err != nil {
 			r.rollbackArtifactCreate(ctx, artifact)
-			diags.AddError("Error uploading artifact source", err.Error())
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
+			}
+			diags.AddError(summary, err.Error())
 			return data, diags
 		}
 		artifact = syncedArtifact
@@ -2247,9 +2342,14 @@ func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, plan, sta
 	}
 
 	if artifactSourceConfigured(&plan) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		syncedArtifact, err := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
 		if err != nil {
-			diags.AddError("Error uploading artifact source", err.Error())
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
+			}
+			diags.AddError(summary, err.Error())
 			return plan, diags
 		}
 		artifact = syncedArtifact
@@ -2296,6 +2396,7 @@ func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
 	mockService.EXPECT().FilesAPI().Return(filesAPI)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
 	result, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDir))
@@ -2346,13 +2447,15 @@ func TestArtifactResourceSourceCreateLockedSuccess(t *testing.T) {
 			}),
 		mockService.EXPECT().FilesAPI().Return(filesAPI),
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftArtifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
-		mockService.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).DoAndReturn(
-			func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
-				if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
-					t.Fatalf("expected lock patch, got status %v", req.Status)
-				}
-				return &lockedArtifact, nil
-			}),
+	)
+	expectArtifactBuildAfterUpload(mockService, draftArtifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch, got status %v", req.Status)
+			}
+			return &lockedArtifact, nil
+		},
 	)
 
 	model := artifactResourceModelWithSource(name, sourceDir)
@@ -2415,6 +2518,7 @@ func TestArtifactResourceSourceUpdateLockedSourceChangeCloneLock(t *testing.T) {
 		})
 	mockService.EXPECT().FilesAPI().Return(filesAPI)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).Return(patchedDraft, nil)
+	expectArtifactBuildAfterUpload(mockService, draftCloneID, artifactFixtureWithImageURI(patchedDraft, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
 			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
@@ -2476,6 +2580,7 @@ func TestArtifactResourceSourceUpdateDraftLockWithSourceChange(t *testing.T) {
 		mockService.EXPECT().FilesAPI().Return(filesAPI1),
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
 	)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
 			if req.Status != nil {
@@ -2487,6 +2592,7 @@ func TestArtifactResourceSourceUpdateDraftLockWithSourceChange(t *testing.T) {
 		mockService.EXPECT().FilesAPI().Return(filesAPI2),
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
 	)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
 			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
@@ -2534,6 +2640,7 @@ func TestArtifactResourceSourceCreateLockedLockFailure(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
 	mockService.EXPECT().FilesAPI().Return(filesAPI)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftArtifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	expectArtifactBuildAfterUpload(mockService, draftArtifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).Return(nil, fmt.Errorf("lock failed"))
 	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 
@@ -2621,6 +2728,82 @@ func TestArtifactResourceSourceCreatePatchCodeRefFailure(t *testing.T) {
 	}
 }
 
+// Create rolls back (deletes the artifact repository) when source upload or build fails:
+// Terraform never records state on a failed create, so leaving the repo/artifact would
+// orphan cloud resources and duplicate them on retry. Updates do not rollback on build failure.
+func TestArtifactResourceSourceCreateBuildFailureRollback(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "app"})
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-build-fail-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	filesAPI := newSyncTestFilesAPI()
+	buildErr := &client.ArtifactBuildFailedError{BuildID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	gomock.InOrder(
+		mockService.EXPECT().
+			TriggerArtifactBuild(gomock.Any(), artifactID).
+			Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+		mockService.EXPECT().
+			WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
+			Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+	)
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	_, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDir))
+	if !diags.HasError() {
+		t.Fatal("expected build error")
+	}
+	if got := diagErrorSummary(diags); got != "Error building artifact image" {
+		t.Fatalf("error summary = %q", got)
+	}
+}
+
+func TestArtifactResourceSourceCreateWaitForBuildFalse(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "app"})
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-no-wait-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	builtArtifact := artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI)
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	expectArtifactBuildTriggerOnly(mockService, artifactID, builtArtifact)
+
+	model := artifactResourceModelWithSource(name, sourceDir)
+	model.Source.WaitForBuild = types.BoolValue(false)
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	result, diags := testArtifactApplyCreate(context.Background(), resource, model)
+	if diags.HasError() {
+		t.Fatalf("create: %s", diagErrorSummary(diags))
+	}
+	if result.Status.ValueString() != "draft" {
+		t.Fatalf("status = %q, want draft", result.Status.ValueString())
+	}
+}
+
 func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -2642,6 +2825,7 @@ func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
 	mockService.EXPECT().FilesAPI().Return(filesAPI).Times(1)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil).Times(1)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(updatedArtifact, nil)
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
@@ -2692,6 +2876,8 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
 	)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
 	state, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDirV1))
@@ -2730,12 +2916,13 @@ func TestArtifactResourceSourceUpdateUploadFailure(t *testing.T) {
 	filesAPI2.uploadErr = fmt.Errorf("upload failed on update")
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
-	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(patchedArtifact, nil)
 	gomock.InOrder(
 		mockService.EXPECT().FilesAPI().Return(filesAPI1),
-		mockService.EXPECT().FilesAPI().Return(filesAPI2),
+		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
 	)
-	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil).Times(1)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(patchedArtifact, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI2)
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
 	state, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDirV1))
@@ -2776,13 +2963,14 @@ func TestArtifactResourceSourceUpdatePatchCodeRefFailure(t *testing.T) {
 	filesAPI2 := newSyncTestFilesAPI()
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
-	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(patchedArtifact, nil)
 	gomock.InOrder(
 		mockService.EXPECT().FilesAPI().Return(filesAPI1),
-		mockService.EXPECT().FilesAPI().Return(filesAPI2),
-	)
-	gomock.InOrder(
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
+	)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(patchedArtifact, nil)
+	gomock.InOrder(
+		mockService.EXPECT().FilesAPI().Return(filesAPI2),
 		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("patch failed on update")),
 	)
 
@@ -2826,6 +3014,7 @@ func TestArtifactResourceSourceUpdatePatchArtifactFailure(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
 	mockService.EXPECT().FilesAPI().Return(filesAPI)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
 	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).Return(nil, fmt.Errorf("patch artifact failed"))
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
