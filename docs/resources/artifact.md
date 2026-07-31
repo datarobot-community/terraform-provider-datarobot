@@ -76,7 +76,10 @@ output "from_source_artifact_id" {
 resource "datarobot_artifact" "from_source_locked" {
   name        = "example-c2w-locked"
   description = "Locked artifact with local source upload (clone → upload → lock)"
-  status      = "locked"
+  # Note: workload-api requires a completed image build (image_uri populated) before lock.
+  # Create as draft, run image build, then set status = "locked" — or use this block only
+  # after image_uri is available from a prior build on the same artifact version.
+  status = "locked"
 
   source = {
     dir = "${path.module}/app"
