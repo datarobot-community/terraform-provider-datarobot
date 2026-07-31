@@ -75,10 +75,8 @@ output "from_source_artifact_id" {
 
 resource "datarobot_artifact" "from_source_locked" {
   name        = "example-c2w-locked"
-  description = "Locked artifact with local source upload (clone → upload → lock)"
-  # Note: workload-api requires a completed image build (image_uri populated) before lock.
-  # Create as draft, run image build, then set status = "locked" — or use this block only
-  # after image_uri is available from a prior build on the same artifact version.
+  description = "Locked artifact with local source upload (create as draft → upload → build → lock)"
+  # The provider creates a draft, uploads source, triggers a build (waits by default), then locks.
   status = "locked"
 
   source = {
@@ -121,7 +119,7 @@ output "from_source_locked_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
-- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version. (see [below for nested schema](#nestedatt--source))
+- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. (see [below for nested schema](#nestedatt--source))
 - `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
@@ -153,7 +151,7 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.
+- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
