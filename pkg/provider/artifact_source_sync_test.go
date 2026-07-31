@@ -572,7 +572,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 		mockService.EXPECT().
 			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
 			Return(patchedArtifact, nil)
-		expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI))
+		expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact))
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "create"})
@@ -669,7 +669,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 
 		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
 		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
-		builtArtifact := artifactFixtureWithImageURI(patchedArtifact, artifactSourceTestImageURI)
+		builtArtifact := artifactFixtureWithImageURI(patchedArtifact)
 
 		mockService.EXPECT().FilesAPI().Return(filesAPI)
 		mockService.EXPECT().
