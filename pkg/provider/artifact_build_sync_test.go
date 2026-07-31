@@ -383,10 +383,10 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 			want:     false,
 		},
 		{
-			name:     "draft update source unchanged",
-			plan:     draftPlan,
-			state:    draftState(dirHash),
-			want:     false,
+			name:  "draft update source unchanged",
+			plan:  draftPlan,
+			state: draftState(dirHash),
+			want:  false,
 		},
 		{
 			name: "draft update source changed",
@@ -467,7 +467,7 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 			wantPrimaryUnknown: true,
 		},
 		{
-			name:               "draft update source changed",
+			name: "draft update source changed",
 			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 				m.Source.DirHash = types.StringValue("new-hash")
 			}),
