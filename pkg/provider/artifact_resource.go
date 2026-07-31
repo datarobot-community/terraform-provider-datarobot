@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -222,10 +223,15 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if artifactSourceConfigured(&data) {
-		artifact, err = r.syncArtifactSource(ctx, &data, nil, artifact, "")
+		artifact, err = r.syncArtifactSourceAndBuild(ctx, &data, nil, artifact, "")
 		if err != nil {
 			r.rollbackArtifactCreate(ctx, artifact)
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
+			}
+			resp.Diagnostics.AddError(summary, err.Error())
 			return
 		}
 	}
@@ -332,9 +338,14 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	if artifactSourceConfigured(&plan) {
-		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		artifact, err = r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
 		if err != nil {
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
+			}
+			resp.Diagnostics.AddError(summary, err.Error())
 			return
 		}
 	}
@@ -413,6 +424,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	applySourceManagedCodeRefsToPlan(&plan, state, isCreate)
+	applySourceManagedImageURIToPlan(&plan, state, isCreate)
 
 	if !isCreate {
 		// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
