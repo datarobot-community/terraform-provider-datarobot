@@ -223,7 +223,7 @@ func testArtifactDraftResource(t *testing.T, name string) {
 					resource.TestCheckResourceAttr(resourceName, "status", "draft"),
 					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
 					captureAttr(resourceName, "artifact_id", &artifactID),
-					checkArtifactStatusInAPI(resourceName, "draft", false),
+					checkArtifactStatusInAPI("draft", false),
 					checkArtifactExistsInAPI(resourceName, name, imageURI, false),
 				),
 			},
@@ -233,7 +233,7 @@ func testArtifactDraftResource(t *testing.T, name string) {
 					resource.TestCheckResourceAttr(resourceName, "status", "draft"),
 					checkArtifactIDEquals(resourceName, &artifactID),
 					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
-					checkArtifactStatusInAPI(resourceName, "draft", false),
+					checkArtifactStatusInAPI("draft", false),
 					checkArtifactExistsInAPI(resourceName, updatedName, imageURI, false),
 					captureAttr(resourceName, "artifact_id", &lastArtifactID),
 				),
@@ -243,7 +243,7 @@ func testArtifactDraftResource(t *testing.T, name string) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "status", "locked"),
 					checkArtifactIDEquals(resourceName, &artifactID),
-					checkArtifactStatusInAPI(resourceName, "locked", false),
+					checkArtifactStatusInAPI("locked", false),
 					captureAttr(resourceName, "artifact_id", &lastArtifactID),
 				),
 			},
@@ -281,8 +281,9 @@ func checkArtifactSourceCatalogVersionChanged(resourceName string, previous *str
 	}
 }
 
-func checkArtifactSourceCodeRefInAPI(resourceName string, isMock bool) resource.TestCheckFunc {
+func checkArtifactSourceCodeRefInAPI(isMock bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
+		const resourceName = "datarobot_artifact.test"
 		if isMock {
 			return nil
 		}
@@ -392,7 +393,7 @@ func testArtifactSourceUpload(t *testing.T, isMock bool, mockService ...*mock_cl
 					resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefVersionAttr()),
 					captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
 					captureAttr(resourceName, "artifact_id", &artifactID),
-					checkArtifactSourceCodeRefInAPI(resourceName, isMock),
+					checkArtifactSourceCodeRefInAPI(isMock),
 				),
 			},
 			{
@@ -400,7 +401,7 @@ func testArtifactSourceUpload(t *testing.T, isMock bool, mockService ...*mock_cl
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
 					checkArtifactIDEquals(resourceName, &artifactID),
-					checkArtifactSourceCodeRefInAPI(resourceName, isMock),
+					checkArtifactSourceCodeRefInAPI(isMock),
 					captureAttr(resourceName, "artifact_id", &lastArtifactID),
 				),
 			},
@@ -534,8 +535,8 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*m
 					captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
 					captureAttr(resourceName, "artifact_id", &initialArtifactID),
 					captureAttr(resourceName, "artifact_repository_id", &initialRepoID),
-					checkArtifactStatusInAPI(resourceName, "locked", isMock),
-					checkArtifactSourceCodeRefInAPI(resourceName, isMock),
+					checkArtifactStatusInAPI("locked", isMock),
+					checkArtifactSourceCodeRefInAPI(isMock),
 				),
 			},
 			{
@@ -545,8 +546,8 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*m
 					checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
 					checkArtifactIDChanged(resourceName, &initialArtifactID),
 					checkArtifactRepositoryIDEquals(resourceName, &initialRepoID),
-					checkArtifactStatusInAPI(resourceName, "locked", isMock),
-					checkArtifactSourceCodeRefInAPI(resourceName, isMock),
+					checkArtifactStatusInAPI("locked", isMock),
+					checkArtifactSourceCodeRefInAPI(isMock),
 					captureAttr(resourceName, "artifact_id", &lastArtifactID),
 				),
 			},
@@ -603,8 +604,9 @@ func checkArtifactExistsInAPI(resourceName, expectedName, expectedImageURI strin
 	}
 }
 
-func checkArtifactStatusInAPI(resourceName, expectedStatus string, isMock bool) resource.TestCheckFunc {
+func checkArtifactStatusInAPI(expectedStatus string, isMock bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
+		const resourceName = "datarobot_artifact.test"
 		if isMock {
 			return nil
 		}

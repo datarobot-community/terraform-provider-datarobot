@@ -20,7 +20,7 @@ func artifactCodeRefNull() types.Object {
 	return types.ObjectNull(artifactCodeRefAttrTypes())
 }
 
-func codeRefObjectFromModel(ctx context.Context, ref *ArtifactCodeRefModel) (types.Object, diag.Diagnostics) {
+func codeRefObjectFromModel(ref *ArtifactCodeRefModel) (types.Object, diag.Diagnostics) {
 	if ref == nil {
 		return artifactCodeRefNull(), nil
 	}
@@ -66,7 +66,7 @@ func setImageBuildConfigCodeRef(cfg *ArtifactImageBuildConfigModel, ref *Artifac
 	if cfg == nil {
 		return nil
 	}
-	obj, diags := codeRefObjectFromModel(context.Background(), ref)
+	obj, diags := codeRefObjectFromModel(ref)
 	if diags.HasError() {
 		return diags
 	}
@@ -75,7 +75,7 @@ func setImageBuildConfigCodeRef(cfg *ArtifactImageBuildConfigModel, ref *Artifac
 }
 
 func artifactCodeRefObject(ref *ArtifactCodeRefModel) types.Object {
-	obj, diags := codeRefObjectFromModel(context.Background(), ref)
+	obj, diags := codeRefObjectFromModel(ref)
 	if diags.HasError() {
 		panic(diags.Errors()[0].Summary())
 	}
