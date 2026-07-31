@@ -332,6 +332,81 @@ func TestSyncArtifactBuild(t *testing.T) {
 	})
 }
 
+func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	spec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+	dirHash, err := computeFolderHash(types.StringValue(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	draftPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Source.DirHash = dirHash
+	})
+	lockedPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Status = types.StringValue("locked")
+		m.Source.DirHash = dirHash
+	})
+
+	draftState := func(hash types.String) *ArtifactResourceModel {
+		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+		return state
+	}
+
+	tests := []struct {
+		name     string
+		plan     *ArtifactResourceModel
+		state    *ArtifactResourceModel
+		isCreate bool
+		want     bool
+	}{
+		{
+			name:     "create with source and build config",
+			plan:     draftPlan,
+			isCreate: true,
+			want:     true,
+		},
+		{
+			name:     "locked create with source",
+			plan:     lockedPlan,
+			isCreate: true,
+			want:     true,
+		},
+		{
+			name:     "no source",
+			plan:     &ArtifactResourceModel{Spec: spec},
+			isCreate: true,
+			want:     false,
+		},
+		{
+			name:     "draft update source unchanged",
+			plan:     draftPlan,
+			state:    draftState(dirHash),
+			want:     false,
+		},
+		{
+			name: "draft update source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: draftState(dirHash),
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := artifactModifyPlanNeedsUnknownImageURI(tt.plan, tt.state, tt.isCreate); got != tt.want {
+				t.Fatalf("artifactModifyPlanNeedsUnknownImageURI() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }
