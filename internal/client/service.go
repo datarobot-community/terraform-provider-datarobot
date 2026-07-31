@@ -280,6 +280,9 @@ type Service interface {
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
+	TriggerArtifactBuild(ctx context.Context, artifactID string) (*ArtifactBuildTriggerResponse, error)
+	GetArtifactBuild(ctx context.Context, artifactID, buildID string) (*ArtifactBuild, error)
+	WaitForArtifactBuild(ctx context.Context, artifactID, buildID string, opts *WaitForArtifactBuildOptions) (*ArtifactBuild, error)
 
 	// Workload (Workload API)
 	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
