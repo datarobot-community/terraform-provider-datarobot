@@ -211,13 +211,16 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		artifact, err = r.syncArtifactSource(ctx, &data, nil, artifact, "")
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
+		if syncErr != nil {
+			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	data.ID = types.StringValue(uuid.NewString())

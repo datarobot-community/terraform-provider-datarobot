@@ -122,8 +122,8 @@ func (r *ArtifactResource) syncArtifactSource(
 	return artifact, nil
 }
 
-func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact) {
-	if artifact == nil || artifact.ArtifactRepositoryID == nil {
+func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
+	if artifact == nil || !deleteRepository || artifact.ArtifactRepositoryID == nil {
 		return
 	}
 	traceAPICall("DeleteArtifactRepository")
