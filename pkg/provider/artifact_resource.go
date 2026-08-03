@@ -301,12 +301,18 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		if syncErr != nil {
+			if createdNewVersion {
+				loadArtifactIntoModel(artifact, &plan)
+				resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			}
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
