@@ -54,9 +54,9 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		"path": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
-			Default:             stringdefault.StaticString("./Dockerfile"),
-			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.",
+			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.",
 			PlanModifiers: []planmodifier.String{
+				artifactDockerfilePathPlanModifier{},
 				stringplanmodifier.UseStateForUnknown(),
 			},
 		},
@@ -1357,6 +1357,7 @@ func loadDockerfileFromAPI(df *client.ArtifactDockerfileConfig) *ArtifactDockerf
 				model.Entrypoint[i] = types.StringValue(e)
 			}
 		}
+		model.Path = types.StringNull()
 		return model
 	}
 
