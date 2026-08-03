@@ -1702,8 +1702,6 @@ func TestArtifactHasManualCodeRef(t *testing.T) {
 }
 
 func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(validDir, "main.py"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1718,8 +1716,9 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:   artifactConfigWithSource("plan-hash", "draft", validDir),
-				PlanOnly: true,
+				Config:             artifactConfigWithSource("plan-hash", "draft", validDir),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "source.dir_hash"),
 				),
@@ -1729,8 +1728,6 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 }
 
 func TestArtifactSourceConfigValidation(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
