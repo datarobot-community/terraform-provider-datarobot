@@ -222,7 +222,6 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -255,7 +254,6 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -309,7 +307,6 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
-	refreshArtifactSourceDirHash(&plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
