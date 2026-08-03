@@ -130,14 +130,25 @@ func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact 
 	_ = r.provider.service.DeleteArtifactRepository(ctx, *artifact.ArtifactRepositoryID)
 }
 
-func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
-	if !artifactSourceConfigured(data) {
-		return
+func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
+	if state == nil || state.Spec == nil {
+		return nil
 	}
-	dirHash, err := computeFolderHash(data.Source.Dir)
-	if err == nil {
-		data.Source.DirHash = dirHash
+	for _, group := range state.Spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !artifactContainerIsPrimary(container, group) {
+				continue
+			}
+			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+				return nil
+			}
+			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
+				return container.ImageBuildConfig.CodeRef
+			}
+			return nil
+		}
 	}
+	return nil
 }
 
 func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
@@ -146,6 +157,7 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	needsUnknown := sourceManagedCodeRefNeedsUnknown(plan, state, isCreate)
+	stateCodeRef := primaryCodeRefFromState(state)
 
 	for gi := range plan.Spec.ContainerGroups {
 		group := plan.Spec.ContainerGroups[gi]
@@ -169,16 +181,8 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 				continue
 			}
 
-			// If the state has a known catalog ID and doesn't needUnknown, copy it into new plan
-			if state != nil &&
-				gi < len(state.Spec.ContainerGroups) &&
-				ci < len(state.Spec.ContainerGroups[gi].Containers) {
-				stateContainer := state.Spec.ContainerGroups[gi].Containers[ci]
-				if stateContainer.ImageBuildConfig != nil &&
-					stateContainer.ImageBuildConfig.CodeRef != nil &&
-					IsKnown(stateContainer.ImageBuildConfig.CodeRef.CatalogID) {
-					container.ImageBuildConfig.CodeRef = stateContainer.ImageBuildConfig.CodeRef
-				}
+			if stateCodeRef != nil {
+				container.ImageBuildConfig.CodeRef = stateCodeRef
 			}
 		}
 	}

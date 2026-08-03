@@ -792,6 +792,32 @@ func testDraftSourceSpec(containers ...ArtifactContainerModel) *ArtifactSpecMode
 	}
 }
 
+func TestPrimaryCodeRefFromState(t *testing.T) {
+	t.Parallel()
+
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+	}
+	dir := t.TempDir()
+
+	t.Run("finds primary container regardless of position", func(t *testing.T) {
+		state := testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+		got := primaryCodeRefFromState(state)
+		if got == nil || got.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+			t.Fatalf("primaryCodeRefFromState() = %#v, want primary code_ref", got)
+		}
+	})
+
+	t.Run("nil state returns nil", func(t *testing.T) {
+		if got := primaryCodeRefFromState(nil); got != nil {
+			t.Fatalf("primaryCodeRefFromState(nil) = %#v, want nil", got)
+		}
+	})
+}
+
 func TestCodeRefManuallySet(t *testing.T) {
 	t.Parallel()
 
@@ -1067,6 +1093,27 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 					t.Fatalf("expected primary code_ref copied from state, got %#v", primaryCodeRef)
 				}
 				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if sidecarCodeRef != nil {
+					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
+				}
+			},
+		},
+		{
+			name: "update with reordered containers copies primary code_ref from state",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+					t.Fatalf("expected primary code_ref copied from state after reorder, got %#v", primaryCodeRef)
+				}
+				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
