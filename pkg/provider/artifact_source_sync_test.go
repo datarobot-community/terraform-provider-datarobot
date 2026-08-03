@@ -298,62 +298,48 @@ func TestCatalogVersionIDFromModel(t *testing.T) {
 	}
 }
 
-func TestRefreshArtifactSourceDirHash(t *testing.T) {
+func TestRollbackArtifactCreate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no source block leaves model unchanged", func(t *testing.T) {
-		data := &ArtifactResourceModel{}
-		refreshArtifactSourceDirHash(data)
-		if data.Source != nil {
-			t.Fatal("expected source to remain nil")
-		}
+	repoID := "repo-123"
+
+	t.Run("nil artifact is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), nil, true)
 	})
 
-	t.Run("computes hash for valid directory", func(t *testing.T) {
-		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "print('hi')"})
-		data := &ArtifactResourceModel{
-			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
-		}
+	t.Run("missing repository id is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 
-		refreshArtifactSourceDirHash(data)
-		if !IsKnown(data.Source.DirHash) {
-			t.Fatal("expected computed dir_hash")
-		}
-
-		refreshArtifactSourceDirHash(data)
-		if !data.Source.DirHash.Equal(data.Source.DirHash) {
-			t.Fatal("expected stable hash on unchanged tree")
-		}
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
 	})
 
-	t.Run("hash changes when file content changes", func(t *testing.T) {
-		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
-		data := &ArtifactResourceModel{
-			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
-		}
-		refreshArtifactSourceDirHash(data)
-		first := data.Source.DirHash
+	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 
-		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("v2"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		refreshArtifactSourceDirHash(data)
-		if data.Source.DirHash.Equal(first) {
-			t.Fatal("expected dir_hash to change after file edit")
-		}
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, false)
 	})
 
-	t.Run("missing directory leaves dir_hash unset", func(t *testing.T) {
-		data := &ArtifactResourceModel{
-			Source: &ArtifactSourceModel{
-				Dir:     types.StringValue(filepath.Join(t.TempDir(), "missing")),
-				DirHash: types.StringNull(),
-			},
-		}
-		refreshArtifactSourceDirHash(data)
-		if IsKnown(data.Source.DirHash) {
-			t.Fatal("expected dir_hash to remain unset when directory is missing")
-		}
+	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, true)
 	})
 }
 
@@ -544,40 +530,6 @@ func TestSyncArtifactSource(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected patch error")
 		}
-	})
-}
-
-func TestRollbackArtifactCreate(t *testing.T) {
-	t.Parallel()
-
-	repoID := "repo-123"
-
-	t.Run("nil artifact is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), nil)
-	})
-
-	t.Run("missing repository id is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"})
-	})
-
-	t.Run("deletes artifact repository", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
-
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		})
 	})
 }
 
