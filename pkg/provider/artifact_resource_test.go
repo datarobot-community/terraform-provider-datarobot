@@ -1911,7 +1911,7 @@ func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string)
 	}
 }
 
-func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID string) *client.Artifact {
+func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
 	patched := *base
 	primary := true
 	patched.Spec = base.Spec
@@ -1928,8 +1928,8 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 				containers[ci].ImageBuildConfig.CodeRef = &client.ArtifactCodeRef{
 					Type: "datarobot",
 					DataRobot: client.ArtifactDataRobotCodeRef{
-						CatalogID:        catalogID,
-						CatalogVersionID: versionID,
+						CatalogID:        artifactSourceTestCatalogID,
+						CatalogVersionID: artifactSourceTestVersionID,
 					},
 				}
 				containers[ci].Primary = &primary
@@ -1940,7 +1940,6 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 	patched.Spec.ContainerGroups = groups
 	return &patched
 }
-
 
 func artifactResourceModelWithSource(name, dir string) ArtifactResourceModel {
 	return ArtifactResourceModel{
@@ -2079,7 +2078,7 @@ func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	name := "source-create-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	filesAPI := newSyncTestFilesAPI()
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
@@ -2189,7 +2188,7 @@ func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 	updatedName := "updated-" + name
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	updatedArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, updatedName)
 	updatedArtifact.Spec = patchedArtifact.Spec
 	filesAPI := newSyncTestFilesAPI()
@@ -2233,7 +2232,7 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 	name := "source-reupload-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 
@@ -2279,7 +2278,7 @@ func TestArtifactResourceSourceUpdateUploadFailure(t *testing.T) {
 	name := "source-update-upload-fail-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 	filesAPI2.uploadErr = fmt.Errorf("upload failed on update")
@@ -2326,7 +2325,7 @@ func TestArtifactResourceSourceUpdatePatchCodeRefFailure(t *testing.T) {
 	name := "source-update-patch-fail-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 
@@ -2375,7 +2374,7 @@ func TestArtifactResourceSourceUpdatePatchArtifactFailure(t *testing.T) {
 	updatedName := "updated-" + name
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	filesAPI := newSyncTestFilesAPI()
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
@@ -2495,7 +2494,7 @@ func TestArtifactResourceSourceReadRefreshesDirHash(t *testing.T) {
 	name := "source-read-hash-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
 	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(patchedArtifact, nil)
 
 	if err := os.WriteFile(filepath.Join(sourceDir, "main.py"), []byte("after"), 0o644); err != nil {
