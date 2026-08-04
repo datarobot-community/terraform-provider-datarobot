@@ -211,6 +211,18 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	createdArtifact := artifact
+	if artifactSourceConfigured(&data) {
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
+		if syncErr != nil {
+			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			return
+		}
+		artifact = syncedArtifact
+	}
+
 	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -264,6 +276,8 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 	}
 
+	priorArtifactID := state.ArtifactID.ValueString()
+
 	var artifact *client.Artifact
 	var err error
 
@@ -271,7 +285,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		traceAPICall("PatchArtifact")
 		artifact, err = r.provider.service.PatchArtifact(
 			ctx,
-			state.ArtifactID.ValueString(),
+			priorArtifactID,
 			patchRequestFromPlan(plan, state),
 		)
 		if err != nil {
@@ -285,6 +299,20 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error creating new Artifact version", err.Error())
 			return
 		}
+	}
+
+	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
+	if artifactSourceConfigured(&plan) {
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		if syncErr != nil {
+			if createdNewVersion {
+				loadArtifactIntoModel(artifact, &plan)
+				resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			}
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			return
+		}
+		artifact = syncedArtifact
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
@@ -339,6 +367,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if req.State.Raw.IsNull() {
+		applySourceManagedCodeRefsToPlan(&plan, nil, true)
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 		return
 	}
@@ -362,6 +391,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		plan.ArtifactID = types.StringUnknown()
 	}
 
+	applySourceManagedCodeRefsToPlan(&plan, &state, false)
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
