@@ -155,14 +155,18 @@ func (e *TaskFailedError) Error() string {
 }
 
 func waitForGenAITaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
-	return waitForTaskStatusToCompleteGeneric(ctx, s, id, true)
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, true, true)
 }
 
 func waitForTaskStatusToComplete(ctx context.Context, s client.Service, id string) error {
-	return waitForTaskStatusToCompleteGeneric(ctx, s, id, false)
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, false, true)
 }
 
-func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, id string, isGenAI bool) error {
+func waitForModelReplacementTaskToComplete(ctx context.Context, s client.Service, id string) error {
+	return waitForTaskStatusToCompleteGeneric(ctx, s, id, false, false)
+}
+
+func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, id string, isGenAI bool, proceedOnStuckInitialized bool) error {
 	expBackoff := getExponentialBackoff()
 
 	startTime := time.Now()
@@ -185,11 +189,14 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 			return backoff.Permanent(err)
 		}
 
-		if task.Status == "ERROR" {
-			return backoff.Permanent(&TaskFailedError{Message: task.Message})
-		}
-
-		if task.Status == "COMPLETED" {
+		switch task.Status {
+		case "ERROR", "ABORTED", "EXPIRED":
+			message := task.Message
+			if message == "" {
+				message = fmt.Sprintf("task %s ended in terminal status %s", id, task.Status)
+			}
+			return backoff.Permanent(&TaskFailedError{Message: message})
+		case "COMPLETED":
 			return nil
 		}
 
@@ -198,7 +205,7 @@ func waitForTaskStatusToCompleteGeneric(ctx context.Context, s client.Service, i
 		// If the task has been stuck in INITIALIZED for over 2 minutes,
 		// the status endpoint is likely not updating — proceed so the caller
 		// can check the resource directly.
-		if task.Status == "INITIALIZED" && elapsed > 2*time.Minute {
+		if proceedOnStuckInitialized && task.Status == "INITIALIZED" && elapsed > 2*time.Minute {
 			tflog.Warn(ctx, "Task stuck in INITIALIZED, proceeding to check resource directly", map[string]interface{}{
 				"task_id": id,
 				"elapsed": elapsed.String(),

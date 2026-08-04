@@ -122,8 +122,8 @@ func (r *ArtifactResource) syncArtifactSource(
 	return artifact, nil
 }
 
-func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact) {
-	if artifact == nil || artifact.ArtifactRepositoryID == nil {
+func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
+	if artifact == nil || !deleteRepository || artifact.ArtifactRepositoryID == nil {
 		return
 	}
 	traceAPICall("DeleteArtifactRepository")
@@ -138,6 +138,26 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if err == nil {
 		data.Source.DirHash = dirHash
 	}
+
+func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
+	if state == nil || state.Spec == nil {
+		return nil
+	}
+	for _, group := range state.Spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !artifactContainerIsPrimary(container, group) {
+				continue
+			}
+			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+				return nil
+			}
+			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
+				return container.ImageBuildConfig.CodeRef
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
@@ -146,6 +166,7 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	needsUnknown := sourceManagedCodeRefNeedsUnknown(plan, state, isCreate)
+	stateCodeRef := primaryCodeRefFromState(state)
 
 	for gi := range plan.Spec.ContainerGroups {
 		group := plan.Spec.ContainerGroups[gi]
@@ -169,16 +190,8 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 				continue
 			}
 
-			// If the state has a known catalog ID and doesn't needUnknown, copy it into new plan
-			if state != nil &&
-				gi < len(state.Spec.ContainerGroups) &&
-				ci < len(state.Spec.ContainerGroups[gi].Containers) {
-				stateContainer := state.Spec.ContainerGroups[gi].Containers[ci]
-				if stateContainer.ImageBuildConfig != nil &&
-					stateContainer.ImageBuildConfig.CodeRef != nil &&
-					IsKnown(stateContainer.ImageBuildConfig.CodeRef.CatalogID) {
-					container.ImageBuildConfig.CodeRef = stateContainer.ImageBuildConfig.CodeRef
-				}
+			if stateCodeRef != nil {
+				container.ImageBuildConfig.CodeRef = stateCodeRef
 			}
 		}
 	}

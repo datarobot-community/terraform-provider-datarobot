@@ -1009,7 +1009,7 @@ type ArtifactResourceModel struct {
 	Spec                 *ArtifactSpecModel   `tfsdk:"spec"`
 }
 
-// ArtifactSourceModel describes a local source tree uploaded to Files API.
+// ArtifactSourceModel describes the local source tree uploaded to Files API.
 type ArtifactSourceModel struct {
 	Dir     types.String `tfsdk:"dir"`
 	DirHash types.String `tfsdk:"dir_hash"`
@@ -1072,6 +1072,7 @@ type ArtifactProbeConfigModel struct {
 	PeriodSeconds       types.Int64  `tfsdk:"period_seconds"`
 	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
 	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
+	SuccessThreshold    types.Int64  `tfsdk:"success_threshold"`
 }
 
 // ArtifactDataSourceModel describes the read-only artifact data source.
@@ -1196,7 +1197,13 @@ type WorkloadResourceModel struct {
 }
 
 type WorkloadRuntimeModel struct {
-	ContainerGroups []WorkloadGroupRuntimeModel `tfsdk:"container_groups"`
+	ContainerGroups   []WorkloadGroupRuntimeModel     `tfsdk:"container_groups"`
+	ReplacementPolicy *WorkloadReplacementPolicyModel `tfsdk:"replacement_policy"`
+}
+
+type WorkloadReplacementPolicyModel struct {
+	WarmupMinutes         types.Int64 `tfsdk:"warmup_minutes"`
+	KeepOldVersionMinutes types.Int64 `tfsdk:"keep_old_version_minutes"`
 }
 
 type WorkloadGroupRuntimeModel struct {
@@ -1221,16 +1228,15 @@ type WorkloadResourceAllocationModel struct {
 }
 
 type WorkloadAutoscalingModel struct {
-	Enabled  types.Bool                       `tfsdk:"enabled"`
-	Policies []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
+	Enabled         types.Bool                       `tfsdk:"enabled"`
+	MinReplicaCount types.Int64                      `tfsdk:"min_replica_count"`
+	MaxReplicaCount types.Int64                      `tfsdk:"max_replica_count"`
+	Policies        []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
 }
 
 type WorkloadAutoscalingPolicyModel struct {
 	ScalingMetric types.String  `tfsdk:"scaling_metric"`
 	Target        types.Float64 `tfsdk:"target"`
-	MinCount      types.Int64   `tfsdk:"min_count"`
-	MaxCount      types.Int64   `tfsdk:"max_count"`
-	Priority      types.Int64   `tfsdk:"priority"`
 }
 
 // QuotaResourceModel describes the datarobot_quota resource. default_rules is a set

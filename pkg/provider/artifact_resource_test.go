@@ -39,7 +39,7 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
@@ -415,6 +415,9 @@ func artifactTestContainerSpecBlock(imageURI string) string {
                 source = "string"
                 name   = "ENV"
                 value  = "production"
+              },
+              {
+                source = "api-key"
               }
             ]
 
@@ -426,6 +429,7 @@ func artifactTestContainerSpecBlock(imageURI string) string {
               period_seconds        = 15
               timeout_seconds       = 5
               failure_threshold     = 3
+              success_threshold     = 1
             }
 
             readiness_probe = {
@@ -485,6 +489,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 	containerDesc := "main container"
 	probeScheme := "HTTP"
 	probeFailureThreshold := int64(3)
+	probeSuccessThreshold := int64(1)
 	probeInitialDelay := int64(10)
 	probePeriod := int64(15)
 	probeTimeout := int64(5)
@@ -530,6 +535,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 							Entrypoint:  []string{"python", "-m", "app"},
 							EnvironmentVars: []client.ArtifactEnvironmentVariable{
 								{Source: client.EnvironmentVariableSourceString, Name: "ENV", Value: "production"},
+								{Source: client.EnvironmentVariableSourceAPIKey},
 							},
 							StartupProbe: &client.ArtifactProbeConfig{
 								Path:                "/startup",
@@ -539,6 +545,7 @@ func artifactFixtureWithStatus(id string, repoID *string, name string, status cl
 								PeriodSeconds:       &probePeriod,
 								TimeoutSeconds:      &probeTimeout,
 								FailureThreshold:    &probeFailureThreshold,
+								SuccessThreshold:    &probeSuccessThreshold,
 							},
 							ReadinessProbe: &client.ArtifactProbeConfig{
 								Path:                "/health",
@@ -572,7 +579,7 @@ func TestArtifactTooManyContainerGroups(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -615,7 +622,7 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	cases := []struct {
@@ -642,6 +649,26 @@ func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 			name:        "string env var missing value",
 			config:      artifactConfigWithStringEnvVarMissingValue(),
 			expectError: `"value" is required`,
+		},
+		{
+			name:        "string env var missing name",
+			config:      artifactConfigWithStringEnvVarMissingName(),
+			expectError: `"name" is required`,
+		},
+		{
+			name:        "api-key env var with unexpected value",
+			config:      artifactConfigWithAPIKeyEnvVar(`value = "should-not-be-here"`),
+			expectError: `"value" must not be set`,
+		},
+		{
+			name:        "api-key env var with unexpected dr_credential_id",
+			config:      artifactConfigWithAPIKeyEnvVar(`dr_credential_id = "cred-abc"`),
+			expectError: `"dr_credential_id" must not be set`,
+		},
+		{
+			name:        "api-key env var with unexpected key",
+			config:      artifactConfigWithAPIKeyEnvVar(`key = "token"`),
+			expectError: `"key" must not be set`,
 		},
 		{
 			name:        "invalid source type",
@@ -722,6 +749,46 @@ resource "datarobot_artifact" "test" {
 `
 }
 
+func artifactConfigWithStringEnvVarMissingName() string {
+	return `
+resource "datarobot_artifact" "test" {
+  name = "missing-name-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "string"
+          value  = "foo"
+        }]
+      }]
+    }]
+  }
+}
+`
+}
+
+// artifactConfigWithAPIKeyEnvVar builds a config with an api-key env var plus
+// an extra attribute line that should be rejected by validation.
+func artifactConfigWithAPIKeyEnvVar(extraLine string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name = "api-key-env-test"
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        environment_vars = [{
+          source = "api-key"
+          %s
+        }]
+      }]
+    }]
+  }
+}
+`, extraLine)
+}
+
 func artifactConfigWithInvalidSource() string {
 	return `
 resource "datarobot_artifact" "test" {
@@ -751,7 +818,7 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
@@ -843,7 +910,7 @@ func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	lockedArtifactID := uuid.NewString()
@@ -919,7 +986,7 @@ func TestArtifactLockedToDraftRejected(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
@@ -1036,7 +1103,7 @@ func TestPatchRequestFromPlan(t *testing.T) {
 }
 
 func TestIntegrationArtifactInvalidStatus(t *testing.T) {
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1061,7 +1128,7 @@ func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
@@ -1135,7 +1202,7 @@ func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
@@ -1203,7 +1270,7 @@ func TestArtifactImageSourceRequired(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1239,7 +1306,7 @@ func TestArtifactLockedImageBuildConfigWithoutImageURI(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1313,7 +1380,7 @@ func TestArtifactNimWithCodeRefRejected(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1635,8 +1702,6 @@ func TestArtifactHasManualCodeRef(t *testing.T) {
 }
 
 func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(validDir, "main.py"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1651,8 +1716,9 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:   artifactConfigWithSource("plan-hash", "draft", validDir),
-				PlanOnly: true,
+				Config:             artifactConfigWithSource("plan-hash", "draft", validDir),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "source.dir_hash"),
 				),
@@ -1922,6 +1988,150 @@ func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
 	globalTestCfg.ApiKey = "fake"
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
+	tests := []struct {
+		name        string
+		config      string
+		expectError *regexp.Regexp
+	}{
+		{
+			name:        "locked with source",
+			config:      artifactConfigWithSource("locked-source", "locked", validDir),
+			expectError: regexp.MustCompile("Source requires draft status"),
+		},
+		{
+			name:        "nim with source",
+			config:      artifactConfigWithSourceType("nim-source", "draft", "nim", validDir),
+			expectError: regexp.MustCompile("Unsupported source on NIM artifacts"),
+		},
+		{
+			name:        "source with manual code_ref",
+			config:      artifactConfigWithSourceAndCodeRef(validDir),
+			expectError: regexp.MustCompile("Conflicting code_ref"),
+		},
+		{
+			name:        "missing source dir",
+			config:      artifactConfigWithSource("missing-dir", "draft", filepath.Join(validDir, "missing")),
+			expectError: regexp.MustCompile("Source directory not found"),
+		},
+		{
+			name:        "primary without image_build_config",
+			config:      artifactConfigWithSourceImageURIONly(validDir),
+			expectError: regexp.MustCompile("Missing image build target"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tt.config,
+						ExpectError: tt.expectError,
+					},
+				},
+			})
+		})
+	}
+}
+
+func artifactConfigWithSource(name, status, dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = %q
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name, status, dir)
+}
+
+func artifactConfigWithSourceType(name, status, artifactType, dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  type   = %q
+  status = %q
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name, artifactType, status, dir)
+}
+
+func artifactConfigWithSourceAndCodeRef(dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = "source-code-ref-conflict"
+  status = "draft"
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          code_ref = {
+            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
+            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, dir)
+}
+
+func artifactConfigWithSourceImageURIONly(dir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = "source-image-uri-only"
+  status = "draft"
+  source = { dir = %q }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = "nginx:latest"
+      }]
+    }]
+  }
+}`, dir)
+}
+
+func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -2038,9 +2248,11 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 		cfg := model.ImageBuildConfig
 		if cfg == nil {
 			t.Fatal("expected image_build_config in state model")
+			return
 		}
 		if cfg.CodeRef == nil {
 			t.Fatal("expected code_ref in state model")
+			return
 		}
 		if got := cfg.CodeRef.CatalogID.ValueString(); got != catalogID {
 			t.Fatalf("catalog_id: got %q, want %q", got, catalogID)
@@ -2050,6 +2262,7 @@ func TestArtifactImageBuildConfigFromAPI_provided(t *testing.T) {
 		}
 		if cfg.Dockerfile == nil {
 			t.Fatal("expected dockerfile in state model")
+			return
 		}
 		if got := cfg.Dockerfile.Source.ValueString(); got != "provided" {
 			t.Fatalf("dockerfile.source: got %q, want %q", got, "provided")
@@ -2205,7 +2418,7 @@ func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
