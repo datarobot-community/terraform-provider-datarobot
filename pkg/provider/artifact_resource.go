@@ -414,7 +414,7 @@ func decodePlanArtifactModel(ctx context.Context, plan tfsdk.Plan, state *Artifa
 }
 
 func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *resource.ModifyPlanResponse, state *ArtifactResourceModel) diag.Diagnostics {
-	return walkPlanCodeRefPaths(ctx, plan, func(codeRefPath path.Path, gi, ci int) diag.Diagnostics {
+	return walkPlanCodeRefPaths(ctx, plan, func(codeRefPath path.Path, gi, ci int, isPrimary bool) diag.Diagnostics {
 		var codeRef types.Object
 		var diags diag.Diagnostics
 		diags.Append(plan.GetAttribute(ctx, codeRefPath, &codeRef)...)
@@ -422,11 +422,8 @@ func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *re
 			return diags
 		}
 
-		if state != nil && state.Spec != nil &&
-			gi < len(state.Spec.ContainerGroups) && ci < len(state.Spec.ContainerGroups[gi].Containers) {
-			container := state.Spec.ContainerGroups[gi].Containers[ci]
-			if container.ImageBuildConfig != nil && container.ImageBuildConfig.CodeRef != nil {
-				ref := container.ImageBuildConfig.CodeRef
+		if isPrimary {
+			if ref := primaryCodeRefFromState(state); ref != nil {
 				codeRefValue, valueDiags := types.ObjectValue(artifactCodeRefObjectType.AttrTypes, map[string]attr.Value{
 					"catalog_id":         ref.CatalogID,
 					"catalog_version_id": ref.CatalogVersionID,
@@ -445,7 +442,23 @@ func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *re
 	})
 }
 
-func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Path, int, int) diag.Diagnostics) diag.Diagnostics {
+func planObjectContainerIsPrimary(container types.Object, containerCount int) bool {
+	if container.IsNull() || container.IsUnknown() {
+		return false
+	}
+	attrs := container.Attributes()
+	primaryAttr, ok := attrs["primary"]
+	if !ok {
+		return containerCount == 1
+	}
+	primary, ok := primaryAttr.(types.Bool)
+	if !ok || primary.IsNull() || primary.IsUnknown() {
+		return containerCount == 1
+	}
+	return primary.ValueBool()
+}
+
+func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Path, int, int, bool) diag.Diagnostics) diag.Diagnostics {
 	var spec types.Object
 	diags := plan.GetAttribute(ctx, path.Root("spec"), &spec)
 	if diags.HasError() || spec.IsNull() || spec.IsUnknown() {
@@ -496,7 +509,7 @@ func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Pat
 				AtName("container_groups").AtListIndex(gi).
 				AtName("containers").AtListIndex(ci).
 				AtName("image_build_config").AtName("code_ref")
-			diags.Append(fn(codeRefPath, gi, ci)...)
+			diags.Append(fn(codeRefPath, gi, ci, planObjectContainerIsPrimary(container, len(containers.Elements())))...)
 			if diags.HasError() {
 				return diags
 			}
