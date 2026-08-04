@@ -13,6 +13,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
+	opts := artifactBuildWaitOptions(context.Background(), &client.WaitForArtifactBuildOptions{
+		PollInterval: time.Millisecond,
+	})
+	if opts.OnOtelLogLine == nil {
+		t.Fatal("expected OTEL log callback to be configured")
+	}
+	if opts.PollInterval != time.Millisecond {
+		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
+	}
+}
+
 func TestArtifactBuildNeededAfterUpload(t *testing.T) {
 	t.Parallel()
 
@@ -211,7 +223,7 @@ func TestSyncArtifactBuild(t *testing.T) {
 				TriggerArtifactBuild(gomock.Any(), artifactID).
 				Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{buildID}}, nil),
 			mockService.EXPECT().
-				WaitForArtifactBuild(gomock.Any(), artifactID, buildID, waitOpts).
+				WaitForArtifactBuild(gomock.Any(), artifactID, buildID, gomock.Any()).
 				Return(&client.ArtifactBuild{ID: buildID, Status: client.ArtifactBuildStatusCompleted}, nil),
 			mockService.EXPECT().
 				GetArtifact(gomock.Any(), artifactID).
