@@ -224,6 +224,41 @@ func Patch[T any](c *Client, ctx context.Context, path string, body any) (*T, er
 	return doRequest[T](c, ctx, http.MethodPatch, path, body)
 }
 
+func getRaw(c *Client, ctx context.Context, path string) ([]byte, error) {
+	url := c.cfg.Endpoint + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, WrapGenericError("failed to create request", err)
+	}
+
+	c.PrepareAPIRequest(req)
+
+	resp, err := c.cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, WrapGenericError(fmt.Sprintf("GET request %s failed", url), err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError(url)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, NewUnauthorizedError(url)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, WrapGenericError("failed to read response body", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewGenericError(fmt.Sprintf("GET request %s : response %s %s", url, resp.Status, string(body)))
+	}
+
+	return body, nil
+}
+
 func ExecuteAndExpectStatus[T any](c *Client, ctx context.Context, method, path string, body any) (*T, string, error) {
 	resp, header, err := doRequestWithResponseHeaders[T](c, ctx, method, path, body)
 
