@@ -50,8 +50,9 @@ type ArtifactBuild struct {
 }
 
 type WaitForArtifactBuildOptions struct {
-	PollInterval time.Duration
-	Timeout      time.Duration
+	PollInterval  time.Duration
+	Timeout       time.Duration
+	OnOtelLogLine func(OtelLogEntry)
 }
 
 type ArtifactBuildFailedError struct {
@@ -225,10 +226,23 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 
 	deadline := time.Now().Add(timeout)
 
+	var logState *otelLogStreamState
+	if opts != nil && opts.OnOtelLogLine != nil {
+		logState = newOtelLogStreamState()
+	}
+	pollOtelLogs := func() {
+		if logState == nil {
+			return
+		}
+		s.pollNewOtelEntityLogs(ctx, "artifact", artifactID, logState, opts.OnOtelLogLine)
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+
+		pollOtelLogs()
 
 		build, err := s.GetArtifactBuild(ctx, artifactID, buildID)
 		if err != nil {
@@ -236,6 +250,7 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		}
 
 		if IsTerminalArtifactBuildStatus(build.Status) {
+			pollOtelLogs()
 			if IsArtifactBuildErrorStatus(build.Status) {
 				return build, &ArtifactBuildFailedError{BuildID: buildID, Status: build.Status}
 			}
