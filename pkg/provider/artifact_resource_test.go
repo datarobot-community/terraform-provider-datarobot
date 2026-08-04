@@ -1821,6 +1821,10 @@ func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schem
 		t.Fatalf("plan.Set: %s", diagErrorSummary(diags))
 	}
 
+	gi, ci := primaryContainerIndex(model)
+	if gi < 0 {
+		t.Fatal("expected primary container with image_build_config")
+	}
 	codeRefPath := path.Root("spec").
 		AtName("container_groups").AtListIndex(0).
 		AtName("containers").AtListIndex(0).
@@ -1830,6 +1834,23 @@ func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schem
 	}
 
 	return plan
+}
+
+func primaryContainerIndex(model *ArtifactResourceModel) (gi, ci int) {
+	if model == nil || model.Spec == nil {
+		return -1, -1
+	}
+	for groupIdx, group := range model.Spec.ContainerGroups {
+		for containerIdx, container := range group.Containers {
+			if container.ImageBuildConfig == nil {
+				continue
+			}
+			if artifactContainerIsPrimary(container, group) {
+				return groupIdx, containerIdx
+			}
+		}
+	}
+	return -1, -1
 }
 
 func testArtifactResourceSchema(t *testing.T) schema.Schema {
