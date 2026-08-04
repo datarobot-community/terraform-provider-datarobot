@@ -143,7 +143,11 @@ func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	}
 
 	waitForBuild := artifactSourceWaitForBuild(plan)
-	artifact, _, err = r.syncArtifactBuild(ctx, artifact.ID, waitForBuild, nil)
+	repoID := ""
+	if artifact.ArtifactRepositoryID != nil {
+		repoID = *artifact.ArtifactRepositoryID
+	}
+	artifact, _, err = r.syncArtifactBuild(ctx, artifact.ID, repoID, waitForBuild, nil)
 	if err != nil {
 		return artifact, &artifactBuildSyncError{cause: err}
 	}
