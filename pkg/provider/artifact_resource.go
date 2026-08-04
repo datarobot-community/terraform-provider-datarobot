@@ -8,12 +8,16 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -72,10 +76,16 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 	}
 
+	codeRefAttrTypes := map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	}
+
 	imageBuildConfigAttributes := map[string]schema.Attribute{
 		"code_ref": schema.SingleNestedAttribute{
 			Optional:            true,
 			Computed:            true,
+			Default:             objectdefault.StaticValue(types.ObjectNull(codeRefAttrTypes)),
 			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. When `source` is set, the provider uploads `source.dir` and populates this block.",
 			Attributes: map[string]schema.Attribute{
 				"catalog_id": schema.StringAttribute{
@@ -191,7 +201,7 @@ func (r *ArtifactResource) Configure(ctx context.Context, req resource.Configure
 func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, nil, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -203,13 +213,16 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		artifact, err = r.syncArtifactSource(ctx, &data, nil, artifact, "")
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
+		if syncErr != nil {
+			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
@@ -254,8 +267,8 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, &state, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -292,12 +305,18 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		artifact, err = r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error uploading artifact source", err.Error())
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		if syncErr != nil {
+			if createdNewVersion {
+				loadArtifactIntoModel(artifact, &plan)
+				resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			}
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
@@ -333,6 +352,17 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+
+	var statePtr *ArtifactResourceModel
+	var state ArtifactResourceModel
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		statePtr = &state
+	}
+  
 	var plan ArtifactResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -363,20 +393,162 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
-	// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
-	// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
-	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
-		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	if plan.Source != nil && IsKnown(plan.Source.Dir) {
+		dirHash, err := computeFolderHash(plan.Source.Dir)
+		if err != nil {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("source").AtName("dir"),
+				"Error calculating source directory hash",
+				err.Error(),
+			)
+			return
+		}
+		plan.Source.DirHash = dirHash
 	}
 
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+	isCreate := req.State.Raw.IsNull()
+	if !isCreate {
+		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
+			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+		}
+
+		if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
+			(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
+			plan.ArtifactID = types.StringUnknown()
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
+		}
 	}
+
+	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+func decodePlanArtifactModel(ctx context.Context, plan tfsdk.Plan, state *ArtifactResourceModel, data *ArtifactResourceModel) diag.Diagnostics {
+	var modifyResp resource.ModifyPlanResponse
+	modifyResp.Plan = plan
+
+	var diags diag.Diagnostics
+	diags.Append(nullUnknownCodeRefsForDecode(ctx, modifyResp.Plan, &modifyResp, state)...)
+	if diags.HasError() {
+		return diags
+	}
+	diags.Append(modifyResp.Plan.Get(ctx, data)...)
+	return diags
+}
+
+func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *resource.ModifyPlanResponse, state *ArtifactResourceModel) diag.Diagnostics {
+	return walkPlanCodeRefPaths(ctx, plan, func(codeRefPath path.Path, gi, ci int, isPrimary bool) diag.Diagnostics {
+		var codeRef types.Object
+		var diags diag.Diagnostics
+		diags.Append(plan.GetAttribute(ctx, codeRefPath, &codeRef)...)
+		if diags.HasError() || !codeRef.IsUnknown() {
+			return diags
+		}
+
+		if isPrimary {
+			if ref := primaryCodeRefFromState(state); ref != nil {
+				codeRefValue, valueDiags := types.ObjectValue(artifactCodeRefObjectType.AttrTypes, map[string]attr.Value{
+					"catalog_id":         ref.CatalogID,
+					"catalog_version_id": ref.CatalogVersionID,
+				})
+				diags.Append(valueDiags...)
+				if diags.HasError() {
+					return diags
+				}
+				diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, codeRefValue)...)
+				return diags
+			}
+		}
+
+		diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, types.ObjectNull(artifactCodeRefObjectType.AttrTypes))...)
+		return diags
+	})
+}
+
+func planObjectContainerIsPrimary(container types.Object, containerCount int) bool {
+	if container.IsNull() || container.IsUnknown() {
+		return false
+	}
+	attrs := container.Attributes()
+	primaryAttr, ok := attrs["primary"]
+	if !ok {
+		return containerCount == 1
+	}
+	primary, ok := primaryAttr.(types.Bool)
+	if !ok || primary.IsNull() || primary.IsUnknown() {
+		return containerCount == 1
+	}
+	return primary.ValueBool()
+}
+
+func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Path, int, int, bool) diag.Diagnostics) diag.Diagnostics {
+	var spec types.Object
+	diags := plan.GetAttribute(ctx, path.Root("spec"), &spec)
+	if diags.HasError() || spec.IsNull() || spec.IsUnknown() {
+		return diags
+	}
+
+	specAttrs := spec.Attributes()
+	groupsAttr, ok := specAttrs["container_groups"]
+	if !ok {
+		return diags
+	}
+	groups, ok := groupsAttr.(types.List)
+	if !ok || groups.IsNull() || groups.IsUnknown() {
+		return diags
+	}
+
+	for gi, groupElem := range groups.Elements() {
+		group, ok := groupElem.(types.Object)
+		if !ok || group.IsNull() || group.IsUnknown() {
+			continue
+		}
+		groupAttrs := group.Attributes()
+		containersAttr, ok := groupAttrs["containers"]
+		if !ok {
+			continue
+		}
+		containers, ok := containersAttr.(types.List)
+		if !ok || containers.IsNull() || containers.IsUnknown() {
+			continue
+		}
+
+		for ci, containerElem := range containers.Elements() {
+			container, ok := containerElem.(types.Object)
+			if !ok || container.IsNull() || container.IsUnknown() {
+				continue
+			}
+			containerAttrs := container.Attributes()
+			buildConfigAttr, ok := containerAttrs["image_build_config"]
+			if !ok {
+				continue
+			}
+			buildConfig, ok := buildConfigAttr.(types.Object)
+			if !ok || buildConfig.IsNull() || buildConfig.IsUnknown() {
+				continue
+			}
+
+			codeRefPath := path.Root("spec").
+				AtName("container_groups").AtListIndex(gi).
+				AtName("containers").AtListIndex(ci).
+				AtName("image_build_config").AtName("code_ref")
+			diags.Append(fn(codeRefPath, gi, ci, planObjectContainerIsPrimary(container, len(containers.Elements())))...)
+			if diags.HasError() {
+				return diags
+			}
+		}
+	}
+
+	return diags
+}
+
+var artifactCodeRefObjectType = types.ObjectType{
+	AttrTypes: map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	},
 }
 
 func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
@@ -552,7 +724,8 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.InitialDelaySeconds.Equal(b.InitialDelaySeconds) &&
 		a.PeriodSeconds.Equal(b.PeriodSeconds) &&
 		a.TimeoutSeconds.Equal(b.TimeoutSeconds) &&
-		a.FailureThreshold.Equal(b.FailureThreshold)
+		a.FailureThreshold.Equal(b.FailureThreshold) &&
+		a.SuccessThreshold.Equal(b.SuccessThreshold)
 }
 
 func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
@@ -583,6 +756,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "string".`)
+		}
 		if ev.Value.IsNull() || ev.Value.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
@@ -599,6 +777,11 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "dr-credential".`)
+		}
 		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
@@ -614,10 +797,26 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Unexpected field",
 				`"value" must not be set when source is "dr-credential".`)
 		}
+	case client.EnvironmentVariableSourceAPIKey:
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "api-key"; the platform resolves the token value.`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "api-key".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "api-key".`)
+		}
 	default:
 		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
 			"Invalid source",
-			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential", "api-key".`, source))
 	}
 }
 
@@ -1019,10 +1218,14 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 				Source: ev.Source.ValueString(),
 				Name:   ev.Name.ValueString(),
 			}
-			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
+			switch ev.Source.ValueString() {
+			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
-			} else {
+			case client.EnvironmentVariableSourceAPIKey:
+				// Only source (and name, when set) are sent; the platform
+				// resolves the token value.
+			default:
 				envVar.Value = ev.Value.ValueString()
 			}
 			container.EnvironmentVars[i] = envVar
@@ -1126,6 +1329,10 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 		v := probe.FailureThreshold.ValueInt64()
 		p.FailureThreshold = &v
 	}
+	if !probe.SuccessThreshold.IsNull() && !probe.SuccessThreshold.IsUnknown() {
+		v := probe.SuccessThreshold.ValueInt64()
+		p.SuccessThreshold = &v
+	}
 	return p
 }
 
@@ -1223,20 +1430,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			m := ArtifactEnvironmentVariableModel{
-				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
-				Value:          types.StringNull(),
-				DrCredentialID: types.StringNull(),
-				Key:            types.StringNull(),
-			}
-			if ev.Source == client.EnvironmentVariableSourceCredential {
-				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
-				m.Key = types.StringValue(ev.Key)
-			} else {
-				m.Value = types.StringValue(ev.Value)
-			}
-			model.EnvironmentVars[i] = m
+			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
@@ -1351,6 +1545,11 @@ func loadProbeFromAPI(probe *client.ArtifactProbeConfig) *ArtifactProbeConfigMod
 		m.FailureThreshold = types.Int64Value(*probe.FailureThreshold)
 	} else {
 		m.FailureThreshold = types.Int64Null()
+	}
+	if probe.SuccessThreshold != nil {
+		m.SuccessThreshold = types.Int64Value(*probe.SuccessThreshold)
+	} else {
+		m.SuccessThreshold = types.Int64Null()
 	}
 	return m
 }

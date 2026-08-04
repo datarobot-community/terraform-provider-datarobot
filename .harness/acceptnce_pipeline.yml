@@ -72,24 +72,6 @@ pipeline:
                       limits:
                         memory: 4Gi
                         cpu: "6"
-              - step:
-                  name: Notify dsx-alerts
-                  identifier: Notify_dsxalerts
-                  template:
-                    templateRef: org.Send_Slack_notification
-                    versionLabel: v1
-                    templateInputs:
-                      type: Run
-                      spec:
-                        envVariables:
-                          SLACK_CHANNEL: dsx-alerts
-                          SLACK_URL: <+input>.default("")
-                          MESSAGE_TYPE: Error
-                          MESSAGE_TITLE: Declarative API Terraform Tests Failed
-                          MESSAGE_TEXT: "@here Check the pipeline logs to see more details..."
-                          MESSAGE_DETAILS_FILENAME: <+input>.default(./SLACK_MESSAGE.md)
-                  when:
-                    stageStatus: Failure
           caching:
             enabled: false
             paths: []
@@ -206,6 +188,9 @@ pipeline:
                 type: Secret
                 default: dr_staging_api_key
                 value: <+input>.default(dr_staging_api_key).allowedValues(dr_staging_api_key,dr_app_charts_r10p2_api_key,dr_private_ca_api_key)
+              - name: notifyOnFailure
+                type: String
+                value: "false"
   variables:
     - name: endpoint
       type: String

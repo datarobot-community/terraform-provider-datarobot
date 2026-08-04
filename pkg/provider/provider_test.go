@@ -83,6 +83,17 @@ func testAccPreCheck(t *testing.T) {
 	}
 }
 
+// mockAPIKey sets a fake API key for a mock (non-acceptance) test and restores
+// the original on cleanup. globalTestCfg is shared package state; leaving it as
+// "fake" leaks into the parallel acceptance tests that bake globalTestCfg.ApiKey
+// into their provider config (e.g. the data source tests), causing spurious 401s.
+func mockAPIKey(t *testing.T) {
+	t.Helper()
+	orig := globalTestCfg.ApiKey
+	t.Cleanup(func() { globalTestCfg.ApiKey = orig })
+	globalTestCfg.ApiKey = "fake"
+}
+
 func testAccFeatureFlagPreCheck(t *testing.T, flagName string) {
 	t.Helper()
 	testAccPreCheck(t)
