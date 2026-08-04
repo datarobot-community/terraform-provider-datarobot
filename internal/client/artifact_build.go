@@ -26,12 +26,12 @@ const (
 )
 
 const (
-	ArtifactBuildPollIntervalEnvVar    = "DATAROBOT_ARTIFACT_BUILD_POLL_INTERVAL"
-	ArtifactBuildPollTimeoutEnvVar     = "DATAROBOT_ARTIFACT_BUILD_POLL_TIMEOUT"
-	ArtifactBuildLogsTailLinesEnvVar   = "DATAROBOT_ARTIFACT_BUILD_LOGS_TAIL_LINES"
-	defaultArtifactBuildPollInterval   = 10 * time.Second
-	defaultArtifactBuildPollTimeout    = 10 * time.Minute
-	defaultArtifactBuildLogsTailLines  = 30
+	ArtifactBuildPollIntervalEnvVar   = "DATAROBOT_ARTIFACT_BUILD_POLL_INTERVAL"
+	ArtifactBuildPollTimeoutEnvVar    = "DATAROBOT_ARTIFACT_BUILD_POLL_TIMEOUT"
+	ArtifactBuildLogsTailLinesEnvVar  = "DATAROBOT_ARTIFACT_BUILD_LOGS_TAIL_LINES"
+	defaultArtifactBuildPollInterval  = 10 * time.Second
+	defaultArtifactBuildPollTimeout   = 10 * time.Minute
+	defaultArtifactBuildLogsTailLines = 30
 )
 
 // ArtifactBuildTriggerResponse is the body returned by POST /artifacts/{id}/builds/.
