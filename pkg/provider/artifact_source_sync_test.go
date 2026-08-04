@@ -325,8 +325,9 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			t.Fatal("expected computed dir_hash")
 		}
 
+		first := data.Source.DirHash
 		refreshArtifactSourceDirHash(data)
-		if !data.Source.DirHash.Equal(data.Source.DirHash) {
+		if !data.Source.DirHash.Equal(first) {
 			t.Fatal("expected stable hash on unchanged tree")
 		}
 	})
