@@ -193,6 +193,59 @@ func TestWaitForArtifactBuildTimesOut(t *testing.T) {
 	}
 }
 
+func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
+	buildCalls := 0
+	otelCalls := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/artifacts/art-1/builds/build-1/":
+			buildCalls++
+			status := ArtifactBuildStatusInProgress
+			if buildCalls >= 2 {
+				status = ArtifactBuildStatusCompleted
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
+		case "/otel/artifact/art-1/logs/":
+			otelCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{{
+					"level":     "info",
+					"message":   "building image",
+					"timestamp": "2026-07-09T16:14:50Z",
+				}},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	var lines []OtelLogEntry
+	_, err := svc.WaitForArtifactBuild(context.Background(), "art-1", "build-1", &WaitForArtifactBuildOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+		OnOtelLogLine: func(entry OtelLogEntry) {
+			lines = append(lines, entry)
+		},
+	})
+	if err != nil {
+		t.Fatalf("WaitForArtifactBuild returned error: %v", err)
+	}
+	if otelCalls == 0 {
+		t.Fatal("expected OTEL log polling during wait")
+	}
+	if len(lines) == 0 || lines[0].Message != "building image" {
+		t.Fatalf("expected streamed OTEL logs, got %#v", lines)
+	}
+}
+
 func TestArtifactBuildPollSettings(t *testing.T) {
 	t.Run("uses env var override for interval", func(t *testing.T) {
 		t.Setenv(ArtifactBuildPollIntervalEnvVar, "7s")
