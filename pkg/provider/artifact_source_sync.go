@@ -138,6 +138,7 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if err == nil {
 		data.Source.DirHash = dirHash
 	}
+}
 
 func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
 	if state == nil || state.Spec == nil {

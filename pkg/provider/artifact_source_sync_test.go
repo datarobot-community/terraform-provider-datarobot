@@ -354,6 +354,9 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		if IsKnown(data.Source.DirHash) {
 			t.Fatal("expected dir_hash to remain unset when directory is missing")
 		}
+	})
+}
+
 func TestRollbackArtifactCreate(t *testing.T) {
 	t.Parallel()
 
