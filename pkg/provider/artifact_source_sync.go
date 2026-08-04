@@ -140,6 +140,16 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	}
 }
 
+func cloneCodeRefModel(ref *ArtifactCodeRefModel) *ArtifactCodeRefModel {
+	if ref == nil {
+		return nil
+	}
+	return &ArtifactCodeRefModel{
+		CatalogID:        ref.CatalogID,
+		CatalogVersionID: ref.CatalogVersionID,
+	}
+}
+
 func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
 	if state == nil || state.Spec == nil {
 		return nil
@@ -192,7 +202,7 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 			}
 
 			if stateCodeRef != nil {
-				container.ImageBuildConfig.CodeRef = stateCodeRef
+				container.ImageBuildConfig.CodeRef = cloneCodeRefModel(stateCodeRef)
 			}
 		}
 	}
