@@ -1731,8 +1731,6 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 }
 
 func TestArtifactSourceConfigValidation(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1774,6 +1772,26 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 			name:        "primary without image_build_config",
 			config:      artifactConfigWithSourceImageURIONly(validDir),
 			expectError: regexp.MustCompile("Missing image build target"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tt.config,
+						ExpectError: tt.expectError,
+					},
+				},
+			})
+		})
+	}
+}
+
 func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
 	t.Parallel()
 
@@ -1854,25 +1872,19 @@ func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resource.Test(t, resource.TestCase{
-				IsUnitTest:               true,
-				PreCheck:                 func() { testAccPreCheck(t) },
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Steps: []resource.TestStep{
-					{
-						Config:      tt.config,
-						ExpectError: tt.expectError,
-					},
-				},
-			})
+			t.Parallel()
+
+			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
+
+			var decoded ArtifactResourceModel
+			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
+				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
+			}
+
+			tt.check(t, decoded)
 		})
 	}
 }
-
-const (
-	artifactSourceTestCatalogID = "aaaaaaaaaaaaaaaaaaaaaaaa"
-	artifactSourceTestVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
-)
 
 func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string) *client.Artifact {
 	port := int64(8080)
@@ -1965,7 +1977,7 @@ func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data Arti
 	if artifactSourceConfigured(&data) {
 		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, artifact, "")
 		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
+			r.rollbackArtifactCreate(ctx, artifact, true)
 			diags.AddError("Error uploading artifact source", err.Error())
 			return data, diags
 		}
@@ -2045,10 +2057,14 @@ func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, plan, sta
 }
 
 func diagErrorSummary(diags diag.Diagnostics) string {
-	if !diags.HasError() {
+	if diags == nil || !diags.HasError() {
 		return ""
 	}
-	return diags.Errors()[0].Summary()
+	summaries := make([]string, 0, len(diags.Errors()))
+	for _, d := range diags.Errors() {
+		summaries = append(summaries, d.Summary())
+	}
+	return strings.Join(summaries, "; ")
 }
 
 func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
@@ -2587,32 +2603,6 @@ resource "datarobot_artifact" "test" {
 }`, dir)
 }
 
-func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
-			t.Parallel()
-
-			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
-
-			var decoded ArtifactResourceModel
-			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
-				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
-			}
-
-			tt.check(t, decoded)
-		})
-	}
-}
-
-func diagErrorSummary(diags diag.Diagnostics) string {
-	if diags == nil || !diags.HasError() {
-		return ""
-	}
-	summaries := make([]string, 0, len(diags.Errors()))
-	for _, d := range diags.Errors() {
-		summaries = append(summaries, d.Summary())
-	}
-	return strings.Join(summaries, "; ")
-}
-
 func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schema schema.Schema, model *ArtifactResourceModel) tfsdk.Plan {
 	t.Helper()
 
@@ -2662,151 +2652,6 @@ func testArtifactResourceSchema(t *testing.T) schema.Schema {
 		t.Fatalf("artifact schema: %s", diagErrorSummary(schemaResponse.Diagnostics))
 	}
 	return schemaResponse.Schema
-}
-
-func TestArtifactSourceConfigValidation(t *testing.T) {
-	validDir := t.TempDir()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
-	globalTestCfg.ApiKey = "fake"
-	t.Setenv(DataRobotApiKeyEnvVar, "fake")
-
-	tests := []struct {
-		name        string
-		config      string
-		expectError *regexp.Regexp
-	}{
-		{
-			name:        "locked with source",
-			config:      artifactConfigWithSource("locked-source", "locked", validDir),
-			expectError: regexp.MustCompile("Source requires draft status"),
-		},
-		{
-			name:        "nim with source",
-			config:      artifactConfigWithSourceType("nim-source", "draft", "nim", validDir),
-			expectError: regexp.MustCompile("Unsupported source on NIM artifacts"),
-		},
-		{
-			name:        "source with manual code_ref",
-			config:      artifactConfigWithSourceAndCodeRef(validDir),
-			expectError: regexp.MustCompile("Conflicting code_ref"),
-		},
-		{
-			name:        "missing source dir",
-			config:      artifactConfigWithSource("missing-dir", "draft", filepath.Join(validDir, "missing")),
-			expectError: regexp.MustCompile("Source directory not found"),
-		},
-		{
-			name:        "primary without image_build_config",
-			config:      artifactConfigWithSourceImageURIONly(validDir),
-			expectError: regexp.MustCompile("Missing image build target"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resource.Test(t, resource.TestCase{
-				IsUnitTest:               true,
-				PreCheck:                 func() { testAccPreCheck(t) },
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Steps: []resource.TestStep{
-					{
-						Config:      tt.config,
-						ExpectError: tt.expectError,
-					},
-				},
-			})
-		})
-	}
-}
-
-func artifactConfigWithSource(name, status, dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = %q
-  status = %q
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, name, status, dir)
-}
-
-func artifactConfigWithSourceType(name, status, artifactType, dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = %q
-  type   = %q
-  status = %q
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, name, artifactType, status, dir)
-}
-
-func artifactConfigWithSourceAndCodeRef(dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = "source-code-ref-conflict"
-  status = "draft"
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          code_ref = {
-            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
-            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
-          }
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, dir)
-}
-
-func artifactConfigWithSourceImageURIONly(dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = "source-image-uri-only"
-  status = "draft"
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary   = true
-        port      = 8080
-        image_uri = "nginx:latest"
-      }]
-    }]
-  }
-}`, dir)
 }
 
 func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
