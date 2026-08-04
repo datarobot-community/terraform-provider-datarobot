@@ -1848,8 +1848,8 @@ func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schem
 		t.Fatal("expected primary container with image_build_config")
 	}
 	codeRefPath := path.Root("spec").
-		AtName("container_groups").AtListIndex(0).
-		AtName("containers").AtListIndex(0).
+		AtName("container_groups").AtListIndex(gi).
+		AtName("containers").AtListIndex(ci).
 		AtName("image_build_config").AtName("code_ref")
 	if diags := plan.SetAttribute(ctx, codeRefPath, types.ObjectUnknown(artifactCodeRefObjectType.AttrTypes)); diags.HasError() {
 		t.Fatalf("plan.SetAttribute(code_ref): %s", diagErrorSummary(diags))
