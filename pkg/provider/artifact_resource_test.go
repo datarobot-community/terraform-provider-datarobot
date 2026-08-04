@@ -1784,6 +1784,28 @@ func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "update decodes unknown code_ref from primary after container reorder",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from primary in state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
