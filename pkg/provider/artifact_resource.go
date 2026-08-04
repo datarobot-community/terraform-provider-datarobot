@@ -352,33 +352,18 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	var plan ArtifactResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("source").AtName("dir"),
-				"Error calculating source directory hash",
-				err.Error(),
-			)
+	var statePtr *ArtifactResourceModel
+	var state ArtifactResourceModel
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		plan.Source.DirHash = dirHash
+		statePtr = &state
 	}
 
-	if req.State.Raw.IsNull() {
-		applySourceManagedCodeRefsToPlan(&plan, nil, true)
-		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
-	}
-
-	var state ArtifactResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	var plan ArtifactResourceModel
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, statePtr, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -467,10 +452,6 @@ func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Pat
 		return diags
 	}
 
-	if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
-		plan.ArtifactID = types.StringUnknown()
-	}
 	specAttrs := spec.Attributes()
 	groupsAttr, ok := specAttrs["container_groups"]
 	if !ok {
@@ -529,7 +510,7 @@ var artifactCodeRefObjectType = types.ObjectType{
 	AttrTypes: map[string]attr.Type{
 		"catalog_id":         types.StringType,
 		"catalog_version_id": types.StringType,
-	}
+	},
 }
 
 func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
