@@ -1,6 +1,7 @@
-# Two common artifact shapes:
+# Three common artifact shapes:
 # - Prebuilt image: set image_uri (works with status = "locked" or "draft")
-# - Build from source: set image_build_config on a draft artifact (omit image_uri until after build)
+# - Build from source with local upload: set image_build_config and source { dir } on a draft artifact
+# - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -20,8 +21,12 @@ resource "datarobot_artifact" "prebuilt" {
 
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
-  description = "Draft artifact with image build configuration (code-to-workload)"
+  description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
+
+  source = {
+    dir = "${path.module}/app"
+  }
 
   spec = {
     container_groups = [{
@@ -31,11 +36,7 @@ resource "datarobot_artifact" "from_source" {
         port    = 8080
 
         image_build_config = {
-          # code_ref is optional at create; required before build or lock
-          # code_ref = {
-          #   catalog_id         = "<24-char-hex>"
-          #   catalog_version_id = "<24-char-hex>"
-          # }
+          # code_ref is populated automatically from source.dir after upload
 
           dockerfile = {
             source = "provided"

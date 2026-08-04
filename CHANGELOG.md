@@ -3,7 +3,8 @@
 ### Added
 
 - Documentation and examples for in-place `datarobot_workload` replacement: operator guide in `docs/resources/workload.md` (WAPI rolling replacement vs legacy destroy/create, artifact dual-ID wiring, update-trigger table, apply duration), registry example at `examples/resources/datarobot_workload/`, and runnable workflow at `examples/workflows/workload_replacement/`.
-
+- `source` block on `datarobot_artifact`: upload a local directory (`source.dir`) to the DataRobot catalog on create and update, auto-populate the primary container's `image_build_config.code_ref`, and track changes via computed `source.dir_hash`. Requires `status = "draft"` and a primary container with `image_build_config`. Manual `code_ref` and `source` are mutually exclusive.
+- Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
 ### Fixed
 
 - Bumped `google.golang.org/grpc` from `1.79.3` to `1.82.1` to resolve `GO-2026-6061` (xDS RBAC authorization engine and HTTP/2 server transport) detected by `govulncheck`. The advisory is reachable from the provider's plugin gRPC server (`providerserver.Serve` → `transport.NewServerTransport`), not merely imported. Dependency-only change; no provider behavior change.
@@ -29,8 +30,8 @@
 
 ### Added
 
-- `internal/client/filesapi` package: context-aware Files API client (catalog create, staged upload, zip upload, async status polling, manifest listing) ported from the DR CLI for upcoming `datarobot_artifact` `source { dir }` support
-- `internal/artifactsource` package: push-only directory upload orchestration (`PushDirectory`) over the Files API client (walk, hash, stage/zip routing, async poll) for upcoming `datarobot_artifact` `source { dir }` support
+- `internal/client/filesapi` package: context-aware Files API client (catalog create, staged upload, zip upload, async status polling, manifest listing) ported from the DR CLI as foundation for `datarobot_artifact` `source { dir }` support
+- `internal/artifactsource` package: push-only directory upload orchestration (`PushDirectory`) over the Files API client (walk, hash, stage/zip routing, async poll) as foundation for `datarobot_artifact` `source { dir }` support
 - `image_build_config` block on `datarobot_artifact` containers: configure code-to-workload image builds with optional `code_ref` and a `dockerfile` (`provided` or `generated`). Use with `status = "draft"` for pre-build artifacts; locking requires a completed build so workload-api has populated `image_uri`.
 - `status` attribute on `datarobot_artifact`: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID

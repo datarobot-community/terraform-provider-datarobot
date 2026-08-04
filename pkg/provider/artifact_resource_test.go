@@ -13,8 +13,11 @@ import (
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -1702,8 +1705,6 @@ func TestArtifactHasManualCodeRef(t *testing.T) {
 }
 
 func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(validDir, "main.py"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1718,8 +1719,9 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:   artifactConfigWithSource("plan-hash", "draft", validDir),
-				PlanOnly: true,
+				Config:             artifactConfigWithSource("plan-hash", "draft", validDir),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("datarobot_artifact.test", "source.dir_hash"),
 				),
@@ -1728,9 +1730,163 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 	})
 }
 
-func TestArtifactSourceConfigValidation(t *testing.T) {
+func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.Background()
+	schema := testArtifactResourceSchema(t)
+	dir := t.TempDir()
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	tests := []struct {
+		name      string
+		planModel *ArtifactResourceModel
+		state     *ArtifactResourceModel
+		check     func(t *testing.T, decoded ArtifactResourceModel)
+	}{
+		{
+			name: "create decodes unknown code_ref as null",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("create-decode")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef != nil && (IsKnown(codeRef.CatalogID) || IsKnown(codeRef.CatalogVersionID)) {
+					t.Fatalf("expected null code_ref on create, got %#v", codeRef)
+				}
+			},
+		},
+		{
+			name: "update decodes unknown code_ref from state",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-b")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+				if got := codeRef.CatalogVersionID.ValueString(); got != artifactSourceTestVersionID {
+					t.Fatalf("catalog_version_id = %q, want %q", got, artifactSourceTestVersionID)
+				}
+			},
+		},
+		{
+			name: "update decodes unknown code_ref from primary after container reorder",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from primary in state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
+
+			var decoded ArtifactResourceModel
+			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
+				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
+			}
+
+			tt.check(t, decoded)
+		})
+	}
+}
+
+func diagErrorSummary(diags diag.Diagnostics) string {
+	if diags == nil || !diags.HasError() {
+		return ""
+	}
+	summaries := make([]string, 0, len(diags.Errors()))
+	for _, d := range diags.Errors() {
+		summaries = append(summaries, d.Summary())
+	}
+	return strings.Join(summaries, "; ")
+}
+
+func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schema schema.Schema, model *ArtifactResourceModel) tfsdk.Plan {
+	t.Helper()
+
+	plan := tfsdk.Plan{Schema: schema}
+	if diags := plan.Set(ctx, model); diags.HasError() {
+		t.Fatalf("plan.Set: %s", diagErrorSummary(diags))
+	}
+
+	gi, ci := primaryContainerIndex(model)
+	if gi < 0 {
+		t.Fatal("expected primary container with image_build_config")
+	}
+	codeRefPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(gi).
+		AtName("containers").AtListIndex(ci).
+		AtName("image_build_config").AtName("code_ref")
+	if diags := plan.SetAttribute(ctx, codeRefPath, types.ObjectUnknown(artifactCodeRefObjectType.AttrTypes)); diags.HasError() {
+		t.Fatalf("plan.SetAttribute(code_ref): %s", diagErrorSummary(diags))
+	}
+
+	return plan
+}
+
+func primaryContainerIndex(model *ArtifactResourceModel) (gi, ci int) {
+	if model == nil || model.Spec == nil {
+		return -1, -1
+	}
+	for groupIdx, group := range model.Spec.ContainerGroups {
+		for containerIdx, container := range group.Containers {
+			if container.ImageBuildConfig == nil {
+				continue
+			}
+			if artifactContainerIsPrimary(container, group) {
+				return groupIdx, containerIdx
+			}
+		}
+	}
+	return -1, -1
+}
+
+func testArtifactResourceSchema(t *testing.T) schema.Schema {
+	t.Helper()
+
+	schemaResponse := &tfresource.SchemaResponse{}
+	NewArtifactResource().Schema(context.Background(), tfresource.SchemaRequest{}, schemaResponse)
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("artifact schema: %s", diagErrorSummary(schemaResponse.Diagnostics))
+	}
+	return schemaResponse.Schema
+}
+
+func TestArtifactSourceConfigValidation(t *testing.T) {
 	validDir := t.TempDir()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
