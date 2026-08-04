@@ -352,7 +352,6 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-
 	var statePtr *ArtifactResourceModel
 	var state ArtifactResourceModel
 	if !req.State.Raw.IsNull() {
@@ -362,33 +361,9 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		}
 		statePtr = &state
 	}
-  
+
 	var plan ArtifactResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("source").AtName("dir"),
-				"Error calculating source directory hash",
-				err.Error(),
-			)
-			return
-		}
-		plan.Source.DirHash = dirHash
-	}
-
-	if req.State.Raw.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
-	}
-
-	var state ArtifactResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
