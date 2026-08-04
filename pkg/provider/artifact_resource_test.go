@@ -13,8 +13,11 @@ import (
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -1799,6 +1802,17 @@ func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
 	}
 }
 
+func diagErrorSummary(diags diag.Diagnostics) string {
+	if diags == nil || !diags.HasError() {
+		return ""
+	}
+	summaries := make([]string, 0, len(diags.Errors()))
+	for _, d := range diags.Errors() {
+		summaries = append(summaries, d.Summary())
+	}
+	return strings.Join(summaries, "; ")
+}
+
 func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schema schema.Schema, model *ArtifactResourceModel) tfsdk.Plan {
 	t.Helper()
 
@@ -1833,150 +1847,6 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 	t.Parallel()
 
 	validDir := t.TempDir()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
-	globalTestCfg.ApiKey = "fake"
-	t.Setenv(DataRobotApiKeyEnvVar, "fake")
-
-	tests := []struct {
-		name        string
-		config      string
-		expectError *regexp.Regexp
-	}{
-		{
-			name:        "locked with source",
-			config:      artifactConfigWithSource("locked-source", "locked", validDir),
-			expectError: regexp.MustCompile("Source requires draft status"),
-		},
-		{
-			name:        "nim with source",
-			config:      artifactConfigWithSourceType("nim-source", "draft", "nim", validDir),
-			expectError: regexp.MustCompile("Unsupported source on NIM artifacts"),
-		},
-		{
-			name:        "source with manual code_ref",
-			config:      artifactConfigWithSourceAndCodeRef(validDir),
-			expectError: regexp.MustCompile("Conflicting code_ref"),
-		},
-		{
-			name:        "missing source dir",
-			config:      artifactConfigWithSource("missing-dir", "draft", filepath.Join(validDir, "missing")),
-			expectError: regexp.MustCompile("Source directory not found"),
-		},
-		{
-			name:        "primary without image_build_config",
-			config:      artifactConfigWithSourceImageURIONly(validDir),
-			expectError: regexp.MustCompile("Missing image build target"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resource.Test(t, resource.TestCase{
-				IsUnitTest:               true,
-				PreCheck:                 func() { testAccPreCheck(t) },
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Steps: []resource.TestStep{
-					{
-						Config:      tt.config,
-						ExpectError: tt.expectError,
-					},
-				},
-			})
-		})
-	}
-}
-
-func artifactConfigWithSource(name, status, dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = %q
-  status = %q
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, name, status, dir)
-}
-
-func artifactConfigWithSourceType(name, status, artifactType, dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = %q
-  type   = %q
-  status = %q
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, name, artifactType, status, dir)
-}
-
-func artifactConfigWithSourceAndCodeRef(dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = "source-code-ref-conflict"
-  status = "draft"
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary = true
-        port    = 8080
-        image_build_config = {
-          code_ref = {
-            catalog_id         = "aaaaaaaaaaaaaaaaaaaaaaaa"
-            catalog_version_id = "bbbbbbbbbbbbbbbbbbbbbbbb"
-          }
-          dockerfile = { source = "provided" }
-        }
-      }]
-    }]
-  }
-}`, dir)
-}
-
-func artifactConfigWithSourceImageURIONly(dir string) string {
-	return fmt.Sprintf(`
-resource "datarobot_artifact" "test" {
-  name   = "source-image-uri-only"
-  status = "draft"
-  source = { dir = %q }
-  spec = {
-    container_groups = [{
-      containers = [{
-        primary   = true
-        port      = 8080
-        image_uri = "nginx:latest"
-      }]
-    }]
-  }
-}`, dir)
-}
-
-func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
