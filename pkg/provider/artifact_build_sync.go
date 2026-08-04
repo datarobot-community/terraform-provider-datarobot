@@ -6,6 +6,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type artifactBuildSyncError struct {
@@ -77,7 +78,8 @@ func (r *ArtifactResource) syncArtifactBuild(
 
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, opts); err != nil {
+		waitOpts := artifactBuildWaitOptions(ctx, opts)
+		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
 			return nil, buildID, r.enrichArtifactBuildError(
 				ctx,
 				artifactID,
@@ -113,6 +115,19 @@ func (r *ArtifactResource) syncArtifactBuild(
 		)
 	}
 	return artifact, buildID, nil
+}
+
+func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+	merged := &client.WaitForArtifactBuildOptions{}
+	if opts != nil {
+		*merged = *opts
+	}
+	if merged.OnOtelLogLine == nil {
+		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
+			tflog.Info(ctx, client.FormatOtelLogEntry(entry))
+		}
+	}
+	return merged
 }
 
 // artifactModifyPlanNeedsUnknownImageURI is true when apply will upload source and trigger
