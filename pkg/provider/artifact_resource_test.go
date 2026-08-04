@@ -1844,8 +1844,6 @@ func testArtifactResourceSchema(t *testing.T) schema.Schema {
 }
 
 func TestArtifactSourceConfigValidation(t *testing.T) {
-	t.Parallel()
-
 	validDir := t.TempDir()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
