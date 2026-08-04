@@ -1914,12 +1914,19 @@ func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string)
 func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
 	patched := *base
 	primary := true
-	patched.Spec = base.Spec
 	groups := make([]client.ArtifactContainerGroup, len(base.Spec.ContainerGroups))
 	for gi, group := range base.Spec.ContainerGroups {
 		containers := make([]client.ArtifactContainer, len(group.Containers))
 		for ci, container := range group.Containers {
 			containers[ci] = container
+			if container.ImageBuildConfig != nil {
+				buildConfig := *container.ImageBuildConfig
+				if container.ImageBuildConfig.Dockerfile != nil {
+					dockerfile := *container.ImageBuildConfig.Dockerfile
+					buildConfig.Dockerfile = &dockerfile
+				}
+				containers[ci].ImageBuildConfig = &buildConfig
+			}
 			isPrimary := container.Primary != nil && *container.Primary
 			if isPrimary || (container.Primary == nil && ci == 0) {
 				if containers[ci].ImageBuildConfig == nil {
@@ -1937,7 +1944,7 @@ func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
 		}
 		groups[gi] = client.ArtifactContainerGroup{Containers: containers}
 	}
-	patched.Spec.ContainerGroups = groups
+	patched.Spec = client.ArtifactSpec{ContainerGroups: groups}
 	return &patched
 }
 
@@ -1973,10 +1980,12 @@ func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data Arti
 		return data, diags
 	}
 
+	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, artifact, "")
+		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
 		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact, true)
+			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
 			diags.AddError("Error uploading artifact source", err.Error())
 			return data, diags
 		}
