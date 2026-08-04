@@ -791,25 +791,18 @@ type getDeploymentLogsRequest struct {
 func formatOtelLogEntries(entries []OtelLogEntry) string {
 	lines := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
-		if entry.StackTrace != "" {
-			line += "\n" + entry.StackTrace
-		}
-		lines = append(lines, line)
+		lines = append(lines, FormatOtelLogEntry(entry))
 	}
 	return strings.Join(lines, "\n")
 }
 
 func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string) (string, error) {
-	queryReq := &getDeploymentLogsRequest{Limit: artifactBuildLogsTailLines()}
-	pathValues, _ := query.Values(queryReq)
-
-	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/"+entityType+"/"+entityID+"/logs/?"+pathValues.Encode())
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, artifactBuildLogsTailLines())
 	if err != nil {
 		return "", err
 	}
 
-	return formatOtelLogEntries(resp.Data), nil
+	return formatOtelLogEntries(entries), nil
 }
 
 func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
