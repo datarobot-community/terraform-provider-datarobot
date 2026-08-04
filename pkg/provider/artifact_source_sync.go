@@ -130,6 +130,26 @@ func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact 
 	_ = r.provider.service.DeleteArtifactRepository(ctx, *artifact.ArtifactRepositoryID)
 }
 
+func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
+	if !artifactSourceConfigured(data) {
+		return
+	}
+	dirHash, err := computeFolderHash(data.Source.Dir)
+	if err == nil {
+		data.Source.DirHash = dirHash
+	}
+}
+
+func cloneCodeRefModel(ref *ArtifactCodeRefModel) *ArtifactCodeRefModel {
+	if ref == nil {
+		return nil
+	}
+	return &ArtifactCodeRefModel{
+		CatalogID:        ref.CatalogID,
+		CatalogVersionID: ref.CatalogVersionID,
+	}
+}
+
 func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
 	if state == nil || state.Spec == nil {
 		return nil
@@ -182,7 +202,7 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 			}
 
 			if stateCodeRef != nil {
-				container.ImageBuildConfig.CodeRef = stateCodeRef
+				container.ImageBuildConfig.CodeRef = cloneCodeRefModel(stateCodeRef)
 			}
 		}
 	}
