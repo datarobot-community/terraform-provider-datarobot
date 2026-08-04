@@ -199,7 +199,7 @@ Optional:
 - `entrypoint` (List of String) Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.
 - `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`.
 - `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`.
-- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.
+- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.
 - `source` (String) How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.
 
 
