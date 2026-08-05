@@ -3009,21 +3009,6 @@ func (mr *MockServiceMockRecorder) UpdateWorkloadSettings(ctx, workloadID, req i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadSettings", reflect.TypeOf((*MockService)(nil).UpdateWorkloadSettings), ctx, workloadID, req)
 }
 
-// UpdateWorkloadSettings mocks base method.
-func (m *MockService) UpdateWorkloadSettings(ctx context.Context, workloadID string, req *client.UpdateWorkloadSettingsRequest) (*client.WorkloadReplacement, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkloadSettings", ctx, workloadID, req)
-	ret0, _ := ret[0].(*client.WorkloadReplacement)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateWorkloadSettings indicates an expected call of UpdateWorkloadSettings.
-func (mr *MockServiceMockRecorder) UpdateWorkloadSettings(ctx, workloadID, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadSettings", reflect.TypeOf((*MockService)(nil).UpdateWorkloadSettings), ctx, workloadID, req)
-}
-
 // ValidateDeploymentModelReplacement mocks base method.
 func (m *MockService) ValidateDeploymentModelReplacement(ctx context.Context, id string, req *client.ValidateDeployemntModelReplacementRequest) (*client.ValidateDeployemntModelReplacementResponse, error) {
 	m.ctrl.T.Helper()
