@@ -3,9 +3,23 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 )
 
 const artifactBuildLogsSeparator = "----------------------------------------"
+
+// artifactBuildLogWriter receives live artifact build log lines during apply.
+// Terraform hides tflog output unless TF_LOG is set, so build progress is written
+// to stderr by default.
+var artifactBuildLogWriter io.Writer = os.Stderr
+
+func emitArtifactBuildLogLine(line string) {
+	if artifactBuildLogWriter == nil || line == "" {
+		return
+	}
+	_, _ = artifactBuildLogWriter.Write([]byte(line + "\n"))
+}
 
 // artifactBuildLogsURL returns the DataRobot UI link for artifact image build logs.
 func artifactBuildLogsURL(baseURL, artifactRepositoryID, artifactID string) string {
