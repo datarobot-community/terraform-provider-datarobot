@@ -1002,6 +1002,55 @@ resource "datarobot_artifact" "test" {
 `
 }
 
+func TestValidateArtifactEnvironmentVar(t *testing.T) {
+	t.Parallel()
+
+	evPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(0).
+		AtName("containers").AtListIndex(0).
+		AtName("environment_vars").AtListIndex(0)
+
+	t.Run("unknown string value defers validation", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source: types.StringValue(client.EnvironmentVariableSourceString),
+			Name:   types.StringValue("DATAROBOT_API_TOKEN"),
+			Value:  types.StringUnknown(),
+		})
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors for unknown value, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("null string value is rejected", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source: types.StringValue(client.EnvironmentVariableSourceString),
+			Name:   types.StringValue("ENV"),
+			Value:  types.StringNull(),
+		})
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected validation error for null value")
+		}
+		if !strings.Contains(resp.Diagnostics.Errors()[0].Detail(), `"value" is required`) {
+			t.Fatalf("unexpected error: %v", resp.Diagnostics.Errors()[0])
+		}
+	})
+
+	t.Run("unknown credential fields defer validation", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source:         types.StringValue(client.EnvironmentVariableSourceCredential),
+			Name:           types.StringValue("SECRET"),
+			DrCredentialID: types.StringUnknown(),
+			Key:            types.StringValue("token"),
+		})
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors for unknown dr_credential_id, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+}
+
 func TestArtifactCredentialEnvVarValidation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
