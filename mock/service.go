@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	filesapi "github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -1254,6 +1255,20 @@ func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
 }
 
+// FilesAPI mocks base method.
+func (m *MockService) FilesAPI() filesapi.Client {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilesAPI")
+	ret0, _ := ret[0].(filesapi.Client)
+	return ret0
+}
+
+// FilesAPI indicates an expected call of FilesAPI.
+func (mr *MockServiceMockRecorder) FilesAPI() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilesAPI", reflect.TypeOf((*MockService)(nil).FilesAPI))
+}
+
 // GetAppOAuthProvider mocks base method.
 func (m *MockService) GetAppOAuthProvider(ctx context.Context, id string) (*client.AppOAuthProviderResponse, error) {
 	m.ctrl.T.Helper()
@@ -2289,6 +2304,36 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx, req)
 }
 
+// PatchArtifact mocks base method.
+func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifact", ctx, id, req)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifact indicates an expected call of PatchArtifact.
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
+}
+
+// PatchArtifactCodeRef mocks base method.
+func (m *MockService) PatchArtifactCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifactCodeRef", ctx, artifactID, catalogID, catalogVersionID)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifactCodeRef indicates an expected call of PatchArtifactCodeRef.
+func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifactCodeRef", reflect.TypeOf((*MockService)(nil).PatchArtifactCodeRef), ctx, artifactID, catalogID, catalogVersionID)
+}
+
 // RemoveEntityFromUseCase mocks base method.
 func (m *MockService) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
@@ -2934,19 +2979,34 @@ func (mr *MockServiceMockRecorder) UpdateVectorDatabase(ctx, id, req interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVectorDatabase", reflect.TypeOf((*MockService)(nil).UpdateVectorDatabase), ctx, id, req)
 }
 
-// UpdateWorkload mocks base method.
-func (m *MockService) UpdateWorkload(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
+// UpdateWorkloadMetadata mocks base method.
+func (m *MockService) UpdateWorkloadMetadata(ctx context.Context, id string, req *client.UpdateWorkloadRequest) (*client.Workload, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkload", ctx, id, req)
+	ret := m.ctrl.Call(m, "UpdateWorkloadMetadata", ctx, id, req)
 	ret0, _ := ret[0].(*client.Workload)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkload indicates an expected call of UpdateWorkload.
-func (mr *MockServiceMockRecorder) UpdateWorkload(ctx, id, req interface{}) *gomock.Call {
+// UpdateWorkloadMetadata indicates an expected call of UpdateWorkloadMetadata.
+func (mr *MockServiceMockRecorder) UpdateWorkloadMetadata(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkload", reflect.TypeOf((*MockService)(nil).UpdateWorkload), ctx, id, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadMetadata", reflect.TypeOf((*MockService)(nil).UpdateWorkloadMetadata), ctx, id, req)
+}
+
+// UpdateWorkloadSettings mocks base method.
+func (m *MockService) UpdateWorkloadSettings(ctx context.Context, workloadID string, req *client.UpdateWorkloadSettingsRequest) (*client.WorkloadReplacement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkloadSettings", ctx, workloadID, req)
+	ret0, _ := ret[0].(*client.WorkloadReplacement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkloadSettings indicates an expected call of UpdateWorkloadSettings.
+func (mr *MockServiceMockRecorder) UpdateWorkloadSettings(ctx, workloadID, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkloadSettings", reflect.TypeOf((*MockService)(nil).UpdateWorkloadSettings), ctx, workloadID, req)
 }
 
 // UpdateWorkloadSettings mocks base method.

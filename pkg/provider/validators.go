@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -962,5 +963,20 @@ func PlaygroundTypeValidators() []validator.String {
 			"rag",
 			"agentic",
 		),
+	}
+}
+
+func ArtifactStatusValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			string(client.ArtifactStatusDraft),
+			string(client.ArtifactStatusLocked),
+		),
+	}
+}
+
+func ArtifactDockerfileSourceValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf("provided", "generated"),
 	}
 }
