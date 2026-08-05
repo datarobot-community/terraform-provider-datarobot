@@ -9,11 +9,13 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -120,6 +122,24 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												boolplanmodifier.UseStateForUnknown(),
 											},
 										},
+										"min_replica_count": schema.Int64Attribute{
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(0),
+											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(0),
+											},
+										},
+										"max_replica_count": schema.Int64Attribute{
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(1),
+											MarkdownDescription: "Maximum number of replicas. Defaults to `1`.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(1),
+											},
+										},
 										"policies": schema.ListNestedAttribute{
 											Required:            true,
 											MarkdownDescription: "Scaling policies that define when and how to scale.",
@@ -127,26 +147,13 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												Attributes: map[string]schema.Attribute{
 													"scaling_metric": schema.StringAttribute{
 														Required:            true,
-														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.",
+														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.",
 													},
 													"target": schema.Float64Attribute{
 														Required:            true,
-														MarkdownDescription: "Target value for the scaling metric.",
-													},
-													"min_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Minimum number of replicas.",
-													},
-													"max_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Maximum number of replicas.",
-													},
-													"priority": schema.Int64Attribute{
-														Optional:            true,
-														Computed:            true,
-														MarkdownDescription: "Policy priority when multiple policies are defined.",
-														PlanModifiers: []planmodifier.Int64{
-															int64planmodifier.UseStateForUnknown(),
+														MarkdownDescription: "Target value for the scaling metric. Must be non-negative.",
+														Validators: []validator.Float64{
+															float64validator.AtLeast(0),
 														},
 													},
 												},
@@ -328,8 +335,8 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	replacementPolicyChanged := workloadReplacementPolicyChanged(planned.Runtime, state.Runtime)
 
 	if workloadMetadataChanged(planned, state) {
-		traceAPICall("UpdateWorkload")
-		workload, err := r.provider.service.UpdateWorkload(ctx, id, workloadUpdateRequest(planned))
+		traceAPICall("UpdateWorkloadMetadata")
+		workload, err := r.provider.service.UpdateWorkloadMetadata(ctx, id, workloadUpdateRequest(planned))
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Workload", err.Error())
 			return
@@ -427,17 +434,54 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 			!g.ReplicaCount.IsUnknown() &&
 			g.ReplicaCount.ValueInt64() != 0
 
-		autoscalingSet := g.Autoscaling != nil &&
-			!g.Autoscaling.Enabled.IsNull() &&
-			!g.Autoscaling.Enabled.IsUnknown() &&
-			g.Autoscaling.Enabled.ValueBool()
+		// autoscaling.enabled defaults to true, so a present autoscaling block
+		// counts as enabled unless the user explicitly sets enabled = false.
+		autoscalingEnabled := false
+		if g.Autoscaling != nil {
+			explicitlyDisabled := !g.Autoscaling.Enabled.IsNull() &&
+				!g.Autoscaling.Enabled.IsUnknown() &&
+				!g.Autoscaling.Enabled.ValueBool()
+			autoscalingEnabled = !explicitlyDisabled
+		}
 
-		if replicaCountSet && autoscalingSet {
+		if replicaCountSet && autoscalingEnabled {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("runtime").AtName("container_groups").AtListIndex(i),
 				"Conflicting runtime configuration",
-				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
+				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling, or set autoscaling.enabled = false.",
 			)
+		}
+
+		if g.Autoscaling != nil &&
+			!g.Autoscaling.MinReplicaCount.IsNull() && !g.Autoscaling.MinReplicaCount.IsUnknown() &&
+			!g.Autoscaling.MaxReplicaCount.IsNull() && !g.Autoscaling.MaxReplicaCount.IsUnknown() &&
+			g.Autoscaling.MinReplicaCount.ValueInt64() > g.Autoscaling.MaxReplicaCount.ValueInt64() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("runtime").AtName("container_groups").AtListIndex(i).AtName("autoscaling"),
+				"Invalid autoscaling replica bounds",
+				"min_replica_count must be less than or equal to max_replica_count.",
+			)
+		}
+
+		// cpuAverageUtilization scaling cannot scale from zero; the API
+		// requires min_replica_count > 0 for it. min_replica_count defaults
+		// to 0, so an omitted value fails the same way as an explicit 0.
+		if g.Autoscaling != nil && autoscalingEnabled {
+			minIsZero := g.Autoscaling.MinReplicaCount.IsNull() ||
+				(!g.Autoscaling.MinReplicaCount.IsUnknown() && g.Autoscaling.MinReplicaCount.ValueInt64() == 0)
+			if minIsZero {
+				for pi, p := range g.Autoscaling.Policies {
+					if !p.ScalingMetric.IsNull() && !p.ScalingMetric.IsUnknown() &&
+						p.ScalingMetric.ValueString() == "cpuAverageUtilization" {
+						resp.Diagnostics.AddAttributeError(
+							path.Root("runtime").AtName("container_groups").AtListIndex(i).
+								AtName("autoscaling").AtName("policies").AtListIndex(pi).AtName("scaling_metric"),
+							"Invalid autoscaling configuration",
+							"min_replica_count must be greater than 0 when using cpuAverageUtilization scaling (it defaults to 0).",
+						)
+					}
+				}
+			}
 		}
 
 		if len(g.ResourceBundles) == 0 {
@@ -574,19 +618,14 @@ func groupRuntimeToClient(g WorkloadGroupRuntimeModel) client.GroupRuntime {
 			enabled := g.Autoscaling.Enabled.ValueBool()
 			gr.Autoscaling.Enabled = &enabled
 		}
+		gr.Autoscaling.MinReplicaCount = g.Autoscaling.MinReplicaCount.ValueInt64()
+		gr.Autoscaling.MaxReplicaCount = g.Autoscaling.MaxReplicaCount.ValueInt64()
 		gr.Autoscaling.Policies = make([]client.AutoscalingPolicy, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := client.AutoscalingPolicy{
+			gr.Autoscaling.Policies[i] = client.AutoscalingPolicy{
 				ScalingMetric: p.ScalingMetric.ValueString(),
 				Target:        p.Target.ValueFloat64(),
-				MinCount:      p.MinCount.ValueInt64(),
-				MaxCount:      p.MaxCount.ValueInt64(),
 			}
-			if !p.Priority.IsNull() && !p.Priority.IsUnknown() {
-				v := p.Priority.ValueInt64()
-				policy.Priority = &v
-			}
-			gr.Autoscaling.Policies[i] = policy
 		}
 	}
 
@@ -657,6 +696,13 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 		}
 		if dg.ResourceBundles == nil {
 			data.Runtime.ContainerGroups[i].ResourceBundles = nil
+		}
+		// When the user did not configure autoscaling, the backend may fill in a
+		// cluster-dependent default (a scale-to-zero autoscaling block). Keep it
+		// out of state so it matches the empty config and does not drift.
+		// (replica_count is Optional+Computed and absorbs its own default.)
+		if dg.Autoscaling == nil {
+			data.Runtime.ContainerGroups[i].Autoscaling = nil
 		}
 		data.Runtime.ContainerGroups[i].BundleSelectionPolicy = dg.BundleSelectionPolicy
 		for j := range dg.Containers {
@@ -821,20 +867,14 @@ func loadGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadGroupRuntimeModel {
 		} else {
 			autoscaling.Enabled = types.BoolNull()
 		}
+		autoscaling.MinReplicaCount = types.Int64Value(g.Autoscaling.MinReplicaCount)
+		autoscaling.MaxReplicaCount = types.Int64Value(g.Autoscaling.MaxReplicaCount)
 		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := WorkloadAutoscalingPolicyModel{
+			autoscaling.Policies[i] = WorkloadAutoscalingPolicyModel{
 				ScalingMetric: types.StringValue(p.ScalingMetric),
 				Target:        types.Float64Value(p.Target),
-				MinCount:      types.Int64Value(p.MinCount),
-				MaxCount:      types.Int64Value(p.MaxCount),
 			}
-			if p.Priority != nil {
-				policy.Priority = types.Int64Value(*p.Priority)
-			} else {
-				policy.Priority = types.Int64Null()
-			}
-			autoscaling.Policies[i] = policy
 		}
 		m.Autoscaling = autoscaling
 	}
