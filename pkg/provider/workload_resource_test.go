@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
@@ -220,6 +222,147 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckNoResourceAttr(resourceName, "description"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationMultipleWorkloadParallelReplacement(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+	mockAPIKey(t)
+
+	id1 := uuid.NewString()
+	id2 := uuid.NewString()
+	artifactID1a := uuid.NewString()
+	artifactID2a := uuid.NewString()
+	artifactID1b := uuid.NewString()
+	artifactID2b := uuid.NewString()
+	name1 := "workload-a-" + uuid.NewString()[:8]
+	name2 := "workload-b-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint1 := "https://workloads.example.com/" + id1
+	endpoint2 := "https://workloads.example.com/" + id2
+
+	workload1a := workloadFixture(id1, artifactID1a, name1, "", client.WorkloadImportanceLow, &replicaCount, &endpoint1)
+	workload2a := workloadFixture(id2, artifactID2a, name2, "", client.WorkloadImportanceLow, &replicaCount, &endpoint2)
+	workload1b := workloadFixture(id1, artifactID1b, name1, "", client.WorkloadImportanceLow, &replicaCount, &endpoint1)
+	workload2b := workloadFixture(id2, artifactID2b, name2, "", client.WorkloadImportanceLow, &replicaCount, &endpoint2)
+
+	currentWorkloads := map[string]*client.Workload{
+		id1: workload1a,
+		id2: workload2a,
+	}
+	deletedWorkloads := map[string]bool{}
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateWorkloadRequest) (*client.Workload, error) {
+			switch req.Name {
+			case name1:
+				return workload1a, nil
+			case name2:
+				return workload2a, nil
+			default:
+				t.Fatalf("unexpected CreateWorkload name %q", req.Name)
+				return nil, nil
+			}
+		},
+	).Times(2)
+
+	mockService.EXPECT().GetWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, workloadID string) (*client.Workload, error) {
+			if deletedWorkloads[workloadID] {
+				return nil, client.NewNotFoundError("workload")
+			}
+			workload, ok := currentWorkloads[workloadID]
+			if !ok {
+				t.Fatalf("unexpected GetWorkload id %q", workloadID)
+			}
+			return workload, nil
+		},
+	).AnyTimes()
+
+	var (
+		waitMu             sync.Mutex
+		activeWaits        int
+		maxConcurrentWaits int
+	)
+
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, workloadID string, _ *client.StartReplacementRequest) (*client.WorkloadReplacement, error) {
+			switch workloadID {
+			case id1:
+				currentWorkloads[id1] = workload1b
+			case id2:
+				currentWorkloads[id2] = workload2b
+			default:
+				t.Fatalf("unexpected StartWorkloadReplacement id %q", workloadID)
+			}
+			return workloadReplacementFixture(workloadID), nil
+		},
+	).Times(2)
+
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, string, *client.WaitForWorkloadReplacementOptions) (*client.WorkloadReplacement, error) {
+			waitMu.Lock()
+			activeWaits++
+			if activeWaits > maxConcurrentWaits {
+				maxConcurrentWaits = activeWaits
+			}
+			waitMu.Unlock()
+
+			time.Sleep(50 * time.Millisecond)
+
+			waitMu.Lock()
+			activeWaits--
+			waitMu.Unlock()
+			return workloadReplacementFixture(""), nil
+		},
+	).Times(2)
+
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, workloadID string) error {
+			deletedWorkloads[workloadID] = true
+			return nil
+		},
+	).Times(2)
+
+	resourceNameA := "datarobot_workload.test_a"
+	resourceNameB := "datarobot_workload.test_b"
+	var initialIDA, initialIDB string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: multiWorkloadReplacementConfig(name1, name2, artifactID1a, artifactID2a),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceNameA, "id"),
+					resource.TestCheckResourceAttrSet(resourceNameB, "id"),
+					captureAttr(resourceNameA, "id", &initialIDA),
+					captureAttr(resourceNameB, "id", &initialIDB),
+				),
+			},
+			{
+				Config: multiWorkloadReplacementConfig(name1, name2, artifactID1b, artifactID2b),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceNameA, "artifact_id", artifactID1b),
+					resource.TestCheckResourceAttr(resourceNameB, "artifact_id", artifactID2b),
+					checkWorkloadIDPreservedForResource(resourceNameA, &initialIDA),
+					checkWorkloadIDPreservedForResource(resourceNameB, &initialIDB),
+					checkParallelReplacementPolls(&maxConcurrentWaits, 2),
 				),
 			},
 		},
@@ -1010,17 +1153,65 @@ func checkWorkloadArtifactIDChanged(initialArtifactID *string) resource.TestChec
 }
 
 func checkWorkloadIDPreserved(initialID *string) resource.TestCheckFunc {
+	return checkWorkloadIDPreservedForResource("datarobot_workload.test", initialID)
+}
+
+func checkWorkloadIDPreservedForResource(resourceName string, initialID *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		const rn = "datarobot_workload.test"
-		rs, ok := s.RootModule().Resources[rn]
+		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
-			return fmt.Errorf("resource %s not found in state", rn)
+			return fmt.Errorf("resource %s not found in state", resourceName)
 		}
 		if *initialID != "" && rs.Primary.ID != *initialID {
 			return fmt.Errorf("workload ID changed after in-place update: %q → %q", *initialID, rs.Primary.ID)
 		}
 		return nil
 	}
+}
+
+func checkParallelReplacementPolls(maxConcurrentWaits *int, minConcurrent int) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if maxConcurrentWaits == nil || *maxConcurrentWaits < minConcurrent {
+			got := 0
+			if maxConcurrentWaits != nil {
+				got = *maxConcurrentWaits
+			}
+			return fmt.Errorf("expected at least %d concurrent replacement polls, got %d", minConcurrent, got)
+		}
+		return nil
+	}
+}
+
+func multiWorkloadReplacementConfig(name1, name2, artifactID1, artifactID2 string) string {
+	return fmt.Sprintf(`
+resource "datarobot_workload" "test_a" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+
+resource "datarobot_workload" "test_b" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, name1, artifactID1, name2, artifactID2)
 }
 
 func workloadReplacementFixture(workloadID string) *client.WorkloadReplacement {
