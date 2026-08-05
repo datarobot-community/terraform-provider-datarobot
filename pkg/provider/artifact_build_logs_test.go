@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -47,6 +48,24 @@ func TestArtifactBuildErrorMessageWithLogs(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestEmitArtifactBuildLogLine(t *testing.T) {
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	emitArtifactBuildLogLine("step 1")
+	emitArtifactBuildLogLine("")
+
+	got := buf.String()
+	want := "step 1\n"
+	if got != want {
+		t.Fatalf("emitArtifactBuildLogLine() wrote %q, want %q", got, want)
+	}
 }
 
 func TestArtifactBuildLogsURL(t *testing.T) {
