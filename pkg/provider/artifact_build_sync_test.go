@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,18 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
+	opts := artifactBuildWaitOptions(context.Background(), &client.WaitForArtifactBuildOptions{
+		PollInterval: time.Millisecond,
+	})
+	if opts.OnOtelLogLine == nil {
+		t.Fatal("expected OTEL log callback to be configured")
+	}
+	if opts.PollInterval != time.Millisecond {
+		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
+	}
+}
 
 func TestArtifactBuildNeededAfterUpload(t *testing.T) {
 	t.Parallel()
@@ -210,7 +223,7 @@ func TestSyncArtifactBuild(t *testing.T) {
 				TriggerArtifactBuild(gomock.Any(), artifactID).
 				Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{buildID}}, nil),
 			mockService.EXPECT().
-				WaitForArtifactBuild(gomock.Any(), artifactID, buildID, waitOpts).
+				WaitForArtifactBuild(gomock.Any(), artifactID, buildID, gomock.Any()).
 				Return(&client.ArtifactBuild{ID: buildID, Status: client.ArtifactBuildStatusCompleted}, nil),
 			mockService.EXPECT().
 				GetArtifact(gomock.Any(), artifactID).
@@ -218,7 +231,7 @@ func TestSyncArtifactBuild(t *testing.T) {
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		artifact, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, true, waitOpts)
+		artifact, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, "repo-1", true, waitOpts)
 		if err != nil {
 			t.Fatalf("syncArtifactBuild() error = %v", err)
 		}
@@ -258,7 +271,7 @@ func TestSyncArtifactBuild(t *testing.T) {
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		_, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, false, nil)
+		_, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, "repo-1", false, nil)
 		if err != nil {
 			t.Fatalf("syncArtifactBuild() error = %v", err)
 		}
@@ -281,10 +294,16 @@ func TestSyncArtifactBuild(t *testing.T) {
 			mockService.EXPECT().
 				WaitForArtifactBuild(gomock.Any(), artifactID, buildID, gomock.Any()).
 				Return(&client.ArtifactBuild{ID: buildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+			mockService.EXPECT().
+				BaseURL().
+				Return("https://app.datarobot.com"),
+			mockService.EXPECT().
+				GetArtifactBuildLogs(gomock.Any(), artifactID, buildID).
+				Return("[2026-06-09 10:00:00] ERROR: docker build failed", nil),
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		_, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, true, nil)
+		_, gotBuildID, err := resource.syncArtifactBuild(context.Background(), artifactID, "repo-1", true, nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -294,6 +313,12 @@ func TestSyncArtifactBuild(t *testing.T) {
 		var failedErr *client.ArtifactBuildFailedError
 		if !errors.As(err, &failedErr) {
 			t.Fatalf("expected ArtifactBuildFailedError, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), "docker build failed") {
+			t.Fatalf("expected enriched logs in error, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/"+artifactID+"/build-log") {
+			t.Fatalf("expected build-log UI URL in error, got: %v", err)
 		}
 	})
 
@@ -322,10 +347,16 @@ func TestSyncArtifactBuild(t *testing.T) {
 						}},
 					},
 				}, nil),
+			mockService.EXPECT().
+				BaseURL().
+				Return("https://app.datarobot.com"),
+			mockService.EXPECT().
+				GetArtifactBuildLogs(gomock.Any(), artifactID, buildID).
+				Return("", nil),
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		_, _, err := resource.syncArtifactBuild(context.Background(), artifactID, true, nil)
+		_, _, err := resource.syncArtifactBuild(context.Background(), artifactID, "repo-1", true, nil)
 		if err == nil {
 			t.Fatal("expected error for missing image_uri")
 		}

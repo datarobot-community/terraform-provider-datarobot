@@ -193,6 +193,59 @@ func TestWaitForArtifactBuildTimesOut(t *testing.T) {
 	}
 }
 
+func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
+	buildCalls := 0
+	otelCalls := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/artifacts/art-1/builds/build-1/":
+			buildCalls++
+			status := ArtifactBuildStatusInProgress
+			if buildCalls >= 2 {
+				status = ArtifactBuildStatusCompleted
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
+		case "/otel/artifact/art-1/logs/":
+			otelCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{{
+					"level":     "info",
+					"message":   "building image",
+					"timestamp": "2026-07-09T16:14:50Z",
+				}},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	var lines []OtelLogEntry
+	_, err := svc.WaitForArtifactBuild(context.Background(), "art-1", "build-1", &WaitForArtifactBuildOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+		OnOtelLogLine: func(entry OtelLogEntry) {
+			lines = append(lines, entry)
+		},
+	})
+	if err != nil {
+		t.Fatalf("WaitForArtifactBuild returned error: %v", err)
+	}
+	if otelCalls == 0 {
+		t.Fatal("expected OTEL log polling during wait")
+	}
+	if len(lines) == 0 || lines[0].Message != "building image" {
+		t.Fatalf("expected streamed OTEL logs, got %#v", lines)
+	}
+}
+
 func TestArtifactBuildPollSettings(t *testing.T) {
 	t.Run("uses env var override for interval", func(t *testing.T) {
 		t.Setenv(ArtifactBuildPollIntervalEnvVar, "7s")
@@ -212,6 +265,142 @@ func TestArtifactBuildPollSettings(t *testing.T) {
 		t.Setenv(ArtifactBuildPollIntervalEnvVar, "not-a-duration")
 		if got := artifactBuildPollInterval(); got != defaultArtifactBuildPollInterval {
 			t.Errorf("expected default %s, got %s", defaultArtifactBuildPollInterval, got)
+		}
+	})
+}
+
+func TestGetArtifactBuildLogsParsesPlainTextBuildKitOutput(t *testing.T) {
+	body := "#1 [internal] load build definition from Dockerfile\n#2 ERROR: failed to solve: process \"/bin/sh\" did not complete\n#3 CANCELED\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	if !strings.Contains(logs, "ERROR: failed to solve") {
+		t.Fatalf("expected plain-text build logs, got:\n%s", logs)
+	}
+}
+
+func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/artifacts/art-1/builds/build-1/logs":
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"detail":"Failed to retrieve build logs"}`))
+		case "/otel/artifact/art-1/logs/":
+			if got := r.URL.Query().Get("limit"); got != "30" {
+				t.Fatalf("expected limit=30, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{{
+					"level":     "error",
+					"message":   "build failed in otel",
+					"timestamp": "2026-07-09T16:14:50Z",
+				}},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	if !strings.Contains(logs, "build failed in otel") {
+		t.Fatalf("expected OTEL fallback logs, got:\n%s", logs)
+	}
+}
+
+func TestGetArtifactBuildLogsParsesAndTailsJSONL(t *testing.T) {
+	body := `{"asctime":"2026-06-09 10:00:00","levelname":"INFO","message":"line-1"}
+{"asctime":"2026-06-09 10:00:01","levelname":"ERROR","message":"line-2"}
+`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/artifacts/art-1/builds/build-1/logs" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"[2026-06-09 10:00:00] INFO: line-1",
+		"[2026-06-09 10:00:01] ERROR: line-2",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)
+		}
+	}
+}
+
+func TestGetArtifactBuildLogsTailLinesEnvVar(t *testing.T) {
+	body := `{"asctime":"2026-06-09 10:00:00","levelname":"INFO","message":"line-1"}
+{"asctime":"2026-06-09 10:00:01","levelname":"INFO","message":"line-2"}
+`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	t.Setenv(ArtifactBuildLogsTailLinesEnvVar, "1")
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	if !strings.Contains(logs, "line-2") {
+		t.Errorf("expected tail to include last line, got:\n%s", logs)
+	}
+	if strings.Contains(logs, "line-1") {
+		t.Errorf("expected tail to exclude first line, got:\n%s", logs)
+	}
+}
+
+func TestArtifactBuildLogsTailLines(t *testing.T) {
+	t.Run("uses env var override", func(t *testing.T) {
+		t.Setenv(ArtifactBuildLogsTailLinesEnvVar, "7")
+		if got := artifactBuildLogsTailLines(); got != 7 {
+			t.Errorf("expected 7, got %d", got)
+		}
+	})
+
+	t.Run("falls back to default when unset", func(t *testing.T) {
+		if got := artifactBuildLogsTailLines(); got != defaultArtifactBuildLogsTailLines {
+			t.Errorf("expected default %d, got %d", defaultArtifactBuildLogsTailLines, got)
 		}
 	})
 }

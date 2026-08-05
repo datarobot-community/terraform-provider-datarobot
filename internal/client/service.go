@@ -282,6 +282,7 @@ type Service interface {
 	DeleteArtifactRepository(ctx context.Context, id string) error
 	TriggerArtifactBuild(ctx context.Context, artifactID string) (*ArtifactBuildTriggerResponse, error)
 	GetArtifactBuild(ctx context.Context, artifactID, buildID string) (*ArtifactBuild, error)
+	GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error)
 	WaitForArtifactBuild(ctx context.Context, artifactID, buildID string, opts *WaitForArtifactBuildOptions) (*ArtifactBuild, error)
 
 	// Workload (Workload API)
@@ -787,6 +788,23 @@ type getDeploymentLogsRequest struct {
 	Limit int `url:"limit,omitempty"`
 }
 
+func formatOtelLogEntries(entries []OtelLogEntry) string {
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		lines = append(lines, FormatOtelLogEntry(entry))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, artifactBuildLogsTailLines())
+	if err != nil {
+		return "", err
+	}
+
+	return formatOtelLogEntries(entries), nil
+}
+
 func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
 	queryReq := &getDeploymentLogsRequest{Limit: deploymentLogsTailLines()}
 	pathValues, _ := query.Values(queryReq)
@@ -796,16 +814,7 @@ func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string,
 		return "", err
 	}
 
-	lines := make([]string, 0, len(resp.Data))
-	for _, entry := range resp.Data {
-		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
-		if entry.StackTrace != "" {
-			line += "\n" + entry.StackTrace
-		}
-		lines = append(lines, line)
-	}
-
-	return strings.Join(lines, "\n"), nil
+	return formatOtelLogEntries(resp.Data), nil
 }
 
 func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {
