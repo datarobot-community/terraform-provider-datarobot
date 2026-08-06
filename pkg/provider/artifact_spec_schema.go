@@ -74,6 +74,14 @@ func artifactResourceProbeAttributes() map[string]schema.Attribute {
 				int64planmodifier.UseStateForUnknown(),
 			},
 		},
+		"success_threshold": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
+			PlanModifiers: []planmodifier.Int64{
+				int64planmodifier.UseStateForUnknown(),
+			},
+		},
 	}
 }
 
@@ -111,6 +119,10 @@ func artifactDataSourceProbeAttributes() map[string]datasourceschema.Attribute {
 			Computed:            true,
 			MarkdownDescription: "Minimum consecutive failures for the probe to be considered failed.",
 		},
+		"success_threshold": datasourceschema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
+		},
 	}
 }
 
@@ -120,11 +132,11 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".`,
 		},
 		"name": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Name of the environment variable.",
+			Optional:            true,
+			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.`,
 		},
 		"value": schema.StringAttribute{
 			Optional:            true,
@@ -145,11 +157,11 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials.`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.`,
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Name of the environment variable.",
+			MarkdownDescription: `Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.`,
 		},
 		"value": datasourceschema.StringAttribute{
 			Computed:            true,
