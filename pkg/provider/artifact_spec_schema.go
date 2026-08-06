@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -166,6 +167,23 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	}
 }
 
+func artifactResourceBuildAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"artifact_image_build_id": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Artifact image build ID.",
+		},
+		"status": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Image build status at submit time.",
+		},
+		"created_at": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Build creation timestamp (UTC).",
+		},
+	}
+}
+
 func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttributes map[string]schema.Attribute) map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"name": schema.StringAttribute{
@@ -235,6 +253,14 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			Optional:            true,
 			MarkdownDescription: "Container liveness check configuration.",
 			Attributes:          probeAttributes,
+		},
+		"build": schema.SingleNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Server-set image build metadata.",
+			Attributes:          artifactResourceBuildAttributes(),
+			PlanModifiers: []planmodifier.Object{
+				objectplanmodifier.UseStateForUnknown(),
+			},
 		},
 	}
 }

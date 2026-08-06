@@ -426,6 +426,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	applySourceManagedCodeRefsToPlan(&plan, state, isCreate)
 	applySourceManagedImageURIToPlan(&plan, state, isCreate)
+	applySourceManagedBuildToPlan(&plan, state, isCreate)
 
 	if !isCreate {
 		// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
@@ -648,7 +649,10 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
-		if ev.Value.IsNull() || ev.Value.IsUnknown() {
+		if ev.Value.IsUnknown() {
+			return
+		}
+		if ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
 				`"value" is required when source is "string".`)
@@ -664,12 +668,15 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
-		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
+		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
+			return
+		}
+		if ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
 				`"dr_credential_id" is required when source is "dr-credential".`)
 		}
-		if ev.Key.IsNull() || ev.Key.IsUnknown() {
+		if ev.Key.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
 				"Missing key",
 				`"key" is required when source is "dr-credential".`)
@@ -1301,6 +1308,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	model.StartupProbe = loadProbeFromAPI(c.StartupProbe)
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
+	model.Build = loadContainerBuildObjectFromAPI(c.Build)
 
 	return model
 }
