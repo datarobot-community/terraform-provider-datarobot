@@ -34,16 +34,21 @@ func TestAccArtifactDraftLifecycle(t *testing.T) {
 
 func TestAccArtifactSourceUpload(t *testing.T) {
 	t.Parallel()
-	testArtifactSourceUpload(t, false)
+	testArtifactSourceUpload(t, false, false)
+}
+
+func TestAccArtifactSourceUploadWithBuild(t *testing.T) {
+	t.Parallel()
+	testArtifactSourceUpload(t, false, true)
+}
+
+func TestAccArtifactLockedSourceWithBuild(t *testing.T) {
+	t.Parallel()
+	testArtifactSourceUploadLocked(t, false, true)
 }
 
 func TestAccArtifactSourceUploadLocked(t *testing.T) {
-	t.Parallel()
-	// workload-api returns 422 when locking with image_build_config but no image_uri,
-	// even after source upload (image build must complete first). The provider's
-	// clone→upload→lock flow is covered by TestIntegrationArtifactSourceUploadLocked.
-	// TODO: skip this test until we trigger and wait for build and therefore image_uri is populated.
-	t.Skip("workload API requires populated image_uri before lock when image_build_config is set")
+	TestAccArtifactLockedSourceWithBuild(t)
 }
 
 func TestIntegrationArtifactSourceUpload(t *testing.T) {
@@ -58,7 +63,7 @@ func TestIntegrationArtifactSourceUpload(t *testing.T) {
 	globalTestCfg.ApiKey = "fake"
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
-	testArtifactSourceUpload(t, true, mockService)
+	testArtifactSourceUpload(t, true, false, mockService)
 }
 
 func TestIntegrationArtifactSourceUploadLocked(t *testing.T) {
@@ -73,7 +78,7 @@ func TestIntegrationArtifactSourceUploadLocked(t *testing.T) {
 	globalTestCfg.ApiKey = "fake"
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
-	testArtifactSourceUploadLocked(t, true, mockService)
+	testArtifactSourceUploadLocked(t, true, true, mockService)
 }
 
 func TestIntegrationArtifactResource(t *testing.T) {
@@ -260,6 +265,77 @@ func artifactCodeRefCatalogAttr() string {
 	return "spec.container_groups.0.containers.0.image_build_config.code_ref.catalog_id"
 }
 
+func artifactImageURIAttr() string {
+	return "spec.container_groups.0.containers.0.image_uri"
+}
+
+func artifactBuildIDAttr() string {
+	return "spec.container_groups.0.containers.0.build.artifact_image_build_id"
+}
+
+func artifactBuildCheckFuncs(resourceName string, isMock, enabled bool) []resource.TestCheckFunc {
+	if !enabled {
+		return nil
+	}
+	return []resource.TestCheckFunc{
+		resource.TestCheckResourceAttrSet(resourceName, artifactImageURIAttr()),
+		resource.TestCheckResourceAttrSet(resourceName, artifactBuildIDAttr()),
+		checkArtifactImageBuiltInAPI(resourceName, isMock),
+	}
+}
+
+func checkArtifactImageBuiltInAPI(resourceName string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+
+		imageURI := rs.Primary.Attributes[artifactImageURIAttr()]
+		if imageURI == "" {
+			return fmt.Errorf("image_uri is not set in state after build")
+		}
+
+		buildID := rs.Primary.Attributes[artifactBuildIDAttr()]
+		if buildID == "" {
+			return fmt.Errorf("build.artifact_image_build_id is not set in state after build")
+		}
+
+		if isMock {
+			return nil
+		}
+
+		artifactID := rs.Primary.Attributes["artifact_id"]
+		if artifactID == "" {
+			return fmt.Errorf("artifact_id is not set in state")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		artifact, err := p.service.GetArtifact(context.Background(), artifactID)
+		if err != nil {
+			return fmt.Errorf("GetArtifact(%s): %w", artifactID, err)
+		}
+
+		if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
+			return fmt.Errorf("artifact has no containers")
+		}
+		container := artifact.Spec.ContainerGroups[0].Containers[0]
+		if got := artifactImageURIValue(container); got == "" {
+			return fmt.Errorf("image_uri not populated in API after build")
+		}
+		if container.Build == nil || container.Build.ArtifactImageBuildID == "" {
+			return fmt.Errorf("build metadata not populated in API after build")
+		}
+
+		return nil
+	}
+}
+
 func checkArtifactSourceCatalogVersionChanged(resourceName string, previous *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		if previous == nil || *previous == "" {
@@ -328,7 +404,7 @@ func checkArtifactSourceCodeRefInAPI(isMock bool) resource.TestCheckFunc {
 	}
 }
 
-func testArtifactSourceUpload(t *testing.T, isMock bool, mockService ...*mock_client.MockService) {
+func testArtifactSourceUpload(t *testing.T, isMock bool, withBuildChecks bool, mockService ...*mock_client.MockService) {
 	t.Helper()
 
 	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{
@@ -380,39 +456,48 @@ func testArtifactSourceUpload(t *testing.T, isMock bool, mockService ...*mock_cl
 		svc.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 	}
 
+	preCheck := func() { testAccPreCheck(t) }
+	if withBuildChecks && !isMock {
+		preCheck = func() { testAccArtifactBuildPreCheck(t) }
+	}
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 preCheck,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, isMock),
 		Steps: []resource.TestStep{
 			{
 				Config: artifactConfigWithSource(name, "draft", sourceDirV1),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "status", "draft"),
-					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "source.dir_hash"),
-					resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefCatalogAttr()),
-					resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefVersionAttr()),
-					captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
-					captureAttr(resourceName, "artifact_id", &artifactID),
-					checkArtifactSourceCodeRefInAPI(isMock),
+					append([]resource.TestCheckFunc{
+						resource.TestCheckResourceAttr(resourceName, "status", "draft"),
+						resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
+						resource.TestCheckResourceAttrSet(resourceName, "source.dir_hash"),
+						resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefCatalogAttr()),
+						resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefVersionAttr()),
+						captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
+						captureAttr(resourceName, "artifact_id", &artifactID),
+						checkArtifactSourceCodeRefInAPI(isMock),
+					}, artifactBuildCheckFuncs(resourceName, isMock, withBuildChecks)...)...,
 				),
 			},
 			{
 				Config: artifactConfigWithSource(name, "draft", sourceDirV2),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
-					checkArtifactIDEquals(resourceName, &artifactID),
-					checkArtifactSourceCodeRefInAPI(isMock),
-					captureAttr(resourceName, "artifact_id", &lastArtifactID),
+					append([]resource.TestCheckFunc{
+						checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
+						checkArtifactIDEquals(resourceName, &artifactID),
+						checkArtifactSourceCodeRefInAPI(isMock),
+						captureAttr(resourceName, "artifact_id", &lastArtifactID),
+					}, artifactBuildCheckFuncs(resourceName, isMock, withBuildChecks)...)...,
 				),
 			},
 		},
 	})
 }
 
-func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*mock_client.MockService) {
+func testArtifactSourceUploadLocked(t *testing.T, isMock bool, withBuildChecks bool, mockService ...*mock_client.MockService) {
 	t.Helper()
 
 	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{
@@ -522,38 +607,47 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, mockService ...*m
 		svc.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 	}
 
+	lockedPreCheck := func() { testAccPreCheck(t) }
+	if withBuildChecks && !isMock {
+		lockedPreCheck = func() { testAccArtifactBuildPreCheck(t) }
+	}
+
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 lockedPreCheck,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		CheckDestroy:             checkArtifactRepoDestroyedFromAPI(&lastArtifactID, isMock),
 		Steps: []resource.TestStep{
 			{
 				Config: artifactConfigWithSource(name, "locked", sourceDirV1),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "status", "locked"),
-					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
-					resource.TestCheckResourceAttrSet(resourceName, "source.dir_hash"),
-					resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefCatalogAttr()),
-					resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefVersionAttr()),
-					captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
-					captureAttr(resourceName, "artifact_id", &initialArtifactID),
-					captureAttr(resourceName, "artifact_repository_id", &initialRepoID),
-					checkArtifactStatusInAPI("locked", isMock),
-					checkArtifactSourceCodeRefInAPI(isMock),
+					append([]resource.TestCheckFunc{
+						resource.TestCheckResourceAttr(resourceName, "status", "locked"),
+						resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
+						resource.TestCheckResourceAttrSet(resourceName, "artifact_repository_id"),
+						resource.TestCheckResourceAttrSet(resourceName, "source.dir_hash"),
+						resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefCatalogAttr()),
+						resource.TestCheckResourceAttrSet(resourceName, artifactCodeRefVersionAttr()),
+						captureAttr(resourceName, artifactCodeRefVersionAttr(), &initialVersionID),
+						captureAttr(resourceName, "artifact_id", &initialArtifactID),
+						captureAttr(resourceName, "artifact_repository_id", &initialRepoID),
+						checkArtifactStatusInAPI("locked", isMock),
+						checkArtifactSourceCodeRefInAPI(isMock),
+					}, artifactBuildCheckFuncs(resourceName, isMock, withBuildChecks)...)...,
 				),
 			},
 			{
 				Config: artifactConfigWithSource(name, "locked", sourceDirV2),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "status", "locked"),
-					checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
-					checkArtifactIDChanged(resourceName, &initialArtifactID),
-					checkArtifactRepositoryIDEquals(resourceName, &initialRepoID),
-					checkArtifactStatusInAPI("locked", isMock),
-					checkArtifactSourceCodeRefInAPI(isMock),
-					captureAttr(resourceName, "artifact_id", &lastArtifactID),
+					append([]resource.TestCheckFunc{
+						resource.TestCheckResourceAttr(resourceName, "status", "locked"),
+						checkArtifactSourceCatalogVersionChanged(resourceName, &initialVersionID),
+						checkArtifactIDChanged(resourceName, &initialArtifactID),
+						checkArtifactRepositoryIDEquals(resourceName, &initialRepoID),
+						checkArtifactStatusInAPI("locked", isMock),
+						checkArtifactSourceCodeRefInAPI(isMock),
+						captureAttr(resourceName, "artifact_id", &lastArtifactID),
+					}, artifactBuildCheckFuncs(resourceName, isMock, withBuildChecks)...)...,
 				),
 			},
 		},
@@ -2187,6 +2281,11 @@ func artifactFixtureWithImageURI(base *client.Artifact) *client.Artifact {
 			if isPrimary || (container.Primary == nil && ci == 0) {
 				containers[ci].ImageURI = artifactSourceTestImageURI
 				containers[ci].Primary = &primary
+				containers[ci].Build = &client.ArtifactContainerBuildInfo{
+					ArtifactImageBuildID: artifactSourceTestBuildID,
+					Status:               client.ArtifactBuildStatusCompleted,
+					CreatedAt:            "2026-01-01T00:00:00Z",
+				}
 			}
 		}
 		groups[gi] = client.ArtifactContainerGroup{Containers: containers}
@@ -2799,6 +2898,11 @@ func TestArtifactResourceSourceCreateBuildFailureRollback(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
 	mockService.EXPECT().FilesAPI().Return(filesAPI)
 	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	mockService.EXPECT().BaseURL().Return("https://app.example.com").AnyTimes()
+	mockService.EXPECT().
+		GetArtifactBuildLogs(gomock.Any(), artifactID, artifactSourceTestBuildID).
+		Return("", nil).
+		AnyTimes()
 	gomock.InOrder(
 		mockService.EXPECT().
 			TriggerArtifactBuild(gomock.Any(), artifactID).

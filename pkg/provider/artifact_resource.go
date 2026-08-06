@@ -426,6 +426,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	applySourceManagedCodeRefsToPlan(&plan, state, isCreate)
 	applySourceManagedImageURIToPlan(&plan, state, isCreate)
+	applySourceManagedBuildToPlan(&plan, state, isCreate)
 
 	if !isCreate {
 		// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
@@ -1307,6 +1308,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	model.StartupProbe = loadProbeFromAPI(c.StartupProbe)
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
+	model.Build = loadContainerBuildObjectFromAPI(c.Build)
 
 	return model
 }
