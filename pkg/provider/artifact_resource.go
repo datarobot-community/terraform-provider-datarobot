@@ -222,8 +222,9 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
-	createdArtifact := artifact	if artifactSourceConfigured(&data) {
-		syncedArtifact, syncErr = r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
+	createdArtifact := artifact
+	if artifactSourceConfigured(&data) {
+		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
 		if syncErr != nil {
 			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
 			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
@@ -235,7 +236,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	if targetLocked && artifactSourceConfigured(&data) {
 		artifact, err = r.lockArtifact(ctx, artifact.ID)
 		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
+			r.rollbackArtifactCreate(ctx, artifact, !userSuppliedRepository)
 			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
 			return
 		}
@@ -412,36 +413,14 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	var statePtr *ArtifactResourceModel
 	var state ArtifactResourceModel
-	if !req.State.Raw.IsNull() {
+	isCreate := req.State.Raw.IsNull()
+	if !isCreate {
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 		statePtr = &state
-	}
 
-	var plan ArtifactResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-  
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("source").AtName("dir"),
-				"Error calculating source directory hash",
-				err.Error(),
-			)
-			return
-		}
-		plan.Source.DirHash = dirHash
-	}
-
-	isCreate := req.State.Raw.IsNull()
-	if !isCreate {
 		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
@@ -524,11 +503,6 @@ func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Pat
 		return diags
 	}
 
-	if artifactModifyPlanNeedsUnknownArtifactID(plan, state) {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
-	}
-
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 	specAttrs := spec.Attributes()
 	groupsAttr, ok := specAttrs["container_groups"]
 	if !ok {
