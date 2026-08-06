@@ -220,7 +220,6 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
@@ -298,7 +297,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	priorArtifactID := state.ArtifactID.ValueString()
-	pendingSourceUpload := artifactSourcePendingUpload(&plan, &state, priorArtifactID)
+	lockedSourceCloneNeeded := artifactLockedSourceCloneNeeded(plan, state)
 	deferLock := artifactSourceDeferLock(plan, state)
 
 	var artifact *client.Artifact
@@ -316,7 +315,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
 		}
-	case pendingSourceUpload:
+	case lockedSourceCloneNeeded:
 		createReq := artifactCreateRequest(plan)
 		createReq.Status = client.ArtifactStatusDraft
 		traceAPICall("CreateUpdatedArtifact")
@@ -334,7 +333,6 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-
 	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
 		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
@@ -351,7 +349,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		artifact.Status != client.ArtifactStatusLocked &&
-		(deferLock || pendingSourceUpload) {
+		(deferLock || lockedSourceCloneNeeded) {
 		artifact, err = r.lockArtifact(ctx, artifact.ID)
 		if err != nil {
 			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
