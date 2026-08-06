@@ -190,6 +190,7 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if err == nil {
 		data.Source.DirHash = dirHash
 	}
+}
 
 func cloneCodeRefModel(ref *ArtifactCodeRefModel) *ArtifactCodeRefModel {
 	if ref == nil {
