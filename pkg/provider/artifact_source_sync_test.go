@@ -1237,6 +1237,22 @@ func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
 			want:  false,
 		},
 		{
+			name: "locked spec change with source needs clone",
+			plan: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.Port = types.Int64Value(9090)
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
 			name:  "draft source change does not use locked clone",
 			plan:  modelWithSource("draft", hashB),
 			state: modelWithSource("draft", hashA),

@@ -130,21 +130,28 @@ func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact 
 	_ = r.provider.service.DeleteArtifactRepository(ctx, *artifact.ArtifactRepositoryID)
 }
 
-
 // artifactSourcePendingUpload reports whether the planned source tree differs from state.
 func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifactID string) bool {
 	return artifactSourceConfigured(plan) &&
 		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
 }
 
-// artifactLockedSourceCloneNeeded is true when a locked artifact needs a new code upload.
+// artifactLockedSourceCloneNeeded is true when a locked artifact with source configured
+// needs a draft clone before upload (source dir change or spec change that creates a new version).
 // Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
 // then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
 func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
 	if state.Status.ValueString() != string(client.ArtifactStatusLocked) {
 		return false
 	}
-	return artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+	if !artifactSourceConfigured(&plan) {
+		return false
+	}
+	priorArtifactID := state.ArtifactID.ValueString()
+	if artifactSourceNeedsUpload(&plan, &state, priorArtifactID, priorArtifactID) {
+		return true
+	}
+	return artifactNeedsNewVersion(plan, state)
 }
 
 // artifactSourceDeferLock is true when a draft→locked transition must wait until after source upload.
