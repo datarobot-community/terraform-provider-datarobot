@@ -596,6 +596,41 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 	})
 }
 
+func TestApplyCompletedArtifactBuildToPrimaryContainer(t *testing.T) {
+	t.Parallel()
+
+	primary := true
+	artifact := &client.Artifact{
+		Spec: client.ArtifactSpec{
+			ContainerGroups: []client.ArtifactContainerGroup{{
+				Containers: []client.ArtifactContainer{{
+					Primary: &primary,
+					Build: &client.ArtifactContainerBuildInfo{
+						ArtifactImageBuildID: "stale-build",
+						Status:               client.ArtifactBuildStatusCompleted,
+						CreatedAt:            "2026-01-01T00:00:00Z",
+					},
+				}},
+			}},
+		},
+	}
+	build := &client.ArtifactBuild{
+		ID:        "fresh-build",
+		Status:    client.ArtifactBuildStatusCompleted,
+		CreatedAt: "2026-02-01T00:00:00Z",
+	}
+
+	applyCompletedArtifactBuildToPrimaryContainer(artifact, build)
+
+	got := artifact.Spec.ContainerGroups[0].Containers[0].Build
+	if got == nil || got.ArtifactImageBuildID != "fresh-build" {
+		t.Fatalf("build id = %#v, want fresh-build", got)
+	}
+	if got.CreatedAt != "2026-02-01T00:00:00Z" {
+		t.Fatalf("created_at = %q", got.CreatedAt)
+	}
+}
+
 func cloneArtifactResourceModel(src *ArtifactResourceModel) *ArtifactResourceModel {
 	if src == nil {
 		return nil

@@ -76,10 +76,13 @@ func (r *ArtifactResource) syncArtifactBuild(
 
 	buildID := trigger.BuildIDs[0]
 
+	var completedBuild *client.ArtifactBuild
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
 		waitOpts := artifactBuildWaitOptions(ctx, opts)
-		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
+		var err error
+		completedBuild, err = r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts)
+		if err != nil {
 			return nil, buildID, r.enrichArtifactBuildError(
 				ctx,
 				artifactID,
@@ -104,6 +107,9 @@ func (r *ArtifactResource) syncArtifactBuild(
 			buildID,
 			fmt.Errorf("%s: %w", msg, err),
 		)
+	}
+	if completedBuild != nil {
+		applyCompletedArtifactBuildToPrimaryContainer(artifact, completedBuild)
 	}
 	if waitForBuild && artifactPrimaryContainerImageURI(artifact) == "" {
 		return artifact, buildID, r.enrichArtifactBuildError(
@@ -179,13 +185,31 @@ func applySourceManagedImageURIToPlan(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	for gi := range plan.Spec.ContainerGroups {
-		group := plan.Spec.ContainerGroups[gi]
+		group := &plan.Spec.ContainerGroups[gi]
 		for ci := range group.Containers {
 			container := &group.Containers[ci]
-			if !artifactContainerIsPrimary(*container, group) {
+			if !artifactContainerIsPrimary(*container, *group) {
 				continue
 			}
 			container.ImageURI = types.StringUnknown()
+		}
+	}
+}
+
+func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+		return
+	}
+
+	attrTypes := artifactBuildAttrTypes()
+	for gi := range plan.Spec.ContainerGroups {
+		group := &plan.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if !artifactContainerIsPrimary(*container, *group) {
+				continue
+			}
+			container.Build = types.ObjectUnknown(attrTypes)
 		}
 	}
 }
@@ -211,4 +235,35 @@ func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {
 	}
 
 	return artifact.Spec.ContainerGroups[0].Containers[0].ImageURI
+}
+
+// applyCompletedArtifactBuildToPrimaryContainer overwrites the primary container's
+// server-set build metadata with the build the provider just waited on. WAPI may
+// return stale container.build on GetArtifact immediately after a build completes.
+func applyCompletedArtifactBuildToPrimaryContainer(artifact *client.Artifact, build *client.ArtifactBuild) {
+	if artifact == nil || build == nil {
+		return
+	}
+
+	buildInfo := &client.ArtifactContainerBuildInfo{
+		ArtifactImageBuildID: build.ID,
+		Status:               build.Status,
+		CreatedAt:            build.CreatedAt,
+	}
+
+	for gi := range artifact.Spec.ContainerGroups {
+		group := &artifact.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if container.Primary != nil && *container.Primary {
+				container.Build = buildInfo
+				return
+			}
+		}
+	}
+
+	if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
+		return
+	}
+	artifact.Spec.ContainerGroups[0].Containers[0].Build = buildInfo
 }
