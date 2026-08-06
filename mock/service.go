@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	client "github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	filesapi "github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -152,21 +153,6 @@ func (m *MockService) CreateArtifact(ctx context.Context, req *client.CreateArti
 func (mr *MockServiceMockRecorder) CreateArtifact(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateArtifact", reflect.TypeOf((*MockService)(nil).CreateArtifact), ctx, req)
-}
-
-// PatchArtifact mocks base method.
-func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PatchArtifact", ctx, id, req)
-	ret0, _ := ret[0].(*client.Artifact)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PatchArtifact indicates an expected call of PatchArtifact.
-func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
 }
 
 // CreateBatchPredictionJobDefinition mocks base method.
@@ -1269,6 +1255,20 @@ func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
 }
 
+// FilesAPI mocks base method.
+func (m *MockService) FilesAPI() filesapi.Client {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilesAPI")
+	ret0, _ := ret[0].(filesapi.Client)
+	return ret0
+}
+
+// FilesAPI indicates an expected call of FilesAPI.
+func (mr *MockServiceMockRecorder) FilesAPI() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilesAPI", reflect.TypeOf((*MockService)(nil).FilesAPI))
+}
+
 // GetAppOAuthProvider mocks base method.
 func (m *MockService) GetAppOAuthProvider(ctx context.Context, id string) (*client.AppOAuthProviderResponse, error) {
 	m.ctrl.T.Helper()
@@ -1594,7 +1594,7 @@ func (m *MockService) GetDeploymentLogs(ctx context.Context, id string) (string,
 }
 
 // GetDeploymentLogs indicates an expected call of GetDeploymentLogs.
-func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentLogs", reflect.TypeOf((*MockService)(nil).GetDeploymentLogs), ctx, id)
 }
@@ -1999,7 +1999,7 @@ func (m *MockService) GetWorkloadReplacement(ctx context.Context, workloadID str
 }
 
 // GetWorkloadReplacement indicates an expected call of GetWorkloadReplacement.
-func (mr *MockServiceMockRecorder) GetWorkloadReplacement(ctx, workloadID interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetWorkloadReplacement(ctx, workloadID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkloadReplacement", reflect.TypeOf((*MockService)(nil).GetWorkloadReplacement), ctx, workloadID)
 }
@@ -2304,6 +2304,36 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx, req)
 }
 
+// PatchArtifact mocks base method.
+func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifact", ctx, id, req)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifact indicates an expected call of PatchArtifact.
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
+}
+
+// PatchArtifactCodeRef mocks base method.
+func (m *MockService) PatchArtifactCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) (*client.Artifact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchArtifactCodeRef", ctx, artifactID, catalogID, catalogVersionID)
+	ret0, _ := ret[0].(*client.Artifact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchArtifactCodeRef indicates an expected call of PatchArtifactCodeRef.
+func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifactCodeRef", reflect.TypeOf((*MockService)(nil).PatchArtifactCodeRef), ctx, artifactID, catalogID, catalogVersionID)
+}
+
 // RemoveEntityFromUseCase mocks base method.
 func (m *MockService) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	m.ctrl.T.Helper()
@@ -2328,7 +2358,7 @@ func (m *MockService) StartWorkloadReplacement(ctx context.Context, workloadID s
 }
 
 // StartWorkloadReplacement indicates an expected call of StartWorkloadReplacement.
-func (mr *MockServiceMockRecorder) StartWorkloadReplacement(ctx, workloadID, req interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) StartWorkloadReplacement(ctx, workloadID, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkloadReplacement", reflect.TypeOf((*MockService)(nil).StartWorkloadReplacement), ctx, workloadID, req)
 }
@@ -3004,7 +3034,7 @@ func (m *MockService) WaitForWorkloadReplacement(ctx context.Context, workloadID
 }
 
 // WaitForWorkloadReplacement indicates an expected call of WaitForWorkloadReplacement.
-func (mr *MockServiceMockRecorder) WaitForWorkloadReplacement(ctx, workloadID, opts interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) WaitForWorkloadReplacement(ctx, workloadID, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForWorkloadReplacement", reflect.TypeOf((*MockService)(nil).WaitForWorkloadReplacement), ctx, workloadID, opts)
 }

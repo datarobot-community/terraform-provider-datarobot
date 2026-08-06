@@ -9,10 +9,13 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -119,6 +122,24 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												boolplanmodifier.UseStateForUnknown(),
 											},
 										},
+										"min_replica_count": schema.Int64Attribute{
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(0),
+											MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero. Defaults to `0`.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(0),
+											},
+										},
+										"max_replica_count": schema.Int64Attribute{
+											Optional:            true,
+											Computed:            true,
+											Default:             int64default.StaticInt64(1),
+											MarkdownDescription: "Maximum number of replicas. Defaults to `1`.",
+											Validators: []validator.Int64{
+												int64validator.AtLeast(1),
+											},
+										},
 										"policies": schema.ListNestedAttribute{
 											Required:            true,
 											MarkdownDescription: "Scaling policies that define when and how to scale.",
@@ -126,26 +147,13 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 												Attributes: map[string]schema.Attribute{
 													"scaling_metric": schema.StringAttribute{
 														Required:            true,
-														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`.",
+														MarkdownDescription: "Metric used for scaling decisions: `cpuAverageUtilization`, `httpRequestsConcurrency`, `gpuCacheUtilization`, or `gpuRequestQueueDepth`. Custom metric names (e.g. `vllm:kv_cache_usage_perc`) are supported for NIM artifacts only.",
 													},
 													"target": schema.Float64Attribute{
 														Required:            true,
-														MarkdownDescription: "Target value for the scaling metric.",
-													},
-													"min_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Minimum number of replicas.",
-													},
-													"max_count": schema.Int64Attribute{
-														Required:            true,
-														MarkdownDescription: "Maximum number of replicas.",
-													},
-													"priority": schema.Int64Attribute{
-														Optional:            true,
-														Computed:            true,
-														MarkdownDescription: "Policy priority when multiple policies are defined.",
-														PlanModifiers: []planmodifier.Int64{
-															int64planmodifier.UseStateForUnknown(),
+														MarkdownDescription: "Target value for the scaling metric. Must be non-negative.",
+														Validators: []validator.Float64{
+															float64validator.AtLeast(0),
 														},
 													},
 												},
@@ -207,6 +215,26 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 						},
 					},
+					"replacement_policy": schema.SingleNestedAttribute{
+						Optional:            true,
+						MarkdownDescription: "Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults).",
+						Attributes: map[string]schema.Attribute{
+							"warmup_minutes": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "Duration in minutes for the warmup phase during replacement. Maps to WAPI `config.warmupDurationMinutes`.",
+								Validators: []validator.Int64{
+									int64validator.AtLeast(0),
+								},
+							},
+							"keep_old_version_minutes": schema.Int64Attribute{
+								Optional:            true,
+								MarkdownDescription: "Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`.",
+								Validators: []validator.Int64{
+									int64validator.AtLeast(0),
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -250,6 +278,7 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 
 	planned := data
 	loadWorkloadIntoModel(workload, &data)
+	preserveWorkloadReplacementPolicy(planned, &data)
 	applySentinels(planned, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -284,6 +313,7 @@ func (r *WorkloadResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	prior := data
 	loadWorkloadIntoModel(workload, &data)
+	preserveWorkloadReplacementPolicy(prior, &data)
 	applySentinels(prior, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -301,7 +331,8 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	planned := plan
 
 	artifactChanged := !planned.ArtifactID.Equal(state.ArtifactID)
-	runtimeChanged := workloadRuntimeChanged(planned.Runtime, state.Runtime)
+	containerGroupsChanged := workloadContainerGroupsChanged(planned.Runtime, state.Runtime)
+	replacementPolicyChanged := workloadReplacementPolicyChanged(planned.Runtime, state.Runtime)
 
 	if workloadMetadataChanged(planned, state) {
 		traceAPICall("UpdateWorkloadMetadata")
@@ -313,8 +344,8 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	if artifactChanged || runtimeChanged {
-		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, runtimeChanged); err != nil {
+	if artifactChanged || containerGroupsChanged || replacementPolicyChanged {
+		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, containerGroupsChanged, replacementPolicyChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
 			if errors.As(err, &failedErr) {
 				resp.Diagnostics.AddError("Workload replacement failed", failedErr.Error())
@@ -333,6 +364,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
+	preserveWorkloadReplacementPolicy(planned, &plan)
 	applySentinels(planned, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -402,17 +434,54 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 			!g.ReplicaCount.IsUnknown() &&
 			g.ReplicaCount.ValueInt64() != 0
 
-		autoscalingSet := g.Autoscaling != nil &&
-			!g.Autoscaling.Enabled.IsNull() &&
-			!g.Autoscaling.Enabled.IsUnknown() &&
-			g.Autoscaling.Enabled.ValueBool()
+		// autoscaling.enabled defaults to true, so a present autoscaling block
+		// counts as enabled unless the user explicitly sets enabled = false.
+		autoscalingEnabled := false
+		if g.Autoscaling != nil {
+			explicitlyDisabled := !g.Autoscaling.Enabled.IsNull() &&
+				!g.Autoscaling.Enabled.IsUnknown() &&
+				!g.Autoscaling.Enabled.ValueBool()
+			autoscalingEnabled = !explicitlyDisabled
+		}
 
-		if replicaCountSet && autoscalingSet {
+		if replicaCountSet && autoscalingEnabled {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("runtime").AtName("container_groups").AtListIndex(i),
 				"Conflicting runtime configuration",
-				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling or disable autoscaling.",
+				"Cannot specify both replica_count and autoscaling. Set replica_count to 0 (or omit it) when using autoscaling, or set autoscaling.enabled = false.",
 			)
+		}
+
+		if g.Autoscaling != nil &&
+			!g.Autoscaling.MinReplicaCount.IsNull() && !g.Autoscaling.MinReplicaCount.IsUnknown() &&
+			!g.Autoscaling.MaxReplicaCount.IsNull() && !g.Autoscaling.MaxReplicaCount.IsUnknown() &&
+			g.Autoscaling.MinReplicaCount.ValueInt64() > g.Autoscaling.MaxReplicaCount.ValueInt64() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("runtime").AtName("container_groups").AtListIndex(i).AtName("autoscaling"),
+				"Invalid autoscaling replica bounds",
+				"min_replica_count must be less than or equal to max_replica_count.",
+			)
+		}
+
+		// cpuAverageUtilization scaling cannot scale from zero; the API
+		// requires min_replica_count > 0 for it. min_replica_count defaults
+		// to 0, so an omitted value fails the same way as an explicit 0.
+		if g.Autoscaling != nil && autoscalingEnabled {
+			minIsZero := g.Autoscaling.MinReplicaCount.IsNull() ||
+				(!g.Autoscaling.MinReplicaCount.IsUnknown() && g.Autoscaling.MinReplicaCount.ValueInt64() == 0)
+			if minIsZero {
+				for pi, p := range g.Autoscaling.Policies {
+					if !p.ScalingMetric.IsNull() && !p.ScalingMetric.IsUnknown() &&
+						p.ScalingMetric.ValueString() == "cpuAverageUtilization" {
+						resp.Diagnostics.AddAttributeError(
+							path.Root("runtime").AtName("container_groups").AtListIndex(i).
+								AtName("autoscaling").AtName("policies").AtListIndex(pi).AtName("scaling_metric"),
+							"Invalid autoscaling configuration",
+							"min_replica_count must be greater than 0 when using cpuAverageUtilization scaling (it defaults to 0).",
+						)
+					}
+				}
+			}
 		}
 
 		if len(g.ResourceBundles) == 0 {
@@ -549,19 +618,14 @@ func groupRuntimeToClient(g WorkloadGroupRuntimeModel) client.GroupRuntime {
 			enabled := g.Autoscaling.Enabled.ValueBool()
 			gr.Autoscaling.Enabled = &enabled
 		}
+		gr.Autoscaling.MinReplicaCount = g.Autoscaling.MinReplicaCount.ValueInt64()
+		gr.Autoscaling.MaxReplicaCount = g.Autoscaling.MaxReplicaCount.ValueInt64()
 		gr.Autoscaling.Policies = make([]client.AutoscalingPolicy, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := client.AutoscalingPolicy{
+			gr.Autoscaling.Policies[i] = client.AutoscalingPolicy{
 				ScalingMetric: p.ScalingMetric.ValueString(),
 				Target:        p.Target.ValueFloat64(),
-				MinCount:      p.MinCount.ValueInt64(),
-				MaxCount:      p.MaxCount.ValueInt64(),
 			}
-			if !p.Priority.IsNull() && !p.Priority.IsUnknown() {
-				v := p.Priority.ValueInt64()
-				policy.Priority = &v
-			}
-			gr.Autoscaling.Policies[i] = policy
 		}
 	}
 
@@ -633,6 +697,13 @@ func applySentinels(desired WorkloadResourceModel, data *WorkloadResourceModel) 
 		if dg.ResourceBundles == nil {
 			data.Runtime.ContainerGroups[i].ResourceBundles = nil
 		}
+		// When the user did not configure autoscaling, the backend may fill in a
+		// cluster-dependent default (a scale-to-zero autoscaling block). Keep it
+		// out of state so it matches the empty config and does not drift.
+		// (replica_count is Optional+Computed and absorbs its own default.)
+		if dg.Autoscaling == nil {
+			data.Runtime.ContainerGroups[i].Autoscaling = nil
+		}
 		data.Runtime.ContainerGroups[i].BundleSelectionPolicy = dg.BundleSelectionPolicy
 		for j := range dg.Containers {
 			if j >= len(data.Runtime.ContainerGroups[i].Containers) {
@@ -672,30 +743,55 @@ func workloadMetadataChanged(plan, state WorkloadResourceModel) bool {
 		!plan.Importance.Equal(state.Importance)
 }
 
-func workloadRuntimeChanged(plan, state WorkloadRuntimeModel) bool {
-	return !reflect.DeepEqual(plan, state)
+func workloadContainerGroupsChanged(plan, state WorkloadRuntimeModel) bool {
+	return !reflect.DeepEqual(plan.ContainerGroups, state.ContainerGroups)
+}
+
+func workloadReplacementPolicyChanged(plan, state WorkloadRuntimeModel) bool {
+	return !reflect.DeepEqual(plan.ReplacementPolicy, state.ReplacementPolicy)
+}
+
+func preserveWorkloadReplacementPolicy(prior WorkloadResourceModel, data *WorkloadResourceModel) {
+	data.Runtime.ReplacementPolicy = prior.Runtime.ReplacementPolicy
+}
+
+func replacementConfigFromPlan(policy *WorkloadReplacementPolicyModel) client.ReplacementConfig {
+	cfg := client.ReplacementConfig{}
+	if policy == nil {
+		return cfg
+	}
+	if !policy.WarmupMinutes.IsNull() && !policy.WarmupMinutes.IsUnknown() {
+		cfg.WarmupDurationMinutes = policy.WarmupMinutes.ValueInt64()
+	}
+	if !policy.KeepOldVersionMinutes.IsNull() && !policy.KeepOldVersionMinutes.IsUnknown() {
+		cfg.KeepOldVersionMinutes = policy.KeepOldVersionMinutes.ValueInt64()
+	}
+	return cfg
 }
 
 func (r *WorkloadResource) triggerWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
 	plan WorkloadResourceModel,
-	artifactChanged, runtimeChanged bool,
+	artifactChanged, containerGroupsChanged, replacementPolicyChanged bool,
 ) error {
-	if artifactChanged {
+	useReplacementAPI := artifactChanged || replacementPolicyChanged
+
+	if useReplacementAPI {
 		traceAPICall("StartWorkloadReplacement")
 		req := &client.StartReplacementRequest{
 			ArtifactID: plan.ArtifactID.ValueString(),
 			Strategy:   client.ReplacementStrategyRolling,
+			Config:     replacementConfigFromPlan(plan.Runtime.ReplacementPolicy),
 		}
-		if runtimeChanged {
+		if containerGroupsChanged {
 			runtime := workloadRuntimeToClient(plan.Runtime)
 			req.Runtime = &runtime
 		}
 		if _, err := r.provider.service.StartWorkloadReplacement(ctx, workloadID, req); err != nil {
 			return err
 		}
-	} else if runtimeChanged {
+	} else if containerGroupsChanged {
 		traceAPICall("UpdateWorkloadSettings")
 		if _, err := r.provider.service.UpdateWorkloadSettings(ctx, workloadID, &client.UpdateWorkloadSettingsRequest{
 			Runtime: workloadRuntimeToClient(plan.Runtime),
@@ -775,20 +871,14 @@ func loadGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadGroupRuntimeModel {
 		} else {
 			autoscaling.Enabled = types.BoolNull()
 		}
+		autoscaling.MinReplicaCount = types.Int64Value(g.Autoscaling.MinReplicaCount)
+		autoscaling.MaxReplicaCount = types.Int64Value(g.Autoscaling.MaxReplicaCount)
 		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := WorkloadAutoscalingPolicyModel{
+			autoscaling.Policies[i] = WorkloadAutoscalingPolicyModel{
 				ScalingMetric: types.StringValue(p.ScalingMetric),
 				Target:        types.Float64Value(p.Target),
-				MinCount:      types.Int64Value(p.MinCount),
-				MaxCount:      types.Int64Value(p.MaxCount),
 			}
-			if p.Priority != nil {
-				policy.Priority = types.Int64Value(*p.Priority)
-			} else {
-				policy.Priority = types.Int64Null()
-			}
-			autoscaling.Policies[i] = policy
 		}
 		m.Autoscaling = autoscaling
 	}

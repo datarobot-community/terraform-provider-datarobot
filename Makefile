@@ -16,9 +16,9 @@ build:
 generate:
 	go generate
 
-# Make mocks for the service
+# Make mocks for the service (must use github.com/golang/mock to match go.mod).
 mocks:
-	mockgen -source=internal/client/service.go -destination=mock/service.go -package=mock_client
+	go run github.com/golang/mock/mockgen@v1.6.0 -source=internal/client/service.go -destination=mock/service.go -package=mock_client
 
 release:
 	GOOS=darwin GOARCH=amd64 go build -o ./bin/${BINARY}_${VERSION}_darwin_amd64

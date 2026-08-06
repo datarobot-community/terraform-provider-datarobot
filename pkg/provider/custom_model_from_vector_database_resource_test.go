@@ -136,6 +136,7 @@ func TestLoadVectorDatabaseToTerraformState_Chunking(t *testing.T) {
 		cp := data.ChunkingParameters
 		if cp == nil {
 			t.Fatal("ChunkingParameters is nil")
+			return
 		}
 		if !cp.CustomChunking.ValueBool() {
 			t.Errorf("CustomChunking = false, want true")
@@ -170,6 +171,7 @@ func TestLoadVectorDatabaseToTerraformState_Chunking(t *testing.T) {
 		cp := data.ChunkingParameters
 		if cp == nil {
 			t.Fatal("ChunkingParameters is nil")
+			return
 		}
 		if cp.ChunkSize.ValueInt64() != 500 {
 			t.Errorf("ChunkSize = %d, want 500", cp.ChunkSize.ValueInt64())

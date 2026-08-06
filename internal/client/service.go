@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	"github.com/google/go-querystring/query"
 )
 
@@ -275,6 +276,7 @@ type Service interface {
 	// Artifact (Workload API)
 	CreateArtifact(ctx context.Context, req *CreateArtifactRequest) (*Artifact, error)
 	PatchArtifact(ctx context.Context, id string, req *PatchArtifactRequest) (*Artifact, error)
+	PatchArtifactCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
@@ -294,6 +296,9 @@ type Service interface {
 	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)
 	UpdateQuota(ctx context.Context, id string, req *UpdateQuotaRequest) (*Quota, error)
 	DeleteQuota(ctx context.Context, id string) error
+
+	// Files API (catalog upload for artifact source sync)
+	FilesAPI() filesapi.Client
 
 	BaseURL() string
 }
