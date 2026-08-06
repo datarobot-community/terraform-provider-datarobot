@@ -363,7 +363,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	var plan ArtifactResourceModel
-	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, statePtr, &plan)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}

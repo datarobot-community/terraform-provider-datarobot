@@ -1594,7 +1594,7 @@ func (m *MockService) GetDeploymentLogs(ctx context.Context, id string) (string,
 }
 
 // GetDeploymentLogs indicates an expected call of GetDeploymentLogs.
-func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetDeploymentLogs(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentLogs", reflect.TypeOf((*MockService)(nil).GetDeploymentLogs), ctx, id)
 }
@@ -1999,7 +1999,7 @@ func (m *MockService) GetWorkloadReplacement(ctx context.Context, workloadID str
 }
 
 // GetWorkloadReplacement indicates an expected call of GetWorkloadReplacement.
-func (mr *MockServiceMockRecorder) GetWorkloadReplacement(ctx, workloadID interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) GetWorkloadReplacement(ctx, workloadID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkloadReplacement", reflect.TypeOf((*MockService)(nil).GetWorkloadReplacement), ctx, workloadID)
 }
@@ -2358,7 +2358,7 @@ func (m *MockService) StartWorkloadReplacement(ctx context.Context, workloadID s
 }
 
 // StartWorkloadReplacement indicates an expected call of StartWorkloadReplacement.
-func (mr *MockServiceMockRecorder) StartWorkloadReplacement(ctx, workloadID, req interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) StartWorkloadReplacement(ctx, workloadID, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkloadReplacement", reflect.TypeOf((*MockService)(nil).StartWorkloadReplacement), ctx, workloadID, req)
 }
@@ -3034,7 +3034,7 @@ func (m *MockService) WaitForWorkloadReplacement(ctx context.Context, workloadID
 }
 
 // WaitForWorkloadReplacement indicates an expected call of WaitForWorkloadReplacement.
-func (mr *MockServiceMockRecorder) WaitForWorkloadReplacement(ctx, workloadID, opts interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) WaitForWorkloadReplacement(ctx, workloadID, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForWorkloadReplacement", reflect.TypeOf((*MockService)(nil).WaitForWorkloadReplacement), ctx, workloadID, opts)
 }
