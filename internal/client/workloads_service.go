@@ -286,11 +286,12 @@ const (
 const (
 	EnvironmentVariableSourceString     = "string"
 	EnvironmentVariableSourceCredential = "dr-credential"
+	EnvironmentVariableSourceAPIKey     = "api-key"
 )
 
 type ArtifactEnvironmentVariable struct {
 	Source         string `json:"source,omitempty"`
-	Name           string `json:"name"`
+	Name           string `json:"name,omitempty"`
 	Value          string `json:"value,omitempty"`
 	DrCredentialID string `json:"drCredentialId,omitempty"`
 	Key            string `json:"key,omitempty"`

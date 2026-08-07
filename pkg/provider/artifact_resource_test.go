@@ -1143,6 +1143,29 @@ func TestValidateArtifactEnvironmentVar(t *testing.T) {
 			t.Fatalf("expected no errors for unknown dr_credential_id, got: %v", resp.Diagnostics.Errors())
 		}
 	})
+
+	t.Run("api-key without name is valid", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source: types.StringValue(client.EnvironmentVariableSourceAPIKey),
+			Name:   types.StringNull(),
+		})
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors for api-key source, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("api-key rejects value", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source: types.StringValue(client.EnvironmentVariableSourceAPIKey),
+			Name:   types.StringNull(),
+			Value:  types.StringValue("secret"),
+		})
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected validation error for api-key with value")
+		}
+	})
 }
 
 func TestArtifactCredentialEnvVarValidation(t *testing.T) {

@@ -125,7 +125,7 @@ Read-Only:
 - `dr_credential_id` (String) DataRobot credential ID when source is "dr-credential".
 - `key` (String) Key within the credential when source is "dr-credential".
 - `name` (String) Name of the environment variable.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token.
 - `value` (String) Value of the environment variable when source is "string".
 
 
