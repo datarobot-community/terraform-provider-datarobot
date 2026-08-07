@@ -16,7 +16,8 @@ Changes to `artifact_id` or `runtime` trigger an in-place workload replacement v
 ## Example Usage
 
 ```terraform
-# Code-to-workload: build a container image from local source, then deploy it as a workload.
+# Code-to-workload: upload local FastAPI source, build a container image, lock the artifact, deploy a workload.
+# The app runs uvicorn on port 8080 so the workload stays healthy (a one-shot script would exit and fail).
 
 resource "datarobot_artifact" "app" {
   name        = "example-c2w-workload"
