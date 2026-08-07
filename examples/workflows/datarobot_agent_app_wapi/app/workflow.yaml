@@ -1,0 +1,123 @@
+# Copyright 2026 DataRobot, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+general:
+  telemetry:
+    tracing:
+      otelcollector:
+        _type: datarobot_otelcollector
+        project: "agent"
+  front_end:
+    _type: dragent_fastapi
+    # Step adaptor is not necessary for custom agents
+    step_adaptor:
+      mode: "off"
+    # If you don't want your agent to expose A2A endpoints, remove the following block.
+    a2a:
+      server:
+        name: "Blog Content Writer"
+        description: "An AI content writing agent that researches and writes well-structured blog posts. Provide a topic and it will generate a concise, publication-ready article in markdown format."
+      skills: # Optional: advertise specific skills in the agent card
+        - id: write_blog
+          name: "Write Blog Post"
+          description: "Researches and writes a blog post on the given topic."
+          tags: []
+          examples:
+            - "Write a blog post about the future of AI in healthcare"
+            - "Create an article about sustainable energy trends"
+            # Optional: Okta cross-application access (XAA) authentication for this agent's A2A endpoints.
+            # Uncomment to advertise XAA requirements on the agent card. See docs/agent/agent2agent-auth.md.
+            # cross_application_access:
+            #   token_exchange:
+            #     trusted_issuer: "https://your-org.okta.com"
+            #     audience: "https://your-org.okta.com/oauth2/ausXXXXXXXXXXXXXXX"
+            #   token_request:
+            #     token_url: "https://your-org.okta.com/oauth2/ausXXXXXXXXXXXXXXX/v1/token"
+            #     audience: "https://example.com/agents/my-agent-id"
+            #     scopes:
+            #       - "dr.impersonation"
+            # Optional: external identity and URL overrides published on the agent card.
+            # external:
+            #   id: "my-agent-id"
+            #   url: "https://my-agent-id.example.com/a2a/"
+# To connect this agent to a remote A2A agent, uncomment the block below and add the
+# function group name to the workflow's tool_names list.
+# For Okta XAA auth, use auth_provider: okta_auth instead of datarobot_auth.
+# function_groups:
+#   remote_agent:
+#     _type: authenticated_a2a_client
+#     url: "https://app.datarobot.com/api/v2/deployments/<deployment-id>/directAccess/a2a/"
+#     auth_provider: datarobot_auth
+
+functions:
+  langgraph_agent:
+    _type: langgraph_agent
+    llm_name: datarobot_llm
+#    llm_name: gpt
+    description: LangGraph planner/writer agent
+    # tool_names:
+    #   - remote_agent
+
+llms:
+  datarobot_llm:
+    _type: datarobot-llm-component
+#     To enable LLM provider fallback/failover, remove the datarobot_llm block above and uncomment the following:
+#     datarobot_llm:
+#       _type: datarobot-llm-router
+#       primary:
+#         use_datarobot_llm_gateway: true
+#         llm_default_model: azure/gpt-5-mini-2025-08-07
+#       fallbacks:
+#         - use_datarobot_llm_gateway: true
+#           llm_default_model: anthropic/claude-opus-4-20250514
+#       num_retries: 1
+
+#llms:
+#  gpt:
+#    _type: azure_openai
+#    base_url: https://dr-l3-int-nonprod-us-mldev-nc.openai.azure.com/
+#    model_name: gpt-4o-mini
+#    api_key: $AZURE_OPENAI_API_KEY
+
+memory:
+  mem0_memory:
+    _type: dr_mem0_memory
+
+workflow:
+  # When memory is not configured streaming_memory_agent is a passthrough so it is safe to use
+  # unconditionally. To configure memory choose agent memory provider "Mem0" and set MEM0_API_KEY
+  # in .env or choose agent memory provider "Datarobot Memory Service" and AGENT_MEMORY_SPACE_ID
+  # will be created during `task deploy-dev`.
+  _type: streaming_memory_agent
+  inner_agent_name: langgraph_agent
+  memory_name: mem0_memory
+  llm_name: datarobot_llm
+#  llm_name: gpt
+  description: LangGraph planner/writer agent with automatic memory capture and retrieval
+  middleware:
+    - datarobot_moderation
+
+middleware:
+  datarobot_moderation:
+    # Guards can be configured inline by adding the moderation field here.
+    # See the Guardrails Configuration Guide at https://pypi.org/project/datarobot-moderations/
+    # If there is no inline configuration then moderation_config.yaml will be loaded, if present.
+    # If no guards are configured then the middleware is a no-op.
+    _type: datarobot_moderation
+
+authentication:
+  datarobot_auth:
+    _type: datarobot_api_key
+  # Uncomment for Okta XAA authentication (requires IDP_AGENT_ID and IDP_AGENT_PRIVATE_KEY_JWK env vars):
+  # okta_auth:
+  #   _type: okta_cross_app_access
