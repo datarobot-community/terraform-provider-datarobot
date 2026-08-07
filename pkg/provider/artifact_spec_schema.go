@@ -121,7 +121,7 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".`,
 		},
 		"name": schema.StringAttribute{
 			Required:            true,
@@ -146,7 +146,7 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials.`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token.`,
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
