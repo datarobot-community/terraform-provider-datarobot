@@ -649,6 +649,14 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsUnknown() {
+			return
+		}
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "string".`)
+		}
 		if ev.Value.IsUnknown() {
 			return
 		}
@@ -668,6 +676,14 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsUnknown() {
+			return
+		}
+		if ev.Name.IsNull() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
+				"Missing name",
+				`"name" is required when source is "dr-credential".`)
+		}
 		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
 			return
 		}
@@ -1094,9 +1110,10 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			envVar := client.ArtifactEnvironmentVariable{
-				Source: ev.Source.ValueString(),
-				Name:   ev.Name.ValueString(),
+			source := ev.Source.ValueString()
+			envVar := client.ArtifactEnvironmentVariable{Source: source}
+			if !ev.Name.IsNull() && !ev.Name.IsUnknown() {
+				envVar.Name = ev.Name.ValueString()
 			}
 			switch source {
 			case client.EnvironmentVariableSourceCredential:
@@ -1307,15 +1324,21 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		for i, ev := range c.EnvironmentVars {
 			m := ArtifactEnvironmentVariableModel{
 				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
+				Name:           types.StringNull(),
 				Value:          types.StringNull(),
 				DrCredentialID: types.StringNull(),
 				Key:            types.StringNull(),
 			}
-			if ev.Source == client.EnvironmentVariableSourceCredential {
+			if ev.Name != "" {
+				m.Name = types.StringValue(ev.Name)
+			}
+			switch ev.Source {
+			case client.EnvironmentVariableSourceCredential:
 				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
 				m.Key = types.StringValue(ev.Key)
-			} else {
+			case client.EnvironmentVariableSourceAPIKey:
+				// Value is resolved at workload deploy time and is not returned by the API.
+			default:
 				m.Value = types.StringValue(ev.Value)
 			}
 			model.EnvironmentVars[i] = m
