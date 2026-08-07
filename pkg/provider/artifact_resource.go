@@ -705,7 +705,7 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 	default:
 		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
 			"Invalid source",
-			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential".`, source))
+			fmt.Sprintf(`Invalid source %q. Allowed values: "string", "dr-credential", "api-key".`, source))
 	}
 }
 
@@ -1098,10 +1098,13 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 				Source: ev.Source.ValueString(),
 				Name:   ev.Name.ValueString(),
 			}
-			if ev.Source.ValueString() == client.EnvironmentVariableSourceCredential {
+			switch source {
+			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
-			} else {
+			case client.EnvironmentVariableSourceAPIKey:
+				// Token value is resolved by workload-api at deploy time.
+			default:
 				envVar.Value = ev.Value.ValueString()
 			}
 			container.EnvironmentVars[i] = envVar
