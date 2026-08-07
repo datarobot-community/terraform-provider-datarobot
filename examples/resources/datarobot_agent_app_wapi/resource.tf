@@ -32,10 +32,10 @@ resource "datarobot_artifact" "agent" {
 
         image_build_config = {
           dockerfile = {
-            source                         = "generated"
+            source                           = "generated"
             execution_environment_id         = "680fe4949604e9eba46b1775"
             execution_environment_version_id = "6a68ad427527674aeb6b75cb"
-            entrypoint                     = ["sh", "run_server.sh"]
+            entrypoint                       = ["sh", "run_server.sh"]
           }
         }
 
