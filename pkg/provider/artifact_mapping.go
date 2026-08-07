@@ -130,7 +130,7 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 		for i, ev := range c.EnvironmentVars {
 			m := ArtifactEnvironmentVariableModel{
 				Source:         types.StringValue(ev.Source),
-				Name:           types.StringValue(ev.Name),
+				Name:           types.StringNull(),
 				Value:          types.StringNull(),
 				DrCredentialID: types.StringNull(),
 				Key:            types.StringNull(),

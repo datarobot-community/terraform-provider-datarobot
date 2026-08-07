@@ -124,8 +124,8 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".`,
 		},
 		"name": schema.StringAttribute{
-			Required:            true,
-			MarkdownDescription: "Name of the environment variable.",
+			Optional:            true,
+			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).`,
 		},
 		"value": schema.StringAttribute{
 			Optional:            true,
