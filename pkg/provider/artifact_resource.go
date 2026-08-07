@@ -686,6 +686,22 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Unexpected field",
 				`"value" must not be set when source is "dr-credential".`)
 		}
+	case client.EnvironmentVariableSourceAPIKey:
+		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
+				"Unexpected field",
+				`"value" must not be set when source is "api-key".`)
+		}
+		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
+				"Unexpected field",
+				`"dr_credential_id" must not be set when source is "api-key".`)
+		}
+		if !ev.Key.IsNull() && !ev.Key.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
+				"Unexpected field",
+				`"key" must not be set when source is "api-key".`)
+		}
 	default:
 		resp.Diagnostics.AddAttributeError(evPath.AtName("source"),
 			"Invalid source",

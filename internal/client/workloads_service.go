@@ -286,6 +286,7 @@ const (
 const (
 	EnvironmentVariableSourceString     = "string"
 	EnvironmentVariableSourceCredential = "dr-credential"
+	EnvironmentVariableSourceAPIKey     = "api-key"
 )
 
 type ArtifactEnvironmentVariable struct {
