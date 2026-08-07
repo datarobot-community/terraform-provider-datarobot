@@ -7,6 +7,7 @@
 - Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
 ### Fixed
 
+- Feature flag checks now evaluate the effective flag value via `POST /api/v2/entitlements/evaluate/` instead of reading the `permissions` map from `GET /api/v2/account/info/`, which only contains flags set directly on the user record. Flags inherited from the user's organization or groups (e.g. `ENABLE_AGENTIC_MEMORY_API` for `datarobot_memory_space`) no longer fail with a false "Feature not enabled" error. A flag missing from the evaluation response is now an explicit error instead of silently reading as disabled.
 - Bumped `google.golang.org/grpc` from `1.79.3` to `1.82.1` to resolve `GO-2026-6061` (xDS RBAC authorization engine and HTTP/2 server transport) detected by `govulncheck`. The advisory is reachable from the provider's plugin gRPC server (`providerserver.Serve` → `transport.NewServerTransport`), not merely imported. Dependency-only change; no provider behavior change.
 
 ## [0.10.45] - 2026-07-27
