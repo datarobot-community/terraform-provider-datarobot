@@ -796,8 +796,8 @@ func formatOtelLogEntries(entries []OtelLogEntry) string {
 	return strings.Join(lines, "\n")
 }
 
-func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string) (string, error) {
-	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, artifactBuildLogsTailLines())
+func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID, buildID string) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, artifactBuildLogsTailLines(), buildID)
 	if err != nil {
 		return "", err
 	}
