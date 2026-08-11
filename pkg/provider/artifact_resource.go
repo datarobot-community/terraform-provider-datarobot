@@ -446,8 +446,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 		}
 
-		if state.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-			(plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(plan, state)) {
+		if artifactModifyPlanNeedsUnknownArtifactID(plan, state) {
 			plan.ArtifactID = types.StringUnknown()
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 		}
