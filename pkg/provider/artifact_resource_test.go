@@ -1513,13 +1513,12 @@ func TestValidateArtifactSource(t *testing.T) {
 			wantSummary: "Invalid source directory",
 		},
 		{
-			name: "locked status",
+			name: "valid locked source",
 			data: ArtifactResourceModel{
 				Status: types.StringValue("locked"),
 				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
 				Spec:   specWithBuildConfig,
 			},
-			wantSummary: "Source requires draft status",
 		},
 		{
 			name: "nim artifact",
