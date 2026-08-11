@@ -3314,7 +3314,7 @@ func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 		},
 	}
 
-	if containersEqual(base, changed) {
+	if containersEqual(base, changed, false) {
 		t.Fatal("expected image_build_config change to make containers unequal")
 	}
 }
