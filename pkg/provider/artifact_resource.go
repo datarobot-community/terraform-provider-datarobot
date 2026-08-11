@@ -340,8 +340,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
 		if syncErr != nil {
 			if createdNewVersion {
-				loadArtifactIntoModel(artifact, &plan)
-				resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
 			}
 			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
 			return
@@ -352,16 +351,37 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		artifact.Status != client.ArtifactStatusLocked &&
 		(deferLock || lockedSourceCloneNeeded) {
-		artifact, err = r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
+		preLockArtifact := artifact
+		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
+		if lockErr != nil {
+			if createdNewVersion || lockedSourceCloneNeeded {
+				persistPartialArtifactUpdate(ctx, resp, preLockArtifact, &plan, &state)
+			}
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", lockErr.Error())
 			return
 		}
+		artifact = lockedArtifact
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
 	refreshArtifactSourceDirHash(&plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// persistPartialArtifactUpdate records a newly created draft version in state when a later
+// step (source upload or lock) fails. The prior source.dir_hash is kept so a retry still
+// sees a pending upload instead of treating the new tree as already synced.
+func persistPartialArtifactUpdate(
+	ctx context.Context,
+	resp *resource.UpdateResponse,
+	artifact *client.Artifact,
+	plan, state *ArtifactResourceModel,
+) {
+	loadArtifactIntoModel(artifact, plan)
+	if plan.Source != nil && state.Source != nil {
+		plan.Source.DirHash = state.Source.DirHash
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

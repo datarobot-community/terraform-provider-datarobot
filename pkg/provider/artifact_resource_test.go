@@ -2323,6 +2323,63 @@ func TestArtifactResourceSourceCreateLockedLockFailure(t *testing.T) {
 	}
 }
 
+func TestArtifactResourceSourceUpdateLockedLockFailurePersistsDraftClone(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
+	sourceDirV2 := writeArtifactSourceTree(t, map[string]string{"main.py": "v2"})
+	lockedArtifactID := uuid.NewString()
+	draftCloneID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-lock-update-fail-" + uuid.NewString()[:8]
+
+	draftClone := artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name)
+	patchedDraft := artifactSourcePatchedArtifact(draftClone, "cccccccccccccccccccccccc", "dddddddddddddddddddddddd")
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftClone, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).Return(patchedDraft, nil)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).Return(nil, fmt.Errorf("lock failed"))
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	state := artifactResourceModelWithSource(name, sourceDirV1)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Source.DirHash = types.StringValue("hash-v1")
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	plan := artifactResourceModelWithSource(name, sourceDirV2)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.DirHash = types.StringValue("hash-v2")
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if !diags.HasError() {
+		t.Fatal("expected lock error")
+	}
+	if got := diagErrorSummary(diags); got != "Error locking Artifact after source upload" {
+		t.Fatalf("error summary = %q", got)
+	}
+	if updated.ArtifactID.ValueString() != draftCloneID {
+		t.Fatalf("expected draft clone in state, artifact_id = %q", updated.ArtifactID.ValueString())
+	}
+	if updated.Status.ValueString() != "draft" {
+		t.Fatalf("status = %q, want draft", updated.Status.ValueString())
+	}
+	if got := updated.Source.DirHash.ValueString(); got != "hash-v1" {
+		t.Fatalf("dir_hash = %q, want prior hash-v1 so retry re-uploads", got)
+	}
+}
+
 func TestArtifactResourceSourceCreateArtifactFailure(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
