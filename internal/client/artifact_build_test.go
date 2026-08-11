@@ -142,6 +142,40 @@ func TestWaitForArtifactBuildCompletesOnTerminalStatus(t *testing.T) {
 	}
 }
 
+func TestWaitForArtifactBuildCallsOnPoll(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		status := ArtifactBuildStatusInProgress
+		if calls >= 2 {
+			status = ArtifactBuildStatusCompleted
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	var pollStatuses []string
+	_, err := svc.WaitForArtifactBuild(context.Background(), "art-1", "build-1", &WaitForArtifactBuildOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+		OnPoll: func(build *ArtifactBuild) {
+			pollStatuses = append(pollStatuses, build.Status)
+		},
+	})
+	if err != nil {
+		t.Fatalf("WaitForArtifactBuild returned error: %v", err)
+	}
+	if len(pollStatuses) != 1 || pollStatuses[0] != ArtifactBuildStatusInProgress {
+		t.Fatalf("OnPoll statuses = %#v, want one IN_PROGRESS callback before completion", pollStatuses)
+	}
+}
+
 func TestWaitForArtifactBuildReturnsFailedError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -209,6 +243,12 @@ func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
 		case "/otel/artifact/art-1/logs/":
 			otelCalls++
+			if got := r.URL.Query()["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
+				t.Fatalf("expected searchKeys=build_id, got %v", got)
+			}
+			if got := r.URL.Query()["searchValues"]; len(got) != 1 || got[0] != "build-1" {
+				t.Fatalf("expected searchValues=build-1, got %v", got)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": []map[string]any{{
@@ -300,6 +340,12 @@ func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
 		case "/otel/artifact/art-1/logs/":
 			if got := r.URL.Query().Get("limit"); got != "30" {
 				t.Fatalf("expected limit=30, got %q", got)
+			}
+			if got := r.URL.Query()["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
+				t.Fatalf("expected searchKeys=build_id, got %v", got)
+			}
+			if got := r.URL.Query()["searchValues"]; len(got) != 1 || got[0] != "build-1" {
+				t.Fatalf("expected searchValues=build-1, got %v", got)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
