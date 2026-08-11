@@ -317,8 +317,8 @@ func TestSyncArtifactBuild(t *testing.T) {
 		if !strings.Contains(err.Error(), "docker build failed") {
 			t.Fatalf("expected enriched logs in error, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/"+artifactID+"/build-log") {
-			t.Fatalf("expected build-log UI URL in error, got: %v", err)
+		if !strings.Contains(err.Error(), "https://app.datarobot.com/api/v2/otel/artifact/"+artifactID+"/logs/?limit=30&searchKeys=build_id&searchValues="+buildID) {
+			t.Fatalf("expected OTEL logs API URL in error, got: %v", err)
 		}
 	})
 
