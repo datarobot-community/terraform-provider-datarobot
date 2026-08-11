@@ -1237,6 +1237,28 @@ func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
 			want:  false,
 		},
 		{
+			name: "locked unchanged source ignores managed code_ref null in plan",
+			plan: modelWithSource("locked", hashA),
+			state: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.ImageBuildConfig = &ArtifactImageBuildConfigModel{
+					CodeRef: &ArtifactCodeRefModel{
+						CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+						CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+					},
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				}
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			want: false,
+		},
+		{
 			name: "locked spec change with source needs clone",
 			plan: func() ArtifactResourceModel {
 				m := modelWithSource("locked", hashA)
