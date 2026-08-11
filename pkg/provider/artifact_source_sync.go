@@ -98,6 +98,8 @@ func (r *ArtifactResource) syncArtifactSource(
 		return artifact, false, nil
 	}
 
+	artifactApplyProgressUploading(artifact.ID)
+
 	catalogID := catalogIDFromModel(state)
 	if catalogID == "" {
 		if ref := client.ExtractCodeRef(artifact); ref != nil {

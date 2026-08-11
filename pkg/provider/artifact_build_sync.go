@@ -59,6 +59,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 	waitForBuild bool,
 	opts *client.WaitForArtifactBuildOptions,
 ) (*client.Artifact, string, error) {
+	artifactApplyProgressBuilding(artifactID)
 	traceAPICall("TriggerArtifactBuild")
 	trigger, err := r.provider.service.TriggerArtifactBuild(ctx, artifactID)
 	if err != nil {
@@ -133,6 +134,14 @@ func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactB
 			line := client.FormatOtelLogEntry(entry)
 			emitArtifactBuildLogLine(line)
 			tflog.Debug(ctx, line)
+		}
+	}
+	if merged.OnPoll == nil {
+		merged.OnPoll = func(build *client.ArtifactBuild) {
+			if build == nil {
+				return
+			}
+			artifactApplyProgressBuildPolling(build.ArtifactID, build.ID)
 		}
 	}
 	return merged

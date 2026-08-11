@@ -79,3 +79,16 @@ func TestArtifactBuildLogsURL(t *testing.T) {
 		t.Fatalf("artifactBuildLogsURL() = %q, want %q", got, want)
 	}
 }
+
+func TestArtifactOtelBuildLogsURL(t *testing.T) {
+	got := artifactOtelBuildLogsURL(
+		"https://staging.datarobot.com",
+		"art-1",
+		"build-1",
+		30,
+	)
+	want := "https://staging.datarobot.com/api/v2/otel/artifact/art-1/logs/?limit=30&searchKeys=build_id&searchValues=build-1"
+	if got != want {
+		t.Fatalf("artifactOtelBuildLogsURL() = %q, want %q", got, want)
+	}
+}
