@@ -11,7 +11,18 @@ import (
 const defaultOtelLogStreamPageSize = 100
 
 type getOtelLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
+	Limit        int      `url:"limit,omitempty"`
+	SearchKeys   []string `url:"searchKeys,omitempty"`
+	SearchValues []string `url:"searchValues,omitempty"`
+}
+
+func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
+	req := &getOtelLogsRequest{Limit: limit}
+	if buildID != "" {
+		req.SearchKeys = []string{"build_id"}
+		req.SearchValues = []string{buildID}
+	}
+	return req
 }
 
 func otelLogKey(entry OtelLogEntry) string {
@@ -27,9 +38,13 @@ func FormatOtelLogEntry(entry OtelLogEntry) string {
 	return line
 }
 
-func (s *ServiceImpl) getOtelEntityLogEntries(ctx context.Context, entityType, entityID string, limit int) ([]OtelLogEntry, error) {
-	queryReq := &getOtelLogsRequest{Limit: limit}
-	pathValues, _ := query.Values(queryReq)
+func (s *ServiceImpl) getOtelEntityLogEntries(
+	ctx context.Context,
+	entityType, entityID string,
+	limit int,
+	buildID string,
+) ([]OtelLogEntry, error) {
+	pathValues, _ := query.Values(otelLogsRequest(limit, buildID))
 
 	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/"+entityType+"/"+entityID+"/logs/?"+pathValues.Encode())
 	if err != nil {
@@ -66,11 +81,11 @@ func (st *otelLogStreamState) emitNew(entries []OtelLogEntry, onLine func(OtelLo
 
 func (s *ServiceImpl) pollNewOtelEntityLogs(
 	ctx context.Context,
-	entityType, entityID string,
+	entityType, entityID, buildID string,
 	state *otelLogStreamState,
 	onLine func(OtelLogEntry),
 ) {
-	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, defaultOtelLogStreamPageSize)
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, defaultOtelLogStreamPageSize, buildID)
 	if err != nil {
 		return
 	}
