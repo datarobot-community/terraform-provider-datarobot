@@ -233,12 +233,14 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if targetLocked && artifactSourceConfigured(&data) {
-		artifact, err = r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact, !userSuppliedRepository)
-			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
+		preLockArtifact := artifact
+		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
+		if lockErr != nil {
+			r.rollbackArtifactCreate(ctx, preLockArtifact, !userSuppliedRepository)
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", lockErr.Error())
 			return
 		}
+		artifact = lockedArtifact
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
