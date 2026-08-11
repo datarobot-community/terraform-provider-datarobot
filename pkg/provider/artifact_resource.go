@@ -578,33 +578,36 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 	if len(plan.Spec.ContainerGroups) != len(state.Spec.ContainerGroups) {
 		return true
 	}
+	// When source manages code_ref, plan code_ref is null (schema default) while state
+	// holds the catalog IDs from the last upload — ignore that managed diff.
+	ignoreManagedCodeRef := artifactSourceConfigured(&plan) && !artifactHasManualCodeRef(plan.Spec)
 	for i := range plan.Spec.ContainerGroups {
-		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i]) {
+		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i], ignoreManagedCodeRef) {
 			return true
 		}
 	}
 	return false
 }
 
-func containerGroupsEqual(a, b ArtifactContainerGroupModel) bool {
+func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef bool) bool {
 	if len(a.Containers) != len(b.Containers) {
 		return false
 	}
 	for i := range a.Containers {
-		if !containersEqual(a.Containers[i], b.Containers[i]) {
+		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef) {
 			return false
 		}
 	}
 	return true
 }
 
-func containersEqual(a, b ArtifactContainerModel) bool {
+func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef bool) bool {
 	if !a.Name.Equal(b.Name) ||
 		!a.ImageURI.Equal(b.ImageURI) ||
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
-		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig) ||
+		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig, ignoreManagedCodeRef) ||
 		!probesEqual(a.StartupProbe, b.StartupProbe) ||
 		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
 		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
@@ -633,14 +636,14 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 	return true
 }
 
-func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel) bool {
+func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel, ignoreManagedCodeRef bool) bool {
 	if a == nil && b == nil {
 		return true
 	}
 	if a == nil || b == nil {
 		return false
 	}
-	if !codeRefEqual(a.CodeRef, b.CodeRef) {
+	if !ignoreManagedCodeRef && !codeRefEqual(a.CodeRef, b.CodeRef) {
 		return false
 	}
 	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
