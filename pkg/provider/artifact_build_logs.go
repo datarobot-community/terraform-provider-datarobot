@@ -8,17 +8,54 @@ import (
 )
 
 const artifactBuildLogsSeparator = "----------------------------------------"
+const defaultArtifactBuildLogsTailLines = 30
 
-// artifactBuildLogWriter receives live artifact build log lines during apply.
-// Terraform hides tflog output unless TF_LOG is set, so build progress is written
+// artifactBuildLogWriter receives live artifact apply progress and build log lines.
+// Terraform hides tflog output unless TF_LOG is set, so apply progress is written
 // to stderr by default.
 var artifactBuildLogWriter io.Writer = os.Stderr
 
 func emitArtifactBuildLogLine(line string) {
+	emitArtifactApplyProgress(line)
+}
+
+func emitArtifactApplyProgress(line string) {
 	if artifactBuildLogWriter == nil || line == "" {
 		return
 	}
 	_, _ = artifactBuildLogWriter.Write([]byte(line + "\n"))
+}
+
+func artifactApplyProgressCreating() {
+	emitArtifactApplyProgress("Creating artifact...")
+}
+
+func artifactApplyProgressUploading(artifactID string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Created artifact with id %s. Uploading code...", artifactID))
+}
+
+func artifactApplyProgressBuilding(artifactID string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Building artifact with id %s...", artifactID))
+}
+
+func artifactApplyProgressBuildPolling(artifactID, buildID string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Build %s in progress for %s...", buildID, artifactID))
+}
+
+// artifactOtelBuildLogsURL returns the DataRobot public API URL for OTEL build logs
+// stored in datavolt (GET /api/v2/otel/artifact/{id}/logs/), scoped to one build.
+func artifactOtelBuildLogsURL(baseURL, artifactID, buildID string, limit int) string {
+	if artifactID == "" {
+		return baseURL + "/registry/service-artifacts"
+	}
+	if limit <= 0 {
+		limit = defaultArtifactBuildLogsTailLines
+	}
+	query := fmt.Sprintf("limit=%d", limit)
+	if buildID != "" {
+		query += "&searchKeys=build_id&searchValues=" + buildID
+	}
+	return baseURL + "/api/v2/otel/artifact/" + artifactID + "/logs/?" + query
 }
 
 // artifactBuildLogsURL returns the DataRobot UI link for artifact image build logs.
@@ -70,7 +107,16 @@ func (r *ArtifactResource) enrichArtifactBuildError(
 		return nil
 	}
 
-	logsURL := artifactBuildLogsURL(r.provider.service.BaseURL(), artifactRepositoryID, artifactID)
+	baseURL := r.provider.service.BaseURL()
+	logsURL := artifactBuildLogsURL(baseURL, artifactRepositoryID, artifactID)
+	if buildID != "" {
+		logsURL = artifactOtelBuildLogsURL(
+			baseURL,
+			artifactID,
+			buildID,
+			defaultArtifactBuildLogsTailLines,
+		)
+	}
 
 	var logs string
 	var logErr error
