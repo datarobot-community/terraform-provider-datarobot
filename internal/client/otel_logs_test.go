@@ -2,6 +2,8 @@ package client
 
 import (
 	"testing"
+
+	"github.com/google/go-querystring/query"
 )
 
 func TestOtelLogStreamStateEmitNew(t *testing.T) {
@@ -29,6 +31,27 @@ func TestOtelLogStreamStateEmitNew(t *testing.T) {
 
 	if len(lines) != 3 || lines[2] != "third" {
 		t.Fatalf("expected only new line appended, got %#v", lines)
+	}
+}
+
+func TestOtelLogsRequestIncludesBuildIDFilter(t *testing.T) {
+	values, err := query.Values(otelLogsRequest(100, "build-abc"))
+	if err != nil {
+		t.Fatalf("query.Values returned error: %v", err)
+	}
+	if got := values["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
+		t.Fatalf("expected searchKeys=build_id, got %v", got)
+	}
+	if got := values["searchValues"]; len(got) != 1 || got[0] != "build-abc" {
+		t.Fatalf("expected searchValues=build-abc, got %v", got)
+	}
+
+	empty, err := query.Values(otelLogsRequest(100, ""))
+	if err != nil {
+		t.Fatalf("query.Values returned error: %v", err)
+	}
+	if len(empty["searchKeys"]) != 0 || len(empty["searchValues"]) != 0 {
+		t.Fatalf("expected no search filters without build ID, got %v", empty)
 	}
 }
 
