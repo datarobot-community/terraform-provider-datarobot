@@ -956,18 +956,6 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 		return
 	}
 
-	status := string(client.ArtifactStatusLocked)
-	if !data.Status.IsNull() && !data.Status.IsUnknown() {
-		status = data.Status.ValueString()
-	}
-	if status != string(client.ArtifactStatusDraft) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Source requires draft status",
-			"`source` is only supported when `status` is `draft`. Locked artifact code updates require the clone workflow.",
-		)
-	}
-
 	artifactType := string(client.ArtifactTypeService)
 	if !data.Type.IsNull() && !data.Type.IsUnknown() {
 		artifactType = data.Type.ValueString()
