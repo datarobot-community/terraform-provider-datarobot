@@ -20,6 +20,9 @@ func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
 	if opts.OnOtelLogLine == nil {
 		t.Fatal("expected OTEL log callback to be configured")
 	}
+	if opts.OnPoll == nil {
+		t.Fatal("expected OnPoll callback to be configured")
+	}
 	if opts.PollInterval != time.Millisecond {
 		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
 	}
