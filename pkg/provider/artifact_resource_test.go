@@ -1875,136 +1875,92 @@ func artifactResourceModelWithSource(name, dir string) ArtifactResourceModel {
 	}
 }
 
+func testArtifactResourceSchemaFor(r *ArtifactResource) (schema.Schema, diag.Diagnostics) {
+	resp := &tfresource.SchemaResponse{}
+	r.Schema(context.Background(), tfresource.SchemaRequest{}, resp)
+	return resp.Schema, resp.Diagnostics
+}
+
+// testArtifactApplyCreate exercises the real Create() implementation (not a parallel copy).
 func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
-	createReq := artifactCreateRequest(data)
-	targetLocked := createReq.Status == client.ArtifactStatusLocked
-	if artifactSourceConfigured(&data) && targetLocked {
-		createReq.Status = client.ArtifactStatusDraft
-	}
-
-	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
-	if err != nil {
-		diags.AddError("Error creating Artifact", err.Error())
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
 		return data, diags
 	}
 
-	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
-	createdArtifact := artifact
-	if artifactSourceConfigured(&data) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
-			diags.AddError("Error uploading artifact source", err.Error())
-			return data, diags
-		}
-		artifact = syncedArtifact
+	plan := tfsdk.Plan{Schema: schema}
+	diags.Append(plan.Set(ctx, &data)...)
+	if diags.HasError() {
+		return data, diags
 	}
 
-	if targetLocked && artifactSourceConfigured(&data) {
-		lockedArtifact, err := r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact, !userSuppliedRepository)
-			diags.AddError("Error locking Artifact after source upload", err.Error())
-			return data, diags
-		}
-		artifact = lockedArtifact
+	resp := &tfresource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schema,
+			Raw:    tftypes.NewValue(schema.Type().TerraformType(ctx), nil),
+		},
 	}
+	r.Create(ctx, tfresource.CreateRequest{Plan: plan}, resp)
 
-	data.ID = types.StringValue(uuid.NewString())
-	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
-	return data, diags
+	var result ArtifactResourceModel
+	if !resp.State.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	}
+	return result, resp.Diagnostics
 }
 
+// testArtifactApplyRead exercises the real Read() implementation.
 func testArtifactApplyRead(ctx context.Context, r *ArtifactResource, data ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics, bool) {
-	var diags diag.Diagnostics
-	if data.ArtifactID.IsNull() || data.ArtifactID.IsUnknown() {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
 		return data, diags, false
 	}
 
-	artifact, err := r.provider.service.GetArtifact(ctx, data.ArtifactID.ValueString())
-	if err != nil {
-		if _, ok := err.(*client.NotFoundError); ok {
-			diags.AddWarning(
-				"Artifact not found",
-				fmt.Sprintf("Artifact with ID %s is not found. Removing from state.", data.ArtifactID.ValueString()),
-			)
-			return data, diags, true
-		}
-		diags.AddError(
-			fmt.Sprintf("Error getting Artifact with ID %s", data.ArtifactID.ValueString()),
-			err.Error(),
-		)
+	state := tfsdk.State{Schema: schema}
+	diags.Append(state.Set(ctx, &data)...)
+	if diags.HasError() {
 		return data, diags, false
 	}
 
-	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
-	return data, diags, false
+	resp := &tfresource.ReadResponse{State: state}
+	r.Read(ctx, tfresource.ReadRequest{State: state}, resp)
+
+	if resp.State.Raw.IsNull() {
+		return data, resp.Diagnostics, true
+	}
+
+	var result ArtifactResourceModel
+	resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	return result, resp.Diagnostics, false
 }
 
-func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, plan, state ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
-	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
-		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+// testArtifactApplyUpdate exercises the real Update() implementation (not a parallel copy).
+func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, planModel, stateModel ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	priorArtifactID := state.ArtifactID.ValueString()
-	lockedSourceCloneNeeded := artifactLockedSourceCloneNeeded(plan, state)
-	deferLock := artifactSourceDeferLock(plan, state)
-
-	var artifact *client.Artifact
-	var err error
-
-	switch {
-	case state.Status.ValueString() == string(client.ArtifactStatusDraft):
-		artifact, err = r.provider.service.PatchArtifact(ctx, priorArtifactID, patchRequestFromPlan(plan, state, deferLock))
-		if err != nil {
-			diags.AddError("Error updating Artifact", err.Error())
-			return plan, diags
-		}
-	case lockedSourceCloneNeeded:
-		createReq := artifactCreateRequest(plan)
-		createReq.Status = client.ArtifactStatusDraft
-		artifact, err = r.provider.service.CreateArtifact(ctx, createReq)
-		if err != nil {
-			diags.AddError("Error creating draft Artifact for source update", err.Error())
-			return plan, diags
-		}
-	default:
-		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
-		if err != nil {
-			diags.AddError("Error creating new Artifact version", err.Error())
-			return plan, diags
-		}
+	plan := tfsdk.Plan{Schema: schema}
+	diags.Append(plan.Set(ctx, &planModel)...)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	if artifactSourceConfigured(&plan) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
-		if err != nil {
-			diags.AddError("Error uploading artifact source", err.Error())
-			return plan, diags
-		}
-		artifact = syncedArtifact
+	state := tfsdk.State{Schema: schema}
+	diags.Append(state.Set(ctx, &stateModel)...)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
-		artifact.Status != client.ArtifactStatusLocked &&
-		(deferLock || lockedSourceCloneNeeded) {
-		lockedArtifact, err := r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			diags.AddError("Error locking Artifact after source upload", err.Error())
-			return plan, diags
-		}
-		artifact = lockedArtifact
-	}
+	resp := &tfresource.UpdateResponse{State: state}
+	r.Update(ctx, tfresource.UpdateRequest{Plan: plan, State: state}, resp)
 
-	loadArtifactIntoModel(artifact, &plan)
-	refreshArtifactSourceDirHash(&plan)
-	return plan, diags
+	var result ArtifactResourceModel
+	if !resp.State.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	}
+	return result, resp.Diagnostics
 }
 
 func diagErrorSummary(diags diag.Diagnostics) string {
