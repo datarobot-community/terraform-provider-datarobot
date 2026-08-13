@@ -138,9 +138,8 @@ func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifa
 		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
 }
 
-
-// artifactLockedSourceCloneNeeded is true when a locked artifact needs a new code upload.
-// needs a draft clone before upload (source dir change or spec change that creates a new version).
+// artifactLockedSourceCloneNeeded is true when a locked artifact needs a draft clone
+// before upload (source dir change or spec change that creates a new version).
 // Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
 // then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
 func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
@@ -221,11 +220,12 @@ func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel
 			if !artifactContainerIsPrimary(container, group) {
 				continue
 			}
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				return nil
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
-				return container.ImageBuildConfig.CodeRef
+			if IsKnown(ref.CatalogID) {
+				return cloneCodeRefModel(ref)
 			}
 			return nil
 		}
@@ -261,7 +261,7 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 			}
 
 			if stateCodeRef != nil {
-				container.ImageBuildConfig.CodeRef = cloneCodeRefModel(stateCodeRef)
+				_ = setImageBuildConfigCodeRef(container.ImageBuildConfig, cloneCodeRefModel(stateCodeRef))
 			}
 		}
 	}
