@@ -126,6 +126,23 @@ func contains[T any](s []T, value T) bool {
 	return false
 }
 
+// isAnyFeatureFlagEnabled reports whether at least one of flagNames is enabled. It
+// stops at the first enabled flag, so callers that list the most common flag first
+// pay a single API call.
+func isAnyFeatureFlagEnabled(ctx context.Context, service client.Service, flagNames []string) (bool, error) {
+	for _, flagName := range flagNames {
+		enabled, err := service.IsFeatureFlagEnabled(ctx, flagName)
+		if err != nil {
+			return false, err
+		}
+		if enabled {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func setStringValueIfKnown(target *string, source basetypes.StringValue) {
 	if IsKnown(source) {
 		*target = source.ValueString()
