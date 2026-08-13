@@ -2320,7 +2320,7 @@ func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.
 }
 
 // PatchArtifact indicates an expected call of PatchArtifact.
-func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
 }
@@ -2335,7 +2335,7 @@ func (m *MockService) PatchArtifactCodeRef(ctx context.Context, artifactID, cata
 }
 
 // PatchArtifactCodeRef indicates an expected call of PatchArtifactCodeRef.
-func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifactCodeRef", reflect.TypeOf((*MockService)(nil).PatchArtifactCodeRef), ctx, artifactID, catalogID, catalogVersionID)
 }

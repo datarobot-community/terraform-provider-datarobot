@@ -124,8 +124,8 @@ func (r *ArtifactResource) syncArtifactSource(
 	return artifact, nil
 }
 
-func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact) {
-	if artifact == nil || artifact.ArtifactRepositoryID == nil {
+func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
+	if artifact == nil || !deleteRepository || artifact.ArtifactRepositoryID == nil {
 		return
 	}
 	traceAPICall("DeleteArtifactRepository")
@@ -138,14 +138,23 @@ func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifa
 		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
 }
 
+
 // artifactLockedSourceCloneNeeded is true when a locked artifact needs a new code upload.
+// needs a draft clone before upload (source dir change or spec change that creates a new version).
 // Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
 // then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
 func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
 	if state.Status.ValueString() != string(client.ArtifactStatusLocked) {
 		return false
 	}
-	return artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+	if !artifactSourceConfigured(&plan) {
+		return false
+	}
+	priorArtifactID := state.ArtifactID.ValueString()
+	if artifactSourceNeedsUpload(&plan, &state, priorArtifactID, priorArtifactID) {
+		return true
+	}
+	return artifactNeedsNewVersion(plan, state)
 }
 
 // artifactSourceDeferLock is true when a draft→locked transition must wait until after source upload.
@@ -193,12 +202,44 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	}
 }
 
+func cloneCodeRefModel(ref *ArtifactCodeRefModel) *ArtifactCodeRefModel {
+	if ref == nil {
+		return nil
+	}
+	return &ArtifactCodeRefModel{
+		CatalogID:        ref.CatalogID,
+		CatalogVersionID: ref.CatalogVersionID,
+	}
+}
+
+func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel {
+	if state == nil || state.Spec == nil {
+		return nil
+	}
+	for _, group := range state.Spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !artifactContainerIsPrimary(container, group) {
+				continue
+			}
+			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+				return nil
+			}
+			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
+				return container.ImageBuildConfig.CodeRef
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
 func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
 	if !artifactSourceConfigured(plan) || plan.Spec == nil || artifactHasManualCodeRef(plan.Spec) {
 		return
 	}
 
 	needsUnknown := sourceManagedCodeRefNeedsUnknown(plan, state, isCreate)
+	stateCodeRef := primaryCodeRefFromState(state)
 
 	for gi := range plan.Spec.ContainerGroups {
 		group := plan.Spec.ContainerGroups[gi]
@@ -219,16 +260,8 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 				continue
 			}
 
-			// If the state has a known catalog ID and doesn't needUnknown, copy it into new plan
-			if state != nil &&
-				gi < len(state.Spec.ContainerGroups) &&
-				ci < len(state.Spec.ContainerGroups[gi].Containers) {
-				stateContainer := state.Spec.ContainerGroups[gi].Containers[ci]
-				if stateContainer.ImageBuildConfig != nil &&
-					!stateContainer.ImageBuildConfig.CodeRef.IsNull() &&
-					!stateContainer.ImageBuildConfig.CodeRef.IsUnknown() {
-					container.ImageBuildConfig.CodeRef = stateContainer.ImageBuildConfig.CodeRef
-				}
+			if stateCodeRef != nil {
+				container.ImageBuildConfig.CodeRef = cloneCodeRefModel(stateCodeRef)
 			}
 		}
 	}
@@ -252,7 +285,7 @@ func sourceManagedCodeRefNeedsUnknown(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
-		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state) {
 			return true
 		}
 		if artifactSourceConfigured(plan) {

@@ -1105,11 +1105,21 @@ func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
 }
 
 func (s *ServiceImpl) IsFeatureFlagEnabled(ctx context.Context, flagName string) (bool, error) {
-	userInfo, err := s.GetUserInfo(ctx)
+	// Evaluate through the entitlements API: it resolves the effective value
+	// (user, group, and organization level), whereas /account/info/ only
+	// carries flags set directly on the user record.
+	resp, err := Post[EvaluateEntitlementsResponse](s.client, ctx, "/entitlements/evaluate/", &EvaluateEntitlementsRequest{
+		Entitlements: []Entitlement{{Name: flagName}},
+	})
 	if err != nil {
-		return false, fmt.Errorf("failed to fetch user info for feature flag %q: %w", flagName, err)
+		return false, fmt.Errorf("failed to evaluate feature flag %q: %w", flagName, err)
 	}
-	return userInfo.Permissions[flagName], nil
+	for _, entitlement := range resp.Entitlements {
+		if entitlement.Name == flagName {
+			return entitlement.Value, nil
+		}
+	}
+	return false, fmt.Errorf("feature flag %q missing from entitlements evaluation response", flagName)
 }
 
 // User MCP Tool Metadata Service Implementation.

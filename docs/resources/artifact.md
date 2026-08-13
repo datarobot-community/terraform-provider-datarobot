@@ -79,7 +79,7 @@ resource "datarobot_artifact" "from_source_locked" {
   # Note: workload-api requires a completed image build (image_uri populated) before lock.
   # Create as draft, run image build, then set status = "locked" — or use this block only
   # after image_uri is available from a prior build on the same artifact version.
-  status = "locked"
+  status      = "locked"
 
   source = {
     dir = "${path.module}/app"
@@ -164,15 +164,12 @@ Optional:
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
 ### Nested Schema for `spec.container_groups.containers.environment_vars`
 
-Required:
-
-- `name` (String) Name of the environment variable.
-
 Optional:
 
 - `dr_credential_id` (String) DataRobot credential ID. Required when source is "dr-credential".
 - `key` (String) Key within the credential. Required when source is "dr-credential".
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials. Defaults to "string".
+- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".
 - `value` (String) Value of the environment variable. Required when source is "string".
 
 
@@ -221,6 +218,7 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -239,6 +237,7 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -257,6 +256,7 @@ Optional:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
