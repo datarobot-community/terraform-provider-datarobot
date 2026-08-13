@@ -285,15 +285,12 @@ func sourceManagedCodeRefNeedsUnknown(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		// locked→draft or a spec change always yields a new version, so code_ref is unknown.
+		// Source-dir changes are handled by artifactLockedSourceCloneNeeded (no-op if source is unset).
 		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state) {
 			return true
 		}
-		if artifactSourceConfigured(plan) {
-			return artifactLockedSourceCloneNeeded(*plan, *state)
-		}
-		if artifactNeedsNewVersion(*plan, *state) {
-			return true
-		}
+		return artifactLockedSourceCloneNeeded(*plan, *state)
 	}
 
 	return false
