@@ -664,7 +664,7 @@ func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel, ignoreManagedCod
 	if a == nil || b == nil {
 		return false
 	}
-	if !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
+	if !ignoreManagedCodeRef && !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
 		return false
 	}
 	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
@@ -925,128 +925,6 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
 		}
 	}
-}
-
-func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
-	if data.Source == nil {
-		return
-	}
-
-	sourcePath := path.Root("source")
-
-	if !IsKnown(data.Source.Dir) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath.AtName("dir"),
-			"Missing source directory",
-			"`source.dir` is required when the `source` block is set.",
-		)
-		return
-	}
-
-	dir := data.Source.Dir.ValueString()
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath.AtName("dir"),
-			"Invalid source directory path",
-			fmt.Sprintf("Could not resolve %q to an absolute path: %s", dir, err),
-		)
-		return
-	}
-
-	info, err := os.Stat(absDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			resp.Diagnostics.AddAttributeError(
-				sourcePath.AtName("dir"),
-				"Source directory not found",
-				fmt.Sprintf("Directory %q does not exist.", absDir),
-			)
-		} else {
-			resp.Diagnostics.AddAttributeError(
-				sourcePath.AtName("dir"),
-				"Source directory not accessible",
-				fmt.Sprintf("Could not access %q: %s", absDir, err),
-			)
-		}
-		return
-	}
-	if !info.IsDir() {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath.AtName("dir"),
-			"Invalid source directory",
-			fmt.Sprintf("%q is not a directory.", absDir),
-		)
-		return
-	}
-
-	artifactType := string(client.ArtifactTypeService)
-	if !data.Type.IsNull() && !data.Type.IsUnknown() {
-		artifactType = data.Type.ValueString()
-	}
-	if artifactType == string(client.ArtifactTypeNim) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Unsupported source on NIM artifacts",
-			"NIM artifacts cannot use `source`; upload code through the NIM workflow instead.",
-		)
-	}
-
-	if data.Spec == nil {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Missing image build target",
-			"`source` requires a primary container with `image_build_config` in `spec`.",
-		)
-		return
-	}
-
-	if !artifactHasPrimaryImageBuildConfig(data.Spec) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Missing image build target",
-			"`source` requires a primary container with `image_build_config` in `spec`.",
-		)
-	}
-
-	if artifactHasManualCodeRef(data.Spec) {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath,
-			"Conflicting code_ref",
-			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
-		)
-	}
-}
-
-func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
-	for _, group := range spec.ContainerGroups {
-		for _, container := range group.Containers {
-			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-			if !isPrimary && len(group.Containers) == 1 &&
-				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
-				isPrimary = true
-			}
-			if isPrimary && container.ImageBuildConfig != nil {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func artifactHasManualCodeRef(spec *ArtifactSpecModel) bool {
-	for _, group := range spec.ContainerGroups {
-		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
-				continue
-			}
-			codeRef := container.ImageBuildConfig.CodeRef
-			if IsKnown(codeRef.CatalogID) && IsKnown(codeRef.CatalogVersionID) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
