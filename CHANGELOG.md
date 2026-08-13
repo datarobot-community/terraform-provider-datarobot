@@ -38,6 +38,25 @@
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 - `datarobot_deployment` now surfaces deployment logs in the error message when a deployment fails to create
+- `datarobot_workload`: in-place updates for `artifact_id` and `runtime` changes via the Workload API (`POST /workloads/{id}/replacement`, `PATCH /workloads/{id}/settings`) with polling until rollout completes
+- `datarobot_workload`: optional `runtime.replacement_policy` block (`warmup_minutes`, `keep_old_version_minutes`) for rolling replacement when `artifact_id` or replacement policy changes
+
+### Changed
+
+- **Breaking:** `datarobot_workload` changes to `artifact_id` or `runtime` no longer destroy and recreate the workload. Updates run in place through the Workload API; the workload `id` and `endpoint` remain stable across artifact and runtime updates. This replaces the previous `RequiresReplace` (delete + create) behavior.
+
+  **Migration from destroy/create:**
+
+  | Before (pre-in-place replacement) | After (this release) |
+  |-----------------------------------|----------------------|
+  | `artifact_id` change → new workload ID | `artifact_id` change → same workload ID |
+  | `endpoint` URL changed | `endpoint` URL stays the same |
+  | `lifecycle { create_before_destroy = true }` required | Remove that `lifecycle` block: it existed only to preserve the endpoint during artifact updates |
+
+  - Wire `artifact_id` to `datarobot_artifact.<name>.artifact_id` (artifact version ID), not `.id` (Terraform resource ID).
+  - No Terraform state migration is required for typical configs; run `terraform plan` after upgrading to confirm the workload is updated in place rather than replaced.
+  - If downstream automation assumed a **new** workload ID after each deploy, update it to rely on the stable ID instead.
+  - Replacement is asynchronous and can block `terraform apply` for several minutes; if apply is interrupted or times out, wait for the workload replacement to finish on the platform, then run terraform apply again to sync state. See [`docs/resources/workload.md`](docs/resources/workload.md) and [`examples/workflows/workload_replacement`](examples/workflows/workload_replacement).
 - `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL` and `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT` environment variables to tune workload replacement polling (defaults: `5s` and `30m`; Go duration syntax)
 
 ### Fixed
