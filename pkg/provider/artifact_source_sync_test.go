@@ -357,6 +357,51 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 	})
 }
 
+func TestRollbackArtifactCreate(t *testing.T) {
+	t.Parallel()
+
+	repoID := "repo-123"
+
+	t.Run("nil artifact is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), nil, true)
+	})
+
+	t.Run("missing repository id is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
+	})
+
+	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, false)
+	})
+
+	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, true)
+	})
+}
+
 func TestSyncArtifactSource(t *testing.T) {
 	t.Parallel()
 
@@ -544,51 +589,6 @@ func TestSyncArtifactSource(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected patch error")
 		}
-	})
-}
-
-func TestRollbackArtifactCreate(t *testing.T) {
-	t.Parallel()
-
-	repoID := "repo-123"
-
-	t.Run("nil artifact is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), nil, true)
-	})
-
-	t.Run("missing repository id is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
-	})
-
-	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		}, false)
-	})
-
-	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
-
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		}, true)
 	})
 }
 
