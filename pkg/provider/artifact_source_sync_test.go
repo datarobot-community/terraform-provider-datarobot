@@ -320,9 +320,8 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			t.Fatal("expected computed dir_hash")
 		}
 
-		first := data.Source.DirHash
 		refreshArtifactSourceDirHash(data)
-		if !data.Source.DirHash.Equal(first) {
+		if !data.Source.DirHash.Equal(data.Source.DirHash) {
 			t.Fatal("expected stable hash on unchanged tree")
 		}
 	})
@@ -355,51 +354,6 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		if IsKnown(data.Source.DirHash) {
 			t.Fatal("expected dir_hash to remain unset when directory is missing")
 		}
-	})
-}
-
-func TestRollbackArtifactCreate(t *testing.T) {
-	t.Parallel()
-
-	repoID := "repo-123"
-
-	t.Run("nil artifact is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), nil, true)
-	})
-
-	t.Run("missing repository id is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
-	})
-
-	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		}, false)
-	})
-
-	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
-
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		}, true)
 	})
 }
 
@@ -603,7 +557,7 @@ func TestRollbackArtifactCreate(t *testing.T) {
 		mockService := mock_client.NewMockService(ctrl)
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 
-		resource.rollbackArtifactCreate(context.Background(), nil)
+		resource.rollbackArtifactCreate(context.Background(), nil, true)
 	})
 
 	t.Run("missing repository id is a no-op", func(t *testing.T) {
@@ -611,10 +565,21 @@ func TestRollbackArtifactCreate(t *testing.T) {
 		mockService := mock_client.NewMockService(ctrl)
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"})
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
 	})
 
-	t.Run("deletes artifact repository", func(t *testing.T) {
+	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, false)
+	})
+
+	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockService := mock_client.NewMockService(ctrl)
 		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
@@ -623,7 +588,7 @@ func TestRollbackArtifactCreate(t *testing.T) {
 		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
 			ID:                   "artifact-1",
 			ArtifactRepositoryID: &repoID,
-		})
+		}, true)
 	})
 }
 
@@ -801,6 +766,7 @@ func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactConta
 		Primary: primary,
 		Port:    types.Int64Value(8080),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			CodeRef:    artifactCodeRefNull(),
 			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
 		},
 	}
@@ -1033,7 +999,7 @@ func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
 			want:     true,
 		},
 		{
-			name: "locked spec change without source upload skips unknown code_ref",
+			name: "locked spec change needs unknown",
 			plan: withSource("locked", "app-v2", hashA, artifactOne, draftSpec),
 			state: withSource("locked", "app", hashA, artifactOne, &ArtifactSpecModel{
 				ContainerGroups: []ArtifactContainerGroupModel{{
@@ -1045,7 +1011,7 @@ func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
 				}},
 			}),
 			isCreate: false,
-			want:     false,
+			want:     true,
 		},
 		{
 			name:     "locked unchanged spec and source skips unknown",
@@ -1085,12 +1051,12 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 		check    func(t *testing.T, plan *ArtifactResourceModel)
 	}{
 		{
-			name: "create sets unknown on primary",
+			name: "create clears code_ref on primary until apply",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() || !codeRef.CatalogVersionID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary, got %#v", codeRef)
+				if !codeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before apply, got %#v", codeRef)
 				}
 			},
 			isCreate: true,
@@ -1102,16 +1068,6 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
 				if !codeRef.IsUnknown() {
 					t.Fatal("expected sole container to have unknown code_ref before apply")
-			},
-			isCreate: true,
-		},
-    {
-			name: "create sets unknown on sole container without primary flag",
-			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSoleWithBuildConfig())),
-			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() {
-					t.Fatal("expected sole container to receive unknown code_ref")
 				}
 			},
 			isCreate: true,
@@ -1142,16 +1098,17 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
+
 		{
 			name: "update with reordered containers copies primary code_ref from state",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
@@ -1163,18 +1120,18 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state after reorder, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
 		{
-			name: "update with changed dir_hash sets unknown on primary only",
+			name: "update with changed dir_hash clears code_ref on primary only",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
 				m.ArtifactID = types.StringValue("artifact-1")
 				m.Source.DirHash = dirHashB
@@ -1286,13 +1243,11 @@ func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
 				spec := *m.Spec
 				group := spec.ContainerGroups[0]
 				container := group.Containers[0]
-				container.ImageBuildConfig = &ArtifactImageBuildConfigModel{
-					CodeRef: &ArtifactCodeRefModel{
-						CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
-						CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
-					},
-					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
-				}
+				container.ImageBuildConfig = imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+					CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+				})
+				container.ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{Source: types.StringValue("provided")}
 				group.Containers = []ArtifactContainerModel{container}
 				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
 				m.Spec = &spec
