@@ -206,15 +206,14 @@ func (r *MemorySpaceResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	desc := data.Description.ValueString()
-	llmModelName := data.LLMModelName.ValueString()
-	llmBaseURL := data.LLMBaseURL.ValueString()
-	customInstructions := data.CustomInstructions.ValueString()
+	// An attribute the config no longer sets must be sent as null to clear it. An
+	// empty string would clear the text fields by coincidence, but llm_base_url is
+	// parsed as a URL and rejects "" with 422.
 	apiReq := &client.MemorySpaceRequest{
-		Description:        &desc,
-		LLMModelName:       &llmModelName,
-		LLMBaseURL:         &llmBaseURL,
-		CustomInstructions: &customInstructions,
+		Description:        StringValuePointerOptional(data.Description),
+		LLMModelName:       StringValuePointerOptional(data.LLMModelName),
+		LLMBaseURL:         StringValuePointerOptional(data.LLMBaseURL),
+		CustomInstructions: StringValuePointerOptional(data.CustomInstructions),
 	}
 
 	traceAPICall("UpdateMemorySpace")

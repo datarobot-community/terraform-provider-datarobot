@@ -61,12 +61,9 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		MemorySpaceID: id,
 		Description:   description,
 	}, nil)
-	emptyStr := ""
+	// Attributes the config does not set are sent as null, never as "".
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &newDescription,
-		LLMModelName:       &emptyStr,
-		LLMBaseURL:         &emptyStr,
-		CustomInstructions: &emptyStr,
+		Description: &newDescription,
 	}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   newDescription,
@@ -76,8 +73,7 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		Description:   newDescription,
 	}, nil)
 
-	// Remove description
-	emptyDesc := ""
+	// Remove description: every attribute is now null, so the request carries four nils.
 	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   newDescription,
@@ -86,12 +82,7 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		MemorySpaceID: id,
 		Description:   newDescription,
 	}, nil)
-	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &emptyDesc,
-		LLMModelName:       &emptyDesc,
-		LLMBaseURL:         &emptyDesc,
-		CustomInstructions: &emptyDesc,
-	}).Return(&client.MemorySpaceResponse{
+	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   "",
 	}, nil)
@@ -152,10 +143,8 @@ func TestIntegrationMemorySpaceResourceNewFields(t *testing.T) {
 		CustomInstructions: instructions,
 	}, nil)
 
-	// Update
-	emptyDesc := ""
+	// Update: description is unset in the config, so it goes out as null.
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &emptyDesc,
 		LLMModelName:       &modelName,
 		LLMBaseURL:         &baseURL,
 		CustomInstructions: &updatedInstructions,
