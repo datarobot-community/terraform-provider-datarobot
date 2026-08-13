@@ -64,7 +64,7 @@ resource "datarobot_artifact" "from_source_locked" {
   # Note: workload-api requires a completed image build (image_uri populated) before lock.
   # Create as draft, run image build, then set status = "locked" — or use this block only
   # after image_uri is available from a prior build on the same artifact version.
-  status      = "locked"
+  status = "locked"
 
   source = {
     dir = "${path.module}/app"
