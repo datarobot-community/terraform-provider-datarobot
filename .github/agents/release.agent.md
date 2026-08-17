@@ -52,6 +52,14 @@ If any check fails, stop and help the user fix it before continuing.
 - Add a fresh empty `## [Unreleased]` section above the new version
 - Show the user the diff for confirmation
 
+This section becomes the GitHub release body and the Slack release message, so it
+must exist and be non-empty before the tag is pushed — the release workflow fails
+otherwise. Preview exactly what will be published with:
+
+```bash
+bash scripts/changelog-section.sh vX.Y.Z
+```
+
 ### 4. Update Makefile VERSION
 
 - Update the `VERSION=` line in `Makefile` to the new version number (without `v` prefix)
@@ -84,8 +92,12 @@ This triggers `.github/workflows/release.yml` which runs GoReleaser to:
 - Build binaries for all platforms (darwin, linux, windows, freebsd)
 - Create ZIP archives
 - Generate and GPG-sign SHA256SUMS
-- Publish a GitHub Release with all artifacts
-- Notify Slack
+- Publish a GitHub Release with all artifacts, using the tagged version's
+  `CHANGELOG.md` section as the release body (plus a compare link to the previous tag)
+- Notify Slack, including the changelog entries
+
+If `CHANGELOG.md` has no `## [X.Y.Z]` section for the tag, the workflow fails before
+publishing anything: add the section on `main`, then move the tag.
 
 ### 7. Post-Release Verification
 
