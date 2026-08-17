@@ -1,6 +1,6 @@
 module github.com/datarobot-community/terraform-provider-datarobot
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
