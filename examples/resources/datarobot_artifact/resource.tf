@@ -1,6 +1,6 @@
 # Three common artifact shapes:
 # - Prebuilt image: set image_uri (works with status = "locked" or "draft")
-# - Build from source with local upload: set image_build_config and source { dir } on a draft artifact
+# - Build from source with local upload: set image_build_config and source { dir }
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 
 resource "datarobot_artifact" "prebuilt" {
@@ -56,4 +56,36 @@ output "prebuilt_artifact_id" {
 output "from_source_artifact_id" {
   value       = datarobot_artifact.from_source.artifact_id
   description = "Artifact ID for the draft image-build example (stable until lock)"
+}
+
+resource "datarobot_artifact" "from_source_locked" {
+  name        = "example-c2w-locked"
+  description = "Locked artifact with local source upload (clone → upload → lock)"
+  status      = "locked"
+
+  source = {
+    dir = "${path.module}/app"
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "primary"
+        primary = true
+        port    = 8080
+
+        image_build_config = {
+          dockerfile = {
+            source = "provided"
+            path   = "./Dockerfile"
+          }
+        }
+      }]
+    }]
+  }
+}
+
+output "from_source_locked_artifact_id" {
+  value       = datarobot_artifact.from_source_locked.artifact_id
+  description = "Artifact ID for the locked image-build example (new version on source change)"
 }
