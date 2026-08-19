@@ -1017,6 +1017,7 @@ type ArtifactSourceModel struct {
 
 type ArtifactSpecModel struct {
 	ContainerGroups []ArtifactContainerGroupModel `tfsdk:"container_groups"`
+	A2AEnabled      types.Bool                    `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupModel struct {
@@ -1117,6 +1118,7 @@ type ArtifactSpecDataSourceModel struct {
 	ContainerGroups []ArtifactContainerGroupDSModel `tfsdk:"container_groups"`
 	Storage         *ArtifactNimStorageModel        `tfsdk:"storage"`
 	TemplateID      types.String                    `tfsdk:"template_id"`
+	A2AEnabled      types.Bool                      `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupDSModel struct {
@@ -1190,6 +1192,7 @@ type WorkloadResourceModel struct {
 	Name        types.String         `tfsdk:"name"`
 	Description types.String         `tfsdk:"description"`
 	Importance  types.String         `tfsdk:"importance"`
+	Type        types.String         `tfsdk:"type"`
 	ArtifactID  types.String         `tfsdk:"artifact_id"`
 	Endpoint    types.String         `tfsdk:"endpoint"`
 	Status      types.String         `tfsdk:"status"`
