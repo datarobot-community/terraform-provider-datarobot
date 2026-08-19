@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -1092,16 +1093,21 @@ func TestPatchRequestFromPlan(t *testing.T) {
 	draftState.Status = types.StringValue("draft")
 	draftPlan := draftState
 
-	patch := patchRequestFromPlan(draftPlan, draftState)
+	patch := patchRequestFromPlan(draftPlan, draftState, false)
 	if patch.Status != nil {
 		t.Fatalf("expected no status on draft spec patch, got %v", patch.Status)
 	}
 
 	lockPlan := draftPlan
 	lockPlan.Status = types.StringValue("locked")
-	lockPatch := patchRequestFromPlan(lockPlan, draftState)
+	lockPatch := patchRequestFromPlan(lockPlan, draftState, false)
 	if lockPatch.Status == nil || *lockPatch.Status != client.ArtifactStatusLocked {
 		t.Fatalf("expected lock status in patch, got %v", lockPatch.Status)
+	}
+
+	deferLockPatch := patchRequestFromPlan(lockPlan, draftState, true)
+	if deferLockPatch.Status != nil {
+		t.Fatalf("expected deferred lock to omit status, got %v", deferLockPatch.Status)
 	}
 }
 
@@ -1507,13 +1513,12 @@ func TestValidateArtifactSource(t *testing.T) {
 			wantSummary: "Invalid source directory",
 		},
 		{
-			name: "locked status",
+			name: "valid locked source",
 			data: ArtifactResourceModel{
 				Status: types.StringValue("locked"),
 				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
 				Spec:   specWithBuildConfig,
 			},
-			wantSummary: "Source requires draft status",
 		},
 		{
 			name: "nim artifact",
@@ -1749,11 +1754,6 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 		expectError *regexp.Regexp
 	}{
 		{
-			name:        "locked with source",
-			config:      artifactConfigWithSource("locked-source", "locked", validDir),
-			expectError: regexp.MustCompile("Source requires draft status"),
-		},
-		{
 			name:        "nim with source",
 			config:      artifactConfigWithSourceType("nim-source", "draft", "nim", validDir),
 			expectError: regexp.MustCompile("Unsupported source on NIM artifacts"),
@@ -1792,99 +1792,10 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 	}
 }
 
-func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	schema := testArtifactResourceSchema(t)
-	dir := t.TempDir()
-	stateCodeRef := &ArtifactCodeRefModel{
-		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
-		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
-	}
-
-	tests := []struct {
-		name      string
-		planModel *ArtifactResourceModel
-		state     *ArtifactResourceModel
-		check     func(t *testing.T, decoded ArtifactResourceModel)
-	}{
-		{
-			name: "create decodes unknown code_ref as null",
-			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
-				m.Name = types.StringValue("create-decode")
-			}),
-			check: func(t *testing.T, decoded ArtifactResourceModel) {
-				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef != nil && (IsKnown(codeRef.CatalogID) || IsKnown(codeRef.CatalogVersionID)) {
-					t.Fatalf("expected null code_ref on create, got %#v", codeRef)
-				}
-			},
-		},
-		{
-			name: "update decodes unknown code_ref from state",
-			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
-				m.Name = types.StringValue("update-decode")
-				m.ArtifactID = types.StringValue("artifact-1")
-				m.Source.DirHash = types.StringValue("hash-b")
-			}),
-			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
-				m.Name = types.StringValue("update-decode")
-				m.ArtifactID = types.StringValue("artifact-1")
-				m.Source.DirHash = types.StringValue("hash-a")
-			}),
-			check: func(t *testing.T, decoded ArtifactResourceModel) {
-				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil {
-					t.Fatal("expected code_ref copied from state")
-				}
-				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
-					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
-				}
-				if got := codeRef.CatalogVersionID.ValueString(); got != artifactSourceTestVersionID {
-					t.Fatalf("catalog_version_id = %q, want %q", got, artifactSourceTestVersionID)
-				}
-			},
-		},
-		{
-			name: "update decodes unknown code_ref from primary after container reorder",
-			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
-				m.Name = types.StringValue("update-decode-reorder")
-				m.ArtifactID = types.StringValue("artifact-1")
-				m.Source.DirHash = types.StringValue("hash-a")
-			}),
-			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
-				m.Name = types.StringValue("update-decode-reorder")
-				m.ArtifactID = types.StringValue("artifact-1")
-				m.Source.DirHash = types.StringValue("hash-a")
-			}),
-			check: func(t *testing.T, decoded ArtifactResourceModel) {
-				codeRef := decoded.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
-				if codeRef == nil {
-					t.Fatal("expected code_ref copied from primary in state")
-				}
-				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
-					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
-
-			var decoded ArtifactResourceModel
-			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
-				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
-			}
-
-			tt.check(t, decoded)
-		})
-	}
-}
+const (
+	artifactSourceTestCatalogID = "aaaaaaaaaaaaaaaaaaaaaaaa"
+	artifactSourceTestVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
+)
 
 func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string) *client.Artifact {
 	port := int64(8080)
@@ -1911,22 +1822,15 @@ func artifactFixtureDraftWithBuildConfig(id string, repoID *string, name string)
 	}
 }
 
-func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
+func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID string) *client.Artifact {
 	patched := *base
 	primary := true
+	patched.Spec = base.Spec
 	groups := make([]client.ArtifactContainerGroup, len(base.Spec.ContainerGroups))
 	for gi, group := range base.Spec.ContainerGroups {
 		containers := make([]client.ArtifactContainer, len(group.Containers))
 		for ci, container := range group.Containers {
 			containers[ci] = container
-			if container.ImageBuildConfig != nil {
-				buildConfig := *container.ImageBuildConfig
-				if container.ImageBuildConfig.Dockerfile != nil {
-					dockerfile := *container.ImageBuildConfig.Dockerfile
-					buildConfig.Dockerfile = &dockerfile
-				}
-				containers[ci].ImageBuildConfig = &buildConfig
-			}
 			isPrimary := container.Primary != nil && *container.Primary
 			if isPrimary || (container.Primary == nil && ci == 0) {
 				if containers[ci].ImageBuildConfig == nil {
@@ -1935,8 +1839,8 @@ func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
 				containers[ci].ImageBuildConfig.CodeRef = &client.ArtifactCodeRef{
 					Type: "datarobot",
 					DataRobot: client.ArtifactDataRobotCodeRef{
-						CatalogID:        artifactSourceTestCatalogID,
-						CatalogVersionID: artifactSourceTestVersionID,
+						CatalogID:        catalogID,
+						CatalogVersionID: versionID,
 					},
 				}
 				containers[ci].Primary = &primary
@@ -1944,7 +1848,7 @@ func artifactSourcePatchedArtifact(base *client.Artifact) *client.Artifact {
 		}
 		groups[gi] = client.ArtifactContainerGroup{Containers: containers}
 	}
-	patched.Spec = client.ArtifactSpec{ContainerGroups: groups}
+	patched.Spec.ContainerGroups = groups
 	return &patched
 }
 
@@ -1971,108 +1875,99 @@ func artifactResourceModelWithSource(name, dir string) ArtifactResourceModel {
 	}
 }
 
-func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
-	var diags diag.Diagnostics
+func testArtifactResourceSchemaFor(r *ArtifactResource) (schema.Schema, diag.Diagnostics) {
+	resp := &tfresource.SchemaResponse{}
+	r.Schema(context.Background(), tfresource.SchemaRequest{}, resp)
+	return resp.Schema, resp.Diagnostics
+}
 
-	artifact, err := r.provider.service.CreateArtifact(ctx, artifactCreateRequest(data))
-	if err != nil {
-		diags.AddError("Error creating Artifact", err.Error())
+// testArtifactApplyCreate exercises the real Create() implementation (not a parallel copy).
+func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
 		return data, diags
 	}
 
-	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
-	createdArtifact := artifact
-	if artifactSourceConfigured(&data) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
-			diags.AddError("Error uploading artifact source", err.Error())
-			return data, diags
-		}
-		artifact = syncedArtifact
+	plan := tfsdk.Plan{Schema: schema}
+	diags.Append(plan.Set(ctx, &data)...)
+	if diags.HasError() {
+		return data, diags
 	}
 
-	data.ID = types.StringValue(uuid.NewString())
-	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
-	return data, diags
+	resp := &tfresource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schema,
+			Raw:    tftypes.NewValue(schema.Type().TerraformType(ctx), nil),
+		},
+	}
+	r.Create(ctx, tfresource.CreateRequest{Plan: plan}, resp)
+
+	var result ArtifactResourceModel
+	if !resp.State.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	}
+	return result, resp.Diagnostics
 }
 
+// testArtifactApplyRead exercises the real Read() implementation.
 func testArtifactApplyRead(ctx context.Context, r *ArtifactResource, data ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics, bool) {
-	var diags diag.Diagnostics
-	if data.ArtifactID.IsNull() || data.ArtifactID.IsUnknown() {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
 		return data, diags, false
 	}
 
-	artifact, err := r.provider.service.GetArtifact(ctx, data.ArtifactID.ValueString())
-	if err != nil {
-		if _, ok := err.(*client.NotFoundError); ok {
-			diags.AddWarning(
-				"Artifact not found",
-				fmt.Sprintf("Artifact with ID %s is not found. Removing from state.", data.ArtifactID.ValueString()),
-			)
-			return data, diags, true
-		}
-		diags.AddError(
-			fmt.Sprintf("Error getting Artifact with ID %s", data.ArtifactID.ValueString()),
-			err.Error(),
-		)
+	state := tfsdk.State{Schema: schema}
+	diags.Append(state.Set(ctx, &data)...)
+	if diags.HasError() {
 		return data, diags, false
 	}
 
-	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
-	return data, diags, false
+	resp := &tfresource.ReadResponse{State: state}
+	r.Read(ctx, tfresource.ReadRequest{State: state}, resp)
+
+	if resp.State.Raw.IsNull() {
+		return data, resp.Diagnostics, true
+	}
+
+	var result ArtifactResourceModel
+	resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	return result, resp.Diagnostics, false
 }
 
-func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, plan, state ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
-	if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
-		plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+// testArtifactApplyUpdate exercises the real Update() implementation (not a parallel copy).
+func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, planModel, stateModel ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	priorArtifactID := state.ArtifactID.ValueString()
-	var artifact *client.Artifact
-	var err error
-
-	if state.Status.ValueString() == string(client.ArtifactStatusDraft) {
-		artifact, err = r.provider.service.PatchArtifact(ctx, priorArtifactID, patchRequestFromPlan(plan, state))
-		if err != nil {
-			diags.AddError("Error updating Artifact", err.Error())
-			return plan, diags
-		}
-	} else {
-		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
-		if err != nil {
-			diags.AddError("Error creating new Artifact version", err.Error())
-			return plan, diags
-		}
+	plan := tfsdk.Plan{Schema: schema}
+	diags.Append(plan.Set(ctx, &planModel)...)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	if artifactSourceConfigured(&plan) {
-		syncedArtifact, err := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
-		if err != nil {
-			diags.AddError("Error uploading artifact source", err.Error())
-			return plan, diags
-		}
-		artifact = syncedArtifact
+	state := tfsdk.State{Schema: schema}
+	diags.Append(state.Set(ctx, &stateModel)...)
+	if diags.HasError() {
+		return planModel, diags
 	}
 
-	loadArtifactIntoModel(artifact, &plan)
-	refreshArtifactSourceDirHash(&plan)
-	return plan, diags
+	resp := &tfresource.UpdateResponse{State: state}
+	r.Update(ctx, tfresource.UpdateRequest{Plan: plan, State: state}, resp)
+
+	var result ArtifactResourceModel
+	if !resp.State.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.State.Get(ctx, &result)...)
+	}
+	return result, resp.Diagnostics
 }
 
 func diagErrorSummary(diags diag.Diagnostics) string {
-	if diags == nil || !diags.HasError() {
+	if !diags.HasError() {
 		return ""
 	}
-	summaries := make([]string, 0, len(diags.Errors()))
-	for _, d := range diags.Errors() {
-		summaries = append(summaries, d.Summary())
-	}
-	return strings.Join(summaries, "; ")
+	return diags.Errors()[0].Summary()
 }
 
 func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
@@ -2087,7 +1982,7 @@ func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	name := "source-create-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	filesAPI := newSyncTestFilesAPI()
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
@@ -2110,6 +2005,377 @@ func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	}
 	if got := result.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
 		t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+	}
+}
+
+func TestArtifactResourceSourceCreateLockedSuccess(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "app"})
+	draftArtifactID := uuid.NewString()
+	lockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-create-locked-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureDraftWithBuildConfig(draftArtifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	lockedArtifact := *patchedArtifact
+	lockedArtifact.ID = lockedArtifactID
+	lockedArtifact.Status = client.ArtifactStatusLocked
+	filesAPI := newSyncTestFilesAPI()
+
+	gomock.InOrder(
+		mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+				if req.Status != client.ArtifactStatusDraft {
+					t.Fatalf("expected draft create before lock, got %q", req.Status)
+				}
+				return draftArtifact, nil
+			}),
+		mockService.EXPECT().FilesAPI().Return(filesAPI),
+		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftArtifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
+		mockService.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).DoAndReturn(
+			func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+				if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+					t.Fatalf("expected lock patch, got status %v", req.Status)
+				}
+				return &lockedArtifact, nil
+			}),
+	)
+
+	model := artifactResourceModelWithSource(name, sourceDir)
+	model.Status = types.StringValue("locked")
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	result, diags := testArtifactApplyCreate(context.Background(), resource, model)
+	if diags.HasError() {
+		t.Fatalf("create: %s", diagErrorSummary(diags))
+	}
+	if result.ArtifactID.ValueString() != lockedArtifactID {
+		t.Fatalf("artifact_id = %q, want %q", result.ArtifactID.ValueString(), lockedArtifactID)
+	}
+	if result.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", result.Status.ValueString())
+	}
+}
+
+func TestArtifactResourceSourceUpdateLockedSourceChangeCloneLock(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
+	sourceDirV2 := writeArtifactSourceTree(t, map[string]string{"main.py": "v2"})
+	lockedArtifactID := uuid.NewString()
+	draftCloneID := uuid.NewString()
+	newLockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-locked-update-" + uuid.NewString()[:8]
+
+	lockedArtifact := artifactFixtureDraftWithBuildConfig(lockedArtifactID, &repoIDPtr, name)
+	lockedArtifact.Status = client.ArtifactStatusLocked
+	lockedArtifact.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &client.ArtifactCodeRef{
+		Type: "datarobot",
+		DataRobot: client.ArtifactDataRobotCodeRef{
+			CatalogID:        artifactSourceTestCatalogID,
+			CatalogVersionID: artifactSourceTestVersionID,
+		},
+	}
+
+	draftClone := artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name)
+	patchedDraft := artifactSourcePatchedArtifact(draftClone, "cccccccccccccccccccccccc", "dddddddddddddddddddddddd")
+	lockedResult := *patchedDraft
+	lockedResult.ID = newLockedArtifactID
+	lockedResult.Status = client.ArtifactStatusLocked
+
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Fatalf("expected draft clone, got %q", req.Status)
+			}
+			if req.ArtifactRepositoryID == nil || *req.ArtifactRepositoryID != repoID {
+				t.Fatalf("expected repository %q, got %v", repoID, req.ArtifactRepositoryID)
+			}
+			return draftClone, nil
+		})
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).Return(patchedDraft, nil)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch, got status %v", req.Status)
+			}
+			return &lockedResult, nil
+		})
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	state := artifactResourceModelWithSource(name, sourceDirV1)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+	state.Source.DirHash = types.StringValue("hash-v1")
+
+	plan := artifactResourceModelWithSource(name, sourceDirV2)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.DirHash = types.StringValue("hash-v2")
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s", diagErrorSummary(diags))
+	}
+	if updated.ArtifactID.ValueString() != newLockedArtifactID {
+		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+}
+
+func TestArtifactResourceSourceUpdateLockedSpecChangeCloneLock(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+	lockedArtifactID := uuid.NewString()
+	draftCloneID := uuid.NewString()
+	newLockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-locked-spec-" + uuid.NewString()[:8]
+
+	draftClone := artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name)
+	patchedDraft := artifactSourcePatchedArtifact(draftClone, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	lockedResult := *patchedDraft
+	lockedResult.ID = newLockedArtifactID
+	lockedResult.Status = client.ArtifactStatusLocked
+	port9090 := int64(9090)
+	lockedResult.Spec.ContainerGroups[0].Containers[0].Port = &port9090
+
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Fatalf("expected draft clone, got %q", req.Status)
+			}
+			if req.ArtifactRepositoryID == nil || *req.ArtifactRepositoryID != repoID {
+				t.Fatalf("expected repository %q, got %v", repoID, req.ArtifactRepositoryID)
+			}
+			return draftClone, nil
+		})
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).Return(patchedDraft, nil)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch, got status %v", req.Status)
+			}
+			return &lockedResult, nil
+		})
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	dirHash, err := computeFolderHash(types.StringValue(sourceDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	state := artifactResourceModelWithSource(name, sourceDir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+	state.Source.DirHash = dirHash
+
+	plan := artifactResourceModelWithSource(name, sourceDir)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Spec.ContainerGroups[0].Containers[0].Port = types.Int64Value(9090)
+	plan.Source.DirHash = dirHash
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s", diagErrorSummary(diags))
+	}
+	if updated.ArtifactID.ValueString() != newLockedArtifactID {
+		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+	if got := updated.Spec.ContainerGroups[0].Containers[0].Port.ValueInt64(); got != 9090 {
+		t.Fatalf("port = %d, want 9090", got)
+	}
+}
+
+func TestArtifactResourceSourceUpdateDraftLockWithSourceChange(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
+	sourceDirV2 := writeArtifactSourceTree(t, map[string]string{"main.py": "v2"})
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-draft-lock-" + uuid.NewString()[:8]
+
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	lockedArtifact := *patchedArtifact
+	lockedArtifact.Status = client.ArtifactStatusLocked
+	filesAPI1 := newSyncTestFilesAPI()
+	filesAPI2 := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	gomock.InOrder(
+		mockService.EXPECT().FilesAPI().Return(filesAPI1),
+		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
+	)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status != nil {
+				t.Fatalf("expected spec-only patch before lock, got status %v", req.Status)
+			}
+			return patchedArtifact, nil
+		})
+	gomock.InOrder(
+		mockService.EXPECT().FilesAPI().Return(filesAPI2),
+		mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil),
+	)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch after source upload, got status %v", req.Status)
+			}
+			return &lockedArtifact, nil
+		})
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	state, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDirV1))
+	if diags.HasError() {
+		t.Fatalf("create: %s", diagErrorSummary(diags))
+	}
+
+	plan := artifactResourceModelWithSource(name, sourceDirV2)
+	plan.Status = types.StringValue("locked")
+	plan.ID = state.ID
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.DirHash = types.StringValue("hash-v2")
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s", diagErrorSummary(diags))
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+}
+
+func TestArtifactResourceSourceCreateLockedLockFailure(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "app"})
+	draftArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-lock-fail-" + uuid.NewString()[:8]
+	draftArtifact := artifactFixtureDraftWithBuildConfig(draftArtifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftArtifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftArtifactID, gomock.Any()).Return(nil, fmt.Errorf("lock failed"))
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	model := artifactResourceModelWithSource(name, sourceDir)
+	model.Status = types.StringValue("locked")
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	_, diags := testArtifactApplyCreate(context.Background(), resource, model)
+	if !diags.HasError() {
+		t.Fatal("expected lock error")
+	}
+	if got := diagErrorSummary(diags); got != "Error locking Artifact after source upload" {
+		t.Fatalf("error summary = %q", got)
+	}
+}
+
+func TestArtifactResourceSourceUpdateLockedLockFailurePersistsDraftClone(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
+	sourceDirV2 := writeArtifactSourceTree(t, map[string]string{"main.py": "v2"})
+	lockedArtifactID := uuid.NewString()
+	draftCloneID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-lock-update-fail-" + uuid.NewString()[:8]
+
+	draftClone := artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name)
+	patchedDraft := artifactSourcePatchedArtifact(draftClone, "cccccccccccccccccccccccc", "dddddddddddddddddddddddd")
+	filesAPI := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftClone, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, gomock.Any(), gomock.Any()).Return(patchedDraft, nil)
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).Return(nil, fmt.Errorf("lock failed"))
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	state := artifactResourceModelWithSource(name, sourceDirV1)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Source.DirHash = types.StringValue("hash-v1")
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	plan := artifactResourceModelWithSource(name, sourceDirV2)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.DirHash = types.StringValue("hash-v2")
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if !diags.HasError() {
+		t.Fatal("expected lock error")
+	}
+	if got := diagErrorSummary(diags); got != "Error locking Artifact after source upload" {
+		t.Fatalf("error summary = %q", got)
+	}
+	if updated.ArtifactID.ValueString() != draftCloneID {
+		t.Fatalf("expected draft clone in state, artifact_id = %q", updated.ArtifactID.ValueString())
+	}
+	if updated.Status.ValueString() != "draft" {
+		t.Fatalf("status = %q, want draft", updated.Status.ValueString())
+	}
+	if got := updated.Source.DirHash.ValueString(); got != "hash-v1" {
+		t.Fatalf("dir_hash = %q, want prior hash-v1 so retry re-uploads", got)
 	}
 }
 
@@ -2197,7 +2463,7 @@ func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 	updatedName := "updated-" + name
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	updatedArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, updatedName)
 	updatedArtifact.Spec = patchedArtifact.Spec
 	filesAPI := newSyncTestFilesAPI()
@@ -2241,7 +2507,7 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 	name := "source-reupload-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 
@@ -2287,7 +2553,7 @@ func TestArtifactResourceSourceUpdateUploadFailure(t *testing.T) {
 	name := "source-update-upload-fail-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 	filesAPI2.uploadErr = fmt.Errorf("upload failed on update")
@@ -2334,7 +2600,7 @@ func TestArtifactResourceSourceUpdatePatchCodeRefFailure(t *testing.T) {
 	name := "source-update-patch-fail-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	filesAPI1 := newSyncTestFilesAPI()
 	filesAPI2 := newSyncTestFilesAPI()
 
@@ -2383,7 +2649,7 @@ func TestArtifactResourceSourceUpdatePatchArtifactFailure(t *testing.T) {
 	updatedName := "updated-" + name
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	filesAPI := newSyncTestFilesAPI()
 
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
@@ -2425,20 +2691,27 @@ func TestArtifactResourceSourceUpdateCreateArtifactFailure(t *testing.T) {
 	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("create draft version failed"))
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
-	state := ArtifactResourceModel{
-		Name:                 types.StringValue(name),
-		Status:               types.StringValue("locked"),
-		ArtifactID:           types.StringValue(lockedArtifactID),
-		ArtifactRepositoryID: types.StringValue(repoID),
+	state := artifactResourceModelWithSource(name, sourceDir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Source.DirHash = types.StringValue("old-hash")
+	state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
 	}
+
 	plan := artifactResourceModelWithSource(name, sourceDir)
-	plan.Status = types.StringValue("draft")
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.DirHash = types.StringValue("new-hash")
 
 	_, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if !diags.HasError() {
-		t.Fatal("expected create new version error")
+		t.Fatal("expected create draft clone error")
 	}
-	if got := diagErrorSummary(diags); got != "Error creating new Artifact version" {
+	if got := diagErrorSummary(diags); got != "Error creating draft Artifact for source update" {
 		t.Fatalf("error summary = %q", got)
 	}
 }
@@ -2503,7 +2776,7 @@ func TestArtifactResourceSourceReadRefreshesDirHash(t *testing.T) {
 	name := "source-read-hash-" + uuid.NewString()[:8]
 
 	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
-	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(patchedArtifact, nil)
 
 	if err := os.WriteFile(filepath.Join(sourceDir, "main.py"), []byte("after"), 0o644); err != nil {
@@ -2609,6 +2882,100 @@ resource "datarobot_artifact" "test" {
     }]
   }
 }`, dir)
+}
+
+func TestDecodePlanArtifactModelUnknownCodeRef(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schema := testArtifactResourceSchema(t)
+	dir := t.TempDir()
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	tests := []struct {
+		name      string
+		planModel *ArtifactResourceModel
+		state     *ArtifactResourceModel
+		check     func(t *testing.T, decoded ArtifactResourceModel)
+	}{
+		{
+			name: "create decodes unknown code_ref as null",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("create-decode")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef != nil && (IsKnown(codeRef.CatalogID) || IsKnown(codeRef.CatalogVersionID)) {
+					t.Fatalf("expected null code_ref on create, got %#v", codeRef)
+				}
+			},
+		},
+		{
+			name: "update decodes unknown code_ref from state",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-b")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+				if got := codeRef.CatalogVersionID.ValueString(); got != artifactSourceTestVersionID {
+					t.Fatalf("catalog_version_id = %q, want %q", got, artifactSourceTestVersionID)
+				}
+			},
+		},
+		{
+			name: "update decodes unknown code_ref from primary after container reorder",
+			planModel: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.Name = types.StringValue("update-decode-reorder")
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = types.StringValue("hash-a")
+			}),
+			check: func(t *testing.T, decoded ArtifactResourceModel) {
+				codeRef := decoded.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				if codeRef == nil {
+					t.Fatal("expected code_ref copied from primary in state")
+				}
+				if got := codeRef.CatalogID.ValueString(); got != artifactSourceTestCatalogID {
+					t.Fatalf("catalog_id = %q, want %q", got, artifactSourceTestCatalogID)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := testArtifactPlanWithUnknownCodeRef(t, ctx, schema, tt.planModel)
+
+			var decoded ArtifactResourceModel
+			if diags := decodePlanArtifactModel(ctx, plan, tt.state, &decoded); diags.HasError() {
+				t.Fatalf("decodePlanArtifactModel: %s", diagErrorSummary(diags))
+			}
+
+			tt.check(t, decoded)
+		})
+	}
 }
 
 func testArtifactPlanWithUnknownCodeRef(t *testing.T, ctx context.Context, schema schema.Schema, model *ArtifactResourceModel) tfsdk.Plan {
@@ -2946,7 +3313,7 @@ func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 		},
 	}
 
-	if containersEqual(base, changed) {
+	if containersEqual(base, changed, false) {
 		t.Fatal("expected image_build_config change to make containers unequal")
 	}
 }

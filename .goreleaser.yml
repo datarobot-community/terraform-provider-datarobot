@@ -58,5 +58,10 @@ release:
   # If you want to manually examine the release before its live, uncomment this line:
   # draft: true
 changelog:
-  disable: true
+  # Must stay enabled: the changelog pipe is also what loads the --release-notes
+  # file passed by .github/workflows/release.yml (the tagged version's CHANGELOG.md
+  # section). With `disable: true` the pipe is skipped and the release body ends up
+  # empty. The file takes precedence over commit-based generation, so no commit log
+  # is added to the release notes.
+  disable: false
   
