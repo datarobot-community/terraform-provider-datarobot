@@ -20,6 +20,9 @@ resource "datarobot_artifact" "prebuilt" {
   }
 }
 
+# Create as draft so this example is copy-pasteable. After the image build
+# populates image_uri, set status = "locked". Applying locked without image_uri
+# is rejected by workload-api (422).
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
   description = "Draft artifact with local source upload (code-to-workload)"
