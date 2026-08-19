@@ -50,7 +50,7 @@ func (d *ArtifactDataSource) Schema(ctx context.Context, _ datasource.SchemaRequ
 			},
 			"type": datasourceschema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The artifact type: `service` or `nim`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`.",
 			},
 			"status": datasourceschema.StringAttribute{
 				Computed:            true,
