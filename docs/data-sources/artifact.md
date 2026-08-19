@@ -44,7 +44,7 @@ output "artifact_status" {
 - `spec` (Attributes) The artifact specification containing container group definitions. (see [below for nested schema](#nestedatt--spec))
 - `status` (String) Artifact status: `draft` or `locked`.
 - `tags` (Attributes List) Tags associated with this artifact. (see [below for nested schema](#nestedatt--tags))
-- `type` (String) The artifact type: `service`, `nim`, or `agent`.
+- `type` (String) The artifact type: `service`, `nim`, `agent`, or `mcp`.
 - `updated_at` (String) Timestamp of when the artifact was last updated.
 - `version` (Number) Version number of the artifact. Set only for locked artifacts.
 

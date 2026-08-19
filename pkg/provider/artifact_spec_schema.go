@@ -471,7 +471,7 @@ func artifactDataSourceComputedAttributes(probeAttributes map[string]datasources
 		},
 		"type": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`.",
+			MarkdownDescription: "The artifact type: `service`, `nim`, `agent`, or `mcp`.",
 		},
 		"status": datasourceschema.StringAttribute{
 			Computed:            true,
