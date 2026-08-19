@@ -1540,6 +1540,15 @@ func TestValidateArtifactSource(t *testing.T) {
 			},
 		},
 		{
+			name: "mcp artifact with source",
+			data: ArtifactResourceModel{
+				Type:   types.StringValue("mcp"),
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithBuildConfig,
+			},
+		},
+		{
 			name: "missing spec",
 			data: ArtifactResourceModel{
 				Status: types.StringValue("draft"),
@@ -3608,6 +3617,14 @@ func TestValidateArtifactA2AEnabled(t *testing.T) {
 			name: "nim with a2a_enabled",
 			data: ArtifactResourceModel{
 				Type: types.StringValue(string(client.ArtifactTypeNim)),
+				Spec: specEnabled,
+			},
+			wantSummary: "Unsupported a2a_enabled",
+		},
+		{
+			name: "mcp with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeMCP)),
 				Spec: specEnabled,
 			},
 			wantSummary: "Unsupported a2a_enabled",
