@@ -3305,6 +3305,48 @@ func TestArtifactNeedsNewVersion_dockerfileDefaults(t *testing.T) {
 	}
 }
 
+func TestArtifactNeedsNewVersion_a2aEnabled(t *testing.T) {
+	t.Parallel()
+
+	base := ArtifactResourceModel{
+		Name:                 types.StringValue("my-artifact"),
+		Description:          types.StringValue("desc"),
+		ArtifactRepositoryID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		Spec: &ArtifactSpecModel{
+			A2AEnabled: types.BoolValue(false),
+			ContainerGroups: []ArtifactContainerGroupModel{{
+				Containers: []ArtifactContainerModel{{
+					ImageURI: types.StringValue("nginx:latest"),
+					Primary:  types.BoolValue(true),
+				}},
+			}},
+		},
+	}
+
+	unchanged := base
+	if artifactNeedsNewVersion(unchanged, base) {
+		t.Fatal("expected matching a2a_enabled not to force a new version")
+	}
+
+	enabled := base
+	enabled.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(true),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if !artifactNeedsNewVersion(enabled, base) {
+		t.Fatal("expected a2a_enabled change to force a new version")
+	}
+
+	cleared := base
+	cleared.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if !artifactNeedsNewVersion(cleared, base) {
+		t.Fatal("expected clearing a2a_enabled to force a new version")
+	}
+}
+
 func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 	base := ArtifactContainerModel{
 		ImageURI: types.StringValue("nginx:latest"),

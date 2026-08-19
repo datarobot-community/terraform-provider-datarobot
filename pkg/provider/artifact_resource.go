@@ -608,7 +608,7 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 			return true
 		}
 	}
-	return false
+	return !plan.Spec.A2AEnabled.Equal(state.Spec.A2AEnabled)
 }
 
 func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef bool) bool {
