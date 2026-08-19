@@ -6,7 +6,8 @@
 - Documentation and examples for in-place `datarobot_workload` replacement: operator guide in `docs/resources/workload.md` (WAPI rolling replacement vs legacy destroy/create, artifact dual-ID wiring, update-trigger table, apply duration), registry example at `examples/resources/datarobot_workload/`, and runnable workflow at `examples/workflows/workload_replacement/`.
 - Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
 - `datarobot_artifact` `type = "agent"` and optional `spec.a2a_enabled` for Workload API agent artifacts (A2A card management). `a2a_enabled` is valid only when `type` is `agent`.
-- Computed `type` on `datarobot_workload`, mirroring the deployed artifact type (`service`, `nim`, or `agent`).
+- Computed `type` on `datarobot_workload`, mirroring the deployed artifact type (`service`, `nim`, `agent`, or `mcp`).
+- `datarobot_artifact` `type = "mcp"` for Workload API MCP server artifacts (same spec shape as `service`; scheduled and built like `service`).
 ### Fixed
 
 - `datarobot_memory_space` updates no longer fail with `422 Unprocessable Entity` on `llmBaseUrl`. The provider sent an empty string for every attribute the config does not set, and the API parses `llmBaseUrl` as a URL, so any update to a memory space without `llm_base_url` was rejected. Unset attributes are now sent as null, which is also what the API requires to clear a stored value: it applies only the keys present in the request body, so an omitted key would leave the old value in place.
