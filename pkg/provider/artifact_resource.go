@@ -135,7 +135,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "The artifact type: `service` or `nim`. Defaults to `service`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`. Defaults to `service`.",
+				Validators:          ArtifactTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -901,6 +902,7 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 
 	validateArtifactSource(resp, data)
+	validateArtifactA2AEnabled(resp, data)
 
 	if data.Spec == nil {
 		return
@@ -925,6 +927,29 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
 		}
 	}
+}
+
+func validateArtifactA2AEnabled(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Spec == nil {
+		return
+	}
+	if data.Spec.A2AEnabled.IsNull() || data.Spec.A2AEnabled.IsUnknown() {
+		return
+	}
+
+	artifactType := string(client.ArtifactTypeService)
+	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+		artifactType = data.Type.ValueString()
+	}
+	if artifactType == string(client.ArtifactTypeAgent) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("spec").AtName("a2a_enabled"),
+		"Unsupported a2a_enabled",
+		"`a2a_enabled` is only valid on agent artifacts.",
+	)
 }
 
 func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
@@ -1154,7 +1179,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
 		Status:      status,
-		Spec:        artifactSpecToClient(*data.Spec),
+		Spec:        artifactSpecToClient(*data.Spec, client.ArtifactType(data.Type.ValueString())),
 	}
 	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
 		repoID := data.ArtifactRepositoryID.ValueString()
@@ -1166,7 +1191,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *client.PatchArtifactRequest {
 	name := plan.Name.ValueString()
 	description := plan.Description.ValueString()
-	spec := artifactSpecToClient(*plan.Spec)
+	spec := artifactSpecToClient(*plan.Spec, client.ArtifactType(plan.Type.ValueString()))
 
 	req := &client.PatchArtifactRequest{
 		Name:        &name,
@@ -1184,14 +1209,19 @@ func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *cl
 	return req
 }
 
-func artifactSpecToClient(spec ArtifactSpecModel) client.ArtifactSpec {
+func artifactSpecToClient(spec ArtifactSpecModel, artifactType client.ArtifactType) client.ArtifactSpec {
 	groups := make([]client.ArtifactContainerGroup, len(spec.ContainerGroups))
 	for i, g := range spec.ContainerGroups {
 		groups[i] = artifactContainerGroupToClient(g)
 	}
-	return client.ArtifactSpec{
+	out := client.ArtifactSpec{
 		ContainerGroups: groups,
 	}
+	if artifactType == client.ArtifactTypeAgent && !spec.A2AEnabled.IsNull() && !spec.A2AEnabled.IsUnknown() {
+		enabled := spec.A2AEnabled.ValueBool()
+		out.A2AEnabled = &enabled
+	}
+	return out
 }
 
 func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.ArtifactContainerGroup {
@@ -1396,7 +1426,23 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
-	return ArtifactSpecModel{ContainerGroups: groups}
+	return ArtifactSpecModel{
+		ContainerGroups: groups,
+		A2AEnabled:      loadA2AEnabledFromAPI(spec.A2AEnabled, prior),
+	}
+}
+
+func loadA2AEnabledFromAPI(apiValue *bool, prior *ArtifactSpecModel) types.Bool {
+	if prior != nil && !prior.A2AEnabled.IsNull() && !prior.A2AEnabled.IsUnknown() {
+		if apiValue != nil {
+			return types.BoolValue(*apiValue)
+		}
+		return prior.A2AEnabled
+	}
+	if apiValue != nil && *apiValue {
+		return types.BoolValue(true)
+	}
+	return types.BoolNull()
 }
 
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
