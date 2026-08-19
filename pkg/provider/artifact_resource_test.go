@@ -57,7 +57,7 @@ func TestIntegrationArtifactSourceUpload(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	testArtifactSourceUpload(t, true, mockService)
@@ -72,7 +72,7 @@ func TestIntegrationArtifactSourceUploadLocked(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	testArtifactSourceUploadLocked(t, true, mockService)
@@ -87,7 +87,7 @@ func TestIntegrationArtifactResource(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
@@ -976,7 +976,7 @@ func TestArtifactTooManyContainerGroups(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1217,7 +1217,7 @@ func TestIntegrationArtifactDraftLifecycle(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
@@ -1309,7 +1309,7 @@ func TestArtifactLockedToDraftCreatesNewDraft(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	lockedArtifactID := uuid.NewString()
@@ -1460,7 +1460,7 @@ func TestPatchRequestFromPlan(t *testing.T) {
 }
 
 func TestIntegrationArtifactInvalidStatus(t *testing.T) {
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1485,7 +1485,7 @@ func TestIntegrationArtifactLockedSpecCreatesNewVersion(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	initialID := uuid.NewString()
@@ -1559,7 +1559,7 @@ func TestIntegrationArtifactDraftSpecPatch(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
@@ -1627,7 +1627,7 @@ func TestArtifactImageSourceRequired(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1663,7 +1663,7 @@ func TestArtifactLockedImageBuildConfigWithoutImageURI(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -1737,7 +1737,7 @@ func TestArtifactNimWithCodeRefRejected(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -2055,7 +2055,7 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -2086,7 +2086,7 @@ func TestArtifactSourceConfigValidation(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	tests := []struct {
@@ -3384,7 +3384,7 @@ func TestArtifactImageBuildConfigNonPrimaryRejected(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	resource.Test(t, resource.TestCase{
@@ -3671,7 +3671,7 @@ func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 		return mockService
 	})()
 
-	globalTestCfg.ApiKey = "fake"
+	mockAPIKey(t)
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	artifactID := uuid.NewString()
