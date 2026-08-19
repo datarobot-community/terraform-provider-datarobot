@@ -74,7 +74,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"type": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Artifact type mirrored by this workload: `service`, `nim`, or `agent`. Set from the deployed artifact; not user-configurable.",
+				MarkdownDescription: "Artifact type mirrored by this workload: `service`, `nim`, `agent`, or `mcp`. Set from the deployed artifact; not user-configurable.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
