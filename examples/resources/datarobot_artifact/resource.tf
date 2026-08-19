@@ -3,6 +3,7 @@
 # - Build from source with local upload: set image_build_config and source { dir }
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
+# - MCP: type = "mcp" (same spec shape as service)
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -111,4 +112,25 @@ resource "datarobot_artifact" "agent" {
 output "agent_artifact_id" {
   value       = datarobot_artifact.agent.artifact_id
   description = "Artifact ID for the agent example"
+}
+
+resource "datarobot_artifact" "mcp" {
+  name        = "example-mcp"
+  description = "MCP server artifact"
+  type        = "mcp"
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        primary   = true
+        port      = 8080
+      }]
+    }]
+  }
+}
+
+output "mcp_artifact_id" {
+  value       = datarobot_artifact.mcp.artifact_id
+  description = "Artifact ID for the MCP example"
 }
