@@ -1217,8 +1217,10 @@ func artifactSpecToClient(spec ArtifactSpecModel, artifactType client.ArtifactTy
 	out := client.ArtifactSpec{
 		ContainerGroups: groups,
 	}
-	if artifactType == client.ArtifactTypeAgent && !spec.A2AEnabled.IsNull() && !spec.A2AEnabled.IsUnknown() {
-		enabled := spec.A2AEnabled.ValueBool()
+	// Agents always send a2aEnabled so a draft PATCH can turn it off. omitempty
+	// would drop a nil pointer and leave the stored API value unchanged.
+	if artifactType == client.ArtifactTypeAgent && !spec.A2AEnabled.IsUnknown() {
+		enabled := !spec.A2AEnabled.IsNull() && spec.A2AEnabled.ValueBool()
 		out.A2AEnabled = &enabled
 	}
 	return out
@@ -1438,6 +1440,11 @@ func loadA2AEnabledFromAPI(apiValue *bool, prior *ArtifactSpecModel) types.Bool 
 			return types.BoolValue(*apiValue)
 		}
 		return prior.A2AEnabled
+	}
+	if prior != nil && (prior.A2AEnabled.IsNull() || prior.A2AEnabled.IsUnknown()) {
+		// Config omitted the flag. After a PATCH that sent false, keep null so
+		// state matches the plan. Import (prior nil) still surfaces API true.
+		return types.BoolNull()
 	}
 	if apiValue != nil && *apiValue {
 		return types.BoolValue(true)

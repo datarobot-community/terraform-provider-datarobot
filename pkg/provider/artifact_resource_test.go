@@ -3502,8 +3502,17 @@ func TestArtifactSpecToClientA2AEnabled(t *testing.T) {
 
 	omitted := ArtifactSpecModel{ContainerGroups: []ArtifactContainerGroupModel{}}
 	got = artifactSpecToClient(omitted, client.ArtifactTypeAgent)
-	if got.A2AEnabled != nil {
-		t.Fatalf("omitted a2a_enabled A2AEnabled = %v, want nil", got.A2AEnabled)
+	if got.A2AEnabled == nil || *got.A2AEnabled {
+		t.Fatalf("omitted a2a_enabled A2AEnabled = %v, want false", got.A2AEnabled)
+	}
+
+	disabled := ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{},
+		A2AEnabled:      types.BoolValue(false),
+	}
+	got = artifactSpecToClient(disabled, client.ArtifactTypeAgent)
+	if got.A2AEnabled == nil || *got.A2AEnabled {
+		t.Fatalf("explicit false A2AEnabled = %v, want false", got.A2AEnabled)
 	}
 }
 
@@ -3527,6 +3536,24 @@ func TestLoadArtifactSpecFromAPIA2AEnabled(t *testing.T) {
 		got := loadArtifactSpecFromAPI(apiSpec, nil)
 		if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
 			t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
+		}
+	})
+
+	t.Run("omitted config stays null after API false", func(t *testing.T) {
+		apiSpec.A2AEnabled = &falseVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolNull()}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if !got.A2AEnabled.IsNull() {
+			t.Fatalf("A2AEnabled = %v, want null", got.A2AEnabled)
+		}
+	})
+
+	t.Run("omitted config stays null even if API still true", func(t *testing.T) {
+		apiSpec.A2AEnabled = &trueVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolNull()}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if !got.A2AEnabled.IsNull() {
+			t.Fatalf("A2AEnabled = %v, want null", got.A2AEnabled)
 		}
 	})
 
