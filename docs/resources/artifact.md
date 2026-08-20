@@ -285,4 +285,4 @@ Optional:
 
 Read-Only:
 
-- `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.
+- `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged. Computed at plan time from the local tree; refresh keeps the last-applied value so file edits produce a plan diff.
