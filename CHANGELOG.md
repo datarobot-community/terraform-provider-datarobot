@@ -3,6 +3,7 @@
 ### Fixed
 
 - `datarobot_artifact` `source.dir_hash` is no longer recomputed from the local tree during Read/refresh. Refresh runs before plan, so overwriting the last-applied hash with the current disk contents made `terraform plan` report no changes after editing source files. The hash is still computed at plan time and stored after a successful apply.
+- `datarobot_workload` replacement wait no longer fails when `GET /workloads/{id}/replacement` returns 404. The Workload API detaches a finished replacement from the workload, so that 404 means the replacement completed. Apply now treats it as success.
 
 ### Added
 
