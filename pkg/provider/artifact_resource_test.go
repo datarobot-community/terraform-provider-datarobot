@@ -2471,7 +2471,7 @@ func testArtifactApplyRead(ctx context.Context, r *ArtifactResource, data Artifa
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	// Match ArtifactResource.Read: do not recompute dir_hash from disk.
 	return data, diags, false
 }
 
@@ -3300,12 +3300,19 @@ func TestArtifactResourceSourceReadNotFoundRemovesState(t *testing.T) {
 	}
 }
 
-func TestArtifactResourceSourceReadRefreshesDirHash(t *testing.T) {
+func TestArtifactResourceSourceReadPreservesDirHash(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockService := mock_client.NewMockService(ctrl)
 
-	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "before"})
+	sourceDir := writeArtifactSourceTree(t, map[string]string{
+		"user_tools.py": "# @dr_mcp_tool(tags={\"user\"})\nasync def user_tool_example():\n    pass\n",
+	})
+	appliedHash, err := computeFolderHash(types.StringValue(sourceDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	artifactID := uuid.NewString()
 	repoID := uuid.NewString()
 	repoIDPtr := repoID
@@ -3315,24 +3322,38 @@ func TestArtifactResourceSourceReadRefreshesDirHash(t *testing.T) {
 	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
 	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(patchedArtifact, nil)
 
-	if err := os.WriteFile(filepath.Join(sourceDir, "main.py"), []byte("after"), 0o644); err != nil {
+	// Simulate a post-apply edit (uncommenting @dr_mcp_tool) before terraform plan.
+	if err := os.WriteFile(filepath.Join(sourceDir, "user_tools.py"), []byte("@dr_mcp_tool(tags={\"user\"})\nasync def user_tool_example():\n    pass\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	expectedHash, err := computeFolderHash(types.StringValue(sourceDir))
+	currentHash, err := computeFolderHash(types.StringValue(sourceDir))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if currentHash.Equal(appliedHash) {
+		t.Fatal("expected dir_hash to change after uncommenting the decorator")
 	}
 
 	resource := &ArtifactResource{provider: &Provider{service: mockService}}
 	result, diags, removed := testArtifactApplyRead(context.Background(), resource, ArtifactResourceModel{
 		ArtifactID: types.StringValue(artifactID),
-		Source:     &ArtifactSourceModel{Dir: types.StringValue(sourceDir), DirHash: types.StringValue("stale")},
+		Source: &ArtifactSourceModel{
+			Dir:     types.StringValue(sourceDir),
+			DirHash: appliedHash,
+		},
 	})
 	if removed || diags.HasError() {
 		t.Fatalf("read failed: removed=%v err=%v", removed, diagErrorSummary(diags))
 	}
-	if !result.Source.DirHash.Equal(expectedHash) {
-		t.Fatalf("dir_hash = %q, want %q", result.Source.DirHash.ValueString(), expectedHash.ValueString())
+	if !result.Source.DirHash.Equal(appliedHash) {
+		t.Fatalf("Read must preserve last-applied dir_hash so plan can detect local file changes, got %q want %q", result.Source.DirHash.ValueString(), appliedHash.ValueString())
+	}
+
+	plan := artifactResourceModelWithSource(name, sourceDir)
+	plan.ArtifactID = types.StringValue(artifactID)
+	plan.Source.DirHash = currentHash
+	if !artifactSourceNeedsUpload(&plan, &result, artifactID, artifactID) {
+		t.Fatal("expected source upload after local file edit when Read preserves last-applied dir_hash")
 	}
 }
 
