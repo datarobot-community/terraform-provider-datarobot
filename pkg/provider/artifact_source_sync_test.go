@@ -889,6 +889,12 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			mockService.EXPECT().
 				WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
 				Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+			mockService.EXPECT().
+				BaseURL().
+				Return("https://app.datarobot.com"),
+			mockService.EXPECT().
+				GetArtifactBuildLogs(gomock.Any(), artifactID, artifactSourceTestBuildID).
+				Return("", nil),
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
