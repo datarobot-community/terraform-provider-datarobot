@@ -138,7 +138,7 @@ func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifa
 		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
 }
 
-// artifactLockedSourceCloneNeeded is true when a locked artifact needs a new code upload.
+// artifactLockedSourceCloneNeeded is true when a locked artifact needs a draft clone
 // before upload (source dir change or spec change that creates a new version).
 // Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
 // then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
