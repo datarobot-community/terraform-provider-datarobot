@@ -664,7 +664,7 @@ func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel, ignoreManagedCod
 	if a == nil || b == nil {
 		return false
 	}
-	if !ignoreManagedCodeRef && !codeRefEqual(a.CodeRef, b.CodeRef) {
+	if !ignoreManagedCodeRef && !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
 		return false
 	}
 	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
@@ -883,7 +883,7 @@ func validateArtifactContainer(
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking), unless `source` is set (the provider uploads code via a draft clone before locking). Use `status = \"draft\"` for pre-build artifacts without `source`.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` until the image build finishes.",
 			)
 		}
 	}
@@ -1037,11 +1037,11 @@ func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
 func artifactHasManualCodeRef(spec *ArtifactSpecModel) bool {
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			codeRef := container.ImageBuildConfig.CodeRef
-			if IsKnown(codeRef.CatalogID) && IsKnown(codeRef.CatalogVersionID) {
+			if IsKnown(ref.CatalogID) && IsKnown(ref.CatalogVersionID) {
 				return true
 			}
 		}
@@ -1079,9 +1079,9 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 		return
 	}
 
-	if cfg.CodeRef != nil &&
-		!cfg.CodeRef.CatalogID.IsNull() &&
-		!cfg.CodeRef.CatalogVersionID.IsNull() &&
+	if ref := imageBuildConfigCodeRef(cfg); ref != nil &&
+		!ref.CatalogID.IsNull() &&
+		!ref.CatalogVersionID.IsNull() &&
 		artifactType == string(client.ArtifactTypeNim) {
 		resp.Diagnostics.AddAttributeError(
 			containerPath.AtName("image_build_config").AtName("code_ref"),
@@ -1274,15 +1274,15 @@ func artifactImageBuildConfigToClient(cfg *ArtifactImageBuildConfigModel) *clien
 		Dockerfile: artifactDockerfileToClient(cfg.Dockerfile),
 	}
 
-	if cfg.CodeRef != nil &&
-		!cfg.CodeRef.CatalogID.IsNull() && !cfg.CodeRef.CatalogID.IsUnknown() &&
-		!cfg.CodeRef.CatalogVersionID.IsNull() && !cfg.CodeRef.CatalogVersionID.IsUnknown() {
+	if ref := imageBuildConfigCodeRef(cfg); ref != nil &&
+		!ref.CatalogID.IsNull() && !ref.CatalogID.IsUnknown() &&
+		!ref.CatalogVersionID.IsNull() && !ref.CatalogVersionID.IsUnknown() {
 		result.CodeRef = &client.ArtifactCodeRef{
 			Type:     "datarobot",
 			Provider: "datarobot",
 			DataRobot: client.ArtifactDataRobotCodeRef{
-				CatalogID:        cfg.CodeRef.CatalogID.ValueString(),
-				CatalogVersionID: cfg.CodeRef.CatalogVersionID.ValueString(),
+				CatalogID:        ref.CatalogID.ValueString(),
+				CatalogVersionID: ref.CatalogVersionID.ValueString(),
 			},
 		}
 	}
@@ -1474,13 +1474,15 @@ func loadImageBuildConfigFromAPI(cfg *client.ArtifactImageBuildConfig, prior *Ar
 		return nil
 	}
 
-	model := &ArtifactImageBuildConfigModel{}
+	model := &ArtifactImageBuildConfigModel{
+		CodeRef: types.ObjectNull(artifactCodeRefAttrTypes()),
+	}
 	if cfg.CodeRef != nil && (cfg.CodeRef.DataRobot.CatalogID != "" || cfg.CodeRef.DataRobot.CatalogVersionID != "") {
-		model.CodeRef = &ArtifactCodeRefModel{
+		_ = setImageBuildConfigCodeRef(model, &ArtifactCodeRefModel{
 			CatalogID:        types.StringValue(cfg.CodeRef.DataRobot.CatalogID),
 			CatalogVersionID: types.StringValue(cfg.CodeRef.DataRobot.CatalogVersionID),
-		}
-	} else if prior != nil && prior.CodeRef != nil {
+		})
+	} else if prior != nil && !prior.CodeRef.IsNull() && !prior.CodeRef.IsUnknown() {
 		model.CodeRef = prior.CodeRef
 	}
 

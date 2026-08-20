@@ -33,11 +33,12 @@ func catalogIDFromModel(data *ArtifactResourceModel) string {
 	}
 	for _, group := range data.Spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
-				return container.ImageBuildConfig.CodeRef.CatalogID.ValueString()
+			if IsKnown(ref.CatalogID) {
+				return ref.CatalogID.ValueString()
 			}
 		}
 	}
@@ -50,11 +51,12 @@ func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
 	}
 	for _, group := range data.Spec.ContainerGroups {
 		for _, container := range group.Containers {
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				continue
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogVersionID) {
-				return container.ImageBuildConfig.CodeRef.CatalogVersionID.ValueString()
+			if IsKnown(ref.CatalogVersionID) {
+				return ref.CatalogVersionID.ValueString()
 			}
 		}
 	}
@@ -136,8 +138,8 @@ func artifactSourcePendingUpload(plan, state *ArtifactResourceModel, priorArtifa
 		artifactSourceNeedsUpload(plan, state, priorArtifactID, priorArtifactID)
 }
 
-// artifactLockedSourceCloneNeeded is true when a locked artifact with source configured
-// needs a draft clone before upload (source dir change or spec change that creates a new version).
+// artifactLockedSourceCloneNeeded is true when a locked artifact needs a draft clone
+// before upload (source dir change or spec change that creates a new version).
 // Locked artifacts are immutable; the provider clones to draft, uploads, patches code_ref,
 // then locks the new version (mirrors CLI guidance in cli/internal/workload/sync/phase1_gather.go).
 func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
@@ -218,11 +220,12 @@ func primaryCodeRefFromState(state *ArtifactResourceModel) *ArtifactCodeRefModel
 			if !artifactContainerIsPrimary(container, group) {
 				continue
 			}
-			if container.ImageBuildConfig == nil || container.ImageBuildConfig.CodeRef == nil {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
 				return nil
 			}
-			if IsKnown(container.ImageBuildConfig.CodeRef.CatalogID) {
-				return container.ImageBuildConfig.CodeRef
+			if IsKnown(ref.CatalogID) {
+				return cloneCodeRefModel(ref)
 			}
 			return nil
 		}
@@ -248,20 +251,17 @@ func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCrea
 			if !artifactContainerIsPrimary(*container, group) {
 				continue
 			}
-			if codeRefManuallySet(container.ImageBuildConfig.CodeRef) {
+			if codeRefManuallySet(imageBuildConfigCodeRef(container.ImageBuildConfig)) {
 				continue
 			}
 
 			if needsUnknown {
-				container.ImageBuildConfig.CodeRef = &ArtifactCodeRefModel{
-					CatalogID:        types.StringUnknown(),
-					CatalogVersionID: types.StringUnknown(),
-				}
+				container.ImageBuildConfig.CodeRef = types.ObjectUnknown(artifactCodeRefAttrTypes())
 				continue
 			}
 
 			if stateCodeRef != nil {
-				container.ImageBuildConfig.CodeRef = cloneCodeRefModel(stateCodeRef)
+				_ = setImageBuildConfigCodeRef(container.ImageBuildConfig, cloneCodeRefModel(stateCodeRef))
 			}
 		}
 	}
@@ -285,9 +285,9 @@ func sourceManagedCodeRefNeedsUnknown(plan, state *ArtifactResourceModel, isCrea
 	}
 
 	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
-		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state) {
-			return true
-		}
+		// locked→draft or a spec change always yields a new version, so code_ref is unknown.
+		// Source-dir changes already returned above via artifactSourceNeedsUpload.
+		return plan.Status.ValueString() == string(client.ArtifactStatusDraft) || artifactNeedsNewVersion(*plan, *state)
 	}
 
 	return false

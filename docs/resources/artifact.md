@@ -34,6 +34,9 @@ resource "datarobot_artifact" "prebuilt" {
   }
 }
 
+# Create as draft so this example is copy-pasteable. After the image build
+# populates image_uri, set status = "locked". Applying locked without image_uri
+# is rejected by workload-api (422).
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
   description = "Draft artifact with local source upload (code-to-workload)"
@@ -71,38 +74,6 @@ output "prebuilt_artifact_id" {
 output "from_source_artifact_id" {
   value       = datarobot_artifact.from_source.artifact_id
   description = "Artifact ID for the draft image-build example (stable until lock)"
-}
-
-resource "datarobot_artifact" "from_source_locked" {
-  name        = "example-c2w-locked"
-  description = "Locked artifact with local source upload (clone → upload → lock)"
-  status      = "locked"
-
-  source = {
-    dir = "${path.module}/app"
-  }
-
-  spec = {
-    container_groups = [{
-      containers = [{
-        name    = "primary"
-        primary = true
-        port    = 8080
-
-        image_build_config = {
-          dockerfile = {
-            source = "provided"
-            path   = "./Dockerfile"
-          }
-        }
-      }]
-    }]
-  }
-}
-
-output "from_source_locked_artifact_id" {
-  value       = datarobot_artifact.from_source_locked.artifact_id
-  description = "Artifact ID for the locked image-build example (new version on source change)"
 }
 ```
 

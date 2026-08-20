@@ -1038,7 +1038,7 @@ type ArtifactContainerModel struct {
 }
 
 type ArtifactImageBuildConfigModel struct {
-	CodeRef    *ArtifactCodeRefModel    `tfsdk:"code_ref"`
+	CodeRef    types.Object             `tfsdk:"code_ref"`
 	Dockerfile *ArtifactDockerfileModel `tfsdk:"dockerfile"`
 }
 

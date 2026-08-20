@@ -211,10 +211,10 @@ func TestCatalogIDFromModel(t *testing.T) {
 					{
 						Primary: types.BoolValue(true),
 						ImageBuildConfig: &ArtifactImageBuildConfigModel{
-							CodeRef: &ArtifactCodeRefModel{
+							CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
 								CatalogID:        id,
 								CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
-							},
+							}),
 						},
 					},
 				},
@@ -260,10 +260,10 @@ func TestCatalogVersionIDFromModel(t *testing.T) {
 			ContainerGroups: []ArtifactContainerGroupModel{{
 				Containers: []ArtifactContainerModel{{
 					ImageBuildConfig: &ArtifactImageBuildConfigModel{
-						CodeRef: &ArtifactCodeRefModel{
+						CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
 							CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
 							CatalogVersionID: id,
-						},
+						}),
 					},
 				}},
 			}},
@@ -614,12 +614,10 @@ func artifactSpecWithCodeRef(catalogID, versionID string) *ArtifactSpecModel {
 		ContainerGroups: []ArtifactContainerGroupModel{{
 			Containers: []ArtifactContainerModel{{
 				Primary: types.BoolValue(true),
-				ImageBuildConfig: &ArtifactImageBuildConfigModel{
-					CodeRef: &ArtifactCodeRefModel{
-						CatalogID:        types.StringValue(catalogID),
-						CatalogVersionID: types.StringValue(versionID),
-					},
-				},
+				ImageBuildConfig: imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue(catalogID),
+					CatalogVersionID: types.StringValue(versionID),
+				}),
 			}},
 		}},
 	}
@@ -769,6 +767,7 @@ func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactConta
 		Primary: primary,
 		Port:    types.Int64Value(8080),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			CodeRef:    artifactCodeRefNull(),
 			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
 		},
 	}
@@ -792,7 +791,7 @@ func testSoleWithBuildConfig() ArtifactContainerModel {
 
 func testPrimaryWithCodeRef(codeRef *ArtifactCodeRefModel) ArtifactContainerModel {
 	container := testPrimaryWithBuildConfig()
-	container.ImageBuildConfig.CodeRef = codeRef
+	_ = setImageBuildConfigCodeRef(container.ImageBuildConfig, codeRef)
 	return container
 }
 
@@ -1053,23 +1052,23 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 		check    func(t *testing.T, plan *ArtifactResourceModel)
 	}{
 		{
-			name: "create sets unknown on primary",
+			name: "create clears code_ref on primary until apply",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() || !codeRef.CatalogVersionID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary, got %#v", codeRef)
+				if !codeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before apply, got %#v", codeRef)
 				}
 			},
 			isCreate: true,
 		},
 		{
-			name: "create sets unknown on sole container without primary flag",
+			name: "create clears code_ref on sole container without primary flag",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSoleWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() {
-					t.Fatal("expected sole container to receive unknown code_ref")
+				if !codeRef.IsUnknown() {
+					t.Fatal("expected sole container to have unknown code_ref before apply")
 				}
 			},
 			isCreate: true,
@@ -1079,11 +1078,11 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary, got %#v", primaryCodeRef)
+				if !primaryCodeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before apply, got %#v", primaryCodeRef)
 				}
 				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
-				if sidecarCodeRef != nil {
+				if !sidecarCodeRef.IsNull() {
 					t.Fatalf("expected no code_ref on non-primary container, got %#v", sidecarCodeRef)
 				}
 			},
@@ -1100,16 +1099,17 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
+
 		{
 			name: "update with reordered containers copies primary code_ref from state",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
@@ -1121,18 +1121,18 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state after reorder, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
 		{
-			name: "update with changed dir_hash sets unknown on primary only",
+			name: "update with changed dir_hash clears code_ref on primary only",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
 				m.ArtifactID = types.StringValue("artifact-1")
 				m.Source.DirHash = dirHashB
@@ -1143,10 +1143,10 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary after source change, got %#v", primaryCodeRef)
+				if !primaryCodeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before re-upload, got %#v", primaryCodeRef)
 				}
-				if plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef != nil {
+				if !plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef.IsNull() {
 					t.Fatal("expected non-primary container to remain without code_ref")
 				}
 			},
@@ -1157,7 +1157,7 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				Spec: testDraftSourceSpec(testPrimaryWithBuildConfig()),
 			},
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				if plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef != nil {
+				if imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig) != nil {
 					t.Fatal("expected no code_ref changes without source")
 				}
 			},
@@ -1166,7 +1166,7 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			name: "no-op when manual code_ref is set",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef))),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				codeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if codeRef == nil || codeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected manual code_ref to be untouched, got %#v", codeRef)
 				}
@@ -1244,13 +1244,11 @@ func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
 				spec := *m.Spec
 				group := spec.ContainerGroups[0]
 				container := group.Containers[0]
-				container.ImageBuildConfig = &ArtifactImageBuildConfigModel{
-					CodeRef: &ArtifactCodeRefModel{
-						CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
-						CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
-					},
-					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
-				}
+				container.ImageBuildConfig = imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+					CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+				})
+				container.ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{Source: types.StringValue("provided")}
 				group.Containers = []ArtifactContainerModel{container}
 				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
 				m.Spec = &spec
