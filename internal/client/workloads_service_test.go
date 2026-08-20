@@ -366,13 +366,12 @@ func TestWorkloadUnmarshalJSON_autoscaling(t *testing.T) {
 						"name": "default",
 						"autoscaling": {
 							"enabled": true,
+							"minReplicaCount": 1,
+							"maxReplicaCount": 3,
 							"policies": [
 								{
 									"scalingMetric": "cpuAverageUtilization",
-									"target": 50.0,
-									"minCount": 1,
-									"maxCount": 3,
-									"priority": 1
+									"target": 50.0
 								}
 							]
 						}
@@ -392,6 +391,9 @@ func TestWorkloadUnmarshalJSON_autoscaling(t *testing.T) {
 		if group.Autoscaling.Enabled == nil || !*group.Autoscaling.Enabled {
 			t.Errorf("autoscaling.enabled = %v, want true", group.Autoscaling.Enabled)
 		}
+		if group.Autoscaling.MinReplicaCount != 1 || group.Autoscaling.MaxReplicaCount != 3 {
+			t.Errorf("replica counts = (%d, %d), want (1, 3)", group.Autoscaling.MinReplicaCount, group.Autoscaling.MaxReplicaCount)
+		}
 		if len(group.Autoscaling.Policies) != 1 {
 			t.Fatalf("autoscaling.policies len = %d, want 1", len(group.Autoscaling.Policies))
 		}
@@ -399,11 +401,8 @@ func TestWorkloadUnmarshalJSON_autoscaling(t *testing.T) {
 		if policy.ScalingMetric != "cpuAverageUtilization" {
 			t.Errorf("scalingMetric = %q, want cpuAverageUtilization", policy.ScalingMetric)
 		}
-		if policy.Target != 50.0 || policy.MinCount != 1 || policy.MaxCount != 3 {
-			t.Errorf("policy values = (%v, %d, %d), want (50.0, 1, 3)", policy.Target, policy.MinCount, policy.MaxCount)
-		}
-		if policy.Priority == nil || *policy.Priority != 1 {
-			t.Errorf("priority = %v, want 1", policy.Priority)
+		if policy.Target != 50.0 {
+			t.Errorf("policy target = %v, want 50.0", policy.Target)
 		}
 	})
 }

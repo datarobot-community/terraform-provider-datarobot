@@ -260,6 +260,14 @@ func workloadDataSourceGroupRuntimeSchemaAttributes() map[string]schema.Attribut
 					Computed:            true,
 					MarkdownDescription: "Whether autoscaling is enabled.",
 				},
+				"min_replica_count": schema.Int64Attribute{
+					Computed:            true,
+					MarkdownDescription: "Minimum number of replicas. Set to `0` to allow scale-to-zero.",
+				},
+				"max_replica_count": schema.Int64Attribute{
+					Computed:            true,
+					MarkdownDescription: "Maximum number of replicas.",
+				},
 				"policies": schema.ListNestedAttribute{
 					Computed:            true,
 					MarkdownDescription: "Scaling policies that define when and how to scale.",
@@ -272,18 +280,6 @@ func workloadDataSourceGroupRuntimeSchemaAttributes() map[string]schema.Attribut
 							"target": schema.Float64Attribute{
 								Computed:            true,
 								MarkdownDescription: "Target value for the scaling metric.",
-							},
-							"min_count": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Minimum number of replicas.",
-							},
-							"max_count": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Maximum number of replicas.",
-							},
-							"priority": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Policy priority when multiple policies are defined.",
 							},
 						},
 					},

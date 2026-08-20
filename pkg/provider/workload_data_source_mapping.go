@@ -191,20 +191,14 @@ func loadWorkloadDataSourceGroupRuntimeFromAPI(g client.GroupRuntime) WorkloadDa
 		} else {
 			autoscaling.Enabled = types.BoolNull()
 		}
+		autoscaling.MinReplicaCount = types.Int64Value(g.Autoscaling.MinReplicaCount)
+		autoscaling.MaxReplicaCount = types.Int64Value(g.Autoscaling.MaxReplicaCount)
 		autoscaling.Policies = make([]WorkloadAutoscalingPolicyModel, len(g.Autoscaling.Policies))
 		for i, p := range g.Autoscaling.Policies {
-			policy := WorkloadAutoscalingPolicyModel{
+			autoscaling.Policies[i] = WorkloadAutoscalingPolicyModel{
 				ScalingMetric: types.StringValue(p.ScalingMetric),
 				Target:        types.Float64Value(p.Target),
-				MinCount:      types.Int64Value(p.MinCount),
-				MaxCount:      types.Int64Value(p.MaxCount),
 			}
-			if p.Priority != nil {
-				policy.Priority = types.Int64Value(*p.Priority)
-			} else {
-				policy.Priority = types.Int64Null()
-			}
-			autoscaling.Policies[i] = policy
 		}
 		m.Autoscaling = autoscaling
 	}
