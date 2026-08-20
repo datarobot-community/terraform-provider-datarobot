@@ -214,6 +214,10 @@ func (r *ArtifactResource) lockArtifact(ctx context.Context, artifactID string) 
 	})
 }
 
+// refreshArtifactSourceDirHash sets source.dir_hash from the current local tree.
+// Call only after a successful Create/Update so state records the hash that was
+// just uploaded. Do not call from Read: terraform refresh runs before plan, and
+// replacing the last-applied hash with the current disk hash hides local edits.
 func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if !artifactSourceConfigured(data) {
 		return
