@@ -90,10 +90,13 @@ type WorkloadArtifactInfo struct {
 	TemplateID           *string         `json:"templateId,omitempty"`
 }
 
+// WorkloadReplacementInfo is the nested replacement object on GET /workloads/{id}/.
+// It is a subset of WorkloadReplacement (the dedicated /replacement resource).
 type WorkloadReplacementInfo struct {
 	Status             string   `json:"status"`
 	CandidateProtonIDs []string `json:"candidateProtonIds"`
 	Strategy           string   `json:"strategy"`
+	Message            *string  `json:"message,omitempty"`
 }
 
 type RequestStats struct {
@@ -263,6 +266,18 @@ func IsReplacementActive(status ReplacementStatus) bool {
 	return !IsReplacementTerminal(status)
 }
 
+func replacementFromWorkloadInfo(info *WorkloadReplacementInfo, workloadID string) *WorkloadReplacement {
+	if info == nil {
+		return nil
+	}
+	return &WorkloadReplacement{
+		WorkloadID: workloadID,
+		Status:     ReplacementStatus(info.Status),
+		Strategy:   ReplacementStrategy(info.Strategy),
+		Message:    info.Message,
+	}
+}
+
 func (s *ServiceImpl) StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error) {
 	return Post[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/replacement", req)
 }
@@ -312,7 +327,7 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		if err != nil {
 			return lastReplacement, err
 		}
-		replacement := workload.Replacement
+		replacement := replacementFromWorkloadInfo(workload.Replacement, workloadID)
 
 		switch {
 		case replacement != nil && replacement.Status == ReplacementStatusErrored:
