@@ -168,7 +168,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					},
 					"dir_hash": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
+						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged. Computed at plan time from the local tree; refresh keeps the last-applied value so file edits produce a plan diff.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -281,7 +281,10 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	// Keep the last-applied source.dir_hash. Refresh runs before plan; recomputing
+	// the hash from the current local tree here would hide file edits (for example
+	// uncommenting a tool in user_tools.py) because plan and refreshed state would
+	// already match. ModifyPlan computes the current hash for diffing.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
