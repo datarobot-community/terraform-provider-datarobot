@@ -299,7 +299,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	priorArtifactID := state.ArtifactID.ValueString()
-	pendingSourceUpload := artifactSourcePendingUpload(&plan, &state, priorArtifactID)
+	lockedSourceCloneNeeded := artifactLockedSourceCloneNeeded(plan, state)
 	deferLock := artifactSourceDeferLock(plan, state)
 
 	var artifact *client.Artifact
@@ -317,7 +317,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
 		}
-	case pendingSourceUpload:
+	case lockedSourceCloneNeeded:
 		createReq := artifactCreateRequest(plan)
 		createReq.Status = client.ArtifactStatusDraft
 		traceAPICall("CreateUpdatedArtifact")
@@ -883,7 +883,7 @@ func validateArtifactContainer(
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). With `source`, the provider uploads code and sets `code_ref`, but lock still fails until workload-api has populated `image_uri` from a completed build. Use `status = \"draft\"` until the image build finishes.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` until the image build finishes.",
 			)
 		}
 	}
