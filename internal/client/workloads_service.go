@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -239,6 +240,12 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 
 		replacement, err := s.GetWorkloadReplacement(ctx, workloadID)
 		if err != nil {
+			if errors.Is(err, &NotFoundError{}) {
+				return &WorkloadReplacement{
+					WorkloadID: workloadID,
+					Status:     ReplacementStatusCompleted,
+				}, nil
+			}
 			return nil, err
 		}
 
