@@ -8,8 +8,9 @@ import (
 
 // CLI source: cli/internal/workload/wapi/template.go
 //
-// DefaultTemplate is the .drignore content Ensure writes at source.dir when
-// generate_ignore is true. Embedded so we don't depend on file lookups at runtime.
+// DefaultTemplate is the .drignore content WriteDefaultDrignoreIfMissing
+// writes at source.dir when generate_ignore is true. Embedded so we don't
+// depend on file lookups at runtime.
 //
 //go:embed drignore.tmpl
 var DefaultTemplate []byte
