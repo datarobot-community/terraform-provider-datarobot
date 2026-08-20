@@ -122,10 +122,12 @@ func artifactDataSourceChecks(dataSourceName, name, imageURI string, isMock bool
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".entrypoint.2", "app"),
 
 		// Environment variables
-		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.#", "1"),
+		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.#", "2"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.0.source", "string"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.0.name", "ENV"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.0.value", "production"),
+		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".environment_vars.1.source", "api-key"),
+		resource.TestCheckNoResourceAttr(dataSourceName, containerPrefix+".environment_vars.1.name"),
 
 		// Probes
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.path", "/startup"),
@@ -135,6 +137,7 @@ func artifactDataSourceChecks(dataSourceName, name, imageURI string, isMock bool
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.period_seconds", "15"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.timeout_seconds", "5"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.failure_threshold", "3"),
+		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".startup_probe.success_threshold", "1"),
 
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".readiness_probe.path", "/health"),
 		resource.TestCheckResourceAttr(dataSourceName, containerPrefix+".readiness_probe.port", "8080"),

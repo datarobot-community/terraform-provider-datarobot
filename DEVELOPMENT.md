@@ -176,9 +176,18 @@ There are currently no permanent fixtures for acceptance tests to use. Each test
 
 ## Releasing
 
-To create a new release simply make a Release in GitHub. The [Release
+To create a new release, push a `vX.Y.Z` tag. The [Release
 Action](https://github.com/datarobot-community/terraform-provider-datarobot/actions/workflows/release.yml)
-will pick it up and run go-releaser. After 5 minutes or so, Hashicorp
+triggers on that tag and runs go-releaser. See `.github/agents/release.agent.md`
+for the full runbook.
+
+The release notes are taken from the tagged version's `CHANGELOG.md` section
+(`## [X.Y.Z] - YYYY-MM-DD`), which becomes the GitHub release body and the Slack
+release message. Make sure that section is in place on `main` before tagging —
+without it the workflow fails instead of publishing an empty release. Preview it
+with `bash scripts/changelog-section.sh vX.Y.Z`.
+
+After 5 minutes or so, Hashicorp
 will pick up the release on the [primary provider
 site](https://registry.terraform.io/providers/datarobot-community/datarobot/latest)
 side with the latest version, and it is ready to go and get released
