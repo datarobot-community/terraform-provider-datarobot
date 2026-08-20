@@ -2,10 +2,13 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -82,6 +85,18 @@ func (r *ArtifactResource) pushArtifactSource(
 	if prior != nil {
 		opts.CatalogVersionID = catalogVersionIDFromModel(prior)
 	}
+
+	if artifactSourceGenerateIgnore(data) {
+		if _, err := ignore.WriteDefaultDrignoreIfMissing(absDir); err != nil {
+			return nil, fmt.Errorf("write %s: %w", ignore.FileName, err)
+		}
+	}
+
+	matcher, err := ignore.New(absDir)
+	if err != nil {
+		return nil, fmt.Errorf("load ignore rules: %w", err)
+	}
+	opts.Ignore = matcher.Match
 
 	traceAPICall("PushDirectory")
 	return artifactsource.PushDirectory(ctx, r.provider.service.FilesAPI(), opts)
@@ -220,10 +235,58 @@ func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
 	if !artifactSourceConfigured(data) {
 		return
 	}
-	dirHash, err := computeFolderHash(data.Source.Dir)
+	dirHash, err := computeArtifactSourceDirHash(data)
 	if err == nil {
 		data.Source.DirHash = dirHash
 	}
+}
+
+func artifactSourceGenerateIgnore(data *ArtifactResourceModel) bool {
+	if data == nil || data.Source == nil {
+		return true
+	}
+	if data.Source.GenerateIgnore.IsNull() || data.Source.GenerateIgnore.IsUnknown() {
+		return true
+	}
+	return data.Source.GenerateIgnore.ValueBool()
+}
+
+func computeArtifactSourceDirHash(data *ArtifactResourceModel) (types.String, error) {
+	hash := types.StringNull()
+	if data == nil || data.Source == nil || !IsKnown(data.Source.Dir) {
+		return hash, nil
+	}
+
+	absDir, err := filepath.Abs(data.Source.Dir.ValueString())
+	if err != nil {
+		return hash, err
+	}
+
+	generateIgnore := artifactSourceGenerateIgnore(data)
+	var matcher *ignore.Matcher
+	var extra []artifactsource.LocalFile
+
+	if generateIgnore && !ignore.UserIgnoreExists(absDir) {
+		matcher = ignore.FromDefaultTemplate()
+		sum := sha256.Sum256(ignore.DefaultTemplate)
+		extra = []artifactsource.LocalFile{{
+			RelPath: ignore.FileName,
+			Hash:    hex.EncodeToString(sum[:]),
+			Size:    int64(len(ignore.DefaultTemplate)),
+		}}
+	} else {
+		matcher, err = ignore.New(absDir)
+		if err != nil {
+			return hash, err
+		}
+	}
+
+	digest, err := artifactsource.FingerprintDirectory(absDir, matcher.Match, extra)
+	if err != nil {
+		return hash, err
+	}
+
+	return types.StringValue(digest), nil
 }
 
 func applySourceManagedCodeRefsToPlan(plan, state *ArtifactResourceModel, isCreate bool) {

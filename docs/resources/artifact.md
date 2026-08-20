@@ -41,6 +41,7 @@ resource "datarobot_artifact" "from_source" {
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -81,6 +82,7 @@ resource "datarobot_artifact" "from_source_locked" {
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -281,8 +283,9 @@ Required:
 
 Optional:
 
+- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. `.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.
 - `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
 
 Read-Only:
 
-- `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.
+- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.

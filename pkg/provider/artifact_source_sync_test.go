@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
@@ -356,6 +357,66 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			t.Fatal("expected dir_hash to remain unset when directory is missing")
 		}
 	})
+
+	t.Run("ignores venv and datarobot yaml", func(t *testing.T) {
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "print('hi')"})
+		data := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+		refreshArtifactSourceDirHash(data)
+		base := data.Source.DirHash
+
+		if err := os.Mkdir(filepath.Join(dir, ".venv"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".venv", "lib.py"), []byte("ignored"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".datarobot.yaml"), []byte("spec: x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		refreshArtifactSourceDirHash(data)
+		if !data.Source.DirHash.Equal(base) {
+			t.Fatal("expected dir_hash to ignore .venv and .datarobot.yaml")
+		}
+	})
+}
+
+func TestComputeArtifactSourceDirHash_PlanMatchesAfterWritingDrignore(t *testing.T) {
+	t.Parallel()
+
+	dir := writeArtifactSourceTree(t, map[string]string{
+		"main.py":         "print('hi')",
+		".venv/lib.py":    "ignored",
+		".datarobot.yaml": "spec: x\n",
+	})
+	data := &ArtifactResourceModel{
+		Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+	}
+
+	before, err := computeArtifactSourceDirHash(data)
+	if err != nil {
+		t.Fatalf("plan-time hash: %v", err)
+	}
+	if !IsKnown(before) {
+		t.Fatal("expected plan-time dir_hash")
+	}
+
+	wrote, err := ignore.WriteDefaultDrignoreIfMissing(dir)
+	if err != nil {
+		t.Fatalf("WriteDefaultDrignoreIfMissing: %v", err)
+	}
+	if !wrote {
+		t.Fatal("expected default .drignore to be written")
+	}
+
+	after, err := computeArtifactSourceDirHash(data)
+	if err != nil {
+		t.Fatalf("after-write hash: %v", err)
+	}
+	if !before.Equal(after) {
+		t.Fatalf("dir_hash churned: plan %q vs after write %q", before.ValueString(), after.ValueString())
+	}
 }
 
 func TestSyncArtifactSource(t *testing.T) {
@@ -423,6 +484,79 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		if filesAPI.createCatalogCalls == 0 && filesAPI.uploadFromZipNewCalls == 0 {
 			t.Fatal("expected Files API upload during create")
+		}
+	})
+
+	t.Run("writes drignore and skips venv and datarobot yaml", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":         "print('hi')",
+			".venv/lib.py":    "ignored",
+			".datarobot.yaml": "spec: x\n",
+		})
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); err != nil {
+			t.Fatalf("expected .drignore to be written: %v", err)
+		}
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == ".datarobot.yaml" || p == ".venv/lib.py" {
+				t.Fatalf("uploaded ignored path %q", p)
+			}
+		}
+		foundMain := false
+		foundIgnore := false
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == "main.py" {
+				foundMain = true
+			}
+			if p == ".drignore" {
+				foundIgnore = true
+			}
+		}
+		if !foundMain || !foundIgnore {
+			t.Fatalf("uploaded paths = %v, want main.py and .drignore", filesAPI.uploadToStagePaths)
+		}
+	})
+
+	t.Run("generate_ignore false does not write drignore", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "print('hi')"})
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{
+				Dir:            types.StringValue(dir),
+				GenerateIgnore: types.BoolValue(false),
+			},
+		}
+
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected .drignore not to be written when generate_ignore is false")
 		}
 	})
 
@@ -755,6 +889,12 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			mockService.EXPECT().
 				WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
 				Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+			mockService.EXPECT().
+				BaseURL().
+				Return("https://app.datarobot.com"),
+			mockService.EXPECT().
+				GetArtifactBuildLogs(gomock.Any(), artifactID, artifactSourceTestBuildID).
+				Return("", nil),
 		)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
@@ -878,6 +1018,7 @@ type syncTestFilesAPI struct {
 
 	createCatalogCalls    int
 	uploadFromZipNewCalls int
+	uploadToStagePaths    []string
 }
 
 func newSyncTestFilesAPI() *syncTestFilesAPI {
@@ -906,10 +1047,11 @@ func (m *syncTestFilesAPI) CreateStage(context.Context, string) (*filesapi.Stage
 	return &filesapi.StageResp{CatalogID: m.catalogID, StageID: "stage-1"}, nil
 }
 
-func (m *syncTestFilesAPI) UploadToStage(context.Context, string, string, string, int64, io.Reader) error {
+func (m *syncTestFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int64, _ io.Reader) error {
 	if m.uploadErr != nil {
 		return m.uploadErr
 	}
+	m.uploadToStagePaths = append(m.uploadToStagePaths, name)
 	return nil
 }
 
