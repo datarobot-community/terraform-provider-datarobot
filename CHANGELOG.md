@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- `datarobot_custom_model` updates no longer send the metadata `PATCH /api/v2/customModels/{id}/` when none of the metadata fields (name, description, language, prediction threshold, target options) changed. The API rewrites the model name into every registered model version whenever the request contains a name, which on models with a long registration history takes longer than the gateway timeout, so files-only updates (the common CI/CD path) failed every apply with `504 Gateway Timeout`. A genuine metadata change still sends the PATCH and is applied as before.
+
 ## [0.10.46] - 2026-08-20
 
 ### Added
