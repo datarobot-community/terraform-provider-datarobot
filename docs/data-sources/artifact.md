@@ -44,7 +44,7 @@ output "artifact_status" {
 - `spec` (Attributes) The artifact specification containing container group definitions. (see [below for nested schema](#nestedatt--spec))
 - `status` (String) Artifact status: `draft` or `locked`.
 - `tags` (Attributes List) Tags associated with this artifact. (see [below for nested schema](#nestedatt--tags))
-- `type` (String) The artifact type: `service` or `nim`.
+- `type` (String) The artifact type: `service`, `nim`, or `agent`.
 - `updated_at` (String) Timestamp of when the artifact was last updated.
 - `version` (Number) Version number of the artifact. Set only for locked artifacts.
 
@@ -65,6 +65,7 @@ Read-Only:
 
 Read-Only:
 
+- `a2a_enabled` (Boolean) Whether A2A card management and the A2A surface are enabled. Set on `agent` artifacts; omitted otherwise.
 - `container_groups` (Attributes List) List of container groups. (see [below for nested schema](#nestedatt--spec--container_groups))
 - `storage` (Attributes) NIM model weight storage configuration. (see [below for nested schema](#nestedatt--spec--storage))
 - `template_id` (String) ID of the template used to create this NIM artifact.

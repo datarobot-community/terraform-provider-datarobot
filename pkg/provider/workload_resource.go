@@ -72,6 +72,10 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				Required:            true,
 				MarkdownDescription: "ID of the Artifact version to deploy. When using `datarobot_artifact`, reference `datarobot_artifact.<name>.artifact_id` (not `.id`). Changing this value triggers an in-place workload replacement.",
 			},
+			"type": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Artifact type mirrored by this workload: `service`, `nim`, or `agent`. Set from the deployed artifact; not user-configurable.",
+			},
 			"endpoint": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The inference endpoint URL for the Workload.",
@@ -812,6 +816,12 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 	data.Importance = types.StringValue(string(workload.Importance))
 
 	data.Description = types.StringValue(workload.Description)
+
+	if workload.Type != "" {
+		data.Type = types.StringValue(string(workload.Type))
+	} else {
+		data.Type = types.StringNull()
+	}
 
 	if workload.ArtifactID != nil {
 		data.ArtifactID = types.StringValue(*workload.ArtifactID)
