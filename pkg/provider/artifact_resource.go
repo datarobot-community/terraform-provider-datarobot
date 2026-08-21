@@ -608,7 +608,18 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 			return true
 		}
 	}
-	return !plan.Spec.A2AEnabled.Equal(state.Spec.A2AEnabled)
+	return a2aEnabledNeedsNewVersion(plan.Spec.A2AEnabled, state.Spec.A2AEnabled)
+}
+
+// a2aEnabledNeedsNewVersion reports a real on/off change. Config null and false
+// are the same wire value, so treating them as different would mint a new
+// locked-artifact version (and roll the workload) for no API change.
+func a2aEnabledNeedsNewVersion(plan, state types.Bool) bool {
+	return a2aEnabledOn(plan) != a2aEnabledOn(state)
+}
+
+func a2aEnabledOn(v types.Bool) bool {
+	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
 }
 
 func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef bool) bool {

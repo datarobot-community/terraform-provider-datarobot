@@ -3686,8 +3686,36 @@ func TestArtifactNeedsNewVersion_a2aEnabled(t *testing.T) {
 		A2AEnabled:      types.BoolNull(),
 		ContainerGroups: base.Spec.ContainerGroups,
 	}
-	if !artifactNeedsNewVersion(cleared, base) {
-		t.Fatal("expected clearing a2a_enabled to force a new version")
+	if artifactNeedsNewVersion(cleared, base) {
+		t.Fatal("expected null and false a2a_enabled not to force a new version")
+	}
+
+	imported := base
+	imported.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	explicitFalse := base
+	explicitFalse.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(false),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if artifactNeedsNewVersion(explicitFalse, imported) {
+		t.Fatal("expected adding explicit a2a_enabled = false not to force a new version")
+	}
+
+	on := base
+	on.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(true),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	off := base
+	off.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if !artifactNeedsNewVersion(off, on) {
+		t.Fatal("expected turning a2a_enabled off to force a new version")
 	}
 }
 
