@@ -19,6 +19,14 @@ import (
 var _ resource.Resource = &MemorySpaceResource{}
 var _ resource.ResourceWithImportState = &MemorySpaceResource{}
 
+// memorySpaceFeatureFlags are the flags that grant access to the memory space API.
+// The DataRobot API gateway lets the chat history surface -- memory spaces and their
+// sessions -- through on either of them, and keeps the persistent memory (mem0) API
+// gated on ENABLE_AGENTIC_MEMORY_API alone. This resource only manages memory spaces,
+// so either flag is enough. ENABLE_AGENTIC_MEMORY_API comes first because a user who
+// has it needs no second call.
+var memorySpaceFeatureFlags = []string{"ENABLE_AGENTIC_MEMORY_API", "ENABLE_GENAI_EXPERIMENTATION"}
+
 func NewMemorySpaceResource() resource.Resource {
 	return &MemorySpaceResource{}
 }
@@ -33,7 +41,7 @@ func (r *MemorySpaceResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *MemorySpaceResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Memory Space is a DataRobot concept that serves as a logical container for Chat Histories (Sessions) and persistent Memories. Feature should be enabled before use with `ENABLE_AGENTIC_MEMORY_API` flag.",
+		MarkdownDescription: "Memory Space is a DataRobot concept that serves as a logical container for Chat Histories (Sessions) and persistent Memories. Managing a Memory Space requires either the `ENABLE_AGENTIC_MEMORY_API` or the `ENABLE_GENAI_EXPERIMENTATION` feature flag. Reading and writing persistent Memories in a Memory Space still requires `ENABLE_AGENTIC_MEMORY_API`.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -94,15 +102,15 @@ func (r *MemorySpaceResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	enabled, err := r.provider.service.IsFeatureFlagEnabled(ctx, "ENABLE_AGENTIC_MEMORY_API")
+	enabled, err := isAnyFeatureFlagEnabled(ctx, r.provider.service, memorySpaceFeatureFlags)
 	if err != nil {
-		resp.Diagnostics.AddError("Error checking feature flag", err.Error())
+		resp.Diagnostics.AddError("Error checking feature flags", err.Error())
 		return
 	}
 	if !enabled {
 		resp.Diagnostics.AddError(
 			"Feature not enabled",
-			"The ENABLE_AGENTIC_MEMORY_API feature flag is not enabled. Please enable it in your DataRobot account settings to use Memory Spaces.",
+			"Neither the ENABLE_AGENTIC_MEMORY_API nor the ENABLE_GENAI_EXPERIMENTATION feature flag is enabled. Please enable one of them in your DataRobot account settings to use Memory Spaces.",
 		)
 		return
 	}
@@ -198,15 +206,14 @@ func (r *MemorySpaceResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	desc := data.Description.ValueString()
-	llmModelName := data.LLMModelName.ValueString()
-	llmBaseURL := data.LLMBaseURL.ValueString()
-	customInstructions := data.CustomInstructions.ValueString()
+	// An attribute the config no longer sets must be sent as null to clear it. An
+	// empty string would clear the text fields by coincidence, but llm_base_url is
+	// parsed as a URL and rejects "" with 422.
 	apiReq := &client.MemorySpaceRequest{
-		Description:        &desc,
-		LLMModelName:       &llmModelName,
-		LLMBaseURL:         &llmBaseURL,
-		CustomInstructions: &customInstructions,
+		Description:        StringValuePointerOptional(data.Description),
+		LLMModelName:       StringValuePointerOptional(data.LLMModelName),
+		LLMBaseURL:         StringValuePointerOptional(data.LLMBaseURL),
+		CustomInstructions: StringValuePointerOptional(data.CustomInstructions),
 	}
 
 	traceAPICall("UpdateMemorySpace")

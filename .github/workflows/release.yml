@@ -17,10 +17,31 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
+      # The release body is the tagged version's CHANGELOG.md section. Runs before
+      # GoReleaser so a missing entry fails the release instead of publishing an
+      # empty one. Files go to RUNNER_TEMP, not the workspace: an untracked file
+      # would trip GoReleaser's dirty-git-tree check.
+      - name: Build release notes from CHANGELOG
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if ! bash scripts/changelog-section.sh "$TAG" CHANGELOG.md > "$RUNNER_TEMP/changelog-section.md"; then
+            echo "::error::No CHANGELOG.md entry for $TAG. Add a '## [${TAG#v}] - YYYY-MM-DD' section on main, then move the tag."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/changelog-section.md" "$RUNNER_TEMP/release-notes.md"
+          prev="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)"
+          if [ -n "$prev" ]; then
+            printf '\n**Full Changelog**: %s/%s/compare/%s...%s\n' \
+              "$GITHUB_SERVER_URL" "$REPO" "$prev" "$TAG" >> "$RUNNER_TEMP/release-notes.md"
+          fi
+          echo "Release notes for $TAG:"
+          cat "$RUNNER_TEMP/release-notes.md"
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: 'go.mod'
@@ -32,10 +53,12 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: latest
-          args: release --clean
+          # --release-notes uses the file verbatim as the GitHub release body
+          # (changelog generation stays disabled in .goreleaser.yml).
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           # GitHub sets the GITHUB_TOKEN secret automatically.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -47,20 +70,43 @@ jobs:
             TAG: ${{ github.ref_name }}
             REPO: ${{ github.repository }}
         run: |
-          payload=$(jq -n --arg tag "$TAG" --arg repo "$REPO" --arg url "https://github.com/$REPO/releases/tag/$TAG" '{
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "Missing SLACK_WEBHOOK_URL."
+            exit 0
+          fi
+          # Markdown changelog -> Slack mrkdwn: '### Added' becomes bold, '-' bullets
+          # become '•'. Backticks already render as code in mrkdwn.
+          # A section block's text is capped at 3000 chars, so drop whole lines once
+          # the budget is spent. Truncating on a line boundary (rather than by byte
+          # count) also keeps multi-byte characters like '•' intact.
+          notes="$(sed -e 's/^### \(.*\)$/*\1*/' -e 's/^[-*] /• /' "$RUNNER_TEMP/changelog-section.md" \
+            | awk -v limit=2800 '
+                { total += length($0) + 1 }
+                total > limit { print "_…truncated — full notes on GitHub_"; exit }
+                { print }
+              ')"
+          payload=$(jq -n --arg tag "$TAG" --arg repo "$REPO" --arg notes "$notes" --arg url "https://github.com/$REPO/releases/tag/$TAG" '{
             text: "*New release*: \($repo) \($tag)",
-            blocks: [
+            blocks: ([
               {
           "type":"section",
           "text":{"type":"mrkdwn","text":"*:rocket: New DataRobot Terraform Provider released: * <\($url)|\($tag)>"}
-              },
+              }
+            ]
+            + (if ($notes | test("\\S")) then [
+              {
+          "type":"section",
+          "text":{"type":"mrkdwn","text":$notes}
+              }
+            ] else [] end)
+            + [
               {
           "type":"context",
           "elements":[
             {"type":"mrkdwn","text":"Tag: `\($tag)` • Repository: `\($repo)`"}
           ]
               }
-            ]
+            ])
           }')
           curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
   notify-failure:
