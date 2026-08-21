@@ -13,6 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -135,7 +137,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "The artifact type: `service` or `nim`. Defaults to `service`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`. Defaults to `service`.",
+				Validators:          ArtifactTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -177,6 +180,15 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"wait_for_build": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 				},
@@ -607,7 +619,18 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 			return true
 		}
 	}
-	return false
+	return a2aEnabledNeedsNewVersion(plan.Spec.A2AEnabled, state.Spec.A2AEnabled)
+}
+
+// a2aEnabledNeedsNewVersion reports a real on/off change. Config null and false
+// are the same wire value, so treating them as different would mint a new
+// locked-artifact version (and roll the workload) for no API change.
+func a2aEnabledNeedsNewVersion(plan, state types.Bool) bool {
+	return a2aEnabledOn(plan) != a2aEnabledOn(state)
+}
+
+func a2aEnabledOn(v types.Bool) bool {
+	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
 }
 
 func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef bool) bool {
@@ -901,6 +924,7 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 
 	validateArtifactSource(resp, data)
+	validateArtifactA2AEnabled(resp, data)
 
 	if data.Spec == nil {
 		return
@@ -925,6 +949,34 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
 		}
 	}
+}
+
+func validateArtifactA2AEnabled(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Spec == nil {
+		return
+	}
+	if data.Spec.A2AEnabled.IsNull() || data.Spec.A2AEnabled.IsUnknown() {
+		return
+	}
+	// Root variables are unknown during Terraform's validate walk. Do not treat
+	// type = var.artifact_type as service or plan fails even when the value is agent.
+	if data.Type.IsUnknown() {
+		return
+	}
+
+	artifactType := string(client.ArtifactTypeService)
+	if !data.Type.IsNull() {
+		artifactType = data.Type.ValueString()
+	}
+	if artifactType == string(client.ArtifactTypeAgent) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("spec").AtName("a2a_enabled"),
+		"Unsupported a2a_enabled",
+		"`a2a_enabled` is only valid on agent artifacts.",
+	)
 }
 
 func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
@@ -1154,7 +1206,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
 		Status:      status,
-		Spec:        artifactSpecToClient(*data.Spec),
+		Spec:        artifactSpecToClient(*data.Spec, client.ArtifactType(data.Type.ValueString())),
 	}
 	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
 		repoID := data.ArtifactRepositoryID.ValueString()
@@ -1166,7 +1218,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *client.PatchArtifactRequest {
 	name := plan.Name.ValueString()
 	description := plan.Description.ValueString()
-	spec := artifactSpecToClient(*plan.Spec)
+	spec := artifactSpecToClient(*plan.Spec, client.ArtifactType(plan.Type.ValueString()))
 
 	req := &client.PatchArtifactRequest{
 		Name:        &name,
@@ -1184,14 +1236,21 @@ func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *cl
 	return req
 }
 
-func artifactSpecToClient(spec ArtifactSpecModel) client.ArtifactSpec {
+func artifactSpecToClient(spec ArtifactSpecModel, artifactType client.ArtifactType) client.ArtifactSpec {
 	groups := make([]client.ArtifactContainerGroup, len(spec.ContainerGroups))
 	for i, g := range spec.ContainerGroups {
 		groups[i] = artifactContainerGroupToClient(g)
 	}
-	return client.ArtifactSpec{
+	out := client.ArtifactSpec{
 		ContainerGroups: groups,
 	}
+	// Agents always send a2aEnabled so a draft PATCH can turn it off. omitempty
+	// would drop a nil pointer and leave the stored API value unchanged.
+	if artifactType == client.ArtifactTypeAgent && !spec.A2AEnabled.IsUnknown() {
+		enabled := !spec.A2AEnabled.IsNull() && spec.A2AEnabled.ValueBool()
+		out.A2AEnabled = &enabled
+	}
+	return out
 }
 
 func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.ArtifactContainerGroup {
@@ -1396,7 +1455,25 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
-	return ArtifactSpecModel{ContainerGroups: groups}
+	return ArtifactSpecModel{
+		ContainerGroups: groups,
+		A2AEnabled:      loadA2AEnabledFromAPI(spec.A2AEnabled, prior),
+	}
+}
+
+func loadA2AEnabledFromAPI(apiValue *bool, prior *ArtifactSpecModel) types.Bool {
+	if prior != nil && !prior.A2AEnabled.IsNull() && !prior.A2AEnabled.IsUnknown() {
+		if apiValue != nil {
+			return types.BoolValue(*apiValue)
+		}
+		return prior.A2AEnabled
+	}
+	// Config omitted the flag. Keep null when the API is off so apply can
+	// round-trip; surface true so a UI-enabled A2A value shows as drift.
+	if apiValue != nil && *apiValue {
+		return types.BoolValue(true)
+	}
+	return types.BoolNull()
 }
 
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {

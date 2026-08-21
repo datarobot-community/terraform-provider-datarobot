@@ -108,3 +108,33 @@ func TestArtifactEnvironmentVariableSerialization(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadArtifactSpecIntoDataSourceModelA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	enabled := true
+	disabled := false
+
+	got := loadArtifactSpecIntoDataSourceModel(client.ArtifactSpec{
+		ContainerGroups: []client.ArtifactContainerGroup{},
+		A2AEnabled:      &enabled,
+	})
+	if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
+		t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
+	}
+
+	got = loadArtifactSpecIntoDataSourceModel(client.ArtifactSpec{
+		ContainerGroups: []client.ArtifactContainerGroup{},
+		A2AEnabled:      &disabled,
+	})
+	if got.A2AEnabled.IsNull() || got.A2AEnabled.ValueBool() {
+		t.Fatalf("A2AEnabled = %v, want false", got.A2AEnabled)
+	}
+
+	got = loadArtifactSpecIntoDataSourceModel(client.ArtifactSpec{
+		ContainerGroups: []client.ArtifactContainerGroup{},
+	})
+	if !got.A2AEnabled.IsNull() {
+		t.Fatalf("omitted A2AEnabled = %v, want null", got.A2AEnabled)
+	}
+}

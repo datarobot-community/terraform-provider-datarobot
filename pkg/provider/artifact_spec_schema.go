@@ -431,6 +431,11 @@ func artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes m
 		Required:            true,
 		MarkdownDescription: "The artifact specification containing container group definitions.",
 		Attributes: map[string]schema.Attribute{
+			"a2a_enabled": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "Turns on agent-to-agent (A2A) card management and the A2A surface for this agent. " +
+					"Valid only when `type` is `agent`. Defaults to off in the Workload API.",
+			},
 			"container_groups": schema.ListNestedAttribute{
 				Required:            true,
 				MarkdownDescription: "List of container groups.",
@@ -466,7 +471,7 @@ func artifactDataSourceComputedAttributes(probeAttributes map[string]datasources
 		},
 		"type": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "The artifact type: `service` or `nim`.",
+			MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`.",
 		},
 		"status": datasourceschema.StringAttribute{
 			Computed:            true,
@@ -549,6 +554,10 @@ func artifactDataSourceSpecAttribute(probeAttributes map[string]datasourceschema
 		Computed:            true,
 		MarkdownDescription: "The artifact specification containing container group definitions.",
 		Attributes: map[string]datasourceschema.Attribute{
+			"a2a_enabled": datasourceschema.BoolAttribute{
+				Computed:            true,
+				MarkdownDescription: "Whether A2A card management and the A2A surface are enabled. Set on `agent` artifacts; omitted otherwise.",
+			},
 			"container_groups": datasourceschema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "List of container groups.",

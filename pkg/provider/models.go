@@ -1009,14 +1009,16 @@ type ArtifactResourceModel struct {
 	Spec                 *ArtifactSpecModel   `tfsdk:"spec"`
 }
 
-// ArtifactSourceModel describes the local source tree uploaded to Files API.
+// ArtifactSourceModel describes a local source tree uploaded to Files API.
 type ArtifactSourceModel struct {
-	Dir     types.String `tfsdk:"dir"`
-	DirHash types.String `tfsdk:"dir_hash"`
+	Dir          types.String `tfsdk:"dir"`
+	DirHash      types.String `tfsdk:"dir_hash"`
+	WaitForBuild types.Bool   `tfsdk:"wait_for_build"`
 }
 
 type ArtifactSpecModel struct {
 	ContainerGroups []ArtifactContainerGroupModel `tfsdk:"container_groups"`
+	A2AEnabled      types.Bool                    `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupModel struct {
@@ -1117,6 +1119,7 @@ type ArtifactSpecDataSourceModel struct {
 	ContainerGroups []ArtifactContainerGroupDSModel `tfsdk:"container_groups"`
 	Storage         *ArtifactNimStorageModel        `tfsdk:"storage"`
 	TemplateID      types.String                    `tfsdk:"template_id"`
+	A2AEnabled      types.Bool                      `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupDSModel struct {
@@ -1190,6 +1193,7 @@ type WorkloadResourceModel struct {
 	Name        types.String         `tfsdk:"name"`
 	Description types.String         `tfsdk:"description"`
 	Importance  types.String         `tfsdk:"importance"`
+	Type        types.String         `tfsdk:"type"`
 	ArtifactID  types.String         `tfsdk:"artifact_id"`
 	Endpoint    types.String         `tfsdk:"endpoint"`
 	Status      types.String         `tfsdk:"status"`
