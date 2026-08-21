@@ -124,3 +124,60 @@ func TestLoad_NotInitialized(t *testing.T) {
 	_, err = LoadManifest(dir)
 	assert.ErrorIs(t, err, ErrNotInitialized)
 }
+
+func TestInitialize_NullsForEmptyOptionals(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	raw, err := os.ReadFile(configPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.Nil(t, parsed["catalogId"])
+	assert.Nil(t, parsed["lastSyncedVersionId"])
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.CatalogID)
+	assert.Nil(t, cfg.LastSyncedVersionID)
+}
+
+func TestLoad_CorruptedJSON(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+	require.NoError(t, os.WriteFile(configPath(dir), []byte("not json"), 0o600))
+	require.NoError(t, os.WriteFile(manifestPath(dir), []byte("not json"), 0o600))
+
+	_, err := LoadConfig(dir)
+	var cfgErr *CorruptedError
+	require.ErrorAs(t, err, &cfgErr)
+	assert.Equal(t, configPath(dir), cfgErr.Path)
+
+	_, err = LoadManifest(dir)
+	var manErr *CorruptedError
+	require.ErrorAs(t, err, &manErr)
+	assert.Equal(t, manifestPath(dir), manErr.Path)
+}
+
+func TestSave_NotInitialized(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	err := SaveConfig(dir, Config{ArtifactID: "art-1"})
+	assert.ErrorIs(t, err, ErrNotInitialized)
+	err = SaveManifest(dir, Manifest{Version: ManifestVersion})
+	assert.ErrorIs(t, err, ErrNotInitialized)
+}
+
+func TestInitialize_EmptyArtifactID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	err := Initialize(dir, InitOptions{})
+	require.Error(t, err)
+	assert.False(t, Exists(dir))
+}
