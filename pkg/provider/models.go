@@ -1018,6 +1018,7 @@ type ArtifactSourceModel struct {
 
 type ArtifactSpecModel struct {
 	ContainerGroups []ArtifactContainerGroupModel `tfsdk:"container_groups"`
+	A2AEnabled      types.Bool                    `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupModel struct {
@@ -1073,6 +1074,7 @@ type ArtifactProbeConfigModel struct {
 	PeriodSeconds       types.Int64  `tfsdk:"period_seconds"`
 	TimeoutSeconds      types.Int64  `tfsdk:"timeout_seconds"`
 	FailureThreshold    types.Int64  `tfsdk:"failure_threshold"`
+	SuccessThreshold    types.Int64  `tfsdk:"success_threshold"`
 }
 
 // ArtifactDataSourceModel describes the read-only artifact data source.
@@ -1117,6 +1119,7 @@ type ArtifactSpecDataSourceModel struct {
 	ContainerGroups []ArtifactContainerGroupDSModel `tfsdk:"container_groups"`
 	Storage         *ArtifactNimStorageModel        `tfsdk:"storage"`
 	TemplateID      types.String                    `tfsdk:"template_id"`
+	A2AEnabled      types.Bool                      `tfsdk:"a2a_enabled"`
 }
 
 type ArtifactContainerGroupDSModel struct {
@@ -1190,6 +1193,7 @@ type WorkloadResourceModel struct {
 	Name        types.String         `tfsdk:"name"`
 	Description types.String         `tfsdk:"description"`
 	Importance  types.String         `tfsdk:"importance"`
+	Type        types.String         `tfsdk:"type"`
 	ArtifactID  types.String         `tfsdk:"artifact_id"`
 	Endpoint    types.String         `tfsdk:"endpoint"`
 	Status      types.String         `tfsdk:"status"`
@@ -1197,7 +1201,13 @@ type WorkloadResourceModel struct {
 }
 
 type WorkloadRuntimeModel struct {
-	ContainerGroups []WorkloadGroupRuntimeModel `tfsdk:"container_groups"`
+	ContainerGroups   []WorkloadGroupRuntimeModel     `tfsdk:"container_groups"`
+	ReplacementPolicy *WorkloadReplacementPolicyModel `tfsdk:"replacement_policy"`
+}
+
+type WorkloadReplacementPolicyModel struct {
+	WarmupMinutes         types.Int64 `tfsdk:"warmup_minutes"`
+	KeepOldVersionMinutes types.Int64 `tfsdk:"keep_old_version_minutes"`
 }
 
 type WorkloadGroupRuntimeModel struct {
@@ -1222,16 +1232,15 @@ type WorkloadResourceAllocationModel struct {
 }
 
 type WorkloadAutoscalingModel struct {
-	Enabled  types.Bool                       `tfsdk:"enabled"`
-	Policies []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
+	Enabled         types.Bool                       `tfsdk:"enabled"`
+	MinReplicaCount types.Int64                      `tfsdk:"min_replica_count"`
+	MaxReplicaCount types.Int64                      `tfsdk:"max_replica_count"`
+	Policies        []WorkloadAutoscalingPolicyModel `tfsdk:"policies"`
 }
 
 type WorkloadAutoscalingPolicyModel struct {
 	ScalingMetric types.String  `tfsdk:"scaling_metric"`
 	Target        types.Float64 `tfsdk:"target"`
-	MinCount      types.Int64   `tfsdk:"min_count"`
-	MaxCount      types.Int64   `tfsdk:"max_count"`
-	Priority      types.Int64   `tfsdk:"priority"`
 }
 
 // QuotaResourceModel describes the datarobot_quota resource. default_rules is a set

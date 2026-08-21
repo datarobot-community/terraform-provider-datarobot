@@ -321,8 +321,9 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			t.Fatal("expected computed dir_hash")
 		}
 
+		first := data.Source.DirHash
 		refreshArtifactSourceDirHash(data)
-		if !data.Source.DirHash.Equal(data.Source.DirHash) {
+		if !data.Source.DirHash.Equal(first) {
 			t.Fatal("expected stable hash on unchanged tree")
 		}
 	})
@@ -355,6 +356,51 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		if IsKnown(data.Source.DirHash) {
 			t.Fatal("expected dir_hash to remain unset when directory is missing")
 		}
+	})
+}
+
+func TestRollbackArtifactCreate(t *testing.T) {
+	t.Parallel()
+
+	repoID := "repo-123"
+
+	t.Run("nil artifact is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), nil, true)
+	})
+
+	t.Run("missing repository id is a no-op", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
+	})
+
+	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, false)
+	})
+
+	t.Run("deletes provisioned artifact repository", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
+			ID:                   "artifact-1",
+			ArtifactRepositoryID: &repoID,
+		}, true)
 	})
 }
 
@@ -454,7 +500,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Spec: artifactSpecWithCodeRef(catalogID, versionID),
 		}
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
+		if _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if filesAPI.catalogID != catalogID {
@@ -489,7 +535,7 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := artifactWithCodeRef(artifactID, catalogID, versionID)
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
+		if _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 	})
@@ -517,7 +563,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
 		if err == nil {
 			t.Fatal("expected upload error")
 		}
@@ -548,7 +594,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
 		if err == nil {
 			t.Fatal("expected patch error")
 		}
@@ -993,6 +1039,7 @@ func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactConta
 		Primary: primary,
 		Port:    types.Int64Value(8080),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			CodeRef:    artifactCodeRefNull(),
 			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
 		},
 	}
@@ -1026,6 +1073,32 @@ func testDraftSourceSpec(containers ...ArtifactContainerModel) *ArtifactSpecMode
 			Containers: containers,
 		}},
 	}
+}
+
+func TestPrimaryCodeRefFromState(t *testing.T) {
+	t.Parallel()
+
+	stateCodeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+	}
+	dir := t.TempDir()
+
+	t.Run("finds primary container regardless of position", func(t *testing.T) {
+		state := testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithCodeRef(stateCodeRef)), func(m *ArtifactResourceModel) {
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+		got := primaryCodeRefFromState(state)
+		if got == nil || got.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+			t.Fatalf("primaryCodeRefFromState() = %#v, want primary code_ref", got)
+		}
+	})
+
+	t.Run("nil state returns nil", func(t *testing.T) {
+		if got := primaryCodeRefFromState(nil); got != nil {
+			t.Fatalf("primaryCodeRefFromState(nil) = %#v, want nil", got)
+		}
+	})
 }
 
 func TestCodeRefManuallySet(t *testing.T) {
@@ -1308,6 +1381,28 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				}
 			},
 		},
+
+		{
+			name: "update with reordered containers copies primary code_ref from state",
+			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			state: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
+				m.ArtifactID = types.StringValue("artifact-1")
+				m.Source.DirHash = dirHashA
+			}),
+			check: func(t *testing.T, plan *ArtifactResourceModel) {
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
+				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
+					t.Fatalf("expected primary code_ref copied from state after reorder, got %#v", primaryCodeRef)
+				}
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
+				if sidecarCodeRef != nil {
+					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
+				}
+			},
+		},
 		{
 			name: "update with changed dir_hash clears code_ref on primary only",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
@@ -1412,6 +1507,42 @@ func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
 			plan:  modelWithSource("locked", hashA),
 			state: modelWithSource("locked", hashA),
 			want:  false,
+		},
+		{
+			name: "locked unchanged source ignores managed code_ref null in plan",
+			plan: modelWithSource("locked", hashA),
+			state: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.ImageBuildConfig = imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+					CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+				})
+				container.ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{Source: types.StringValue("provided")}
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			want: false,
+		},
+		{
+			name: "locked spec change with source needs clone",
+			plan: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.Port = types.Int64Value(9090)
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			state: modelWithSource("locked", hashA),
+			want:  true,
 		},
 		{
 			name:  "draft source change does not use locked clone",
