@@ -13,6 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -178,6 +180,15 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"wait_for_build": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 				},

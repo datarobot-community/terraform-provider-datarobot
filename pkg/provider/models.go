@@ -1009,10 +1009,11 @@ type ArtifactResourceModel struct {
 	Spec                 *ArtifactSpecModel   `tfsdk:"spec"`
 }
 
-// ArtifactSourceModel describes the local source tree uploaded to Files API.
+// ArtifactSourceModel describes a local source tree uploaded to Files API.
 type ArtifactSourceModel struct {
-	Dir     types.String `tfsdk:"dir"`
-	DirHash types.String `tfsdk:"dir_hash"`
+	Dir          types.String `tfsdk:"dir"`
+	DirHash      types.String `tfsdk:"dir_hash"`
+	WaitForBuild types.Bool   `tfsdk:"wait_for_build"`
 }
 
 type ArtifactSpecModel struct {
