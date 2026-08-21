@@ -118,7 +118,34 @@ func (r *ArtifactResource) syncArtifactSource(
 		pushResult.CatalogVersionID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("patch artifact code reference: %w", err)
+		return nil, true, fmt.Errorf("patch artifact code reference: %w", err)
+	}
+
+	return artifact, true, nil
+}
+
+// syncArtifactSourceAndBuild uploads source when needed, then triggers an image build
+// when upload produced new code on a draft artifact with image_build_config.
+func (r *ArtifactResource) syncArtifactSourceAndBuild(
+	ctx context.Context,
+	plan *ArtifactResourceModel,
+	state *ArtifactResourceModel,
+	artifact *client.Artifact,
+	priorArtifactID string,
+) (*client.Artifact, error) {
+	artifact, uploaded, err := r.syncArtifactSource(ctx, plan, state, artifact, priorArtifactID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !artifactBuildNeededAfterUpload(plan, artifact, uploaded) {
+		return artifact, nil
+	}
+
+	waitForBuild := artifactSourceWaitForBuild(plan)
+	artifact, _, err = r.syncArtifactBuild(ctx, artifact.ID, waitForBuild, nil)
+	if err != nil {
+		return artifact, &artifactBuildSyncError{cause: err}
 	}
 
 	return artifact, nil

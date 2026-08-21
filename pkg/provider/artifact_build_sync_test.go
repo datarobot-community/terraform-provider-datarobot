@@ -332,6 +332,275 @@ func TestSyncArtifactBuild(t *testing.T) {
 	})
 }
 
+func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	spec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+	dirHash, err := computeFolderHash(types.StringValue(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	draftPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Source.DirHash = dirHash
+	})
+	lockedPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Status = types.StringValue("locked")
+		m.Source.DirHash = dirHash
+	})
+
+	draftState := func(hash types.String) *ArtifactResourceModel {
+		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+		return state
+	}
+
+	tests := []struct {
+		name     string
+		plan     *ArtifactResourceModel
+		state    *ArtifactResourceModel
+		isCreate bool
+		want     bool
+	}{
+		{
+			name:     "create with source and build config",
+			plan:     draftPlan,
+			isCreate: true,
+			want:     true,
+		},
+		{
+			name:     "locked create with source",
+			plan:     lockedPlan,
+			isCreate: true,
+			want:     true,
+		},
+		{
+			name:     "no source",
+			plan:     &ArtifactResourceModel{Spec: spec},
+			isCreate: true,
+			want:     false,
+		},
+		{
+			name:  "draft update source unchanged",
+			plan:  draftPlan,
+			state: draftState(dirHash),
+			want:  false,
+		},
+		{
+			name: "draft update source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: draftState(dirHash),
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := artifactModifyPlanNeedsUnknownImageURI(tt.plan, tt.state, tt.isCreate); got != tt.want {
+				t.Fatalf("artifactModifyPlanNeedsUnknownImageURI() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplySourceManagedImageURIToPlan(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	spec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+	dirHash, err := computeFolderHash(types.StringValue(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setKnownImageURIs := func(plan *ArtifactResourceModel) {
+		for gi := range plan.Spec.ContainerGroups {
+			for ci := range plan.Spec.ContainerGroups[gi].Containers {
+				plan.Spec.ContainerGroups[gi].Containers[ci].ImageURI = types.StringValue("nginx:latest")
+			}
+		}
+	}
+
+	draftPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Source.DirHash = dirHash
+	})
+	lockedPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		m.Status = types.StringValue("locked")
+		m.Source.DirHash = dirHash
+	})
+
+	draftState := func(hash types.String) *ArtifactResourceModel {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+	}
+	lockedState := func(hash types.String) *ArtifactResourceModel {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Status = types.StringValue("locked")
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
+	}
+
+	tests := []struct {
+		name               string
+		plan               *ArtifactResourceModel
+		state              *ArtifactResourceModel
+		isCreate           bool
+		wantPrimaryUnknown bool
+	}{
+		{
+			name:               "create with source and build config",
+			plan:               draftPlan,
+			isCreate:           true,
+			wantPrimaryUnknown: true,
+		},
+		{
+			name:               "locked create with source",
+			plan:               lockedPlan,
+			isCreate:           true,
+			wantPrimaryUnknown: true,
+		},
+		{
+			name: "draft update source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state:              draftState(dirHash),
+			wantPrimaryUnknown: true,
+		},
+		{
+			name: "locked to locked source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state:              lockedState(dirHash),
+			wantPrimaryUnknown: true,
+		},
+		{
+			name: "draft to locked source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state:              draftState(dirHash),
+			wantPrimaryUnknown: true,
+		},
+		{
+			name:               "no source",
+			plan:               &ArtifactResourceModel{Spec: spec},
+			isCreate:           true,
+			wantPrimaryUnknown: false,
+		},
+		{
+			name:               "draft update source unchanged",
+			plan:               draftPlan,
+			state:              draftState(dirHash),
+			wantPrimaryUnknown: false,
+		},
+		{
+			name:               "locked to locked source unchanged",
+			plan:               lockedPlan,
+			state:              lockedState(dirHash),
+			wantPrimaryUnknown: false,
+		},
+		{
+			name: "draft to locked source unchanged",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = dirHash
+			}),
+			state:              draftState(dirHash),
+			wantPrimaryUnknown: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := cloneArtifactResourceModel(tt.plan)
+			setKnownImageURIs(plan)
+
+			applySourceManagedImageURIToPlan(plan, tt.state, tt.isCreate)
+
+			got := primaryPlanImageURI(plan)
+			if tt.wantPrimaryUnknown {
+				if !got.IsUnknown() {
+					t.Fatalf("primary image_uri = %v, want unknown", got)
+				}
+				return
+			}
+			if got.IsUnknown() {
+				t.Fatalf("primary image_uri = unknown, want unchanged known value")
+			}
+			if got.ValueString() != "nginx:latest" {
+				t.Fatalf("primary image_uri = %q, want nginx:latest", got.ValueString())
+			}
+		})
+	}
+
+	t.Run("non-primary container image_uri unchanged", func(t *testing.T) {
+		multiSpec := testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())
+		plan := testSourcePlanModel(t, dir, multiSpec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = dirHash
+		})
+		setKnownImageURIs(plan)
+
+		applySourceManagedImageURIToPlan(plan, nil, true)
+
+		primary := primaryPlanImageURI(plan)
+		if !primary.IsUnknown() {
+			t.Fatalf("primary image_uri = %v, want unknown", primary)
+		}
+
+		sidecar := plan.Spec.ContainerGroups[0].Containers[1].ImageURI
+		if sidecar.IsUnknown() || sidecar.ValueString() != "nginx:latest" {
+			t.Fatalf("sidecar image_uri = %v, want nginx:latest", sidecar)
+		}
+	})
+}
+
+func cloneArtifactResourceModel(src *ArtifactResourceModel) *ArtifactResourceModel {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if src.Source != nil {
+		source := *src.Source
+		dst.Source = &source
+	}
+	if src.Spec != nil {
+		spec := *src.Spec
+		spec.ContainerGroups = make([]ArtifactContainerGroupModel, len(src.Spec.ContainerGroups))
+		for gi, group := range src.Spec.ContainerGroups {
+			spec.ContainerGroups[gi] = group
+			spec.ContainerGroups[gi].Containers = make([]ArtifactContainerModel, len(group.Containers))
+			copy(spec.ContainerGroups[gi].Containers, group.Containers)
+		}
+		dst.Spec = &spec
+	}
+	return &dst
+}
+
+func primaryPlanImageURI(plan *ArtifactResourceModel) types.String {
+	if plan == nil || plan.Spec == nil {
+		return types.StringNull()
+	}
+	for _, group := range plan.Spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if artifactContainerIsPrimary(container, group) {
+				return container.ImageURI
+			}
+		}
+	}
+	return types.StringNull()
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }

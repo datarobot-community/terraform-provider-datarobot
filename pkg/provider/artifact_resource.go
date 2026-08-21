@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -169,7 +170,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"source": schema.SingleNestedAttribute{
 				Optional: true,
 				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
-					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version.",
+					"When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
+					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -232,16 +234,21 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
 		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
-		if syncErr != nil {
-			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
-			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+    if syncErr != nil {
+			r.rollbackArtifactCreate(ctx, syncedArtifact)
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
+			}
+			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
 		}
-		artifact = syncedArtifact
 	}
 
 	if targetLocked && artifactSourceConfigured(&data) {
@@ -347,14 +354,17 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+
 	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
 		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
 		if syncErr != nil {
-			if createdNewVersion {
-				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(err, &buildErr) {
+				summary = "Error building artifact image"
 			}
-			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			resp.Diagnostics.AddError(summary, err.Error())
 			return
 		}
 		artifact = syncedArtifact
@@ -428,6 +438,17 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	isCreate := req.State.Raw.IsNull()
+	var state *ArtifactResourceModel
+	if !isCreate {
+		var stateVal ArtifactResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &stateVal)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state = &stateVal
 	}
 
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
@@ -906,7 +927,7 @@ func validateArtifactContainer(
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` until the image build finishes.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). With `source`, the provider uploads code and sets `code_ref`, but lock still fails until workload-api has populated `image_uri` from a completed build. Use `status = \"draft\"` until the image build finishes.",
 			)
 		}
 	}
@@ -977,6 +998,128 @@ func validateArtifactA2AEnabled(resp *resource.ValidateConfigResponse, data Arti
 		"Unsupported a2a_enabled",
 		"`a2a_enabled` is only valid on agent artifacts.",
 	)
+}
+
+func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Source == nil {
+		return
+	}
+
+	sourcePath := path.Root("source")
+
+	if !IsKnown(data.Source.Dir) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Missing source directory",
+			"`source.dir` is required when the `source` block is set.",
+		)
+		return
+	}
+
+	dir := data.Source.Dir.ValueString()
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory path",
+			fmt.Sprintf("Could not resolve %q to an absolute path: %s", dir, err),
+		)
+		return
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not found",
+				fmt.Sprintf("Directory %q does not exist.", absDir),
+			)
+		} else {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not accessible",
+				fmt.Sprintf("Could not access %q: %s", absDir, err),
+			)
+		}
+		return
+	}
+	if !info.IsDir() {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory",
+			fmt.Sprintf("%q is not a directory.", absDir),
+		)
+		return
+	}
+
+	artifactType := string(client.ArtifactTypeService)
+	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+		artifactType = data.Type.ValueString()
+	}
+	if artifactType == string(client.ArtifactTypeNim) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Unsupported source on NIM artifacts",
+			"NIM artifacts cannot use `source`; upload code through the NIM workflow instead.",
+		)
+	}
+
+	if data.Spec == nil {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Missing image build target",
+			"`source` requires a primary container with `image_build_config` in `spec`.",
+		)
+		return
+	}
+
+	if !artifactHasPrimaryImageBuildConfig(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Missing image build target",
+			"`source` requires a primary container with `image_build_config` in `spec`.",
+		)
+	}
+
+	if artifactHasManualCodeRef(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath,
+			"Conflicting code_ref",
+			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
+		)
+	}
+}
+
+func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+			if !isPrimary && len(group.Containers) == 1 &&
+				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+				isPrimary = true
+			}
+			if isPrimary && container.ImageBuildConfig != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func artifactHasManualCodeRef(spec *ArtifactSpecModel) bool {
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
+			if ref == nil {
+				continue
+			}
+			if IsKnown(ref.CatalogID) && IsKnown(ref.CatalogVersionID) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {

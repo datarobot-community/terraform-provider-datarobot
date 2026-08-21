@@ -183,7 +183,7 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.
+- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
