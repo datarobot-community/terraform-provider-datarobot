@@ -92,6 +92,7 @@ func loadArtifactSpecIntoDataSourceModel(spec client.ArtifactSpec) ArtifactSpecD
 	model := ArtifactSpecDataSourceModel{
 		ContainerGroups: groups,
 		TemplateID:      optionalStringValue(spec.TemplateID),
+		A2AEnabled:      optionalBoolValue(spec.A2AEnabled),
 	}
 	if spec.Storage != nil {
 		model.Storage = &ArtifactNimStorageModel{

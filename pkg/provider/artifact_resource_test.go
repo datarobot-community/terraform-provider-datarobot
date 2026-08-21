@@ -1871,6 +1871,15 @@ func TestValidateArtifactSource(t *testing.T) {
 			wantSummary: "Unsupported source on NIM artifacts",
 		},
 		{
+			name: "agent artifact with source",
+			data: ArtifactResourceModel{
+				Type:   types.StringValue("agent"),
+				Status: types.StringValue("draft"),
+				Source: &ArtifactSourceModel{Dir: types.StringValue(validDir)},
+				Spec:   specWithBuildConfig,
+			},
+		},
+		{
 			name: "missing spec",
 			data: ArtifactResourceModel{
 				Status: types.StringValue("draft"),
@@ -3640,6 +3649,76 @@ func TestArtifactNeedsNewVersion_dockerfileDefaults(t *testing.T) {
 	}
 }
 
+func TestArtifactNeedsNewVersion_a2aEnabled(t *testing.T) {
+	t.Parallel()
+
+	base := ArtifactResourceModel{
+		Name:                 types.StringValue("my-artifact"),
+		Description:          types.StringValue("desc"),
+		ArtifactRepositoryID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		Spec: &ArtifactSpecModel{
+			A2AEnabled: types.BoolValue(false),
+			ContainerGroups: []ArtifactContainerGroupModel{{
+				Containers: []ArtifactContainerModel{{
+					ImageURI: types.StringValue("nginx:latest"),
+					Primary:  types.BoolValue(true),
+				}},
+			}},
+		},
+	}
+
+	unchanged := base
+	if artifactNeedsNewVersion(unchanged, base) {
+		t.Fatal("expected matching a2a_enabled not to force a new version")
+	}
+
+	enabled := base
+	enabled.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(true),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if !artifactNeedsNewVersion(enabled, base) {
+		t.Fatal("expected a2a_enabled change to force a new version")
+	}
+
+	cleared := base
+	cleared.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if artifactNeedsNewVersion(cleared, base) {
+		t.Fatal("expected null and false a2a_enabled not to force a new version")
+	}
+
+	imported := base
+	imported.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	explicitFalse := base
+	explicitFalse.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(false),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if artifactNeedsNewVersion(explicitFalse, imported) {
+		t.Fatal("expected adding explicit a2a_enabled = false not to force a new version")
+	}
+
+	on := base
+	on.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolValue(true),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	off := base
+	off.Spec = &ArtifactSpecModel{
+		A2AEnabled:      types.BoolNull(),
+		ContainerGroups: base.Spec.ContainerGroups,
+	}
+	if !artifactNeedsNewVersion(off, on) {
+		t.Fatal("expected turning a2a_enabled off to force a new version")
+	}
+}
+
 func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 	base := ArtifactContainerModel{
 		ImageURI: types.StringValue("nginx:latest"),
@@ -3773,4 +3852,211 @@ func artifactFixtureWithStatusAndImage(id string, repoID *string, name string, s
 	artifact := artifactFixtureWithStatus(id, repoID, name, status)
 	artifact.Spec.ContainerGroups[0].Containers[0].ImageURI = imageURI
 	return artifact
+}
+
+func TestArtifactSpecToClientA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	spec := ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{},
+		A2AEnabled:      types.BoolValue(true),
+	}
+
+	got := artifactSpecToClient(spec, client.ArtifactTypeAgent)
+	if got.A2AEnabled == nil || !*got.A2AEnabled {
+		t.Fatalf("agent spec A2AEnabled = %v, want true", got.A2AEnabled)
+	}
+
+	got = artifactSpecToClient(spec, client.ArtifactTypeService)
+	if got.A2AEnabled != nil {
+		t.Fatalf("service spec A2AEnabled = %v, want nil", got.A2AEnabled)
+	}
+
+	omitted := ArtifactSpecModel{ContainerGroups: []ArtifactContainerGroupModel{}}
+	got = artifactSpecToClient(omitted, client.ArtifactTypeAgent)
+	if got.A2AEnabled == nil || *got.A2AEnabled {
+		t.Fatalf("omitted a2a_enabled A2AEnabled = %v, want false", got.A2AEnabled)
+	}
+
+	disabled := ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{},
+		A2AEnabled:      types.BoolValue(false),
+	}
+	got = artifactSpecToClient(disabled, client.ArtifactTypeAgent)
+	if got.A2AEnabled == nil || *got.A2AEnabled {
+		t.Fatalf("explicit false A2AEnabled = %v, want false", got.A2AEnabled)
+	}
+}
+
+func TestLoadArtifactSpecFromAPIA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	trueVal := true
+	falseVal := false
+	apiSpec := client.ArtifactSpec{ContainerGroups: []client.ArtifactContainerGroup{}}
+
+	t.Run("null prior and API false stay null", func(t *testing.T) {
+		apiSpec.A2AEnabled = &falseVal
+		got := loadArtifactSpecFromAPI(apiSpec, nil)
+		if !got.A2AEnabled.IsNull() {
+			t.Fatalf("A2AEnabled = %v, want null", got.A2AEnabled)
+		}
+	})
+
+	t.Run("null prior and API true surfaces true", func(t *testing.T) {
+		apiSpec.A2AEnabled = &trueVal
+		got := loadArtifactSpecFromAPI(apiSpec, nil)
+		if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
+			t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
+		}
+	})
+
+	t.Run("omitted config stays null after API false", func(t *testing.T) {
+		apiSpec.A2AEnabled = &falseVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolNull()}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if !got.A2AEnabled.IsNull() {
+			t.Fatalf("A2AEnabled = %v, want null", got.A2AEnabled)
+		}
+	})
+
+	t.Run("omitted config surfaces API true as drift", func(t *testing.T) {
+		apiSpec.A2AEnabled = &trueVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolNull()}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
+			t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
+		}
+	})
+
+	t.Run("prior false round-trips API false", func(t *testing.T) {
+		apiSpec.A2AEnabled = &falseVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolValue(false)}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if got.A2AEnabled.IsNull() || got.A2AEnabled.ValueBool() {
+			t.Fatalf("A2AEnabled = %v, want false", got.A2AEnabled)
+		}
+	})
+
+	t.Run("prior true round-trips API true", func(t *testing.T) {
+		apiSpec.A2AEnabled = &trueVal
+		prior := &ArtifactSpecModel{A2AEnabled: types.BoolValue(true)}
+		got := loadArtifactSpecFromAPI(apiSpec, prior)
+		if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
+			t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
+		}
+	})
+}
+
+func TestValidateArtifactA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	specEnabled := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{},
+		A2AEnabled:      types.BoolValue(true),
+	}
+
+	tests := []struct {
+		name        string
+		data        ArtifactResourceModel
+		wantSummary string
+	}{
+		{
+			name: "agent with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeAgent)),
+				Spec: specEnabled,
+			},
+		},
+		{
+			name: "service with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeService)),
+				Spec: specEnabled,
+			},
+			wantSummary: "Unsupported a2a_enabled",
+		},
+		{
+			name: "nim with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeNim)),
+				Spec: specEnabled,
+			},
+			wantSummary: "Unsupported a2a_enabled",
+		},
+		{
+			name: "service without a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeService)),
+				Spec: &ArtifactSpecModel{ContainerGroups: []ArtifactContainerGroupModel{}},
+			},
+		},
+		{
+			name: "unknown type with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringUnknown(),
+				Spec: specEnabled,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &tfresource.ValidateConfigResponse{}
+			validateArtifactA2AEnabled(resp, tt.data)
+
+			if tt.wantSummary == "" {
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("expected no errors, got: %v", resp.Diagnostics.Errors())
+				}
+				return
+			}
+
+			if !resp.Diagnostics.HasError() {
+				t.Fatalf("expected validation error %q", tt.wantSummary)
+			}
+			if !strings.Contains(resp.Diagnostics.Errors()[0].Summary(), tt.wantSummary) {
+				t.Fatalf("expected summary %q, got %q", tt.wantSummary, resp.Diagnostics.Errors()[0].Summary())
+			}
+		})
+	}
+}
+
+func TestArtifactA2AEnabledConfigValidation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "datarobot_artifact" "test" {
+  name = "service-a2a"
+  type = "service"
+  spec = {
+    a2a_enabled = true
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        primary   = true
+        port      = 8080
+      }]
+    }]
+  }
+}`,
+				ExpectError: regexp.MustCompile("Unsupported a2a_enabled"),
+			},
+		},
+	})
 }

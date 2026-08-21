@@ -428,3 +428,62 @@ func TestArtifactContainerOmitsEmptyImageURI(t *testing.T) {
 		t.Fatalf("imageUri = %v, want %q", payload["imageUri"], "nginx:latest")
 	}
 }
+
+func TestArtifactSpecOmitsUnsetA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	spec := ArtifactSpec{
+		ContainerGroups: []ArtifactContainerGroup{},
+	}
+
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal spec: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal spec: %v", err)
+	}
+	if _, ok := payload["a2aEnabled"]; ok {
+		t.Fatalf("expected a2aEnabled to be omitted, got payload: %s", string(raw))
+	}
+
+	enabled := true
+	spec.A2AEnabled = &enabled
+	raw, err = json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal spec with a2aEnabled: %v", err)
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal spec with a2aEnabled: %v", err)
+	}
+	if payload["a2aEnabled"] != true {
+		t.Fatalf("a2aEnabled = %v, want true", payload["a2aEnabled"])
+	}
+}
+
+func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"id":"w1","name":"agent-wl","type":"agent","status":"running","importance":"low","runtime":{}}`)
+	var workload Workload
+	if err := json.Unmarshal(raw, &workload); err != nil {
+		t.Fatalf("unmarshal workload: %v", err)
+	}
+	if workload.Type != ArtifactTypeAgent {
+		t.Fatalf("Type = %q, want %q", workload.Type, ArtifactTypeAgent)
+	}
+
+	encoded, err := json.Marshal(workload)
+	if err != nil {
+		t.Fatalf("marshal workload: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("unmarshal encoded workload: %v", err)
+	}
+	if payload["type"] != "agent" {
+		t.Fatalf("encoded type = %v, want %q", payload["type"], "agent")
+	}
+}
