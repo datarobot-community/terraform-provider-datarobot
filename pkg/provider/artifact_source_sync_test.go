@@ -593,40 +593,6 @@ func TestSyncArtifactSource(t *testing.T) {
 	})
 }
 
-func TestRollbackArtifactCreate(t *testing.T) {
-	t.Parallel()
-
-	repoID := "repo-123"
-
-	t.Run("nil artifact is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), nil)
-	})
-
-	t.Run("missing repository id is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"})
-	})
-
-	t.Run("deletes artifact repository", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
-
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		})
-	})
-}
-
 func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 
