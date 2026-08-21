@@ -279,6 +279,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	workload1 := workloadFixture(id1, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 	workload2 := workloadFixture(id1, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2.Type = client.ArtifactTypeAgent
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
@@ -308,6 +309,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID1),
+					resource.TestCheckResourceAttr(resourceName, "type", "service"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -316,6 +318,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+					resource.TestCheckResourceAttr(resourceName, "type", "agent"),
 					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
