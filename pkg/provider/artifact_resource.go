@@ -1446,11 +1446,8 @@ func loadA2AEnabledFromAPI(apiValue *bool, prior *ArtifactSpecModel) types.Bool 
 		}
 		return prior.A2AEnabled
 	}
-	if prior != nil && (prior.A2AEnabled.IsNull() || prior.A2AEnabled.IsUnknown()) {
-		// Config omitted the flag. After a PATCH that sent false, keep null so
-		// state matches the plan. Import (prior nil) still surfaces API true.
-		return types.BoolNull()
-	}
+	// Config omitted the flag. Keep null when the API is off so apply can
+	// round-trip; surface true so a UI-enabled A2A value shows as drift.
 	if apiValue != nil && *apiValue {
 		return types.BoolValue(true)
 	}

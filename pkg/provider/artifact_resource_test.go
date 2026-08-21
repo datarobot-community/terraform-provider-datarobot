@@ -3892,12 +3892,12 @@ func TestLoadArtifactSpecFromAPIA2AEnabled(t *testing.T) {
 		}
 	})
 
-	t.Run("omitted config stays null even if API still true", func(t *testing.T) {
+	t.Run("omitted config surfaces API true as drift", func(t *testing.T) {
 		apiSpec.A2AEnabled = &trueVal
 		prior := &ArtifactSpecModel{A2AEnabled: types.BoolNull()}
 		got := loadArtifactSpecFromAPI(apiSpec, prior)
-		if !got.A2AEnabled.IsNull() {
-			t.Fatalf("A2AEnabled = %v, want null", got.A2AEnabled)
+		if got.A2AEnabled.IsNull() || !got.A2AEnabled.ValueBool() {
+			t.Fatalf("A2AEnabled = %v, want true", got.A2AEnabled)
 		}
 	})
 
