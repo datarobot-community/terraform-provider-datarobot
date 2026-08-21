@@ -3963,6 +3963,13 @@ func TestValidateArtifactA2AEnabled(t *testing.T) {
 				Spec: &ArtifactSpecModel{ContainerGroups: []ArtifactContainerGroupModel{}},
 			},
 		},
+		{
+			name: "unknown type with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringUnknown(),
+				Spec: specEnabled,
+			},
+		},
 	}
 
 	for _, tt := range tests {

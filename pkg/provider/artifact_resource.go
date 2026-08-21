@@ -936,9 +936,14 @@ func validateArtifactA2AEnabled(resp *resource.ValidateConfigResponse, data Arti
 	if data.Spec.A2AEnabled.IsNull() || data.Spec.A2AEnabled.IsUnknown() {
 		return
 	}
+	// Root variables are unknown during Terraform's validate walk. Do not treat
+	// type = var.artifact_type as service or plan fails even when the value is agent.
+	if data.Type.IsUnknown() {
+		return
+	}
 
 	artifactType := string(client.ArtifactTypeService)
-	if !data.Type.IsNull() && !data.Type.IsUnknown() {
+	if !data.Type.IsNull() {
 		artifactType = data.Type.ValueString()
 	}
 	if artifactType == string(client.ArtifactTypeAgent) {
