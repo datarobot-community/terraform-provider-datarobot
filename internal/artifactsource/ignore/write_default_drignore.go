@@ -17,7 +17,7 @@ func WriteDefaultDrignoreIfMissing(projectDir string) (bool, error) {
 	}
 
 	path := filepath.Join(projectDir, FileName)
-	if err := os.WriteFile(path, DefaultTemplate, 0o644); err != nil {
+	if err := os.WriteFile(path, DefaultTemplate, 0o600); err != nil {
 		return false, fmt.Errorf("write %s: %w", path, err)
 	}
 
