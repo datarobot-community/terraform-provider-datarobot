@@ -2087,6 +2087,184 @@ func TestArtifactModifyPlanComputesSourceDirHash(t *testing.T) {
 	})
 }
 
+// TestArtifactModifyPlanImageURIClearsWithoutSource guards the manual image_build_config
+// path (no `source` block) that already shipped in a prior release: image_uri must still
+// behave like a plain Optional attribute there. Making image_uri Computed for the new
+// source-driven build feature must not silently keep a stale image_uri in state forever
+// when a user drops it from config on a manually-managed image_build_config container.
+func TestArtifactModifyPlanImageURIClearsWithoutSource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "manual-image-uri-" + uuid.NewString()[:8]
+
+	draftArtifact := &client.Artifact{
+		ID:                   artifactID,
+		Name:                 name,
+		Type:                 client.ArtifactTypeService,
+		Status:               client.ArtifactStatusDraft,
+		ArtifactRepositoryID: &repoIDPtr,
+		Spec: client.ArtifactSpec{
+			ContainerGroups: []client.ArtifactContainerGroup{{
+				Containers: []client.ArtifactContainer{{
+					Name:     stringPtr("main"),
+					Primary:  boolPtr(true),
+					Port:     func() *int64 { v := int64(8080); return &v }(),
+					ImageURI: "registry.example.com/app:manual",
+					ImageBuildConfig: &client.ArtifactImageBuildConfig{
+						Dockerfile: &client.ArtifactDockerfileConfig{Source: "provided", Path: "./Dockerfile"},
+					},
+				}},
+			}},
+		},
+	}
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(draftArtifact, nil).AnyTimes()
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	configWithURI := fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        name      = "main"
+        primary   = true
+        port      = 8080
+        image_uri = "registry.example.com/app:manual"
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name)
+
+	configWithoutURI := fmt.Sprintf(`
+resource "datarobot_artifact" "test" {
+  name   = %q
+  status = "draft"
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "main"
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, name)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: configWithURI,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_artifact.test", "spec.container_groups.0.containers.0.image_uri", "registry.example.com/app:manual"),
+				),
+			},
+			{
+				// Dropping image_uri from config (no source configured) must still plan a
+				// change, matching pre-Computed behavior — not silently keep the stale value.
+				Config:             configWithoutURI,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestArtifactModifyPlanImageURIStaysKnownWithUnchangedSource checks the other side of the
+// image_uri Computed scoping: with `source` configured and image_uri left unset in config,
+// a re-plan against unchanged source content must NOT diff image_uri to null. If it did,
+// apply would send a clearing PatchArtifact even though nothing changed — silently wiping
+// out the last build's image_uri on every no-op plan/apply.
+func TestArtifactModifyPlanImageURIStaysKnownWithUnchangedSource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{
+		"main.py":    "print('v1')",
+		"Dockerfile": "FROM python:3.11-slim\nWORKDIR /app\nCOPY main.py .\nCMD [\"python\", \"main.py\"]\n",
+	})
+
+	resourceName := "datarobot_artifact.test"
+	name := "source-noop-image-uri-" + uuid.NewString()[:8]
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
+	filesAPI := newSyncTestFilesAPI()
+
+	var currentArtifact *client.Artifact
+	patchCodeRef := func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+		currentArtifact = artifactSourcePatchedArtifact(draftArtifact, catalogID, versionID)
+		return currentArtifact, nil
+	}
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil).Times(1)
+	mockService.EXPECT().FilesAPI().Return(filesAPI).Times(1)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).DoAndReturn(patchCodeRef).Times(1)
+	expectArtifactBuildAfterUploadFromLatest(mockService, artifactID, &currentArtifact)
+	mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).DoAndReturn(
+		func(_ context.Context, id string) (*client.Artifact, error) {
+			if currentArtifact != nil {
+				return artifactSourceBuiltForRead(currentArtifact), nil
+			}
+			return draftArtifact, nil
+		},
+	).AnyTimes()
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactConfigWithSource(name, "draft", sourceDir),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "spec.container_groups.0.containers.0.image_uri"),
+				),
+			},
+			{
+				// Same source dir, unchanged content/dir_hash: nothing should diff.
+				Config:             artifactConfigWithSource(name, "draft", sourceDir),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 func TestArtifactSourceConfigValidation(t *testing.T) {
 
 	validDir := t.TempDir()

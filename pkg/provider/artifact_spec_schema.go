@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"context"
+
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
@@ -11,6 +14,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// artifactImageURIUseStateForUnknown carries the prior image_uri forward across plans only
+// when `source` is configured. Without `source`, image_uri behaves like a plain Optional
+// attribute: dropping it from config plans it null (clearing it), instead of Computed
+// silently keeping the last known value in state forever.
+type artifactImageURIUseStateForUnknown struct{}
+
+func (m artifactImageURIUseStateForUnknown) Description(ctx context.Context) string {
+	return "Carries the prior image_uri forward across plans only when `source` is configured."
+}
+
+func (m artifactImageURIUseStateForUnknown) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m artifactImageURIUseStateForUnknown) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	var source types.Object
+	diags := req.Config.GetAttribute(ctx, path.Root("source"), &source)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if source.IsNull() {
+		resp.PlanValue = req.ConfigValue
+		return
+	}
+
+	stringplanmodifier.UseStateForUnknown().PlanModifyString(ctx, req, resp)
+}
 
 func artifactResourceProbeAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
@@ -193,7 +226,7 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			Computed:            true,
 			MarkdownDescription: "Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.",
 			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
+				artifactImageURIUseStateForUnknown{},
 			},
 		},
 		"image_build_config": schema.SingleNestedAttribute{
