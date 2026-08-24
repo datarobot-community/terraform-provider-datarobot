@@ -12,7 +12,7 @@ import (
 //
 // JSON field names match the CLI so a mixed CLI/TF tree can share .wapi/.
 // CLIVersion is the JSON key; Initialize writes ProviderWriter.
-// The Go field is still called CLIVersion because the JSON key is cliVersion. 
+// The Go field is still called CLIVersion because the JSON key is cliVersion.
 // We do not invent a providerVersion key. On init we store "terraform-provider-datarobot" in that field.
 
 const ProviderWriter = "terraform-provider-datarobot"
