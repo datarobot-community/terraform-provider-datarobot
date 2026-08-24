@@ -146,9 +146,11 @@ func RestoreRollback(projectDir string) error {
 		dst := filepath.Join(projectDir, rel)
 		return copyFile(path, dst)
 	})
+	if walkErr != nil {
+		return fmt.Errorf("restore rollback tree: %w", walkErr)
+	}
 
-	_ = os.RemoveAll(rollbackPath)
-	return walkErr
+	return os.RemoveAll(rollbackPath)
 }
 
 // Discard removes .wapi/.rollback without restoring files.
