@@ -121,10 +121,14 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 		return false
 	}
 
-	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) {
-		if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
-			return artifactLockedSourceCloneNeeded(*plan, *state)
+	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+			return true
 		}
+		return artifactLockedSourceCloneNeeded(*plan, *state)
+	}
+
+	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) {
 		return artifactSourceDeferLock(*plan, *state)
 	}
 

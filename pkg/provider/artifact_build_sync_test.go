@@ -341,6 +341,7 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	draftPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 		m.Source.DirHash = dirHash
 	})
@@ -350,11 +351,17 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 	})
 
 	draftState := func(hash types.String) *ArtifactResourceModel {
-		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 			m.Source.DirHash = hash
 			m.ArtifactID = types.StringValue("artifact-1")
 		})
-		return state
+	}
+	lockedState := func(hash types.String) *ArtifactResourceModel {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Status = types.StringValue("locked")
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
 	}
 
 	tests := []struct {
@@ -395,6 +402,35 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 			}),
 			state: draftState(dirHash),
 			want:  true,
+		},
+		{
+			name:  "locked to draft source unchanged",
+			plan:  draftPlan,
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to draft source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to locked source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name:  "locked to locked source unchanged",
+			plan:  lockedPlan,
+			state: lockedState(dirHash),
+			want:  false,
 		},
 	}
 
