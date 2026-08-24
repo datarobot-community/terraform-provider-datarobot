@@ -1100,6 +1100,22 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 		)
 	}
 
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	if status == string(client.ArtifactStatusLocked) &&
+		!data.Source.WaitForBuild.IsNull() &&
+		!data.Source.WaitForBuild.IsUnknown() &&
+		!data.Source.WaitForBuild.ValueBool() &&
+		!artifactHasPrimaryImageURI(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("wait_for_build"),
+			"Invalid wait_for_build on locked artifact",
+			"Locked artifacts require a completed image build before locking. Setting `wait_for_build = false` is only supported when `status = \"draft\"` or when `image_uri` is explicitly specified.",
+		)
+	}
+
 	if artifactHasManualCodeRef(data.Spec) {
 		resp.Diagnostics.AddAttributeError(
 			sourcePath,
@@ -1107,6 +1123,25 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
 		)
 	}
+}
+
+func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
+	}
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+			if !isPrimary && len(group.Containers) == 1 &&
+				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+				isPrimary = true
+			}
+			if isPrimary && !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
