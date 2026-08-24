@@ -239,11 +239,19 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	if artifactSourceConfigured(&data) {
 		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "")
 		if syncErr != nil {
-			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			var timeoutErr *client.ArtifactBuildTimeoutError
+			isTimeout := errors.As(syncErr, &timeoutErr)
+			if !isTimeout {
+				r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			}
 			summary := "Error uploading artifact source"
 			var buildErr *artifactBuildSyncError
 			if errors.As(syncErr, &buildErr) {
-				summary = "Error building artifact image"
+				if isTimeout {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
 			}
 			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
@@ -364,7 +372,12 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			summary := "Error uploading artifact source"
 			var buildErr *artifactBuildSyncError
 			if errors.As(syncErr, &buildErr) {
-				summary = "Error building artifact image"
+				var timeoutErr *client.ArtifactBuildTimeoutError
+				if errors.As(syncErr, &timeoutErr) {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
 			}
 			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
