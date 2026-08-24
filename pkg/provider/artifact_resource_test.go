@@ -3920,6 +3920,60 @@ func TestContainersEqual_includesImageBuildConfig(t *testing.T) {
 	}
 }
 
+func TestArtifactNeedsNewVersion_sidecarImageChangeWithSource(t *testing.T) {
+	t.Parallel()
+
+	base := ArtifactResourceModel{
+		Name:                 types.StringValue("my-artifact"),
+		Description:          types.StringValue("desc"),
+		ArtifactRepositoryID: types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+		Source: &ArtifactSourceModel{
+			Dir:     types.StringValue("/tmp/fake-dir"),
+			DirHash: types.StringValue("hash-v1"),
+		},
+		Spec: &ArtifactSpecModel{
+			ContainerGroups: []ArtifactContainerGroupModel{{
+				Containers: []ArtifactContainerModel{
+					{
+						Name:    types.StringValue("main"),
+						Primary: types.BoolValue(true),
+						ImageBuildConfig: &ArtifactImageBuildConfigModel{
+							CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
+								CatalogID:        types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+								CatalogVersionID: types.StringValue("cccccccccccccccccccccccc"),
+							}),
+						},
+					},
+					{
+						Name:     types.StringValue("sidecar"),
+						Primary:  types.BoolValue(false),
+						ImageURI: types.StringValue("sidecar:v1"),
+					},
+				},
+			}},
+		},
+	}
+
+	state := base
+	plan := base
+	plan.Spec = &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{
+				base.Spec.ContainerGroups[0].Containers[0],
+				{
+					Name:     types.StringValue("sidecar"),
+					Primary:  types.BoolValue(false),
+					ImageURI: types.StringValue("sidecar:v2"),
+				},
+			},
+		}},
+	}
+
+	if !artifactNeedsNewVersion(plan, state) {
+		t.Fatal("expected changing sidecar image_uri on locked artifact with source to need new version")
+	}
+}
+
 func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

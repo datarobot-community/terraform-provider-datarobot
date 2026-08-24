@@ -635,7 +635,8 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 		return true
 	}
 	// When source manages code_ref / image_uri, plan values are null or pre-build while
-	// state holds the last upload/build results — ignore those managed diffs.
+	// state holds the last upload/build results — ignore those managed diffs on the
+	// provider-managed primary container only; sidecar changes always count.
 	ignoreManagedCodeRef := artifactSourceConfigured(&plan) && !artifactHasManualCodeRef(plan.Spec)
 	ignoreManagedImageURI := artifactSourceConfigured(&plan)
 	for i := range plan.Spec.ContainerGroups {
@@ -662,16 +663,17 @@ func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef
 		return false
 	}
 	for i := range a.Containers {
-		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef, ignoreManagedImageURI) {
+		skipImageURI := ignoreManagedImageURI && artifactContainerIsPrimary(a.Containers[i], a)
+		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef, skipImageURI) {
 			return false
 		}
 	}
 	return true
 }
 
-func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreManagedImageURI bool) bool {
+func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreImageURI bool) bool {
 	if !a.Name.Equal(b.Name) ||
-		(!ignoreManagedImageURI && !a.ImageURI.Equal(b.ImageURI)) ||
+		(!ignoreImageURI && !a.ImageURI.Equal(b.ImageURI)) ||
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
