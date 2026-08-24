@@ -442,6 +442,16 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	var config ArtifactResourceModel
+	var configPtr *ArtifactResourceModel
+	if !req.Config.Raw.IsNull() {
+		resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		configPtr = &config
+	}
+
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
 		dirHash, err := computeFolderHash(plan.Source.Dir)
 		if err != nil {
@@ -477,7 +487,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
-	applySourceManagedImageURIToPlan(&plan, statePtr, isCreate)
+	applySourceManagedImageURIToPlan(configPtr, &plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }

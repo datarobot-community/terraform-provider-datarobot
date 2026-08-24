@@ -131,8 +131,11 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
 }
 
-func applySourceManagedImageURIToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {
 	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+		return
+	}
+	if config != nil && artifactHasManualImageURI(config.Spec) {
 		return
 	}
 
@@ -143,9 +146,41 @@ func applySourceManagedImageURIToPlan(plan, state *ArtifactResourceModel, isCrea
 			if !artifactContainerIsPrimary(*container, group) {
 				continue
 			}
+			if config != nil && containerImageURIManuallySet(config, gi, ci) {
+				continue
+			}
 			container.ImageURI = types.StringUnknown()
 		}
 	}
+}
+
+func artifactHasManualImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
+	}
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containerImageURIManuallySet(model *ArtifactResourceModel, gi, ci int) bool {
+	if model == nil || model.Spec == nil {
+		return false
+	}
+	if gi >= len(model.Spec.ContainerGroups) {
+		return false
+	}
+	group := model.Spec.ContainerGroups[gi]
+	if ci >= len(group.Containers) {
+		return false
+	}
+	uri := group.Containers[ci].ImageURI
+	return !uri.IsNull() && !uri.IsUnknown() && uri.ValueString() != ""
 }
 
 func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {
