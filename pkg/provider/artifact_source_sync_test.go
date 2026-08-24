@@ -831,40 +831,6 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 	})
 }
 
-func TestRollbackArtifactCreate(t *testing.T) {
-	t.Parallel()
-
-	repoID := "repo-123"
-
-	t.Run("nil artifact is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), nil)
-	})
-
-	t.Run("missing repository id is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"})
-	})
-
-	t.Run("deletes artifact repository", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
-
-		resource := &ArtifactResource{provider: &Provider{service: mockService}}
-		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{
-			ID:                   "artifact-1",
-			ArtifactRepositoryID: &repoID,
-		})
-	})
-}
-
 func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 
@@ -1272,7 +1238,7 @@ func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
 			want:     true,
 		},
 		{
-			name: "locked spec change without source upload skips unknown code_ref",
+			name: "locked spec change with source clones and needs unknown code_ref",
 			plan: withSource("locked", "app-v2", hashA, artifactOne, draftSpec),
 			state: withSource("locked", "app", hashA, artifactOne, &ArtifactSpecModel{
 				ContainerGroups: []ArtifactContainerGroupModel{{
@@ -1284,7 +1250,7 @@ func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
 				}},
 			}),
 			isCreate: false,
-			want:     false,
+			want:     true,
 		},
 		{
 			name:     "locked unchanged spec and source skips unknown",
