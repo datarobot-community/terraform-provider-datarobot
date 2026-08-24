@@ -112,17 +112,25 @@ func RestoreRollback(projectDir string) error {
 		if err := json.Unmarshal(manifestData, &manifest); err == nil {
 			// Remove newly created files
 			for _, created := range manifest.CreatedFiles {
-				p := filepath.Join(projectDir, created)
+				cleanCreated, err := validateAndCleanRelPath(created)
+				if err != nil {
+					return fmt.Errorf("invalid manifest created file %q: %w", created, err)
+				}
+				p := filepath.Join(projectDir, cleanCreated)
 				_ = os.Remove(p)
 			}
 
 			// Restore backed up files
 			for _, backedUp := range manifest.BackedUpFiles {
-				src := filepath.Join(rollbackPath, backedUp)
-				dst := filepath.Join(projectDir, backedUp)
+				cleanBackedUp, err := validateAndCleanRelPath(backedUp)
+				if err != nil {
+					return fmt.Errorf("invalid manifest backed up file %q: %w", backedUp, err)
+				}
+				src := filepath.Join(rollbackPath, cleanBackedUp)
+				dst := filepath.Join(projectDir, cleanBackedUp)
 				if _, statErr := os.Stat(src); statErr == nil {
 					if err := copyFile(src, dst); err != nil {
-						return fmt.Errorf("restore file %s: %w", backedUp, err)
+						return fmt.Errorf("restore file %s: %w", cleanBackedUp, err)
 					}
 				}
 			}

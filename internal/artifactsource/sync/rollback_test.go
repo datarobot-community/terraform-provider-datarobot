@@ -231,6 +231,28 @@ func TestRollback_PathSafety(t *testing.T) {
 	assert.Error(t, rt.Backup(".wapi/config.json"))
 }
 
+func TestRollback_RestoreManifestPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wapiDir := filepath.Join(dir, ".wapi")
+	require.NoError(t, os.Mkdir(wapiDir, 0755))
+
+	rollbackDir := filepath.Join(wapiDir, ".rollback")
+	require.NoError(t, os.Mkdir(rollbackDir, 0755))
+
+	// Malicious manifest targeting outside project
+	manifestData := []byte(`{
+		"backedUpFiles": ["../../evil.txt"],
+		"createdFiles": ["../evil_created.txt"]
+	}`)
+	require.NoError(t, os.WriteFile(filepath.Join(rollbackDir, "manifest.json"), manifestData, 0644))
+
+	err := RestoreRollback(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid manifest")
+}
+
 func TestRollback_Discard(t *testing.T) {
 	t.Parallel()
 
