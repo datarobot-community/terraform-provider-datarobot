@@ -56,7 +56,7 @@ func TestAcquireLock_Exclusivity(t *testing.T) {
 	require.NoError(t, lock2.Unlock())
 }
 
-func TestAcquireLock_UnlockRemovesLockFile(t *testing.T) {
+func TestAcquireLock_UnlockRetainsLockFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -70,7 +70,8 @@ func TestAcquireLock_UnlockRemovesLockFile(t *testing.T) {
 	assert.FileExists(t, lockFilePath)
 
 	require.NoError(t, lock.Unlock())
-	assert.NoFileExists(t, lockFilePath)
+	// Lock file remains on disk to prevent flock-unlink race conditions across processes
+	assert.FileExists(t, lockFilePath)
 }
 
 func TestAcquireLock_ReadOnlyDirectory(t *testing.T) {

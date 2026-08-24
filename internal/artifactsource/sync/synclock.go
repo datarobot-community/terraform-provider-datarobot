@@ -46,7 +46,8 @@ func AcquireLock(projectDir string) (*SyncLock, error) {
 	}, nil
 }
 
-// Unlock releases the lock, closes the lock file handle, and removes sync.lock.
+// Unlock releases the lock and closes the lock file handle.
+// The lock file is not removed on unlock to avoid flock-unlink race conditions across processes.
 func (l *SyncLock) Unlock() error {
 	if l == nil || l.file == nil {
 		return nil
@@ -54,6 +55,5 @@ func (l *SyncLock) Unlock() error {
 	_ = unlockFile(l.file)
 	_ = l.file.Close()
 	l.file = nil
-	_ = os.Remove(l.lockPath)
 	return nil
 }
