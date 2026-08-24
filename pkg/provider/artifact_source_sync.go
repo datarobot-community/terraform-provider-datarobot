@@ -93,9 +93,9 @@ func (r *ArtifactResource) syncArtifactSource(
 	state *ArtifactResourceModel,
 	artifact *client.Artifact,
 	priorArtifactID string,
-) (*client.Artifact, error) {
+) (*client.Artifact, bool, error) {
 	if !artifactSourceNeedsUpload(plan, state, priorArtifactID, artifact.ID) {
-		return artifact, nil
+		return artifact, false, nil
 	}
 
 	catalogID := catalogIDFromModel(state)
@@ -107,7 +107,7 @@ func (r *ArtifactResource) syncArtifactSource(
 
 	pushResult, err := r.pushArtifactSource(ctx, plan, state, catalogID)
 	if err != nil {
-		return nil, fmt.Errorf("upload artifact source: %w", err)
+		return nil, false, fmt.Errorf("upload artifact source: %w", err)
 	}
 
 	traceAPICall("PatchArtifactCodeRef")
