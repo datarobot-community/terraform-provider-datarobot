@@ -2,7 +2,7 @@
 
 ### Added
 
-- `source` block on `datarobot_artifact`: upload a local directory (`source.dir`) to the DataRobot catalog on create and update, auto-populate the primary container's `image_build_config.code_ref`, and track changes via computed `source.dir_hash`. After a successful upload on a draft artifact with `image_build_config`, the provider triggers an image build and, by default (`source.wait_for_build`, default `true`), polls until completion and populates the primary container's computed `image_uri`. Set `wait_for_build = false` to trigger a build without blocking apply. Requires a primary container with `image_build_config`. On draft artifacts, uploads are applied in-place; on locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. Manual `code_ref` and `source` are mutually exclusive.
+- Automatic artifact image build trigger after source upload on `datarobot_artifact`: when `source` is configured on a draft artifact with `image_build_config`, the provider triggers an image build and polls until completion by default (`source.wait_for_build`, default `true`), populating the primary container's computed `image_uri`. Set `wait_for_build = false` to trigger a build without blocking apply.
 - `DATAROBOT_ARTIFACT_BUILD_POLL_INTERVAL` and `DATAROBOT_ARTIFACT_BUILD_POLL_TIMEOUT` environment variables to tune artifact image build polling (defaults: `10s` and `10m`; Go duration syntax).
 
 ### Changed
