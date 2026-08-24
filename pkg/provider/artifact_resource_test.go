@@ -2405,6 +2405,44 @@ func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, planModel
 	return result, resp.Diagnostics
 }
 
+// testArtifactApplyModifyPlan exercises the real ModifyPlan() implementation, unlike the
+// unit tests for artifactModifyPlanNeedsUnknownImageURI/applySourceManagedImageURIToPlan
+// which call those helpers directly and never wire through the resource's config handling.
+func testArtifactApplyModifyPlan(ctx context.Context, r *ArtifactResource, configModel, planModel, stateModel ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
+		return planModel, diags
+	}
+
+	configPlan := tfsdk.Plan{Schema: schema}
+	diags.Append(configPlan.Set(ctx, &configModel)...)
+	if diags.HasError() {
+		return planModel, diags
+	}
+	config := tfsdk.Config{Schema: schema, Raw: configPlan.Raw}
+
+	plan := tfsdk.Plan{Schema: schema}
+	diags.Append(plan.Set(ctx, &planModel)...)
+	if diags.HasError() {
+		return planModel, diags
+	}
+
+	state := tfsdk.State{Schema: schema}
+	diags.Append(state.Set(ctx, &stateModel)...)
+	if diags.HasError() {
+		return planModel, diags
+	}
+
+	resp := &tfresource.ModifyPlanResponse{Plan: plan}
+	r.ModifyPlan(ctx, tfresource.ModifyPlanRequest{Config: config, Plan: plan, State: state}, resp)
+
+	var result ArtifactResourceModel
+	if !resp.Plan.Raw.IsNull() {
+		resp.Diagnostics.Append(resp.Plan.Get(ctx, &result)...)
+	}
+	return result, resp.Diagnostics
+}
+
 func diagErrorSummary(diags diag.Diagnostics) string {
 	if !diags.HasError() {
 		return ""
@@ -3068,6 +3106,65 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 	_, diags = testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
 		t.Fatalf("update: %s", diagErrorSummary(diags))
+	}
+}
+
+// TestArtifactResourceModifyPlanImageURIUnknownOnRebuild exercises the real ModifyPlan()
+// method (not applySourceManagedImageURIToPlan directly) with a rebuilt image_uri that
+// differs from the prior known state value. Without the applySourceManagedImageURIToPlan
+// call in ModifyPlan, the framework's UseStateForUnknown plan modifier would carry the
+// prior build's image_uri forward as "known", and Terraform would report "Provider
+// produced inconsistent result after apply" once the real rebuilt value landed in state.
+func TestArtifactResourceModifyPlanImageURIUnknownOnRebuild(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDirV1 := writeArtifactSourceTree(t, map[string]string{"main.py": "v1"})
+	sourceDirV2 := writeArtifactSourceTree(t, map[string]string{"main.py": "v2"})
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "modify-plan-image-uri-" + uuid.NewString()[:8]
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoIDPtr, name)
+	patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	filesAPI1 := newSyncTestFilesAPI()
+
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI1)
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).Return(patchedArtifact, nil)
+	expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact))
+
+	state, diags := testArtifactApplyCreate(context.Background(), resource, artifactResourceModelWithSource(name, sourceDirV1))
+	if diags.HasError() {
+		t.Fatalf("create: %s", diagErrorSummary(diags))
+	}
+	priorImageURI := state.Spec.ContainerGroups[0].Containers[0].ImageURI
+	if priorImageURI.ValueString() != artifactSourceTestImageURI {
+		t.Fatalf("prior image_uri = %v, want %q", priorImageURI, artifactSourceTestImageURI)
+	}
+
+	// Simulates what Terraform Core hands ModifyPlan for an Optional+Computed attribute the
+	// user never set in config: the raw plan carries the prior state value forward via
+	// UseStateForUnknown, exactly like priorImageURI above.
+	config := artifactResourceModelWithSource(name, sourceDirV2)
+	planModel := artifactResourceModelWithSource(name, sourceDirV2)
+	planModel.ID = state.ID
+	planModel.ArtifactID = state.ArtifactID
+	planModel.ArtifactRepositoryID = state.ArtifactRepositoryID
+	planModel.Spec.ContainerGroups[0].Containers[0].ImageURI = priorImageURI
+
+	plannedResult, diags := testArtifactApplyModifyPlan(context.Background(), resource, config, planModel, state)
+	if diags.HasError() {
+		t.Fatalf("modify plan: %s", diagErrorSummary(diags))
+	}
+
+	gotPlannedImageURI := plannedResult.Spec.ContainerGroups[0].Containers[0].ImageURI
+	if !gotPlannedImageURI.IsUnknown() {
+		t.Fatalf("planned spec.container_groups.0.containers.0.image_uri = %v, want unknown after a source change queues a rebuild", gotPlannedImageURI)
 	}
 }
 
