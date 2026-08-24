@@ -78,7 +78,10 @@ func (r *RollbackTree) Backup(relPath string) error {
 	dstPath := filepath.Join(r.rollbackDir, cleanRel)
 
 	info, err := os.Stat(srcPath)
-	if err == nil && !info.IsDir() {
+	if err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("cannot backup directory %s: only files are supported", cleanRel)
+		}
 		if err := copyFile(srcPath, dstPath); err != nil {
 			return fmt.Errorf("backup file %s: %w", cleanRel, err)
 		}
@@ -89,6 +92,8 @@ func (r *RollbackTree) Backup(relPath string) error {
 		if !containsString(r.manifest.CreatedFiles, cleanRel) {
 			r.manifest.CreatedFiles = append(r.manifest.CreatedFiles, cleanRel)
 		}
+	} else {
+		return fmt.Errorf("stat %s: %w", cleanRel, err)
 	}
 
 	return r.saveManifest()

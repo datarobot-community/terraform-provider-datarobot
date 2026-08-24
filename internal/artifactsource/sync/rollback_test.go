@@ -231,6 +231,24 @@ func TestRollback_PathSafety(t *testing.T) {
 	assert.Error(t, rt.Backup(".wapi/config.json"))
 }
 
+func TestRollback_BackupDirectoryError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wapiDir := filepath.Join(dir, ".wapi")
+	require.NoError(t, os.Mkdir(wapiDir, 0755))
+
+	subDir := filepath.Join(dir, "somedir")
+	require.NoError(t, os.Mkdir(subDir, 0755))
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+
+	err := rt.Backup("somedir")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot backup directory somedir: only files are supported")
+}
+
 func TestRollback_RestoreManifestPathTraversal(t *testing.T) {
 	t.Parallel()
 
