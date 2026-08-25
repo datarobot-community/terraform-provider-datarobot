@@ -3,8 +3,47 @@
 ### Added
 
 - `source` block on `datarobot_artifact`: upload a local directory (`source.dir`) to the DataRobot catalog on create and update, auto-populate the primary container's `image_build_config.code_ref`, and track changes via computed `source.dir_hash`. After a successful upload on a draft artifact with `image_build_config`, the provider triggers an image build and, by default (`source.wait_for_build`, default `true`), polls until completion and populates the primary container's computed `image_uri`. Set `wait_for_build = false` to trigger a build without blocking apply. Requires a primary container with `image_build_config`. On draft artifacts, uploads are applied in-place; on locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. Manual `code_ref` and `source` are mutually exclusive.
+- Automatic artifact image build trigger after source upload on `datarobot_artifact`: when `source` is configured on a draft artifact with `image_build_config`, the provider triggers an image build and polls until completion by default (`source.wait_for_build`, default `true`), populating the primary container's computed `image_uri`. Set `wait_for_build = false` to trigger a build without blocking apply.
 - `DATAROBOT_ARTIFACT_BUILD_POLL_INTERVAL` and `DATAROBOT_ARTIFACT_BUILD_POLL_TIMEOUT` environment variables to tune artifact image build polling (defaults: `10s` and `10m`; Go duration syntax).
 - `datarobot_artifact` now streams artifact image build OTEL logs to stderr while waiting for a source-triggered image build to complete (`source.wait_for_build = true`, the default), so build progress is visible during a normal `terraform apply` without setting `TF_LOG`. On failure, the apply error also includes a tailed excerpt of build logs (WAPI build logs with OTEL fallback) and a link to the full build log page in the DataRobot UI. Default tail length is 30 lines; override with `DATAROBOT_ARTIFACT_BUILD_LOGS_TAIL_LINES`.
+
+### Changed
+
+- `datarobot_artifact`: `spec.container_groups.*.containers.*.image_uri` is now `Computed` in addition to `Optional`, allowing the provider to populate the image URI after a source-driven build.
+
+## [0.10.46] - 2026-08-20
+
+### Added
+
+- `source` block on `datarobot_artifact`: upload a local directory (`source.dir`) to the DataRobot catalog on create and update, auto-populate the primary container's `image_build_config.code_ref`, and track changes via computed `source.dir_hash`. Requires a primary container with `image_build_config`. On draft artifacts, uploads are applied in-place; on locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version. Manual `code_ref` and `source` are mutually exclusive.
+- Documentation and examples for in-place `datarobot_workload` replacement: operator guide in `docs/resources/workload.md` (WAPI rolling replacement vs legacy destroy/create, artifact dual-ID wiring, update-trigger table, apply duration), registry example at `examples/resources/datarobot_workload/`, and runnable workflow at `examples/workflows/workload_replacement/`.
+- Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
+- `datarobot_artifact` `type = "agent"` and optional `spec.a2a_enabled` for Workload API agent artifacts (A2A card management). `a2a_enabled` is valid only when `type` is `agent`.
+- Computed `type` on `datarobot_workload`, mirroring the deployed artifact type (`service`, `nim`, or `agent`).
+### Fixed
+
+- `datarobot_memory_space` updates no longer fail with `422 Unprocessable Entity` on `llmBaseUrl`. The provider sent an empty string for every attribute the config does not set, and the API parses `llmBaseUrl` as a URL, so any update to a memory space without `llm_base_url` was rejected. Unset attributes are now sent as null, which is also what the API requires to clear a stored value: it applies only the keys present in the request body, so an omitted key would leave the old value in place.
+- `datarobot_memory_space` no longer requires `ENABLE_AGENTIC_MEMORY_API`. Either `ENABLE_AGENTIC_MEMORY_API` or `ENABLE_GENAI_EXPERIMENTATION` is now enough, which is what the memory service and the DataRobot API gateway already allow for the chat history surface (memory spaces and their sessions). The persistent memory (mem0) API stays gated on `ENABLE_AGENTIC_MEMORY_API`, so a memory space created with only `ENABLE_GENAI_EXPERIMENTATION` holds chat history but no persistent memories.
+- Feature flag checks now evaluate the effective flag value via `POST /api/v2/entitlements/evaluate/` instead of reading the `permissions` map from `GET /api/v2/account/info/`, which only contains flags set directly on the user record. Flags inherited from the user's organization or groups (e.g. `ENABLE_AGENTIC_MEMORY_API` for `datarobot_memory_space`) no longer fail with a false "Feature not enabled" error. A flag missing from the evaluation response is now an explicit error instead of silently reading as disabled.
+- Bumped `google.golang.org/grpc` from `1.79.3` to `1.82.1` to resolve `GO-2026-6061` (xDS RBAC authorization engine and HTTP/2 server transport) detected by `govulncheck`. The advisory is reachable from the provider's plugin gRPC server (`providerserver.Serve` → `transport.NewServerTransport`), not merely imported. Dependency-only change; no provider behavior change.
+- Bumped the Go toolchain in `go.mod` from `1.26.5` to `1.26.6` to resolve eight standard library advisories detected by `govulncheck`, all fixed in `go1.26.6`. Four are reachable from provider code: `GO-2026-6218` (`net/url` quadratic `resolvePath`), `GO-2026-6090` (`crypto/tls` post-handshake message limit), `GO-2026-5972` (`encoding/asn1` recursion depth), and `GO-2026-5026` (`net/http` Punycode label rejection via `golang.org/x/net/idna`), traced through `providerserver.Serve` and the Files API client's `PollStatus`/`DownloadFile`. The remaining four are imported or required but not called: `GO-2026-6091` (`html/template`), `GO-2026-6089` (`net/http` `ReadHeaderTimeout`), `GO-2026-5942` (`net` DNS SVCB/HTTPS RR parsing), and `GO-2026-6088` (`encoding/xml` decode recursion). Toolchain-only change; no dependency or provider behavior change. All CI jobs resolve Go via `go-version-file: go.mod`, so this also raises the version used to build releases.
+
+## [0.10.45] - 2026-07-27
+
+### Added
+
+- updated autoscaling object scheme on workload resources according to the new API version
+- new `api-key` source for artifact container `environment_vars`, injecting a platform-managed DataRobot API token (`name` is optional and defaults to `DATAROBOT_API_TOKEN`)
+- plan-time validation aligned with the Workload API OpenAPI schema: `cpuAverageUtilization` scaling requires `min_replica_count > 0`, and policy `target` must be non-negative
+- `success_threshold` on `datarobot_artifact` container probes (`startup_probe`, `readiness_probe`, `liveness_probe`): minimum consecutive successes for the probe to be considered successful after a failure (matches `ProbeConfig.successThreshold`)
+
+### Fixed
+
+- `datarobot_deployment`: updating `registered_model_version_id` is no longer silently missed when the referenced value changes in the same apply (e.g. a new `datarobot_registered_model` version created upstream). The attribute's `UseStateForUnknown` plan modifier was substituting the prior state value whenever the config value was still unknown at plan time, suppressing the diff so `Update()` never ran and the deployment kept serving the previous model version. `Update()` already applied the model replacement correctly once triggered; only the missed diff detection needed fixing.
+- `datarobot_deployment` updates no longer hangs when the new model version fails to start.
+- `datarobot_workload` updates (artifact or runtime changes) no longer intermittently fail with `Error replacing Workload ... not found`. The provider now waits for the replacement by polling the workload record (`workload.replacement`) instead of the `/replacement` endpoint. The Workload API cleans up a `completed` replacement record almost immediately (~1s), so a `GET /replacement` between polls could 404 and was treated as a failure; the workload record makes completion (`replacement` cleared while `running`) and failure (`replacement.status == errored`, which persists) unambiguous and race-free.
+- `datarobot_deployment`: the "deployment is not ready" timeout error now includes the deployment id and a console activity-log URL, so a failed activation/deactivation can be traced to the specific deployment and its logs.
+- `datarobot_workload`: a container group that sets neither `replica_count` nor `autoscaling` no longer shows perpetual plan drift. The Workload API fills in a cluster-dependent scaling default (a scale-to-zero `autoscaling` block where `KEDA_DEFAULT_SCALE_TO_ZERO_ENABLED` is on, otherwise `replica_count`); that backend-owned `autoscaling` is now kept out of state so it matches the empty config, mirroring how `resource_bundles` and `bundle_selection_policy` are handled.
 
 ## [0.10.43] - 2026-07-15
 
@@ -17,6 +56,25 @@
 - `datarobot_artifact` data source for looking up an existing Workload API artifact by ID
 - `datarobot_artifacts` data source for listing Workload API artifacts with optional `status` and `limit` filters
 - `datarobot_deployment` now surfaces deployment logs in the error message when a deployment fails to create
+- `datarobot_workload`: in-place updates for `artifact_id` and `runtime` changes via the Workload API (`POST /workloads/{id}/replacement`, `PATCH /workloads/{id}/settings`) with polling until rollout completes
+- `datarobot_workload`: optional `runtime.replacement_policy` block (`warmup_minutes`, `keep_old_version_minutes`) for rolling replacement when `artifact_id` or replacement policy changes
+
+### Changed
+
+- **Breaking:** `datarobot_workload` changes to `artifact_id` or `runtime` no longer destroy and recreate the workload. Updates run in place through the Workload API; the workload `id` and `endpoint` remain stable across artifact and runtime updates. This replaces the previous `RequiresReplace` (delete + create) behavior.
+
+  **Migration from destroy/create:**
+
+  | Before (pre-in-place replacement) | After (this release) |
+  |-----------------------------------|----------------------|
+  | `artifact_id` change → new workload ID | `artifact_id` change → same workload ID |
+  | `endpoint` URL changed | `endpoint` URL stays the same |
+  | `lifecycle { create_before_destroy = true }` required | Remove that `lifecycle` block: it existed only to preserve the endpoint during artifact updates |
+
+  - Wire `artifact_id` to `datarobot_artifact.<name>.artifact_id` (artifact version ID), not `.id` (Terraform resource ID).
+  - No Terraform state migration is required for typical configs; run `terraform plan` after upgrading to confirm the workload is updated in place rather than replaced.
+  - If downstream automation assumed a **new** workload ID after each deploy, update it to rely on the stable ID instead.
+  - Replacement is asynchronous and can block `terraform apply` for several minutes; if apply is interrupted or times out, wait for the workload replacement to finish on the platform, then run terraform apply again to sync state. See [`docs/resources/workload.md`](docs/resources/workload.md) and [`examples/workflows/workload_replacement`](examples/workflows/workload_replacement).
 - `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL` and `DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT` environment variables to tune workload replacement polling (defaults: `5s` and `30m`; Go duration syntax)
 
 ### Fixed

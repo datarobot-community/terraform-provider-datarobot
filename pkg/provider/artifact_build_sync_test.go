@@ -381,11 +381,17 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 	})
 
 	draftState := func(hash types.String) *ArtifactResourceModel {
-		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 			m.Source.DirHash = hash
 			m.ArtifactID = types.StringValue("artifact-1")
 		})
-		return state
+	}
+	lockedState := func(hash types.String) *ArtifactResourceModel {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Status = types.StringValue("locked")
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
 	}
 
 	tests := []struct {
@@ -426,6 +432,35 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 			}),
 			state: draftState(dirHash),
 			want:  true,
+		},
+		{
+			name:  "locked to draft source unchanged",
+			plan:  draftPlan,
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to draft source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to locked source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name:  "locked to locked source unchanged",
+			plan:  lockedPlan,
+			state: lockedState(dirHash),
+			want:  false,
 		},
 	}
 
@@ -557,7 +592,7 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 			plan := cloneArtifactResourceModel(tt.plan)
 			setKnownImageURIs(plan)
 
-			applySourceManagedImageURIToPlan(plan, tt.state, tt.isCreate)
+			applySourceManagedImageURIToPlan(nil, plan, tt.state, tt.isCreate)
 
 			got := primaryPlanImageURI(plan)
 			if tt.wantPrimaryUnknown {
@@ -575,6 +610,42 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 	}
 
+	t.Run("manual image_uri in config is not marked unknown", func(t *testing.T) {
+		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+		plan := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+
+		applySourceManagedImageURIToPlan(config, plan, draftState(dirHash), false)
+
+		primary := primaryPlanImageURI(plan)
+		if primary.IsUnknown() || primary.ValueString() != "custom/image:1.0" {
+			t.Fatalf("expected manual image_uri to be preserved, got %v", primary)
+		}
+	})
+
+	t.Run("manual image_uri on create is preserved", func(t *testing.T) {
+		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+		plan := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+
+		applySourceManagedImageURIToPlan(config, plan, nil, true)
+
+		primary := primaryPlanImageURI(plan)
+		if primary.IsUnknown() || primary.ValueString() != "custom/image:1.0" {
+			t.Fatalf("expected manual image_uri on create to be preserved, got %v", primary)
+		}
+	})
+
 	t.Run("non-primary container image_uri unchanged", func(t *testing.T) {
 		multiSpec := testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())
 		plan := testSourcePlanModel(t, dir, multiSpec, func(m *ArtifactResourceModel) {
@@ -582,7 +653,7 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 		setKnownImageURIs(plan)
 
-		applySourceManagedImageURIToPlan(plan, nil, true)
+		applySourceManagedImageURIToPlan(nil, plan, nil, true)
 
 		primary := primaryPlanImageURI(plan)
 		if !primary.IsUnknown() {

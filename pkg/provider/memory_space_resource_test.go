@@ -61,12 +61,9 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		MemorySpaceID: id,
 		Description:   description,
 	}, nil)
-	emptyStr := ""
+	// Attributes the config does not set are sent as null, never as "".
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &newDescription,
-		LLMModelName:       &emptyStr,
-		LLMBaseURL:         &emptyStr,
-		CustomInstructions: &emptyStr,
+		Description: &newDescription,
 	}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   newDescription,
@@ -76,8 +73,7 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		Description:   newDescription,
 	}, nil)
 
-	// Remove description
-	emptyDesc := ""
+	// Remove description: every attribute is now null, so the request carries four nils.
 	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   newDescription,
@@ -86,12 +82,7 @@ func TestIntegrationMemorySpaceResource(t *testing.T) {
 		MemorySpaceID: id,
 		Description:   newDescription,
 	}, nil)
-	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &emptyDesc,
-		LLMModelName:       &emptyDesc,
-		LLMBaseURL:         &emptyDesc,
-		CustomInstructions: &emptyDesc,
-	}).Return(&client.MemorySpaceResponse{
+	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{}).Return(&client.MemorySpaceResponse{
 		MemorySpaceID: id,
 		Description:   "",
 	}, nil)
@@ -152,10 +143,8 @@ func TestIntegrationMemorySpaceResourceNewFields(t *testing.T) {
 		CustomInstructions: instructions,
 	}, nil)
 
-	// Update
-	emptyDesc := ""
+	// Update: description is unset in the config, so it goes out as null.
 	mockService.EXPECT().UpdateMemorySpace(gomock.Any(), id, &client.MemorySpaceRequest{
-		Description:        &emptyDesc,
 		LLMModelName:       &modelName,
 		LLMBaseURL:         &baseURL,
 		CustomInstructions: &updatedInstructions,
@@ -264,6 +253,7 @@ func TestIntegrationMemorySpaceResourceFeatureFlagDisabled(t *testing.T) {
 	}
 
 	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_AGENTIC_MEMORY_API").Return(false, nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_GENAI_EXPERIMENTATION").Return(false, nil)
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -271,7 +261,54 @@ func TestIntegrationMemorySpaceResourceFeatureFlagDisabled(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      memorySpaceResourceConfig("test-description"),
-				ExpectError: regexp.MustCompile("ENABLE_AGENTIC_MEMORY_API feature flag is not enabled"),
+				ExpectError: regexp.MustCompile("Neither the ENABLE_AGENTIC_MEMORY_API nor the ENABLE_GENAI_EXPERIMENTATION"),
+			},
+		},
+	})
+}
+
+// A user with only ENABLE_GENAI_EXPERIMENTATION may manage memory spaces, matching the
+// gating the memory service and the API gateway apply to the chat history surface.
+func TestIntegrationMemorySpaceResourceGenAIExperimentationOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	if globalTestCfg.ApiKey == "" {
+		t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	}
+
+	id := uuid.NewString()
+	description := uuid.NewString()
+
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_AGENTIC_MEMORY_API").Return(false, nil)
+	mockService.EXPECT().IsFeatureFlagEnabled(gomock.Any(), "ENABLE_GENAI_EXPERIMENTATION").Return(true, nil)
+	mockService.EXPECT().CreateMemorySpace(gomock.Any(), &client.MemorySpaceRequest{
+		Description: &description,
+	}).Return(&client.MemorySpaceResponse{
+		MemorySpaceID: id,
+		Description:   description,
+	}, nil)
+	mockService.EXPECT().GetMemorySpace(gomock.Any(), id).Return(&client.MemorySpaceResponse{
+		MemorySpaceID: id,
+		Description:   description,
+	}, nil).AnyTimes()
+	mockService.EXPECT().DeleteMemorySpace(gomock.Any(), id).Return(nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: memorySpaceResourceConfig(description),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("datarobot_memory_space.test", "description", description),
+					resource.TestCheckResourceAttrSet("datarobot_memory_space.test", "id"),
+				),
 			},
 		},
 	})
@@ -281,7 +318,7 @@ func testMemorySpaceResource(t *testing.T, description string, isMock bool) {
 	resourceName := "datarobot_memory_space.test"
 	var preCheck func()
 	if !isMock {
-		preCheck = func() { testAccFeatureFlagPreCheck(t, "ENABLE_AGENTIC_MEMORY_API") }
+		preCheck = func() { testAccFeatureFlagPreCheck(t, memorySpaceFeatureFlags...) }
 	}
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               isMock,

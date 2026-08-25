@@ -73,6 +73,23 @@ func (e *ArtifactBuildFailedError) Error() string {
 	return fmt.Sprintf("artifact build %s ended with status %s", e.BuildID, e.Status)
 }
 
+type ArtifactBuildTimeoutError struct {
+	ArtifactID string
+	BuildID    string
+	Timeout    time.Duration
+	LastStatus string
+}
+
+func (e *ArtifactBuildTimeoutError) Error() string {
+	return fmt.Sprintf(
+		"timeout waiting for artifact %s build %s after %s (last status: %s)",
+		e.ArtifactID,
+		e.BuildID,
+		e.Timeout,
+		e.LastStatus,
+	)
+}
+
 func artifactBuildPollInterval() time.Duration {
 	return durationFromEnv(ArtifactBuildPollIntervalEnvVar, defaultArtifactBuildPollInterval)
 }
@@ -258,13 +275,12 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		}
 
 		if time.Now().After(deadline) {
-			return build, fmt.Errorf(
-				"timeout waiting for artifact %s build %s after %s (last status: %s)",
-				artifactID,
-				buildID,
-				timeout,
-				build.Status,
-			)
+			return build, &ArtifactBuildTimeoutError{
+				ArtifactID: artifactID,
+				BuildID:    buildID,
+				Timeout:    timeout,
+				LastStatus: build.Status,
+			}
 		}
 
 		timer := time.NewTimer(pollInterval)

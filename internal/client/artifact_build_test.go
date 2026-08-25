@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -188,8 +187,12 @@ func TestWaitForArtifactBuildTimesOut(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
-	if !strings.Contains(err.Error(), "timeout waiting for artifact art-1 build build-1") {
-		t.Fatalf("unexpected error: %v", err)
+	var timeoutErr *ArtifactBuildTimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("expected ArtifactBuildTimeoutError, got %T: %v", err, err)
+	}
+	if timeoutErr.ArtifactID != "art-1" || timeoutErr.BuildID != "build-1" {
+		t.Fatalf("unexpected timeout error fields: %+v", timeoutErr)
 	}
 }
 
