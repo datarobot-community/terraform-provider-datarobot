@@ -391,6 +391,7 @@ type ArtifactContainer struct {
 	Description      string                        `json:"description,omitempty"`
 	Port             *int64                        `json:"port,omitempty"`
 	Entrypoint       []string                      `json:"entrypoint,omitempty"`
+	Routes           []string                      `json:"routes,omitempty"`
 	EnvironmentVars  []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
 	StartupProbe     *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
 	ReadinessProbe   *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`
