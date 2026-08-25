@@ -314,6 +314,20 @@ const (
 	EnvironmentVariableSourceAPIKey     = "api-key"
 )
 
+const (
+	RouteAuthRequired = "required"
+	RouteAuthOptional = "optional"
+	RouteAuthDisabled = "disabled"
+)
+
+// ArtifactContainerRoute is a workload route exposed publicly from a primary
+// container, e.g. an MCP server's OAuth discovery document. Mirrors
+// workload_api.schemas.containers.WorkloadRoute.
+type ArtifactContainerRoute struct {
+	Path string `json:"path"`
+	Auth string `json:"auth"`
+}
+
 type ArtifactEnvironmentVariable struct {
 	Source string `json:"source,omitempty"`
 	// Name is optional for the api-key source (the platform resolves an
@@ -391,7 +405,7 @@ type ArtifactContainer struct {
 	Description      string                        `json:"description,omitempty"`
 	Port             *int64                        `json:"port,omitempty"`
 	Entrypoint       []string                      `json:"entrypoint,omitempty"`
-	Routes           []string                      `json:"routes,omitempty"`
+	Routes           []ArtifactContainerRoute      `json:"routes,omitempty"`
 	EnvironmentVars  []ArtifactEnvironmentVariable `json:"environmentVars,omitempty"`
 	StartupProbe     *ArtifactProbeConfig          `json:"startupProbe,omitempty"`
 	ReadinessProbe   *ArtifactProbeConfig          `json:"readinessProbe,omitempty"`

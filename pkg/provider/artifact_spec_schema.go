@@ -187,6 +187,33 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 	}
 }
 
+func artifactResourceRouteAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"path": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`, for example `/.well-known/oauth-authorization-server`.",
+		},
+		"auth": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: `Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.`,
+			Validators:          RouteAuthValidators(),
+		},
+	}
+}
+
+func artifactDataSourceRouteAttributes() map[string]datasourceschema.Attribute {
+	return map[string]datasourceschema.Attribute{
+		"path": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Route path relative to the workload root.",
+		},
+		"auth": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Authentication applied to this route.",
+		},
+	}
+}
+
 func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.Attribute {
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
@@ -277,10 +304,12 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
 		},
-		"routes": schema.ListAttribute{
+		"routes": schema.ListNestedAttribute{
 			Optional:            true,
-			ElementType:         types.StringType,
-			MarkdownDescription: "Additional HTTP paths served by the container that should be routed to it from the workload's public endpoint, for example `/.well-known/oauth-authorization-server` for an MCP server's OAuth discovery document.",
+			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy. For example, expose an MCP server's OAuth discovery document with `path = \"/.well-known/oauth-authorization-server\"` and `auth = \"disabled\"`.",
+			NestedObject: schema.NestedAttributeObject{
+				Attributes: artifactResourceRouteAttributes(),
+			},
 		},
 		"environment_vars": schema.ListNestedAttribute{
 			Optional:            true,
@@ -342,10 +371,12 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
 		},
-		"routes": datasourceschema.ListAttribute{
+		"routes": datasourceschema.ListNestedAttribute{
 			Computed:            true,
-			ElementType:         types.StringType,
-			MarkdownDescription: "Additional HTTP paths served by the container that are routed to it from the workload's public endpoint.",
+			MarkdownDescription: "Routes exposed publicly from this container.",
+			NestedObject: datasourceschema.NestedAttributeObject{
+				Attributes: artifactDataSourceRouteAttributes(),
+			},
 		},
 		"environment_vars": datasourceschema.ListNestedAttribute{
 			Computed:            true,

@@ -990,3 +990,13 @@ func ArtifactDockerfileSourceValidators() []validator.String {
 		stringvalidator.OneOf("provided", "generated"),
 	}
 }
+
+func RouteAuthValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			client.RouteAuthRequired,
+			client.RouteAuthOptional,
+			client.RouteAuthDisabled,
+		),
+	}
+}

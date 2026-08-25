@@ -1034,7 +1034,7 @@ type ArtifactContainerModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
-	Routes           []types.String                     `tfsdk:"routes"`
+	Routes           []ArtifactContainerRouteModel      `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
@@ -1067,6 +1067,11 @@ type ArtifactEnvironmentVariableModel struct {
 	Value          types.String `tfsdk:"value"`
 	DrCredentialID types.String `tfsdk:"dr_credential_id"`
 	Key            types.String `tfsdk:"key"`
+}
+
+type ArtifactContainerRouteModel struct {
+	Path types.String `tfsdk:"path"`
+	Auth types.String `tfsdk:"auth"`
 }
 
 type ArtifactProbeConfigModel struct {
@@ -1138,7 +1143,7 @@ type ArtifactContainerDSModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
-	Routes           []types.String                     `tfsdk:"routes"`
+	Routes           []ArtifactContainerRouteModel      `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
