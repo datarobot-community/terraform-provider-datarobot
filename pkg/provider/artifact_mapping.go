@@ -154,9 +154,12 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 		}
 	}
 	if len(c.Routes) > 0 {
-		model.Routes = make([]types.String, len(c.Routes))
+		model.Routes = make([]ArtifactContainerRouteModel, len(c.Routes))
 		for i, r := range c.Routes {
-			model.Routes[i] = types.StringValue(r)
+			model.Routes[i] = ArtifactContainerRouteModel{
+				Path: types.StringValue(r.Path),
+				Auth: types.StringValue(r.Auth),
+			}
 		}
 	}
 	if len(c.EnvironmentVars) > 0 {
