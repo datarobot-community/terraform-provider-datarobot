@@ -728,6 +728,14 @@ func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreIm
 			return false
 		}
 	}
+	if len(a.Routes) != len(b.Routes) {
+		return false
+	}
+	for i := range a.Routes {
+		if !a.Routes[i].Equal(b.Routes[i]) {
+			return false
+		}
+	}
 	if len(a.EnvironmentVars) != len(b.EnvironmentVars) {
 		return false
 	}
@@ -1407,6 +1415,13 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 		}
 	}
 
+	if len(c.Routes) > 0 {
+		container.Routes = make([]string, len(c.Routes))
+		for i, r := range c.Routes {
+			container.Routes[i] = r.ValueString()
+		}
+	}
+
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
@@ -1638,6 +1653,13 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		model.Entrypoint = make([]types.String, len(c.Entrypoint))
 		for i, e := range c.Entrypoint {
 			model.Entrypoint[i] = types.StringValue(e)
+		}
+	}
+
+	if len(c.Routes) > 0 {
+		model.Routes = make([]types.String, len(c.Routes))
+		for i, r := range c.Routes {
+			model.Routes[i] = types.StringValue(r)
 		}
 	}
 
