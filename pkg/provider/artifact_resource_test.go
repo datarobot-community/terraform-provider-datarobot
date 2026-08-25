@@ -4521,6 +4521,94 @@ func TestArtifactNeedsNewVersion_sidecarImageChangeWithSource(t *testing.T) {
 	}
 }
 
+func TestArtifactContainerToClient_routes(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+		Routes: []ArtifactContainerRouteModel{
+			{
+				Path: types.StringValue("/.well-known/oauth-authorization-server"),
+				Auth: types.StringValue(client.RouteAuthDisabled),
+			},
+		},
+	})
+
+	if len(container.Routes) != 1 {
+		t.Fatalf("routes length: got %d, want 1", len(container.Routes))
+	}
+	if container.Routes[0].Path != "/.well-known/oauth-authorization-server" {
+		t.Fatalf("unexpected route path: %q", container.Routes[0].Path)
+	}
+	if container.Routes[0].Auth != client.RouteAuthDisabled {
+		t.Fatalf("unexpected route auth: %q", container.Routes[0].Auth)
+	}
+}
+
+func TestArtifactContainerToClient_routesOmittedWhenUnset(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+	})
+
+	if container.Routes != nil {
+		t.Fatalf("expected no routes, got %v", container.Routes)
+	}
+}
+
+func TestLoadContainerFromAPI_routes(t *testing.T) {
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+		Routes: []client.ArtifactContainerRoute{
+			{Path: "/.well-known/oauth-authorization-server", Auth: client.RouteAuthDisabled},
+		},
+	}, nil)
+
+	if len(model.Routes) != 1 {
+		t.Fatalf("routes length: got %d, want 1", len(model.Routes))
+	}
+	if got := model.Routes[0].Path.ValueString(); got != "/.well-known/oauth-authorization-server" {
+		t.Fatalf("unexpected route path: %q", got)
+	}
+	if got := model.Routes[0].Auth.ValueString(); got != client.RouteAuthDisabled {
+		t.Fatalf("unexpected route auth: %q", got)
+	}
+}
+
+func TestContainersEqual_routes(t *testing.T) {
+	base := ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+	}
+	changed := base
+	changed.Routes = []ArtifactContainerRouteModel{
+		{
+			Path: types.StringValue("/.well-known/oauth-authorization-server"),
+			Auth: types.StringValue(client.RouteAuthDisabled),
+		},
+	}
+
+	if containersEqual(base, changed, false, false) {
+		t.Fatal("expected routes change to make containers unequal")
+	}
+	if !containersEqual(changed, changed, false, false) {
+		t.Fatal("expected identical routes to be equal")
+	}
+
+	authChanged := changed
+	authChanged.Routes = []ArtifactContainerRouteModel{
+		{
+			Path: types.StringValue("/.well-known/oauth-authorization-server"),
+			Auth: types.StringValue(client.RouteAuthRequired),
+		},
+	}
+	if containersEqual(changed, authChanged, false, false) {
+		t.Fatal("expected auth-only route change to make containers unequal")
+	}
+}
+
 func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
