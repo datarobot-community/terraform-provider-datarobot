@@ -30,11 +30,10 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
-        # Extra paths to route from the workload's public endpoint, e.g. the
-        # OAuth discovery document for an MCP server. "disabled" auth is
-        # required here since clients fetch this before they have a token.
+        # Extra paths to expose from the workload's public endpoint, each with
+        # its own auth policy: "required", "optional", or "disabled".
         routes = [{
-          path = "/.well-known/oauth-authorization-server"
+          path = "/status"
           auth = "disabled"
         }]
       }]
@@ -204,7 +203,7 @@ Optional:
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
-- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy. For example, expose an MCP server's OAuth discovery document with `path = "/.well-known/oauth-authorization-server"` and `auth = "disabled"`. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
+- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
 Read-Only:
@@ -297,7 +296,7 @@ Optional:
 Required:
 
 - `auth` (String) Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.
-- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`, for example `/.well-known/oauth-authorization-server`.
+- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`.
 
 
 <a id="nestedatt--spec--container_groups--containers--startup_probe"></a>

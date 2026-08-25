@@ -4528,7 +4528,7 @@ func TestArtifactContainerToClient_routes(t *testing.T) {
 		Port:     types.Int64Value(8080),
 		Routes: []ArtifactContainerRouteModel{
 			{
-				Path: types.StringValue("/.well-known/oauth-authorization-server"),
+				Path: types.StringValue("/status"),
 				Auth: types.StringValue(client.RouteAuthDisabled),
 			},
 		},
@@ -4537,7 +4537,7 @@ func TestArtifactContainerToClient_routes(t *testing.T) {
 	if len(container.Routes) != 1 {
 		t.Fatalf("routes length: got %d, want 1", len(container.Routes))
 	}
-	if container.Routes[0].Path != "/.well-known/oauth-authorization-server" {
+	if container.Routes[0].Path != "/status" {
 		t.Fatalf("unexpected route path: %q", container.Routes[0].Path)
 	}
 	if container.Routes[0].Auth != client.RouteAuthDisabled {
@@ -4561,14 +4561,14 @@ func TestLoadContainerFromAPI_routes(t *testing.T) {
 	model := loadContainerFromAPI(client.ArtifactContainer{
 		ImageURI: "registry.example/mcp:latest",
 		Routes: []client.ArtifactContainerRoute{
-			{Path: "/.well-known/oauth-authorization-server", Auth: client.RouteAuthDisabled},
+			{Path: "/status", Auth: client.RouteAuthDisabled},
 		},
 	}, nil)
 
 	if len(model.Routes) != 1 {
 		t.Fatalf("routes length: got %d, want 1", len(model.Routes))
 	}
-	if got := model.Routes[0].Path.ValueString(); got != "/.well-known/oauth-authorization-server" {
+	if got := model.Routes[0].Path.ValueString(); got != "/status" {
 		t.Fatalf("unexpected route path: %q", got)
 	}
 	if got := model.Routes[0].Auth.ValueString(); got != client.RouteAuthDisabled {
@@ -4585,7 +4585,7 @@ func TestContainersEqual_routes(t *testing.T) {
 	changed := base
 	changed.Routes = []ArtifactContainerRouteModel{
 		{
-			Path: types.StringValue("/.well-known/oauth-authorization-server"),
+			Path: types.StringValue("/status"),
 			Auth: types.StringValue(client.RouteAuthDisabled),
 		},
 	}
@@ -4600,7 +4600,7 @@ func TestContainersEqual_routes(t *testing.T) {
 	authChanged := changed
 	authChanged.Routes = []ArtifactContainerRouteModel{
 		{
-			Path: types.StringValue("/.well-known/oauth-authorization-server"),
+			Path: types.StringValue("/status"),
 			Auth: types.StringValue(client.RouteAuthRequired),
 		},
 	}

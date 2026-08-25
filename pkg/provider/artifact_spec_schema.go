@@ -191,7 +191,7 @@ func artifactResourceRouteAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"path": schema.StringAttribute{
 			Required:            true,
-			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`, for example `/.well-known/oauth-authorization-server`.",
+			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`.",
 		},
 		"auth": schema.StringAttribute{
 			Required:            true,
@@ -306,7 +306,7 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 		},
 		"routes": schema.ListNestedAttribute{
 			Optional:            true,
-			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy. For example, expose an MCP server's OAuth discovery document with `path = \"/.well-known/oauth-authorization-server\"` and `auth = \"disabled\"`.",
+			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy.",
 			NestedObject: schema.NestedAttributeObject{
 				Attributes: artifactResourceRouteAttributes(),
 			},
