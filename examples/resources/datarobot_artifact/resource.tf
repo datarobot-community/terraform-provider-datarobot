@@ -15,9 +15,13 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
-        # Extra paths served by the container to route from the workload's
-        # public endpoint, e.g. the OAuth discovery document for an MCP server.
-        routes = ["/.well-known/oauth-authorization-server"]
+        # Extra paths to route from the workload's public endpoint, e.g. the
+        # OAuth discovery document for an MCP server. "disabled" auth is
+        # required here since clients fetch this before they have a token.
+        routes = [{
+          path = "/.well-known/oauth-authorization-server"
+          auth = "disabled"
+        }]
       }]
     }]
   }

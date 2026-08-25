@@ -94,7 +94,7 @@ Read-Only:
 - `port` (Number) Container access port (1024-65535).
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
-- `routes` (List of String) Additional HTTP paths served by the container that are routed to it from the workload's public endpoint.
+- `routes` (Attributes List) Routes exposed publicly from this container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
 - `security_context` (Attributes) Container security context. (see [below for nested schema](#nestedatt--spec--container_groups--containers--security_context))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
@@ -190,6 +190,15 @@ Read-Only:
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
 - `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
+
+
+<a id="nestedatt--spec--container_groups--containers--routes"></a>
+### Nested Schema for `spec.container_groups.containers.routes`
+
+Read-Only:
+
+- `auth` (String) Authentication applied to this route.
+- `path` (String) Route path relative to the workload root.
 
 
 <a id="nestedatt--spec--container_groups--containers--security_context"></a>
