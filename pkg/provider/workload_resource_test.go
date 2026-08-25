@@ -14,6 +14,41 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
+func TestAccWorkloadArtifactReplacement(t *testing.T) {
+	t.Parallel()
+	resourceName := "datarobot_workload.test"
+	artifactResourceName := "datarobot_artifact.test_artifact"
+	name := "workload-artifact-repl-" + nameSalt
+	var initialWorkloadID, initialArtifactID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadAccConfigWithImage(name, "", "low", "containous/whoami:latest", 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "artifact_id"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					captureAttr(resourceName, "id", &initialWorkloadID),
+					captureAttr(resourceName, "artifact_id", &initialArtifactID),
+					checkWorkloadExistsInAPI(name, false),
+				),
+			},
+			{
+				Config: workloadAccConfigWithImage(name, "", "low", "containous/whoami:v1.5.0", 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkWorkloadIDPreserved(&initialWorkloadID),
+					checkWorkloadArtifactIDChanged(&initialArtifactID),
+					resource.TestCheckResourceAttrPair(resourceName, "artifact_id", artifactResourceName, "artifact_id"),
+					checkWorkloadExistsInAPI(name, false),
+				),
+			},
+		},
+	})
+}
+
 func TestAccWorkloadResource(t *testing.T) {
 	t.Parallel()
 	resourceName := "datarobot_workload.test"
@@ -58,6 +93,42 @@ func TestAccWorkloadResource(t *testing.T) {
 	})
 }
 
+func TestAccWorkloadMetadataPreservesReplacementPolicy(t *testing.T) {
+	t.Parallel()
+	resourceName := "datarobot_workload.test"
+	name := "workload-metadata-rp-" + nameSalt
+	updatedName := "updated-" + name
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadAccConfigWithReplacementPolicy(name, "", "low", 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+					captureAttr(resourceName, "id", &initialID),
+					checkWorkloadExistsInAPI(name, false),
+				),
+			},
+			{
+				Config: workloadAccConfigWithReplacementPolicy(updatedName, "", "low", 1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+					checkWorkloadIDPreserved(&initialID),
+					checkWorkloadExistsInAPI(updatedName, false),
+				),
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -67,9 +138,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -113,6 +182,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "status"),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
+					resource.TestCheckResourceAttr(resourceName, "type", "service"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
@@ -141,9 +211,7 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -200,9 +268,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id1 := uuid.NewString()
 	artifactID1 := uuid.NewString()
@@ -213,6 +279,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	workload1 := workloadFixture(id1, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 	workload2 := workloadFixture(id1, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2.Type = client.ArtifactTypeAgent
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
@@ -242,6 +309,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID1),
+					resource.TestCheckResourceAttr(resourceName, "type", "service"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -250,8 +318,128 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+					resource.TestCheckResourceAttr(resourceName, "type", "agent"),
 					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadReplaceWithReplacementPolicyOnArtifactChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id1 := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id1
+
+	workload1 := workloadFixture(id1, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id1, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+
+	replacement := workloadReplacementFixture(id1)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id1, startReplacementMatcher{
+		artifactID:            artifactID2,
+		strategy:              client.ReplacementStrategyRolling,
+		warmupDurationMinutes: 5,
+		keepOldVersionMinutes: 10,
+	}).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
+
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplacementPolicy(name, artifactID1, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+				),
+			},
+			{
+				Config: workloadConfigWithReplacementPolicy(name, artifactID2, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadReplaceOnReplacementPolicyChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id1 := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id1
+
+	workload1 := workloadFixture(id1, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+
+	replacement := workloadReplacementFixture(id1)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id1, startReplacementMatcher{
+		artifactID:            artifactID,
+		strategy:              client.ReplacementStrategyRolling,
+		warmupDurationMinutes: 15,
+	}).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
+
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID, 1),
+			},
+			{
+				Config: workloadConfigWithReplacementPolicy(name, artifactID, 15, 0),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "15"),
 				),
 			},
 		},
@@ -267,9 +455,7 @@ func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID1 := uuid.NewString()
@@ -326,6 +512,177 @@ func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
 	})
 }
 
+func TestIntegrationWorkloadUpdateMetadataPreservesReplacementPolicy(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	updatedName := "updated-" + name
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload1 := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	metadataWorkload := workloadFixture(id, artifactID, updatedName, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().UpdateWorkloadMetadata(gomock.Any(), id, gomock.Any()).Return(metadataWorkload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(metadataWorkload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplacementPolicy(name, artifactID, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+				),
+			},
+			{
+				Config: workloadConfigWithReplacementPolicy(updatedName, artifactID, 5, 10),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", updatedName),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.warmup_minutes", "5"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.replacement_policy.keep_old_version_minutes", "10"),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadReplaceOnArtifactAndRuntimeChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount1 := int64(1)
+	replicaCount2 := int64(3)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount1, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount2, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, startReplacementWithRuntimeMatcher{
+		artifactID:   artifactID2,
+		replicaCount: replicaCount2,
+	}).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload2, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload2, nil)
+
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 3),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "3"),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload1, nil)
+
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(nil, &client.ReplacementFailedError{
+		Message: "candidate proton failed health checks",
+	})
+
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+			},
+			{
+				Config:      workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				ExpectError: regexp.MustCompile("Workload replacement failed"),
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -335,9 +692,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id1 := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -357,8 +712,12 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	// Pre-update plan refresh
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
 
-	// Step 2: In-place replacement (changed replica_count)
-	expectWorkloadRuntimeReplacement(mockService, id1, workload2)
+	// Step 2: In-place replacement via settings endpoint (runtime-only)
+	replacement := workloadReplacementFixture(id1)
+	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id1, updateWorkloadSettingsReplicaMatcher(3)).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 
 	// Destroy
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id1).Return(nil)
@@ -401,9 +760,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id1 := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -466,9 +823,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id1 := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -505,7 +860,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 1, 3, 50.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "1"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.min_replica_count", "1"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -513,7 +868,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 			{
 				Config: workloadConfigWithAutoscaling(name, "", "low", artifactID, 2, 5, 70.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.policies.0.min_count", "2"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.autoscaling.min_replica_count", "2"),
 					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInAPI(name, true),
 				),
@@ -531,9 +886,7 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -591,9 +944,7 @@ func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	artifactID := uuid.NewString()
 
@@ -610,6 +961,33 @@ func TestWorkloadConflictingRuntimeConfig(t *testing.T) {
 	})
 }
 
+func TestWorkloadCPUScalingRequiresNonZeroMinReplicas(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// min_replica_count = 0 (scale to zero) is invalid with cpuAverageUtilization.
+				Config:      workloadConfigWithAutoscaling("cpu-min-zero-test", "", "low", artifactID, 0, 3, 70),
+				ExpectError: regexp.MustCompile("min_replica_count must be greater than 0"),
+			},
+		},
+	})
+}
+
 func TestWorkloadTooManyContainerGroups(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -619,9 +997,7 @@ func TestWorkloadTooManyContainerGroups(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	artifactID := uuid.NewString()
 
@@ -684,6 +1060,21 @@ func checkWorkloadExistsInAPI(expectedName string, isMock bool) resource.TestChe
 	}
 }
 
+func checkWorkloadArtifactIDChanged(initialArtifactID *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", rn)
+		}
+		newArtifactID := rs.Primary.Attributes["artifact_id"]
+		if *initialArtifactID != "" && newArtifactID == *initialArtifactID {
+			return fmt.Errorf("workload artifact_id unchanged after artifact spec update: still %q", newArtifactID)
+		}
+		return nil
+	}
+}
+
 func checkWorkloadIDPreserved(initialID *string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		const rn = "datarobot_workload.test"
@@ -723,14 +1114,97 @@ func expectWorkloadRuntimeReplacement(mockService *mock_client.MockService, work
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
 }
 
+type startReplacementMatcher struct {
+	artifactID            string
+	strategy              client.ReplacementStrategy
+	warmupDurationMinutes int64
+	keepOldVersionMinutes int64
+}
+
+func (m startReplacementMatcher) Matches(x any) bool {
+	req, ok := x.(*client.StartReplacementRequest)
+	if !ok || req == nil {
+		return false
+	}
+	if req.ArtifactID != m.artifactID || req.Strategy != m.strategy {
+		return false
+	}
+	if req.Config.WarmupDurationMinutes != m.warmupDurationMinutes {
+		return false
+	}
+	if m.keepOldVersionMinutes != 0 && req.Config.KeepOldVersionMinutes != m.keepOldVersionMinutes {
+		return false
+	}
+	if m.keepOldVersionMinutes == 0 && req.Config.KeepOldVersionMinutes != 0 {
+		return false
+	}
+	return true
+}
+
+func (m startReplacementMatcher) String() string {
+	return fmt.Sprintf(
+		"StartReplacementRequest{artifactId=%q strategy=%q warmup=%d keepOld=%d}",
+		m.artifactID, m.strategy, m.warmupDurationMinutes, m.keepOldVersionMinutes,
+	)
+}
+
+type startReplacementWithRuntimeMatcher struct {
+	artifactID   string
+	replicaCount int64
+}
+
+func (m startReplacementWithRuntimeMatcher) Matches(x any) bool {
+	req, ok := x.(*client.StartReplacementRequest)
+	if !ok || req == nil {
+		return false
+	}
+	if req.ArtifactID != m.artifactID || req.Strategy != client.ReplacementStrategyRolling {
+		return false
+	}
+	if req.Runtime == nil || len(req.Runtime.ContainerGroups) == 0 {
+		return false
+	}
+	replicaCount := req.Runtime.ContainerGroups[0].ReplicaCount
+	return replicaCount != nil && *replicaCount == m.replicaCount
+}
+
+func (m startReplacementWithRuntimeMatcher) String() string {
+	return fmt.Sprintf(
+		"StartReplacementRequest{artifactId=%q strategy=%q replicaCount=%d}",
+		m.artifactID, client.ReplacementStrategyRolling, m.replicaCount,
+	)
+}
+
+type updateWorkloadSettingsReplicaMatcher int64
+
+func (m updateWorkloadSettingsReplicaMatcher) Matches(x any) bool {
+	req, ok := x.(*client.UpdateWorkloadSettingsRequest)
+	if !ok || req == nil {
+		return false
+	}
+	if len(req.Runtime.ContainerGroups) == 0 {
+		return false
+	}
+	replicaCount := req.Runtime.ContainerGroups[0].ReplicaCount
+	return replicaCount != nil && *replicaCount == int64(m)
+}
+
+func (m updateWorkloadSettingsReplicaMatcher) String() string {
+	return fmt.Sprintf("UpdateWorkloadSettingsRequest with replica_count=%d", int64(m))
+}
+
 // ─── config helpers ────────────────────────────────────────────────────────────
+
+func workloadMockConfig(cfg string) string {
+	return testProviderConfigBlock() + "\n" + cfg
+}
 
 func workloadConfigWithReplicas(name, description, importance, artifactID string, replicaCount int64) string {
 	desc := ""
 	if description != "" {
 		desc = fmt.Sprintf("description = %q", description)
 	}
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
   importance  = %q
@@ -745,7 +1219,29 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, importance, artifactID, desc, replicaCount)
+`, name, importance, artifactID, desc, replicaCount))
+}
+
+func workloadConfigWithReplacementPolicy(name, artifactID string, warmupMinutes, keepOldVersionMinutes int64) string {
+	return workloadMockConfig(fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+    replacement_policy = {
+      warmup_minutes           = %d
+      keep_old_version_minutes = %d
+    }
+  }
+}
+`, name, artifactID, warmupMinutes, keepOldVersionMinutes))
 }
 
 func workloadConfigWithReplicasAndResources(name, description, importance, artifactID string, replicaCount int64, resourceBundleID string) string {
@@ -753,7 +1249,7 @@ func workloadConfigWithReplicasAndResources(name, description, importance, artif
 	if description != "" {
 		desc = fmt.Sprintf("description = %q", description)
 	}
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
   importance  = %q
@@ -768,15 +1264,15 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, importance, artifactID, desc, replicaCount, resourceBundleID)
+`, name, importance, artifactID, desc, replicaCount, resourceBundleID))
 }
 
-func workloadConfigWithAutoscaling(name, description, importance, artifactID string, minCount, maxCount int64, target float64) string {
+func workloadConfigWithAutoscaling(name, description, importance, artifactID string, minReplicaCount, maxReplicaCount int64, target float64) string {
 	desc := ""
 	if description != "" {
 		desc = fmt.Sprintf("description = %q", description)
 	}
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
   importance  = %q
@@ -787,13 +1283,13 @@ resource "datarobot_workload" "test" {
       {
         resource_bundles = ["cpu.small"]
         autoscaling = {
-          enabled = true
+          enabled           = true
+          min_replica_count = %d
+          max_replica_count = %d
           policies = [
             {
               scaling_metric = "cpuAverageUtilization"
               target         = %g
-              min_count      = %d
-              max_count      = %d
             }
           ]
         }
@@ -801,11 +1297,11 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, importance, artifactID, desc, target, minCount, maxCount)
+`, name, importance, artifactID, desc, minReplicaCount, maxReplicaCount, target))
 }
 
 func workloadConfigConflictingRuntime(artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = "conflict-test"
   artifact_id = %q
@@ -814,13 +1310,13 @@ resource "datarobot_workload" "test" {
       {
         replica_count = 2
         autoscaling = {
-          enabled = true
+          enabled           = true
+          min_replica_count = 1
+          max_replica_count = 4
           policies = [
             {
               scaling_metric = "cpuAverageUtilization"
               target         = 50
-              min_count      = 1
-              max_count      = 4
             }
           ]
         }
@@ -828,10 +1324,14 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, artifactID)
+`, artifactID))
 }
 
 func workloadAccConfig(name, description, importance string, replicaCount int64) string {
+	return workloadAccConfigWithImage(name, description, importance, "containous/whoami:latest", replicaCount)
+}
+
+func workloadAccConfigWithImage(name, description, importance, imageURI string, replicaCount int64) string {
 	artifactName := "acc-artifact-" + nameSalt
 	desc := ""
 	if description != "" {
@@ -848,7 +1348,7 @@ resource "datarobot_artifact" "test_artifact" {
         containers = [
           {
             name      = "main"
-            image_uri = "containous/whoami:latest"
+            image_uri = %q
             port      = 8080
             primary   = true
             entrypoint = ["/whoami", "--port", "8080"]
@@ -873,7 +1373,56 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, artifactName, name, importance, desc, replicaCount)
+`, artifactName, imageURI, name, importance, desc, replicaCount)
+}
+
+func workloadAccConfigWithReplacementPolicy(name, description, importance string, replicaCount, warmupMinutes, keepOldVersionMinutes int64) string {
+	artifactName := "acc-artifact-" + nameSalt
+	desc := ""
+	if description != "" {
+		desc = fmt.Sprintf("description = %q", description)
+	}
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "test_artifact" {
+  name = %q
+  type = "service"
+
+  spec = {
+    container_groups = [
+      {
+        containers = [
+          {
+            name       = "main"
+            image_uri  = "containous/whoami:latest"
+            port       = 8080
+            primary    = true
+            entrypoint = ["/whoami", "--port", "8080"]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = %q
+  artifact_id = datarobot_artifact.test_artifact.artifact_id
+  %s
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = %d
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+    replacement_policy = {
+      warmup_minutes           = %d
+      keep_old_version_minutes = %d
+    }
+  }
+}
+`, artifactName, name, importance, desc, replicaCount, warmupMinutes, keepOldVersionMinutes)
 }
 
 // ─── fixture helpers ───────────────────────────────────────────────────────────
@@ -885,6 +1434,7 @@ func workloadFixture(id, artifactID, name, description string, importance client
 		Description: description,
 		Status:      client.ProtonStatusRunning,
 		Importance:  importance,
+		Type:        client.ArtifactTypeService,
 		ArtifactID:  &artifactID,
 		Endpoint:    endpoint,
 		Runtime: client.WorkloadRuntime{
@@ -901,13 +1451,14 @@ func workloadFixtureWithResources(id, artifactID, name string, replicaCount *int
 	return w
 }
 
-func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *string, minCount, maxCount int64, target float64) *client.Workload {
+func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *string, minReplicaCount, maxReplicaCount int64, target float64) *client.Workload {
 	enabled := true
 	return &client.Workload{
 		ID:         id,
 		Name:       name,
 		Status:     client.ProtonStatusRunning,
 		Importance: client.WorkloadImportanceLow,
+		Type:       client.ArtifactTypeService,
 		ArtifactID: &artifactID,
 		Endpoint:   endpoint,
 		Runtime: client.WorkloadRuntime{
@@ -916,13 +1467,13 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 					Name:            "default",
 					ResourceBundles: []string{"cpu.small"},
 					Autoscaling: &client.AutoscalingProperties{
-						Enabled: &enabled,
+						Enabled:         &enabled,
+						MinReplicaCount: minReplicaCount,
+						MaxReplicaCount: maxReplicaCount,
 						Policies: []client.AutoscalingPolicy{
 							{
 								ScalingMetric: "cpuAverageUtilization",
 								Target:        target,
-								MinCount:      minCount,
-								MaxCount:      maxCount,
 							},
 						},
 					},
@@ -930,6 +1481,87 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 			},
 		},
 	}
+}
+
+// workloadConfigScalingUnspecified is a workload whose container group sets
+// neither replica_count nor autoscaling (only resource_bundles) — the case where
+// the backend supplies a cluster-dependent scaling default.
+func workloadConfigScalingUnspecified(name, artifactID string) string {
+	return workloadMockConfig(fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  runtime = {
+    container_groups = [
+      {
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, name, artifactID))
+}
+
+// TestIntegrationWorkloadNoDriftWhenScalingUnspecified guards the ModifyPlan
+// drift fix: when the config specifies neither replica_count nor autoscaling and
+// the backend fills in an autoscaling block, subsequent plans must be empty (no
+// perpetual drift). The framework runs an automatic empty-plan check after the
+// apply step; without ModifyPlan the backend-populated autoscaling would diff
+// against the empty config and fail it.
+func TestIntegrationWorkloadNoDriftWhenScalingUnspecified(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	endpoint := "https://workloads.example.com/" + id
+
+	// The user configured neither replica_count nor autoscaling; the backend
+	// responds with a scale-to-zero autoscaling block (min=0, max=1).
+	workload := workloadFixtureWithAutoscaling(id, artifactID, name, &endpoint, 0, 1, 1000.0)
+
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(_ context.Context, _ string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return workload, nil
+		}).AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(_ context.Context, _ string) error {
+			deleted = true
+			return nil
+		})
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigScalingUnspecified(name, artifactID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("datarobot_workload.test", "id"),
+					// The backend-supplied scaling is kept out of state (sentinel), so
+					// it matches the empty config. No-drift is asserted automatically
+					// by the framework's post-apply empty-plan check.
+					resource.TestCheckNoResourceAttr("datarobot_workload.test", "runtime.container_groups.0.autoscaling"),
+					resource.TestCheckNoResourceAttr("datarobot_workload.test", "runtime.container_groups.0.replica_count"),
+				),
+			},
+		},
+	})
 }
 
 func TestWorkloadMissingResourceConfig(t *testing.T) {
@@ -941,9 +1573,7 @@ func TestWorkloadMissingResourceConfig(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	artifactID := uuid.NewString()
 
@@ -961,7 +1591,7 @@ func TestWorkloadMissingResourceConfig(t *testing.T) {
 }
 
 func workloadConfigMissingResourceAllocation(artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = "missing-resource-test"
   artifact_id = %q
@@ -976,7 +1606,7 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, artifactID)
+`, artifactID))
 }
 
 func TestWorkloadEmptyContainers(t *testing.T) {
@@ -988,9 +1618,7 @@ func TestWorkloadEmptyContainers(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	artifactID := uuid.NewString()
 
@@ -1016,9 +1644,7 @@ func TestIntegrationWorkloadResourceBundlesSentinel(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -1069,9 +1695,7 @@ func TestIntegrationWorkloadBundleSelectionPolicySentinel(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -1126,9 +1750,7 @@ func TestIntegrationWorkloadStringMemoryNormalization(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	mockAPIKey(t)
 
 	id := uuid.NewString()
 	artifactID := uuid.NewString()
@@ -1175,7 +1797,7 @@ func TestIntegrationWorkloadStringMemoryNormalization(t *testing.T) {
 }
 
 func workloadConfigWithResourceAllocation(name, artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
   artifact_id = %q
@@ -1196,11 +1818,11 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, artifactID)
+`, name, artifactID))
 }
 
 func workloadConfigWithStringMemory(name, artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = %q
   artifact_id = %q
@@ -1221,11 +1843,11 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, name, artifactID)
+`, name, artifactID))
 }
 
 func workloadConfigEmptyContainers(artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = "empty-containers-test"
   artifact_id = %q
@@ -1238,11 +1860,11 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, artifactID)
+`, artifactID))
 }
 
 func workloadConfigWithMultipleGroups(artifactID string) string {
-	return fmt.Sprintf(`
+	return workloadMockConfig(fmt.Sprintf(`
 resource "datarobot_workload" "test" {
   name        = "multi-group-test"
   artifact_id = %q
@@ -1253,5 +1875,28 @@ resource "datarobot_workload" "test" {
     ]
   }
 }
-`, artifactID)
+`, artifactID))
+}
+
+func TestLoadWorkloadIntoModelType(t *testing.T) {
+	t.Parallel()
+
+	id := "wl-1"
+	artifactID := "art-1"
+	endpoint := "https://example.com/wl-1"
+	workload := workloadFixture(id, artifactID, "agent-wl", "", client.WorkloadImportanceLow, nil, &endpoint)
+	workload.Type = client.ArtifactTypeAgent
+
+	var data WorkloadResourceModel
+	loadWorkloadIntoModel(workload, &data)
+
+	if data.Type.ValueString() != string(client.ArtifactTypeAgent) {
+		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeAgent)
+	}
+
+	workload.Type = ""
+	loadWorkloadIntoModel(workload, &data)
+	if !data.Type.IsNull() {
+		t.Fatalf("empty Type = %v, want null", data.Type)
+	}
 }
