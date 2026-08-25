@@ -277,6 +277,11 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
 		},
+		"routes": schema.ListAttribute{
+			Optional:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Additional HTTP paths served by the container that should be routed to it from the workload's public endpoint, for example `/.well-known/oauth-authorization-server` for an MCP server's OAuth discovery document.",
+		},
 		"environment_vars": schema.ListNestedAttribute{
 			Optional:            true,
 			MarkdownDescription: "Environment variables for the container.",
@@ -336,6 +341,11 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 			Computed:            true,
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
+		},
+		"routes": datasourceschema.ListAttribute{
+			Computed:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Additional HTTP paths served by the container that are routed to it from the workload's public endpoint.",
 		},
 		"environment_vars": datasourceschema.ListNestedAttribute{
 			Computed:            true,
