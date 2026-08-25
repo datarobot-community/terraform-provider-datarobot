@@ -153,6 +153,12 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 			model.Entrypoint[i] = types.StringValue(e)
 		}
 	}
+	if len(c.Routes) > 0 {
+		model.Routes = make([]types.String, len(c.Routes))
+		for i, r := range c.Routes {
+			model.Routes[i] = types.StringValue(r)
+		}
+	}
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
