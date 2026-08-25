@@ -94,6 +94,7 @@ Read-Only:
 - `port` (Number) Container access port (1024-65535).
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
+- `routes` (List of String) Additional HTTP paths served by the container that are routed to it from the workload's public endpoint.
 - `security_context` (Attributes) Container security context. (see [below for nested schema](#nestedatt--spec--container_groups--containers--security_context))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 

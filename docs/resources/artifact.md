@@ -30,6 +30,9 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
+        # Extra paths served by the container to route from the workload's
+        # public endpoint, e.g. the OAuth discovery document for an MCP server.
+        routes = ["/.well-known/oauth-authorization-server"]
       }]
     }]
   }
@@ -197,6 +200,7 @@ Optional:
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
+- `routes` (List of String) Additional HTTP paths served by the container that should be routed to it from the workload's public endpoint, for example `/.well-known/oauth-authorization-server` for an MCP server's OAuth discovery document.
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
 Read-Only:
