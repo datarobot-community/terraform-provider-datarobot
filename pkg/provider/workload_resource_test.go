@@ -185,6 +185,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "status"),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
+					resource.TestCheckResourceAttr(resourceName, "type", "service"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInState(),
@@ -281,6 +282,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 
 	workload1 := workloadFixture(id1, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 	workload2 := workloadFixture(id1, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2.Type = client.ArtifactTypeAgent
 
 	// Step 1: Create
 	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
@@ -310,6 +312,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID1),
+					resource.TestCheckResourceAttr(resourceName, "type", "service"),
 					captureAttr(resourceName, "id", &initialID),
 					checkWorkloadExistsInState(),
 				),
@@ -318,6 +321,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+					resource.TestCheckResourceAttr(resourceName, "type", "agent"),
 					checkWorkloadIDPreserved(&initialID),
 					checkWorkloadExistsInState(),
 				),
@@ -1446,6 +1450,7 @@ func workloadFixture(id, artifactID, name, description string, importance client
 		Description: desc,
 		Status:      client.ProtonStatusRunning,
 		Importance:  importance,
+		Type:        client.ArtifactTypeService,
 		ArtifactID:  &artifactID,
 		Endpoint:    endpoint,
 		Runtime: client.WorkloadRuntime{
@@ -1469,6 +1474,7 @@ func workloadFixtureWithAutoscaling(id, artifactID, name string, endpoint *strin
 		Name:       name,
 		Status:     client.ProtonStatusRunning,
 		Importance: client.WorkloadImportanceLow,
+		Type:       client.ArtifactTypeService,
 		ArtifactID: &artifactID,
 		Endpoint:   endpoint,
 		Runtime: client.WorkloadRuntime{
@@ -1886,4 +1892,27 @@ resource "datarobot_workload" "test" {
   }
 }
 `, artifactID))
+}
+
+func TestLoadWorkloadIntoModelType(t *testing.T) {
+	t.Parallel()
+
+	id := "wl-1"
+	artifactID := "art-1"
+	endpoint := "https://example.com/wl-1"
+	workload := workloadFixture(id, artifactID, "agent-wl", "", client.WorkloadImportanceLow, nil, &endpoint)
+	workload.Type = client.ArtifactTypeAgent
+
+	var data WorkloadResourceModel
+	loadWorkloadIntoModel(workload, &data)
+
+	if data.Type.ValueString() != string(client.ArtifactTypeAgent) {
+		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeAgent)
+	}
+
+	workload.Type = ""
+	loadWorkloadIntoModel(workload, &data)
+	if !data.Type.IsNull() {
+		t.Fatalf("empty Type = %v, want null", data.Type)
+	}
 }
