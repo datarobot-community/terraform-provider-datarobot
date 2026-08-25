@@ -16,6 +16,7 @@
 - `datarobot_artifact` now streams artifact image build OTEL logs to the provider's stderr while waiting for a source-triggered image build to complete (`source.wait_for_build = true`, the default). Terraform routes provider stderr through its own logging pipeline, so this progress output is visible when `TF_LOG` is set (e.g. `TF_LOG=DEBUG`), not on a plain `terraform apply`. On failure, the apply error always includes a tailed excerpt of build logs (WAPI build logs with OTEL fallback) and a link to the full build log page in the DataRobot UI, regardless of `TF_LOG`. Default tail length is 30 lines; override with `DATAROBOT_ARTIFACT_BUILD_LOGS_TAIL_LINES`.
 - `DATAROBOT_DEBUG` environment variable to opt into verbose HTTP request/response dumps and curl reproductions in error messages.
 - `examples/resources/datarobot_workload` example: end-to-end code-to-workload flow (`datarobot_artifact` with `source` + build wait → `datarobot_workload`).
+- `routes` attribute on `datarobot_artifact` container specs: a list of additional HTTP paths served by the container that are routed to it from the workload's public endpoint, for example `/.well-known/oauth-authorization-server` for an MCP server's OAuth discovery document.
 
 ### Changed
 
