@@ -1034,6 +1034,7 @@ type ArtifactContainerModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	Routes           []types.String                     `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
@@ -1137,6 +1138,7 @@ type ArtifactContainerDSModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	Routes           []types.String                     `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
