@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+### Added
+
+- Automatic artifact image build trigger after source upload on `datarobot_artifact`: when `source` is configured on a draft artifact with `image_build_config`, the provider triggers an image build and polls until completion by default (`source.wait_for_build`, default `true`), populating the primary container's computed `image_uri`. Set `wait_for_build = false` to trigger a build without blocking apply.
+- `DATAROBOT_ARTIFACT_BUILD_POLL_INTERVAL` and `DATAROBOT_ARTIFACT_BUILD_POLL_TIMEOUT` environment variables to tune artifact image build polling (defaults: `10s` and `10m`; Go duration syntax).
+
+### Changed
+
+- `datarobot_artifact`: `spec.container_groups.*.containers.*.image_uri` is now `Computed` in addition to `Optional`, allowing the provider to populate the image URI after a source-driven build.
+
 ## [0.10.46] - 2026-08-20
 
 ### Added

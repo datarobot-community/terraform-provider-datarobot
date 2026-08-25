@@ -5,7 +5,20 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+type artifactBuildSyncError struct {
+	cause error
+}
+
+func (e *artifactBuildSyncError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *artifactBuildSyncError) Unwrap() error {
+	return e.cause
+}
 
 // artifactBuildNeededAfterUpload reports whether a source upload should be followed
 // by an image build trigger. Builds may only run on draft artifacts (WAPI constraint).
@@ -75,6 +88,103 @@ func (r *ArtifactResource) syncArtifactBuild(
 		return artifact, buildID, fmt.Errorf("artifact build completed but primary container image_uri is empty")
 	}
 	return artifact, buildID, nil
+}
+
+// artifactModifyPlanNeedsUnknownImageURI is true when apply will upload source and trigger
+// a build that populates the primary container image_uri.
+func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *ArtifactResourceModel, isCreate bool) bool {
+	if !artifactSourceConfigured(plan) || !artifactHasPrimaryImageBuildConfig(plan.Spec) {
+		return false
+	}
+
+	priorArtifactID := ""
+	if state != nil && IsKnown(state.ArtifactID) {
+		priorArtifactID = state.ArtifactID.ValueString()
+	}
+
+	newArtifactID := priorArtifactID
+	if state != nil && artifactModifyPlanNeedsUnknownArtifactID(*plan, *state) {
+		// Assign "new-version" to signal that a new artifact version will be created,
+		// so that artifactSourceNeedsUpload logic treats this as a new ID not matching any prior version.
+		newArtifactID = "new-version"
+	}
+
+	if !artifactSourceNeedsUpload(plan, state, priorArtifactID, newArtifactID) {
+		return false
+	}
+
+	if isCreate {
+		return true
+	}
+
+	if state == nil {
+		return false
+	}
+
+	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+			return true
+		}
+		return artifactLockedSourceCloneNeeded(*plan, *state)
+	}
+
+	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		return artifactSourceDeferLock(*plan, *state)
+	}
+
+	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
+}
+
+func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {
+	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+		return
+	}
+	if config != nil && artifactHasManualImageURI(config.Spec) {
+		return
+	}
+
+	for gi := range plan.Spec.ContainerGroups {
+		group := plan.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if !artifactContainerIsPrimary(*container, group) {
+				continue
+			}
+			if config != nil && containerImageURIManuallySet(config, gi, ci) {
+				continue
+			}
+			container.ImageURI = types.StringUnknown()
+		}
+	}
+}
+
+func artifactHasManualImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
+	}
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containerImageURIManuallySet(model *ArtifactResourceModel, gi, ci int) bool {
+	if model == nil || model.Spec == nil {
+		return false
+	}
+	if gi >= len(model.Spec.ContainerGroups) {
+		return false
+	}
+	group := model.Spec.ContainerGroups[gi]
+	if ci >= len(group.Containers) {
+		return false
+	}
+	uri := group.Containers[ci].ImageURI
+	return !uri.IsNull() && !uri.IsUnknown() && uri.ValueString() != ""
 }
 
 func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {

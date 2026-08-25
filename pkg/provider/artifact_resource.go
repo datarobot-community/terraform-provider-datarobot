@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -169,7 +170,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"source": schema.SingleNestedAttribute{
 				Optional: true,
 				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
-					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version.",
+					"When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
+					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -235,10 +237,23 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &data, nil, createdArtifact, "")
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "")
 		if syncErr != nil {
-			r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
-			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			var timeoutErr *client.ArtifactBuildTimeoutError
+			isTimeout := errors.As(syncErr, &timeoutErr)
+			if !isTimeout {
+				r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			}
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(syncErr, &buildErr) {
+				if isTimeout {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
+			}
+			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
 		}
 		artifact = syncedArtifact
@@ -349,12 +364,22 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		syncedArtifact, syncErr := r.syncArtifactSource(ctx, &plan, &state, artifact, priorArtifactID)
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
 		if syncErr != nil {
 			if createdNewVersion {
 				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
 			}
-			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			summary := "Error uploading artifact source"
+			var buildErr *artifactBuildSyncError
+			if errors.As(syncErr, &buildErr) {
+				var timeoutErr *client.ArtifactBuildTimeoutError
+				if errors.As(syncErr, &timeoutErr) {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
+			}
+			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
 		}
 		artifact = syncedArtifact
@@ -430,6 +455,16 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	var config ArtifactResourceModel
+	var configPtr *ArtifactResourceModel
+	if !req.Config.Raw.IsNull() {
+		resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		configPtr = &config
+	}
+
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
 		dirHash, err := computeFolderHash(plan.Source.Dir)
 		if err != nil {
@@ -465,6 +500,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
+	applySourceManagedImageURIToPlan(configPtr, &plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
@@ -611,11 +647,13 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 	if len(plan.Spec.ContainerGroups) != len(state.Spec.ContainerGroups) {
 		return true
 	}
-	// When source manages code_ref, plan code_ref is null (schema default) while state
-	// holds the catalog IDs from the last upload — ignore that managed diff.
+	// When source manages code_ref / image_uri, plan values are null or pre-build while
+	// state holds the last upload/build results — ignore those managed diffs on the
+	// provider-managed primary container only; sidecar changes always count.
 	ignoreManagedCodeRef := artifactSourceConfigured(&plan) && !artifactHasManualCodeRef(plan.Spec)
+	ignoreManagedImageURI := artifactSourceConfigured(&plan)
 	for i := range plan.Spec.ContainerGroups {
-		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i], ignoreManagedCodeRef) {
+		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i], ignoreManagedCodeRef, ignoreManagedImageURI) {
 			return true
 		}
 	}
@@ -633,21 +671,22 @@ func a2aEnabledOn(v types.Bool) bool {
 	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
 }
 
-func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef bool) bool {
+func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef, ignoreManagedImageURI bool) bool {
 	if len(a.Containers) != len(b.Containers) {
 		return false
 	}
 	for i := range a.Containers {
-		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef) {
+		skipImageURI := ignoreManagedImageURI && artifactContainerIsPrimary(a.Containers[i], a)
+		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef, skipImageURI) {
 			return false
 		}
 	}
 	return true
 }
 
-func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef bool) bool {
+func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreImageURI bool) bool {
 	if !a.Name.Equal(b.Name) ||
-		!a.ImageURI.Equal(b.ImageURI) ||
+		(!ignoreImageURI && !a.ImageURI.Equal(b.ImageURI)) ||
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
@@ -1061,6 +1100,22 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 		)
 	}
 
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	if status == string(client.ArtifactStatusLocked) &&
+		!data.Source.WaitForBuild.IsNull() &&
+		!data.Source.WaitForBuild.IsUnknown() &&
+		!data.Source.WaitForBuild.ValueBool() &&
+		!artifactHasPrimaryImageURI(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("wait_for_build"),
+			"Invalid wait_for_build on locked artifact",
+			"Locked artifacts require a completed image build before locking. Setting `wait_for_build = false` is only supported when `status = \"draft\"` or when `image_uri` is explicitly specified.",
+		)
+	}
+
 	if artifactHasManualCodeRef(data.Spec) {
 		resp.Diagnostics.AddAttributeError(
 			sourcePath,
@@ -1068,6 +1123,25 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
 		)
 	}
+}
+
+func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
+	}
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+			if !isPrimary && len(group.Containers) == 1 &&
+				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+				isPrimary = true
+			}
+			if isPrimary && !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
