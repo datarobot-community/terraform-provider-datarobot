@@ -1253,6 +1253,13 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 				"`entrypoint` is required when dockerfile source is `generated`.",
 			)
 		}
+		if IsKnown(cfg.Dockerfile.Path) {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("path"),
+				"Conflicting dockerfile path",
+				"`path` is not used when dockerfile source is `generated` and would be silently discarded; remove it or set `source = \"provided\"`.",
+			)
+		}
 	case "provided":
 		// path defaults to ./Dockerfile at marshal time
 	default:
