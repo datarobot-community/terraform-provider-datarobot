@@ -49,10 +49,10 @@ func (m artifactDockerfilePathPlanModifier) PlanModifyString(ctx context.Context
 		return
 	}
 
-	resp.PlanValue = plannedDockerfilePath(source, req.PlanValue, req.StateValue)
+	resp.PlanValue = plannedDockerfilePath(source, req.PlanValue)
 }
 
-func plannedDockerfilePath(source string, planValue, stateValue types.String) types.String {
+func plannedDockerfilePath(source string, planValue types.String) types.String {
 	if source == "generated" {
 		return types.StringNull()
 	}
@@ -61,10 +61,13 @@ func plannedDockerfilePath(source string, planValue, stateValue types.String) ty
 		return planValue
 	}
 
-	if !stateValue.IsNull() && !stateValue.IsUnknown() {
-		return stateValue
-	}
-
+	// planValue is only null/unknown here because the config omitted `path`
+	// (an unresolved reference was already handled by the ConfigValue guard
+	// above). An omitted path always resolves to the documented default,
+	// even if a prior apply had a custom path in state - falling back to
+	// state would make the default permanently unreachable once a custom
+	// path had ever been set, since deleting the config line could never
+	// undo it.
 	return types.StringValue(artifactDockerfileDefaultPath)
 }
 
