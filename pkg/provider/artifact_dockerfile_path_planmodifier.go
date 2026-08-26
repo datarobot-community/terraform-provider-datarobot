@@ -35,9 +35,17 @@ func (m artifactDockerfilePathPlanModifier) PlanModifyString(ctx context.Context
 		return
 	}
 
-	source, diags := dockerfileSourceFromConfig(ctx, req.Config, req.Path.ParentPath())
+	source, sourceUnknown, diags := dockerfileSourceFromConfig(ctx, req.Config, req.Path.ParentPath())
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	// An unresolved `source` means we don't yet know whether the eventual value
+	// will be "generated" (path must end up null) or "provided" (path defaults
+	// to ./Dockerfile). Guessing "provided" here would plan a concrete value
+	// that a later "generated" result can't be reconciled with. Leave path
+	// unknown, same as the ConfigValue guard above.
+	if sourceUnknown {
 		return
 	}
 
@@ -60,18 +68,19 @@ func plannedDockerfilePath(source string, planValue, stateValue types.String) ty
 	return types.StringValue(artifactDockerfileDefaultPath)
 }
 
-func dockerfileSourceFromConfig(ctx context.Context, config tfsdk.Config, dockerfilePath path.Path) (string, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
+func dockerfileSourceFromConfig(ctx context.Context, config tfsdk.Config, dockerfilePath path.Path) (source string, unknown bool, diags diag.Diagnostics) {
 	sourcePath := dockerfilePath.AtName("source")
-	var source types.String
-	diags.Append(config.GetAttribute(ctx, sourcePath, &source)...)
+	var sourceVal types.String
+	diags.Append(config.GetAttribute(ctx, sourcePath, &sourceVal)...)
 	if diags.HasError() {
-		return "", diags
+		return "", false, diags
 	}
-	if source.IsNull() || source.IsUnknown() || source.ValueString() == "" {
-		return "provided", diags
+	if sourceVal.IsUnknown() {
+		return "", true, diags
+	}
+	if sourceVal.IsNull() || sourceVal.ValueString() == "" {
+		return "provided", false, diags
 	}
 
-	return source.ValueString(), diags
+	return sourceVal.ValueString(), false, diags
 }
