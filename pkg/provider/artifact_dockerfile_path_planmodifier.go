@@ -25,6 +25,16 @@ func (m artifactDockerfilePathPlanModifier) MarkdownDescription(_ context.Contex
 }
 
 func (m artifactDockerfilePathPlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// A config value that is still unknown (e.g. a reference to another resource's
+	// not-yet-applied attribute) must stay unknown here too; only Terraform can
+	// resolve it at apply time. Overwriting it now with the default or the prior
+	// state value would "lock in" a value before the real one is known, and the
+	// UseStateForUnknown modifier that runs after this one can no longer help
+	// because it only acts while the plan value is still unknown.
+	if req.ConfigValue.IsUnknown() {
+		return
+	}
+
 	source, diags := dockerfileSourceFromConfig(ctx, req.Config, req.Path.ParentPath())
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
