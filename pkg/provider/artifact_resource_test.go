@@ -1021,6 +1021,15 @@ func TestValidateArtifactEnvironmentVar(t *testing.T) {
 		AtName("containers").AtListIndex(0).
 		AtName("environment_vars").AtListIndex(0)
 
+	hasDetail := func(diags diag.Diagnostics, substr string) bool {
+		for _, d := range diags.Errors() {
+			if strings.Contains(d.Detail(), substr) {
+				return true
+			}
+		}
+		return false
+	}
+
 	t.Run("unknown string value defers validation", func(t *testing.T) {
 		resp := &tfresource.ValidateConfigResponse{}
 		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
@@ -1058,6 +1067,59 @@ func TestValidateArtifactEnvironmentVar(t *testing.T) {
 		})
 		if resp.Diagnostics.HasError() {
 			t.Fatalf("expected no errors for unknown dr_credential_id, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("unknown credential key defers validation", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source:         types.StringValue(client.EnvironmentVariableSourceCredential),
+			Name:           types.StringValue("SECRET"),
+			DrCredentialID: types.StringValue("cred-abc"),
+			Key:            types.StringUnknown(),
+		})
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors for unknown key, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	// An unknown value defers only its own "required" check: a literal key is still
+	// rejected, otherwise it would be silently dropped when mapped to the API.
+	t.Run("unknown string value still reports unexpected key", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source: types.StringValue(client.EnvironmentVariableSourceString),
+			Name:   types.StringValue("ENV"),
+			Value:  types.StringUnknown(),
+			Key:    types.StringValue("token"),
+		})
+		if !hasDetail(resp.Diagnostics, `"key" must not be set`) {
+			t.Fatalf("expected unexpected-key error alongside unknown value, got: %v", resp.Diagnostics.Errors())
+		}
+		if hasDetail(resp.Diagnostics, `"value" is required`) {
+			t.Fatalf("unknown value must not be reported as missing: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	// An unknown dr_credential_id defers only its own "required" check: a missing key
+	// is still reported, otherwise the provider would send an empty key to the API.
+	t.Run("unknown credential id still reports its siblings", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactEnvironmentVar(resp, evPath, ArtifactEnvironmentVariableModel{
+			Source:         types.StringValue(client.EnvironmentVariableSourceCredential),
+			Name:           types.StringValue("SECRET"),
+			DrCredentialID: types.StringUnknown(),
+			Key:            types.StringNull(),
+			Value:          types.StringValue("literal"),
+		})
+		if !hasDetail(resp.Diagnostics, `"key" is required`) {
+			t.Fatalf("expected missing-key error alongside unknown dr_credential_id, got: %v", resp.Diagnostics.Errors())
+		}
+		if !hasDetail(resp.Diagnostics, `"value" must not be set`) {
+			t.Fatalf("expected unexpected-value error alongside unknown dr_credential_id, got: %v", resp.Diagnostics.Errors())
+		}
+		if hasDetail(resp.Diagnostics, `"dr_credential_id" is required`) {
+			t.Fatalf("unknown dr_credential_id must not be reported as missing: %v", resp.Diagnostics.Errors())
 		}
 	})
 }
