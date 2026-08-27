@@ -3147,6 +3147,12 @@ func TestArtifactResourceSourceCreateBuildFailureRollback(t *testing.T) {
 		mockService.EXPECT().
 			WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
 			Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+		mockService.EXPECT().
+			BaseURL().
+			Return("https://app.datarobot.com"),
+		mockService.EXPECT().
+			GetArtifactBuildLogs(gomock.Any(), artifactID, artifactSourceTestBuildID).
+			Return("[2026-06-09 10:00:00] ERROR: docker build failed", nil),
 	)
 	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 
