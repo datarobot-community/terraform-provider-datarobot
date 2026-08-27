@@ -1038,7 +1038,7 @@ type ArtifactContainerModel struct {
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
 	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
 	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
-	Build            types.Object                         `tfsdk:"build"`
+	Build            types.Object                       `tfsdk:"build"`
 }
 
 type ArtifactImageBuildConfigModel struct {

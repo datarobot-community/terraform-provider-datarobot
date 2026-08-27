@@ -210,10 +210,14 @@ func artifactBuildAttrTypes() map[string]attr.Type {
 	}
 }
 
+func artifactBuildNull() types.Object {
+	return types.ObjectNull(artifactBuildAttrTypes())
+}
+
 func loadContainerBuildObjectFromAPI(build *client.ArtifactContainerBuildInfo) types.Object {
 	attrTypes := artifactBuildAttrTypes()
 	if build == nil {
-		return types.ObjectNull(attrTypes)
+		return artifactBuildNull()
 	}
 	obj, diags := types.ObjectValue(attrTypes, map[string]attr.Value{
 		"artifact_image_build_id": types.StringValue(build.ArtifactImageBuildID),
