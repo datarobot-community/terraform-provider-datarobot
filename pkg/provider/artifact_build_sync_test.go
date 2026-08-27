@@ -341,7 +341,6 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	draftPlan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 		m.Source.DirHash = dirHash
 	})

@@ -4030,6 +4030,9 @@ func TestArtifactImageBuildConfigFromAPI_generated(t *testing.T) {
 		if got := cfg.Dockerfile.Entrypoint[1].ValueString(); got != "app.py" {
 			t.Fatalf("entrypoint[1]: got %q, want %q", got, "app.py")
 		}
+		if !cfg.Dockerfile.Path.IsNull() {
+			t.Fatalf("dockerfile.path: got %v, want null for generated dockerfile", cfg.Dockerfile.Path)
+		}
 		if model.ImageURI.ValueString() != "registry.example/app:latest" {
 			t.Fatalf("image_uri: got %q", model.ImageURI.ValueString())
 		}

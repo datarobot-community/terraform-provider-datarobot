@@ -185,20 +185,7 @@ func loadImageBuildConfigDSFromAPI(cfg *client.ArtifactImageBuildConfig) *Artifa
 		}
 	}
 	if cfg.Dockerfile != nil {
-		df := cfg.Dockerfile
-		dockerfileModel := &ArtifactDockerfileModel{
-			Source:                        types.StringValue(df.Source),
-			Path:                          types.StringValue(df.Path),
-			ExecutionEnvironmentID:        types.StringValue(df.ExecutionEnvironmentID),
-			ExecutionEnvironmentVersionID: types.StringValue(df.ExecutionEnvironmentVersionID),
-		}
-		if len(df.Entrypoint) > 0 {
-			dockerfileModel.Entrypoint = make([]types.String, len(df.Entrypoint))
-			for i, e := range df.Entrypoint {
-				dockerfileModel.Entrypoint[i] = types.StringValue(e)
-			}
-		}
-		model.Dockerfile = dockerfileModel
+		model.Dockerfile = loadDockerfileFromAPI(cfg.Dockerfile)
 	}
 	return model
 }

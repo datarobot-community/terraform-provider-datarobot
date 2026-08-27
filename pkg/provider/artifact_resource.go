@@ -58,9 +58,9 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		"path": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
-			Default:             stringdefault.StaticString("./Dockerfile"),
-			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.",
+			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.",
 			PlanModifiers: []planmodifier.String{
+				artifactDockerfilePathPlanModifier{},
 				stringplanmodifier.UseStateForUnknown(),
 			},
 		},
@@ -1253,6 +1253,13 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 				"`entrypoint` is required when dockerfile source is `generated`.",
 			)
 		}
+		if IsKnown(cfg.Dockerfile.Path) {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("path"),
+				"Conflicting dockerfile path",
+				"`path` is not used when dockerfile source is `generated` and would be silently discarded; remove it or set `source = \"provided\"`.",
+			)
+		}
 	case "provided":
 		// path defaults to ./Dockerfile at marshal time
 	default:
@@ -1672,6 +1679,7 @@ func loadDockerfileFromAPI(df *client.ArtifactDockerfileConfig) *ArtifactDockerf
 				model.Entrypoint[i] = types.StringValue(e)
 			}
 		}
+		model.Path = types.StringNull()
 		return model
 	}
 
