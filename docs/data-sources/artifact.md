@@ -44,7 +44,7 @@ output "artifact_status" {
 - `spec` (Attributes) The artifact specification containing container group definitions. (see [below for nested schema](#nestedatt--spec))
 - `status` (String) Artifact status: `draft` or `locked`.
 - `tags` (Attributes List) Tags associated with this artifact. (see [below for nested schema](#nestedatt--tags))
-- `type` (String) The artifact type: `service` or `nim`.
+- `type` (String) The artifact type: `service`, `nim`, or `agent`.
 - `updated_at` (String) Timestamp of when the artifact was last updated.
 - `version` (Number) Version number of the artifact. Set only for locked artifacts.
 
@@ -65,6 +65,7 @@ Read-Only:
 
 Read-Only:
 
+- `a2a_enabled` (Boolean) Whether A2A card management and the A2A surface are enabled. Set on `agent` artifacts; omitted otherwise.
 - `container_groups` (Attributes List) List of container groups. (see [below for nested schema](#nestedatt--spec--container_groups))
 - `storage` (Attributes) NIM model weight storage configuration. (see [below for nested schema](#nestedatt--spec--storage))
 - `template_id` (String) ID of the template used to create this NIM artifact.
@@ -113,8 +114,8 @@ Read-Only:
 
 - `dr_credential_id` (String) DataRobot credential ID when source is "dr-credential".
 - `key` (String) Key within the credential when source is "dr-credential".
-- `name` (String) Name of the environment variable.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials.
+- `name` (String) Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.
 - `value` (String) Value of the environment variable when source is "string".
 
 
@@ -170,6 +171,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -185,6 +187,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -229,6 +232,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
