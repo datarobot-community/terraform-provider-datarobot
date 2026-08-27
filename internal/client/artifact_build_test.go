@@ -211,7 +211,7 @@ func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
-		case "/otel/artifacts/art-1/logs/":
+		case "/otel/artifact/art-1/logs/":
 			otelCalls++
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -301,7 +301,7 @@ func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
 		case "/artifacts/art-1/builds/build-1/logs":
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"detail":"Failed to retrieve build logs"}`))
-		case "/otel/artifacts/art-1/logs/":
+		case "/otel/artifact/art-1/logs/":
 			if got := r.URL.Query().Get("limit"); got != "30" {
 				t.Fatalf("expected limit=30, got %q", got)
 			}
