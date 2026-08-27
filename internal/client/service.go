@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
-	"github.com/google/go-querystring/query"
 )
 
 const (
@@ -784,10 +783,6 @@ func deploymentLogsTailLines() int {
 	return tailLines
 }
 
-type getDeploymentLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
-}
-
 func formatOtelLogEntries(entries []OtelLogEntry) string {
 	lines := make([]string, 0, len(entries))
 	for _, entry := range entries {
@@ -796,8 +791,13 @@ func formatOtelLogEntries(entries []OtelLogEntry) string {
 	return strings.Join(lines, "\n")
 }
 
-func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string) (string, error) {
-	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, artifactBuildLogsTailLines())
+// getOtelEntityLogs takes limit from the caller rather than reading an env var
+// itself, so each entity keeps its own tail-length setting (e.g. deployments use
+// DeploymentLogsTailLinesEnvVar, artifact builds use ArtifactBuildLogsTailLinesEnvVar)
+// instead of every entity silently sharing whichever one this function happened to
+// call internally.
+func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string, limit int) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, limit)
 	if err != nil {
 		return "", err
 	}
@@ -806,15 +806,7 @@ func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityI
 }
 
 func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	queryReq := &getDeploymentLogsRequest{Limit: deploymentLogsTailLines()}
-	pathValues, _ := query.Values(queryReq)
-
-	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/deployment/"+id+"/logs/?"+pathValues.Encode())
-	if err != nil {
-		return "", err
-	}
-
-	return formatOtelLogEntries(resp.Data), nil
+	return s.getOtelEntityLogs(ctx, "deployment", id, deploymentLogsTailLines())
 }
 
 func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {
