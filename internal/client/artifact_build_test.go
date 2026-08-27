@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -210,7 +211,7 @@ func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
-		case "/otel/artifact/art-1/logs/":
+		case "/otel/artifacts/art-1/logs/":
 			otelCalls++
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -300,7 +301,7 @@ func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
 		case "/artifacts/art-1/builds/build-1/logs":
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"detail":"Failed to retrieve build logs"}`))
-		case "/otel/artifact/art-1/logs/":
+		case "/otel/artifacts/art-1/logs/":
 			if got := r.URL.Query().Get("limit"); got != "30" {
 				t.Fatalf("expected limit=30, got %q", got)
 			}
@@ -357,6 +358,36 @@ func TestGetArtifactBuildLogsParsesAndTailsJSONL(t *testing.T) {
 	for _, want := range []string{
 		"[2026-06-09 10:00:00] INFO: line-1",
 		"[2026-06-09 10:00:01] ERROR: line-2",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)
+		}
+	}
+}
+
+// A single JSONL wrapper line elsewhere in the body must not cause a plain-text
+// BuildKit error line to be dropped - see the artifact-build-log-tail PR review.
+func TestGetArtifactBuildLogsKeepsPlainTextLineAlongsideJSONL(t *testing.T) {
+	body := "{\"asctime\":\"2026-06-09 10:00:00\",\"levelname\":\"INFO\",\"message\":\"pulling image\"}\n" +
+		"#2 ERROR: failed to solve: process \"/bin/sh\" did not complete\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"[2026-06-09 10:00:00] INFO: pulling image",
+		"ERROR: failed to solve",
 	} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)

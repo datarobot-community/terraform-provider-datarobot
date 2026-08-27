@@ -135,11 +135,18 @@ func artifactBuildLogsTailLines() int {
 	return tailLines
 }
 
-func parseArtifactBuildLogs(body []byte) []ArtifactBuildLogEntry {
+// formatArtifactBuildLogLines formats each line of the build log body independently:
+// a line that parses as a structured JSONL entry is rendered as "[timestamp] LEVEL:
+// message"; any other line is kept as-is (IBS forwards BuildKit stderr as plain text -
+// see workload-api acceptance tests). Falling back per line, rather than treating the
+// whole body as JSON the moment any one line parses, means a single JSON line
+// elsewhere in the body can't cause a plain-text line - e.g. the "ERROR: failed to
+// solve" line this feature exists to surface - to be silently dropped.
+func formatArtifactBuildLogLines(body []byte) []string {
 	scanner := bufio.NewScanner(bytes.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	var entries []ArtifactBuildLogEntry
+	var lines []string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -147,20 +154,14 @@ func parseArtifactBuildLogs(body []byte) []ArtifactBuildLogEntry {
 		}
 
 		var entry ArtifactBuildLogEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		if err := json.Unmarshal([]byte(line), &entry); err == nil {
+			lines = append(lines, formatArtifactBuildLogEntry(entry))
 			continue
 		}
-		entries = append(entries, entry)
+		lines = append(lines, line)
 	}
 
-	return entries
-}
-
-func tailArtifactBuildLogEntries(entries []ArtifactBuildLogEntry, n int) []ArtifactBuildLogEntry {
-	if n <= 0 || len(entries) <= n {
-		return entries
-	}
-	return entries[len(entries)-n:]
+	return lines
 }
 
 func tailPlainTextLogLines(text string, n int) string {
@@ -177,35 +178,25 @@ func formatArtifactBuildLogsBody(body []byte) string {
 		return ""
 	}
 
-	entries := parseArtifactBuildLogs(body)
-	if len(entries) > 0 {
-		return formatArtifactBuildLogEntries(tailArtifactBuildLogEntries(entries, artifactBuildLogsTailLines()))
-	}
-
-	// IBS forwards BuildKit stderr as plain text (see workload-api acceptance tests).
-	return tailPlainTextLogLines(trimmed, artifactBuildLogsTailLines())
+	return tailPlainTextLogLines(strings.Join(formatArtifactBuildLogLines(body), "\n"), artifactBuildLogsTailLines())
 }
 
-func formatArtifactBuildLogEntries(entries []ArtifactBuildLogEntry) string {
-	lines := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		level := strings.ToUpper(entry.Levelname)
-		if level == "" {
-			level = "INFO"
-		}
-		timestamp := entry.Asctime
-		if timestamp == "" {
-			timestamp = "unknown"
-		}
-		lines = append(lines, fmt.Sprintf("[%s] %s: %s", timestamp, level, entry.Message))
+func formatArtifactBuildLogEntry(entry ArtifactBuildLogEntry) string {
+	level := strings.ToUpper(entry.Levelname)
+	if level == "" {
+		level = "INFO"
 	}
-	return strings.Join(lines, "\n")
+	timestamp := entry.Asctime
+	if timestamp == "" {
+		timestamp = "unknown"
+	}
+	return fmt.Sprintf("[%s] %s: %s", timestamp, level, entry.Message)
 }
 
 func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
 	body, err := getRaw(s.client, ctx, "/artifacts/"+artifactID+"/builds/"+buildID+"/logs")
 	if err != nil {
-		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID)
+		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifacts", artifactID, artifactBuildLogsTailLines())
 		if otelErr == nil && otelLogs != "" {
 			return otelLogs, nil
 		}
@@ -217,7 +208,7 @@ func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buil
 		return logs, nil
 	}
 
-	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID)
+	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifacts", artifactID, artifactBuildLogsTailLines())
 	if otelErr == nil && otelLogs != "" {
 		return otelLogs, nil
 	}
@@ -251,7 +242,7 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		if logState == nil {
 			return
 		}
-		s.pollNewOtelEntityLogs(ctx, "artifact", artifactID, logState, opts.OnOtelLogLine)
+		s.pollNewOtelEntityLogs(ctx, "artifacts", artifactID, logState, opts.OnOtelLogLine)
 	}
 
 	for {
