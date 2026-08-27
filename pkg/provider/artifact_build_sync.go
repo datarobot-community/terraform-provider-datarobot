@@ -126,7 +126,6 @@ func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactB
 		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
 			line := client.FormatOtelLogEntry(entry)
 			emitArtifactBuildLogLine(line)
-			tflog.Debug(ctx, line)
 		}
 	}
 	return merged
