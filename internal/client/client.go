@@ -239,6 +239,10 @@ func getRaw(c *Client, ctx context.Context, path string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
+	if req.URL.String() != resp.Request.URL.String() {
+		return nil, NewGenericError("request was redirected")
+	}
+
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, NewNotFoundError(url)
 	}
