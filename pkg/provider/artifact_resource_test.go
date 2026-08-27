@@ -3835,7 +3835,9 @@ func TestArtifactResourceSourceReadRefreshesDirHash(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceDir, "main.py"), []byte("after"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	expectedHash, err := computeFolderHash(types.StringValue(sourceDir))
+	expectedHash, err := computeArtifactSourceDirHash(&ArtifactResourceModel{
+		Source: &ArtifactSourceModel{Dir: types.StringValue(sourceDir)},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -178,10 +178,22 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						MarkdownDescription: "Path to the local directory containing application source files to upload.",
 					},
 					"dir_hash": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
+						Computed: true,
+						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
+							"Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"generate_ignore": schema.BoolAttribute{
+						Optional: true,
+						Computed: true,
+						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
+							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
+							"`.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.",
+						Default: booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 					"wait_for_build": schema.BoolAttribute{
@@ -473,7 +485,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
+		dirHash, err := computeArtifactSourceDirHash(&plan)
 		if err != nil {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("source").AtName("dir"),

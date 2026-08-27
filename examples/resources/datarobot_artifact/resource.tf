@@ -38,6 +38,7 @@ resource "datarobot_artifact" "from_source" {
   source = {
     dir            = "${path.module}/app"
     wait_for_build = true
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -78,6 +79,7 @@ resource "datarobot_artifact" "from_source_locked" {
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
