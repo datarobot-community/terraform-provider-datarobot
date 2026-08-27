@@ -6,7 +6,6 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type artifactBuildSyncError struct {
@@ -76,13 +75,10 @@ func (r *ArtifactResource) syncArtifactBuild(
 
 	buildID := trigger.BuildIDs[0]
 
-	var completedBuild *client.ArtifactBuild
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		waitOpts := artifactBuildWaitOptions(ctx, opts)
-		var err error
-		completedBuild, err = r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts)
-		if err != nil {
+		waitOpts := artifactBuildWaitOptions(opts)
+		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
 			return nil, buildID, r.enrichArtifactBuildError(
 				ctx,
 				artifactID,
@@ -108,9 +104,6 @@ func (r *ArtifactResource) syncArtifactBuild(
 			fmt.Errorf("%s: %w", msg, err),
 		)
 	}
-	if completedBuild != nil {
-		applyCompletedArtifactBuildToPrimaryContainer(artifact, completedBuild)
-	}
 	if waitForBuild && artifactPrimaryContainerImageURI(artifact) == "" {
 		return artifact, buildID, r.enrichArtifactBuildError(
 			ctx,
@@ -123,7 +116,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 	return artifact, buildID, nil
 }
 
-func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+func artifactBuildWaitOptions(opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
 	merged := &client.WaitForArtifactBuildOptions{}
 	if opts != nil {
 		*merged = *opts
@@ -132,7 +125,6 @@ func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactB
 		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
 			line := client.FormatOtelLogEntry(entry)
 			emitArtifactBuildLogLine(line)
-			tflog.Debug(ctx, line)
 		}
 	}
 	return merged
@@ -169,26 +161,36 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 		return false
 	}
 
-	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) {
-		if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
-			return artifactLockedSourceCloneNeeded(*plan, *state)
+	if state.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		if plan.Status.ValueString() == string(client.ArtifactStatusDraft) {
+			return true
 		}
+		return artifactLockedSourceCloneNeeded(*plan, *state)
+	}
+
+	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) {
 		return artifactSourceDeferLock(*plan, *state)
 	}
 
 	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
 }
 
-func applySourceManagedImageURIToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {
 	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+		return
+	}
+	if config != nil && artifactHasManualImageURI(config.Spec) {
 		return
 	}
 
 	for gi := range plan.Spec.ContainerGroups {
-		group := &plan.Spec.ContainerGroups[gi]
+		group := plan.Spec.ContainerGroups[gi]
 		for ci := range group.Containers {
 			container := &group.Containers[ci]
-			if !artifactContainerIsPrimary(*container, *group) {
+			if !artifactContainerIsPrimary(*container, group) {
+				continue
+			}
+			if config != nil && containerImageURIManuallySet(config, gi, ci) {
 				continue
 			}
 			container.ImageURI = types.StringUnknown()
@@ -196,22 +198,33 @@ func applySourceManagedImageURIToPlan(plan, state *ArtifactResourceModel, isCrea
 	}
 }
 
-func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
-	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
-		return
+func artifactHasManualImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
 	}
-
-	attrTypes := artifactBuildAttrTypes()
-	for gi := range plan.Spec.ContainerGroups {
-		group := &plan.Spec.ContainerGroups[gi]
-		for ci := range group.Containers {
-			container := &group.Containers[ci]
-			if !artifactContainerIsPrimary(*container, *group) {
-				continue
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			if !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
 			}
-			container.Build = types.ObjectUnknown(attrTypes)
 		}
 	}
+	return false
+}
+
+func containerImageURIManuallySet(model *ArtifactResourceModel, gi, ci int) bool {
+	if model == nil || model.Spec == nil {
+		return false
+	}
+	if gi >= len(model.Spec.ContainerGroups) {
+		return false
+	}
+	group := model.Spec.ContainerGroups[gi]
+	if ci >= len(group.Containers) {
+		return false
+	}
+	uri := group.Containers[ci].ImageURI
+	return !uri.IsNull() && !uri.IsUnknown() && uri.ValueString() != ""
 }
 
 func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {
