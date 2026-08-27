@@ -54,24 +54,38 @@ func artifactSourceWaitForBuild(plan *ArtifactResourceModel) bool {
 func (r *ArtifactResource) syncArtifactBuild(
 	ctx context.Context,
 	artifactID string,
+	artifactRepositoryID string,
 	waitForBuild bool,
 	opts *client.WaitForArtifactBuildOptions,
 ) (*client.Artifact, string, error) {
 	traceAPICall("TriggerArtifactBuild")
 	trigger, err := r.provider.service.TriggerArtifactBuild(ctx, artifactID)
 	if err != nil {
-		return nil, "", fmt.Errorf("trigger artifact build: %w", err)
+		return nil, "", r.enrichArtifactBuildError(ctx, artifactID, artifactRepositoryID, "", fmt.Errorf("trigger artifact build: %w", err))
 	}
 	if trigger == nil || len(trigger.BuildIDs) == 0 {
-		return nil, "", fmt.Errorf("trigger artifact build: empty buildIds")
+		return nil, "", r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			"",
+			fmt.Errorf("trigger artifact build: empty buildIds"),
+		)
 	}
 
 	buildID := trigger.BuildIDs[0]
 
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, opts); err != nil {
-			return nil, buildID, fmt.Errorf("wait for artifact build: %w", err)
+		waitOpts := artifactBuildWaitOptions(opts)
+		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
+			return nil, buildID, r.enrichArtifactBuildError(
+				ctx,
+				artifactID,
+				artifactRepositoryID,
+				buildID,
+				fmt.Errorf("wait for artifact build: %w", err),
+			)
 		}
 	}
 
@@ -82,12 +96,38 @@ func (r *ArtifactResource) syncArtifactBuild(
 		if !waitForBuild {
 			msg = "refresh artifact after build trigger"
 		}
-		return nil, buildID, fmt.Errorf("%s: %w", msg, err)
+		return nil, buildID, r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			buildID,
+			fmt.Errorf("%s: %w", msg, err),
+		)
 	}
 	if waitForBuild && artifactPrimaryContainerImageURI(artifact) == "" {
-		return artifact, buildID, fmt.Errorf("artifact build completed but primary container image_uri is empty")
+		return artifact, buildID, r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			buildID,
+			fmt.Errorf("artifact build completed but primary container image_uri is empty"),
+		)
 	}
 	return artifact, buildID, nil
+}
+
+func artifactBuildWaitOptions(opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+	merged := &client.WaitForArtifactBuildOptions{}
+	if opts != nil {
+		*merged = *opts
+	}
+	if merged.OnOtelLogLine == nil {
+		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
+			line := client.FormatOtelLogEntry(entry)
+			emitArtifactBuildLogLine(line)
+		}
+	}
+	return merged
 }
 
 // artifactModifyPlanNeedsUnknownImageURI is true when apply will upload source and trigger

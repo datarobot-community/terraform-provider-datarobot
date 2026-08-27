@@ -104,7 +104,7 @@ func traceAPICall(api string) {
 	val, exists := os.LookupEnv("TRACE_API_CALLS")
 	if exists && val == "1" {
 		pc, _, _, _ := runtime.Caller(1)
-		fmt.Printf("DataRobot API Call: %s (%s)\n", api, runtime.FuncForPC(pc).Name())
+		fmt.Fprintf(os.Stderr, "DataRobot API Call: %s (%s)\n", api, runtime.FuncForPC(pc).Name())
 	}
 }
 
@@ -146,6 +146,17 @@ func isAnyFeatureFlagEnabled(ctx context.Context, service client.Service, flagNa
 func setStringValueIfKnown(target *string, source basetypes.StringValue) {
 	if IsKnown(source) {
 		*target = source.ValueString()
+	}
+}
+
+// debugEnabled reports whether a DATAROBOT_DEBUG-style value turns debug mode on.
+// Unset and the usual falsey spellings are off; any other non-empty value is on.
+func debugEnabled(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "0", "false", "off", "no":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -851,7 +862,7 @@ func getFileInfo(localPath, pathInModel string) (fileInfo client.FileInfo, err e
 	var fileReader *os.File
 	fileReader, err = os.Open(localPath)
 	if err != nil {
-		fmt.Println("Error opening file", err)
+		fmt.Fprintln(os.Stderr, "Error opening file", err)
 		return
 	}
 	defer fileReader.Close()

@@ -126,16 +126,11 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 	cfg.UserAgent = fmt.Sprintf("%s/%s Terraform-%s", UserAgent, p.version, req.TerraformVersion)
 	cfg.TraceContext = traceContext
 
-	// set debug mode if TF_LOG is set to DEBUG or TRACE
-	logLevel := os.Getenv("TF_LOG")
-	if logLevel == "DEBUG" || logLevel == "TRACE" {
-		cfg.Debug = true
-	} else {
-		logLevel = os.Getenv("TF_LOG_PROVIDER")
-		if logLevel == "DEBUG" || logLevel == "TRACE" {
-			cfg.Debug = true
-		}
-	}
+	// Debug mode dumps every HTTP request/response and appends curl reproductions to
+	// error messages. It is opt-in via DATAROBOT_DEBUG rather than inferred from TF_LOG,
+	// so that TF_LOG=DEBUG can surface provider progress output (e.g. artifact build log
+	// tailing) without also emitting full API payloads.
+	cfg.Debug = debugEnabled(os.Getenv(DataRobotDebugEnvVar))
 
 	// retryablehttp gives us automatic retries with exponential backoff.
 	httpClient := retryablehttp.NewClient()

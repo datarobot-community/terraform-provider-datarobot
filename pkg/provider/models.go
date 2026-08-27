@@ -11,6 +11,7 @@ const (
 	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
+	DataRobotDebugEnvVar        string = "DATAROBOT_DEBUG"
 	TimeoutMinutesEnvVar        string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent                   string = "DataRobotTerraformClient"
 
