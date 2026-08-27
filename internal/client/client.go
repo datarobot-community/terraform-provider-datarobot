@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/go-querystring/query"
@@ -157,7 +158,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 	}
 
 	if c.cfg.Debug {
-		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
+		fmt.Fprintf(os.Stderr, "Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
 
 	// Deserialize the response into the provided result type
@@ -409,7 +410,7 @@ func uploadFilesFromBinaries[T any](
 	}
 
 	if c.cfg.Debug {
-		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
+		fmt.Fprintf(os.Stderr, "Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errorMessage := fmt.Sprintf("%s request %s : response %s %s", req.Method, req.URL.String(), resp.Status, string(respBody))

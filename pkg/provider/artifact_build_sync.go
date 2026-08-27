@@ -6,7 +6,6 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type artifactBuildSyncError struct {
@@ -78,7 +77,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		waitOpts := artifactBuildWaitOptions(ctx, opts)
+		waitOpts := artifactBuildWaitOptions(opts)
 		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
 			return nil, buildID, r.enrichArtifactBuildError(
 				ctx,
@@ -117,7 +116,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 	return artifact, buildID, nil
 }
 
-func artifactBuildWaitOptions(ctx context.Context, opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+func artifactBuildWaitOptions(opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
 	merged := &client.WaitForArtifactBuildOptions{}
 	if opts != nil {
 		*merged = *opts

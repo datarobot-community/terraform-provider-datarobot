@@ -14,7 +14,7 @@ import (
 )
 
 func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
-	opts := artifactBuildWaitOptions(context.Background(), &client.WaitForArtifactBuildOptions{
+	opts := artifactBuildWaitOptions(&client.WaitForArtifactBuildOptions{
 		PollInterval: time.Millisecond,
 	})
 	if opts.OnOtelLogLine == nil {
