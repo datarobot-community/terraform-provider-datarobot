@@ -17,7 +17,7 @@ func TestGetRawRejectsRedirect(t *testing.T) {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
-		w.Write([]byte("<html>please log in</html>"))
+		_, _ = w.Write([]byte("<html>please log in</html>"))
 	}))
 	defer server.Close()
 
