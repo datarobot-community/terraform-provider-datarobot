@@ -196,7 +196,7 @@ func formatArtifactBuildLogEntry(entry ArtifactBuildLogEntry) string {
 func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
 	body, err := getRaw(s.client, ctx, "/artifacts/"+artifactID+"/builds/"+buildID+"/logs")
 	if err != nil {
-		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifacts", artifactID, artifactBuildLogsTailLines())
+		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines())
 		if otelErr == nil && otelLogs != "" {
 			return otelLogs, nil
 		}
@@ -208,7 +208,7 @@ func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buil
 		return logs, nil
 	}
 
-	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifacts", artifactID, artifactBuildLogsTailLines())
+	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines())
 	if otelErr == nil && otelLogs != "" {
 		return otelLogs, nil
 	}
@@ -242,7 +242,7 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		if logState == nil {
 			return
 		}
-		s.pollNewOtelEntityLogs(ctx, "artifacts", artifactID, logState, opts.OnOtelLogLine)
+		s.pollNewOtelEntityLogs(ctx, "artifact", artifactID, logState, opts.OnOtelLogLine)
 	}
 
 	for {
