@@ -858,10 +858,7 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Missing name",
 				`"name" is required when source is "string".`)
 		}
-		if ev.Value.IsUnknown() {
-			return
-		}
-		if ev.Value.IsNull() {
+		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
 				`"value" is required when source is "string".`)
