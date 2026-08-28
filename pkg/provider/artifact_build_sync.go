@@ -75,10 +75,13 @@ func (r *ArtifactResource) syncArtifactBuild(
 
 	buildID := trigger.BuildIDs[0]
 
+	var completedBuild *client.ArtifactBuild
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
 		waitOpts := artifactBuildWaitOptions(opts)
-		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts); err != nil {
+		var err error
+		completedBuild, err = r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts)
+		if err != nil {
 			return nil, buildID, r.enrichArtifactBuildError(
 				ctx,
 				artifactID,
@@ -103,6 +106,9 @@ func (r *ArtifactResource) syncArtifactBuild(
 			buildID,
 			fmt.Errorf("%s: %w", msg, err),
 		)
+	}
+	if completedBuild != nil {
+		applyCompletedArtifactBuildToPrimaryContainer(artifact, completedBuild)
 	}
 	if waitForBuild && artifactPrimaryContainerImageURI(artifact) == "" {
 		return artifact, buildID, r.enrichArtifactBuildError(
@@ -173,6 +179,30 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 	}
 
 	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
+}
+
+// applySourceManagedBuildToPlan marks the primary container's computed build metadata
+// unknown whenever apply will trigger a new image build. Without this, the schema's
+// UseStateForUnknown would carry the previous build forward as a known value and
+// Terraform would reject the refreshed metadata as an inconsistent result after apply.
+// Unlike image_uri there is no user-settable counterpart to preserve: a triggered build
+// always replaces this block.
+func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+		return
+	}
+
+	attrTypes := artifactBuildAttrTypes()
+	for gi := range plan.Spec.ContainerGroups {
+		group := &plan.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if !artifactContainerIsPrimary(*container, *group) {
+				continue
+			}
+			container.Build = types.ObjectUnknown(attrTypes)
+		}
+	}
 }
 
 func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {

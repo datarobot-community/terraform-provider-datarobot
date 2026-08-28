@@ -501,6 +501,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
 	applySourceManagedImageURIToPlan(configPtr, &plan, statePtr, isCreate)
+	applySourceManagedBuildToPlan(&plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
