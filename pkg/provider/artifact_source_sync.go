@@ -10,6 +10,8 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -257,6 +259,46 @@ func artifactSourceGenerateIgnore(data *ArtifactResourceModel) bool {
 	return data.Source.GenerateIgnore.ValueBool()
 }
 
+// artifactSourceIgnoreDiagnostics reports the two ignore-file conditions the
+// matcher can detect but nothing else in an apply would mention: the deprecated
+// .wapiignore name still being in effect, and a second ignore file whose
+// patterns are silently inert. The first sign of the latter otherwise is a
+// .venv on the remote.
+//
+// These are raised during planning so the user reads them before anything is
+// uploaded, rather than after the catalog already has the file.
+//
+// A matcher that fails to load is not reported here. computeArtifactSourceDirHash
+// reads the same directory and turns that into an attribute error, so repeating
+// it would only print the problem twice.
+func artifactSourceIgnoreDiagnostics(data *ArtifactResourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if data == nil || data.Source == nil || !IsKnown(data.Source.Dir) {
+		return diags
+	}
+
+	absDir, err := filepath.Abs(data.Source.Dir.ValueString())
+	if err != nil {
+		return diags
+	}
+
+	matcher, err := ignore.New(absDir)
+	if err != nil {
+		return diags
+	}
+
+	dirPath := path.Root("source").AtName("dir")
+	if notice := matcher.Notice(); notice != "" {
+		diags.AddAttributeWarning(dirPath, "Deprecated ignore file name", notice)
+	}
+	if shadow := matcher.ShadowWarning(); shadow != "" {
+		diags.AddAttributeWarning(dirPath, "Ignore file present but not applied", shadow)
+	}
+
+	return diags
+}
+
 func computeArtifactSourceDirHash(data *ArtifactResourceModel) (types.String, error) {
 	hash := types.StringNull()
 	if data == nil || data.Source == nil || !IsKnown(data.Source.Dir) {
@@ -272,7 +314,7 @@ func computeArtifactSourceDirHash(data *ArtifactResourceModel) (types.String, er
 	var matcher *ignore.Matcher
 	var extra []artifactsource.LocalFile
 
-	if generateIgnore && !ignore.UserIgnoreExists(absDir) {
+	if generateIgnore && ignore.Locate(absDir) == "" {
 		matcher = ignore.FromDefaultTemplate()
 		sum := sha256.Sum256(ignore.DefaultTemplate)
 		extra = []artifactsource.LocalFile{{

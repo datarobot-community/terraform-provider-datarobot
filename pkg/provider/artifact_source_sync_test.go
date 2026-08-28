@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
@@ -1730,5 +1731,102 @@ func TestArtifactModifyPlanNeedsUnknownArtifactID(t *testing.T) {
 				t.Fatalf("artifactModifyPlanNeedsUnknownArtifactID() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestArtifactSourceIgnoreDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	sourceModel := func(dir string) *ArtifactResourceModel {
+		return &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+	}
+
+	writeFile := func(t *testing.T, dir, name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("*.tmp\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	tests := []struct {
+		name        string
+		files       []string
+		wantWarning bool
+		wantDetail  string
+	}{
+		{
+			name:  "no ignore file",
+			files: nil,
+		},
+		{
+			name:  "drignore only",
+			files: []string{ignore.FileName},
+		},
+		{
+			// The legacy name still works, so this is the only signal the user
+			// gets that it is on its way out.
+			name:        "legacy name in effect",
+			files:       []string{ignore.LegacyFileName},
+			wantWarning: true,
+			wantDetail:  ignore.LegacyFileName,
+		},
+		{
+			// .drignore wins outright, so the patterns in .wapiignore are inert
+			// and nothing else in an apply would say so.
+			name:        "second ignore file is inert",
+			files:       []string{ignore.FileName, ignore.LegacyFileName},
+			wantWarning: true,
+			wantDetail:  "not applied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			for _, name := range tt.files {
+				writeFile(t, dir, name)
+			}
+
+			diags := artifactSourceIgnoreDiagnostics(sourceModel(dir))
+
+			if got := diags.ErrorsCount(); got != 0 {
+				t.Fatalf("ErrorsCount() = %d, want 0 (%v)", got, diags.Errors())
+			}
+
+			want := 0
+			if tt.wantWarning {
+				want = 1
+			}
+			if got := diags.WarningsCount(); got != want {
+				t.Fatalf("WarningsCount() = %d, want %d (%v)", got, want, diags.Warnings())
+			}
+
+			if tt.wantDetail == "" {
+				return
+			}
+			w := diags.Warnings()[0]
+			if !strings.Contains(w.Summary()+w.Detail(), tt.wantDetail) {
+				t.Fatalf("warning %q / %q does not mention %q", w.Summary(), w.Detail(), tt.wantDetail)
+			}
+		})
+	}
+}
+
+func TestArtifactSourceIgnoreDiagnosticsSkipsUnknownDir(t *testing.T) {
+	t.Parallel()
+
+	for _, data := range []*ArtifactResourceModel{
+		nil,
+		{},
+		{Source: &ArtifactSourceModel{}},
+		{Source: &ArtifactSourceModel{Dir: types.StringUnknown()}},
+	} {
+		if diags := artifactSourceIgnoreDiagnostics(data); len(diags) != 0 {
+			t.Fatalf("artifactSourceIgnoreDiagnostics() = %v, want none", diags)
+		}
 	}
 }
