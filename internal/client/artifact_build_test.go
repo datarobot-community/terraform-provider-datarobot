@@ -188,8 +188,12 @@ func TestWaitForArtifactBuildTimesOut(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
-	if !strings.Contains(err.Error(), "timeout waiting for artifact art-1 build build-1") {
-		t.Fatalf("unexpected error: %v", err)
+	var timeoutErr *ArtifactBuildTimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("expected ArtifactBuildTimeoutError, got %T: %v", err, err)
+	}
+	if timeoutErr.ArtifactID != "art-1" || timeoutErr.BuildID != "build-1" {
+		t.Fatalf("unexpected timeout error fields: %+v", timeoutErr)
 	}
 }
 
@@ -354,6 +358,36 @@ func TestGetArtifactBuildLogsParsesAndTailsJSONL(t *testing.T) {
 	for _, want := range []string{
 		"[2026-06-09 10:00:00] INFO: line-1",
 		"[2026-06-09 10:00:01] ERROR: line-2",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)
+		}
+	}
+}
+
+// A single JSONL wrapper line elsewhere in the body must not cause a plain-text
+// BuildKit error line to be dropped - see the artifact-build-log-tail PR review.
+func TestGetArtifactBuildLogsKeepsPlainTextLineAlongsideJSONL(t *testing.T) {
+	body := "{\"asctime\":\"2026-06-09 10:00:00\",\"levelname\":\"INFO\",\"message\":\"pulling image\"}\n" +
+		"#2 ERROR: failed to solve: process \"/bin/sh\" did not complete\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"[2026-06-09 10:00:00] INFO: pulling image",
+		"ERROR: failed to solve",
 	} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)

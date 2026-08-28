@@ -975,6 +975,16 @@ func ArtifactStatusValidators() []validator.String {
 	}
 }
 
+func ArtifactTypeValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.OneOf(
+			string(client.ArtifactTypeService),
+			string(client.ArtifactTypeNim),
+			string(client.ArtifactTypeAgent),
+		),
+	}
+}
+
 func ArtifactDockerfileSourceValidators() []validator.String {
 	return []validator.String{
 		stringvalidator.OneOf("provided", "generated"),

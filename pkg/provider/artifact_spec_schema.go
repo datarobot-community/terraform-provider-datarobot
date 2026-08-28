@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"context"
+
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
@@ -12,6 +15,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// artifactImageURIUseStateForUnknown carries the prior image_uri forward across plans only
+// when `source` is configured. Without `source`, image_uri behaves like a plain Optional
+// attribute: dropping it from config plans it null (clearing it), instead of Computed
+// silently keeping the last known value in state forever.
+type artifactImageURIUseStateForUnknown struct{}
+
+func (m artifactImageURIUseStateForUnknown) Description(ctx context.Context) string {
+	return "Carries the prior image_uri forward across plans only when `source` is configured."
+}
+
+func (m artifactImageURIUseStateForUnknown) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m artifactImageURIUseStateForUnknown) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	var source types.Object
+	diags := req.Config.GetAttribute(ctx, path.Root("source"), &source)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if source.IsNull() {
+		resp.PlanValue = req.ConfigValue
+		return
+	}
+
+	stringplanmodifier.UseStateForUnknown().PlanModifyString(ctx, req, resp)
+}
 
 func artifactResourceProbeAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
@@ -75,6 +108,14 @@ func artifactResourceProbeAttributes() map[string]schema.Attribute {
 				int64planmodifier.UseStateForUnknown(),
 			},
 		},
+		"success_threshold": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
+			PlanModifiers: []planmodifier.Int64{
+				int64planmodifier.UseStateForUnknown(),
+			},
+		},
 	}
 }
 
@@ -111,6 +152,10 @@ func artifactDataSourceProbeAttributes() map[string]datasourceschema.Attribute {
 		"failure_threshold": datasourceschema.Int64Attribute{
 			Computed:            true,
 			MarkdownDescription: "Minimum consecutive failures for the probe to be considered failed.",
+		},
+		"success_threshold": datasourceschema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Minimum consecutive successes for the probe to be considered successful after having failed.",
 		},
 	}
 }
@@ -150,7 +195,7 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Name of the environment variable.",
+			MarkdownDescription: `Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.`,
 		},
 		"value": datasourceschema.StringAttribute{
 			Computed:            true,
@@ -175,7 +220,7 @@ func artifactResourceBuildAttributes() map[string]schema.Attribute {
 		},
 		"status": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Image build status at submit time.",
+			MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 		},
 		"created_at": schema.StringAttribute{
 			Computed:            true,
@@ -199,7 +244,7 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			Computed:            true,
 			MarkdownDescription: "Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.",
 			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
+				artifactImageURIUseStateForUnknown{},
 			},
 		},
 		"image_build_config": schema.SingleNestedAttribute{
@@ -385,7 +430,7 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 				},
 				"status": datasourceschema.StringAttribute{
 					Computed:            true,
-					MarkdownDescription: "Image build status at submit time.",
+					MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 				},
 				"created_at": datasourceschema.StringAttribute{
 					Computed:            true,
@@ -446,6 +491,11 @@ func artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes m
 		Required:            true,
 		MarkdownDescription: "The artifact specification containing container group definitions.",
 		Attributes: map[string]schema.Attribute{
+			"a2a_enabled": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "Turns on agent-to-agent (A2A) card management and the A2A surface for this agent. " +
+					"Valid only when `type` is `agent`. Defaults to off in the Workload API.",
+			},
 			"container_groups": schema.ListNestedAttribute{
 				Required:            true,
 				MarkdownDescription: "List of container groups.",
@@ -481,7 +531,7 @@ func artifactDataSourceComputedAttributes(probeAttributes map[string]datasources
 		},
 		"type": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "The artifact type: `service` or `nim`.",
+			MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`.",
 		},
 		"status": datasourceschema.StringAttribute{
 			Computed:            true,
@@ -564,6 +614,10 @@ func artifactDataSourceSpecAttribute(probeAttributes map[string]datasourceschema
 		Computed:            true,
 		MarkdownDescription: "The artifact specification containing container group definitions.",
 		Attributes: map[string]datasourceschema.Attribute{
+			"a2a_enabled": datasourceschema.BoolAttribute{
+				Computed:            true,
+				MarkdownDescription: "Whether A2A card management and the A2A surface are enabled. Set on `agent` artifacts; omitted otherwise.",
+			},
 			"container_groups": datasourceschema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "List of container groups.",

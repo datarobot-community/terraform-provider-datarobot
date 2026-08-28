@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/go-querystring/query"
@@ -157,7 +158,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 	}
 
 	if c.cfg.Debug {
-		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
+		fmt.Fprintf(os.Stderr, "Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
 
 	// Deserialize the response into the provided result type
@@ -238,6 +239,10 @@ func getRaw(c *Client, ctx context.Context, path string) ([]byte, error) {
 		return nil, WrapGenericError(fmt.Sprintf("GET request %s failed", url), err)
 	}
 	defer resp.Body.Close()
+
+	if req.URL.String() != resp.Request.URL.String() {
+		return nil, NewGenericError("request was redirected")
+	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, NewNotFoundError(url)
@@ -405,7 +410,7 @@ func uploadFilesFromBinaries[T any](
 	}
 
 	if c.cfg.Debug {
-		fmt.Printf("Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
+		fmt.Fprintf(os.Stderr, "Request %s %s - Response %s %s\n\n", req.Method, req.URL.String(), resp.Status, string(respBody))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errorMessage := fmt.Sprintf("%s request %s : response %s %s", req.Method, req.URL.String(), resp.Status, string(respBody))
