@@ -872,9 +872,6 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Missing name",
 				`"name" is required when source is "string".`)
 		}
-		if ev.Value.IsUnknown() {
-			return
-		}
 		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
@@ -898,9 +895,6 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
-		}
-		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
-			return
 		}
 		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
