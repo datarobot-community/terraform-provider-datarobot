@@ -208,8 +208,8 @@ Optional:
 
 - `dr_credential_id` (String) DataRobot credential ID. Required when source is "dr-credential".
 - `key` (String) Key within the credential. Required when source is "dr-credential".
-- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".
+- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".
 - `value` (String) Value of the environment variable. Required when source is "string".
 
 

@@ -2779,13 +2779,8 @@ func testArtifactApplyRead(ctx context.Context, r *ArtifactResource, data Artifa
 		return data, diags, false
 	}
 
-	loadArtifactIntoModel(artifact, &data)
-	// Match ArtifactResource.Read: do not recompute dir_hash from disk.
-	return data, diags, false
-}
-
-func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, plan, state ArtifactResourceModel) (ArtifactResourceModel, diag.Diagnostics) {
-	var diags diag.Diagnostics
+	resp := &tfresource.ReadResponse{State: state}
+	r.Read(ctx, tfresource.ReadRequest{State: state}, resp)
 
 	if resp.State.Raw.IsNull() {
 		return data, resp.Diagnostics, true
