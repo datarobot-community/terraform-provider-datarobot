@@ -1388,17 +1388,17 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			source := ev.Source.ValueString()
-			envVar := client.ArtifactEnvironmentVariable{Source: source}
-			if !ev.Name.IsNull() && !ev.Name.IsUnknown() {
-				envVar.Name = ev.Name.ValueString()
+			envVar := client.ArtifactEnvironmentVariable{
+				Source: ev.Source.ValueString(),
+				Name:   ev.Name.ValueString(),
 			}
-			switch source {
+			switch ev.Source.ValueString() {
 			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
 			case client.EnvironmentVariableSourceAPIKey:
-				// Token value is resolved by workload-api at deploy time.
+				// Only source (and name, when set) are sent; the platform
+				// resolves the token value.
 			default:
 				envVar.Value = ev.Value.ValueString()
 			}
@@ -1622,26 +1622,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			m := ArtifactEnvironmentVariableModel{
-				Source:         types.StringValue(ev.Source),
-				Name:           types.StringNull(),
-				Value:          types.StringNull(),
-				DrCredentialID: types.StringNull(),
-				Key:            types.StringNull(),
-			}
-			if ev.Name != "" {
-				m.Name = types.StringValue(ev.Name)
-			}
-			switch ev.Source {
-			case client.EnvironmentVariableSourceCredential:
-				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
-				m.Key = types.StringValue(ev.Key)
-			case client.EnvironmentVariableSourceAPIKey:
-				// Value is resolved at workload deploy time and is not returned by the API.
-			default:
-				m.Value = types.StringValue(ev.Value)
-			}
-			model.EnvironmentVars[i] = m
+			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
