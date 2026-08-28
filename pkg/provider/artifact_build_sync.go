@@ -181,6 +181,21 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
 }
 
+// artifactBuildNeedsUnknownInPlan reports whether apply will replace the primary
+// container's build metadata. That happens when a build is about to run, and also
+// whenever Update creates a new artifact version for any reason (a plain name change,
+// for example): artifactContainerToClient never sends build, so the new version comes
+// back without it. Unlike image_uri, the create request cannot echo build back.
+func artifactBuildNeedsUnknownInPlan(plan, state *ArtifactResourceModel, isCreate bool) bool {
+	if artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) {
+		return true
+	}
+	if isCreate || state == nil {
+		return false
+	}
+	return artifactModifyPlanNeedsUnknownArtifactID(*plan, *state)
+}
+
 // applySourceManagedBuildToPlan marks the primary container's computed build metadata
 // unknown whenever apply will trigger a new image build. Without this, the schema's
 // UseStateForUnknown would carry the previous build forward as a known value and
@@ -188,7 +203,10 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 // Unlike image_uri there is no user-settable counterpart to preserve: a triggered build
 // always replaces this block.
 func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
-	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
+	if plan.Spec == nil {
+		return
+	}
+	if !artifactBuildNeedsUnknownInPlan(plan, state, isCreate) {
 		return
 	}
 
