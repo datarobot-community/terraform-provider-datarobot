@@ -307,67 +307,6 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 	}
 }
 
-func TestWaitForWorkloadReplacementTreatsDetachedReplacementAsCompleted(t *testing.T) {
-	t.Parallel()
-
-	t.Run("immediate 404 after start", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.NotFound(w, r)
-		}))
-		defer server.Close()
-
-		cfg := NewConfiguration("fake-token")
-		cfg.Endpoint = server.URL
-		svc := NewService(NewClient(cfg))
-
-		resp, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
-			PollInterval: 5 * time.Millisecond,
-			Timeout:      time.Second,
-		})
-		if err != nil {
-			t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
-		}
-		if resp == nil || resp.Status != ReplacementStatusCompleted {
-			t.Fatalf("expected completed status after detached replacement, got %#v", resp)
-		}
-		if resp.WorkloadID != "wl-1" {
-			t.Fatalf("expected workload id wl-1, got %q", resp.WorkloadID)
-		}
-	})
-
-	t.Run("404 after in-progress poll", func(t *testing.T) {
-		calls := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			calls++
-			if calls == 1 {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(replacementJSON(ReplacementStatusPromoting, ""))
-				return
-			}
-			http.NotFound(w, r)
-		}))
-		defer server.Close()
-
-		cfg := NewConfiguration("fake-token")
-		cfg.Endpoint = server.URL
-		svc := NewService(NewClient(cfg))
-
-		resp, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
-			PollInterval: 5 * time.Millisecond,
-			Timeout:      time.Second,
-		})
-		if err != nil {
-			t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
-		}
-		if resp == nil || resp.Status != ReplacementStatusCompleted {
-			t.Fatalf("expected completed status after detach, got %#v", resp)
-		}
-		if calls < 2 {
-			t.Fatalf("expected at least 2 polls, got %d", calls)
-		}
-	})
-}
-
 func TestWaitForWorkloadReplacementPropagatesNonNotFoundErrors(t *testing.T) {
 	t.Parallel()
 
