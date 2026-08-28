@@ -261,6 +261,9 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 	if targetLocked && artifactSourceConfigured(&data) {
 		preLockArtifact := artifact
+		// The lock response can omit or lag container.build, which would discard the
+		// terminal build metadata syncArtifactBuild just pinned from WaitForArtifactBuild.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
 		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
 		if lockErr != nil {
 			r.rollbackArtifactCreate(ctx, preLockArtifact, !userSuppliedRepository)
@@ -268,6 +271,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 			return
 		}
 		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
@@ -389,6 +393,8 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		artifact.Status != client.ArtifactStatusLocked &&
 		(deferLock || lockedSourceCloneNeeded) {
 		preLockArtifact := artifact
+		// See the Create path: locking must not drop the pinned build metadata.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
 		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
 		if lockErr != nil {
 			if createdNewVersion || lockedSourceCloneNeeded {
@@ -398,6 +404,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	loadArtifactIntoModel(artifact, &plan)

@@ -288,10 +288,18 @@ func applyCompletedArtifactBuildToPrimaryContainer(artifact *client.Artifact, bu
 		return
 	}
 
-	buildInfo := &client.ArtifactContainerBuildInfo{
+	applyBuildInfoToPrimaryContainer(artifact, &client.ArtifactContainerBuildInfo{
 		ArtifactImageBuildID: build.ID,
 		Status:               build.Status,
 		CreatedAt:            build.CreatedAt,
+	})
+}
+
+// applyBuildInfoToPrimaryContainer writes buildInfo onto the primary container, falling
+// back to the first container when no container is flagged primary.
+func applyBuildInfoToPrimaryContainer(artifact *client.Artifact, buildInfo *client.ArtifactContainerBuildInfo) {
+	if artifact == nil || buildInfo == nil {
+		return
 	}
 
 	for gi := range artifact.Spec.ContainerGroups {
@@ -309,4 +317,27 @@ func applyCompletedArtifactBuildToPrimaryContainer(artifact *client.Artifact, bu
 		return
 	}
 	artifact.Spec.ContainerGroups[0].Containers[0].Build = buildInfo
+}
+
+// primaryContainerBuildInfo returns the build metadata currently pinned on the primary
+// container, or nil when there is none.
+func primaryContainerBuildInfo(artifact *client.Artifact) *client.ArtifactContainerBuildInfo {
+	if artifact == nil {
+		return nil
+	}
+
+	for gi := range artifact.Spec.ContainerGroups {
+		group := artifact.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := group.Containers[ci]
+			if container.Primary != nil && *container.Primary {
+				return container.Build
+			}
+		}
+	}
+
+	if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
+		return nil
+	}
+	return artifact.Spec.ContainerGroups[0].Containers[0].Build
 }
