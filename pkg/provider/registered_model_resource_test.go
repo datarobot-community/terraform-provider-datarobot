@@ -19,6 +19,17 @@ import (
 )
 
 func TestAccRegisteredModelResource(t *testing.T) {
+	// TODO(RAPTOR-18879): re-enable once the backend Use Case group-role cleanup is
+	// fixed. This test links the registered model to a Use Case, then unlinks it and
+	// destroys the Use Case, then creates a new version (step 4). Two compounding
+	// monolith bugs leave a dangling group-role reference on the registered model, so
+	// POST /modelPackages/fromCustomModelVersion/ returns 404 "group_ids were not
+	// found". Reproduces on master and in prod; not a Terraform provider bug (the
+	// provider never manages group_ids). Registered-model coverage is retained by
+	// TestAccTextGenerationRegisteredModelResource, TestAccRegisteredModelFromLeaderboardResource,
+	// and the tags/schema unit tests.
+	t.Skip("skipped pending RAPTOR-18879 (backend Use Case group-role cleanup); new-version creation after a linked Use Case is deleted 404s")
+
 	t.Parallel()
 
 	resourceName := "datarobot_registered_model.test"

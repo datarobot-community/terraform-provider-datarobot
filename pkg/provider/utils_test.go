@@ -677,3 +677,105 @@ func TestMergeBlueprintRuntimeParameters(t *testing.T) {
 		}
 	})
 }
+
+func TestIsAnyFeatureFlagEnabled(t *testing.T) {
+	t.Parallel()
+
+	flagErr := errors.New("evaluation failed")
+
+	testCases := []struct {
+		name          string
+		flagValues    map[string]bool
+		flagErrors    map[string]error
+		expected      bool
+		expectedErr   error
+		expectedCalls []string
+	}{
+		{
+			name:          "first flag enabled short-circuits",
+			flagValues:    map[string]bool{"FIRST": true, "SECOND": true},
+			expected:      true,
+			expectedCalls: []string{"FIRST"},
+		},
+		{
+			name:          "falls through to the second flag",
+			flagValues:    map[string]bool{"FIRST": false, "SECOND": true},
+			expected:      true,
+			expectedCalls: []string{"FIRST", "SECOND"},
+		},
+		{
+			name:          "no flag enabled",
+			flagValues:    map[string]bool{"FIRST": false, "SECOND": false},
+			expected:      false,
+			expectedCalls: []string{"FIRST", "SECOND"},
+		},
+		{
+			name:          "evaluation error stops the walk",
+			flagErrors:    map[string]error{"FIRST": flagErr},
+			expectedErr:   flagErr,
+			expectedCalls: []string{"FIRST"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var calls []string
+			service := &fakeFeatureFlagService{
+				evaluate: func(flagName string) (bool, error) {
+					calls = append(calls, flagName)
+					return tc.flagValues[flagName], tc.flagErrors[flagName]
+				},
+			}
+
+			enabled, err := isAnyFeatureFlagEnabled(context.Background(), service, []string{"FIRST", "SECOND"})
+			if !errors.Is(err, tc.expectedErr) {
+				t.Fatalf("expected error %v, got %v", tc.expectedErr, err)
+			}
+			if enabled != tc.expected {
+				t.Errorf("expected enabled=%v, got %v", tc.expected, enabled)
+			}
+			if strings.Join(calls, ",") != strings.Join(tc.expectedCalls, ",") {
+				t.Errorf("expected calls %v, got %v", tc.expectedCalls, calls)
+			}
+		})
+	}
+}
+
+// fakeFeatureFlagService answers feature flag evaluations and panics on every other
+// call, so a test that reaches the rest of the client surface fails loudly.
+type fakeFeatureFlagService struct {
+	client.Service
+	evaluate func(flagName string) (bool, error)
+}
+
+func (s *fakeFeatureFlagService) IsFeatureFlagEnabled(_ context.Context, flagName string) (bool, error) {
+	return s.evaluate(flagName)
+}
+
+// TestDebugEnabled verifies that verbose HTTP debug output is opt-in: unset and the
+// usual falsey spellings stay off, so a plain TF_LOG=DEBUG apply does not dump payloads.
+func TestDebugEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{
+		{"", false},
+		{"0", false},
+		{"false", false},
+		{"FALSE", false},
+		{"off", false},
+		{"no", false},
+		{"  ", false},
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{"yes", true},
+		{" 1 ", true},
+	} {
+		if got := debugEnabled(tc.value); got != tc.want {
+			t.Errorf("debugEnabled(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
