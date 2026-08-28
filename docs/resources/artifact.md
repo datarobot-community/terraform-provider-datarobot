@@ -197,6 +197,10 @@ Optional:
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
+Read-Only:
+
+- `build` (Attributes) Server-set image build metadata. (see [below for nested schema](#nestedatt--spec--container_groups--containers--build))
+
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
 ### Nested Schema for `spec.container_groups.containers.environment_vars`
 
@@ -294,6 +298,16 @@ Optional:
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
 - `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
+
+
+<a id="nestedatt--spec--container_groups--containers--build"></a>
+### Nested Schema for `spec.container_groups.containers.build`
+
+Read-Only:
+
+- `artifact_image_build_id` (String) Artifact image build ID.
+- `created_at` (String) Build creation timestamp (UTC).
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
 
 
 

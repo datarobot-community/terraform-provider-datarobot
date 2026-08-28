@@ -1010,6 +1010,7 @@ func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactConta
 	container := ArtifactContainerModel{
 		Primary: primary,
 		Port:    types.Int64Value(8080),
+		Build:   artifactBuildNull(),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
 			CodeRef:    artifactCodeRefNull(),
 			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},

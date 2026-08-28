@@ -51,46 +51,12 @@ func TestAccWorkloadArtifactReplacement(t *testing.T) {
 
 func TestAccWorkloadResource(t *testing.T) {
 	t.Parallel()
-	resourceName := "datarobot_workload.test"
-	name := "workload-" + nameSalt
-	var initialID string
+	testAccWorkloadResource(t)
+}
 
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: workloadAccConfig(name, "", "low", 1),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "endpoint"),
-					resource.TestCheckResourceAttrSet(resourceName, "status"),
-					resource.TestCheckResourceAttr(resourceName, "name", name),
-					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
-					captureAttr(resourceName, "id", &initialID),
-					checkWorkloadExistsInAPI(name, false),
-				),
-			},
-			{
-				Config: workloadAccConfig("updated-"+name, "test description", "high", 1),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "name", "updated-"+name),
-					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
-					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
-					checkWorkloadIDPreserved(&initialID),
-					checkWorkloadExistsInAPI("updated-"+name, false),
-				),
-			},
-			{
-				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "2"),
-					checkWorkloadIDPreserved(&initialID),
-					checkWorkloadExistsInAPI("updated-"+name, false),
-				),
-			},
-		},
-	})
+func TestAccWorkloadFromBuiltArtifact(t *testing.T) {
+	t.Parallel()
+	testAccWorkloadFromBuiltArtifact(t, false)
 }
 
 func TestAccWorkloadMetadataPreservesReplacementPolicy(t *testing.T) {
@@ -1423,6 +1389,280 @@ resource "datarobot_workload" "test" {
   }
 }
 `, artifactName, name, importance, desc, replicaCount, warmupMinutes, keepOldVersionMinutes)
+}
+
+func testAccWorkloadResource(t *testing.T) {
+	t.Helper()
+
+	resourceName := "datarobot_workload.test"
+	name := "workload-" + nameSalt
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadAccConfig(name, "", "low", 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "endpoint"),
+					resource.TestCheckResourceAttrSet(resourceName, "status"),
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "importance", "low"),
+					captureAttr(resourceName, "id", &initialID),
+					checkWorkloadExistsInAPI(name, false),
+				),
+			},
+			{
+				Config: workloadAccConfig("updated-"+name, "test description", "high", 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", "updated-"+name),
+					resource.TestCheckResourceAttr(resourceName, "description", "test description"),
+					resource.TestCheckResourceAttr(resourceName, "importance", "high"),
+					checkWorkloadIDPreserved(&initialID),
+					checkWorkloadExistsInAPI("updated-"+name, false),
+				),
+			},
+			{
+				Config: workloadAccConfig("updated-"+name, "test description", "high", 2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.container_groups.0.replica_count", "2"),
+					checkWorkloadIDPreserved(&initialID),
+					checkWorkloadExistsInAPI("updated-"+name, false),
+				),
+			},
+		},
+	})
+}
+
+func testAccWorkloadFromBuiltArtifact(t *testing.T, isMock bool) {
+	t.Helper()
+
+	sourceDir := writeWorkloadACCSourceTree(t)
+
+	const (
+		artifactResourceName = "datarobot_artifact.app"
+		workloadResourceName = "datarobot_workload.test"
+	)
+	artifactName := "acc-built-artifact-" + nameSalt
+	workloadName := "acc-built-workload-" + nameSalt
+	var lastArtifactID, lastWorkloadID string
+
+	preCheck := func() { testAccPreCheck(t) }
+	if !isMock {
+		preCheck = func() { testAccArtifactBuildPreCheck(t) }
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               isMock,
+		PreCheck:                 preCheck,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkWorkloadFromBuiltArtifactDestroyed(&lastWorkloadID, &lastArtifactID, isMock),
+		Steps: []resource.TestStep{
+			{
+				Config: workloadFromBuiltArtifactAccConfig(artifactName, workloadName, sourceDir),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					append([]resource.TestCheckFunc{
+						resource.TestCheckResourceAttr(artifactResourceName, "status", "locked"),
+						resource.TestCheckResourceAttrSet(artifactResourceName, "artifact_id"),
+						resource.TestCheckResourceAttrSet(workloadResourceName, "id"),
+						resource.TestCheckResourceAttrSet(workloadResourceName, "endpoint"),
+						resource.TestCheckResourceAttr(workloadResourceName, "name", workloadName),
+						resource.TestCheckResourceAttr(workloadResourceName, "status", "running"),
+						resource.TestCheckResourceAttrSet(workloadResourceName, "artifact_id"),
+						checkWorkloadArtifactIDMatches(artifactResourceName, workloadResourceName, isMock),
+						checkWorkloadRunningInAPI(workloadResourceName, isMock),
+						checkWorkloadExistsInAPI(workloadName, isMock),
+						captureAttr(workloadResourceName, "id", &lastWorkloadID),
+						captureAttr(artifactResourceName, "artifact_id", &lastArtifactID),
+					}, artifactBuildCheckFuncs(artifactResourceName, isMock, true)...)...,
+				),
+			},
+		},
+	})
+}
+
+func writeWorkloadACCSourceTree(t *testing.T) string {
+	t.Helper()
+
+	return writeArtifactSourceTree(t, map[string]string{
+		"app.py": `from fastapi import FastAPI
+
+app = FastAPI(title="Workload ACC Test")
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+`,
+		"requirements.txt": "fastapi>=0.115.0\nuvicorn>=0.32.0\n",
+		"Dockerfile": `FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+`,
+	})
+}
+
+func checkWorkloadRunningInAPI(workloadResourceName string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[workloadResourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", workloadResourceName)
+		}
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("workload ID is not set in state")
+		}
+		if isMock {
+			return nil
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		workload, err := p.service.GetWorkload(context.Background(), rs.Primary.ID)
+		if err != nil {
+			return fmt.Errorf("GetWorkload(%s): %w", rs.Primary.ID, err)
+		}
+		if workload.Status != client.ProtonStatusRunning {
+			return fmt.Errorf("expected workload status running in API, got %q", workload.Status)
+		}
+
+		return nil
+	}
+}
+
+func checkWorkloadDestroyedFromAPI(lastWorkloadID *string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if isMock || *lastWorkloadID == "" {
+			return nil
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		_, err := p.service.GetWorkload(context.Background(), *lastWorkloadID)
+		if err == nil {
+			return fmt.Errorf("workload %s still exists after destroy", *lastWorkloadID)
+		}
+		if _, ok := err.(*client.NotFoundError); !ok {
+			return fmt.Errorf("unexpected error checking workload %s after destroy: %w", *lastWorkloadID, err)
+		}
+
+		return nil
+	}
+}
+
+func checkWorkloadFromBuiltArtifactDestroyed(lastWorkloadID, lastArtifactID *string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if err := checkWorkloadDestroyedFromAPI(lastWorkloadID, isMock)(s); err != nil {
+			return err
+		}
+		return checkArtifactRepoDestroyedFromAPI(lastArtifactID, isMock)(s)
+	}
+}
+
+func workloadFromBuiltArtifactAccConfig(artifactName, workloadName, sourceDir string) string {
+	return fmt.Sprintf(`
+resource "datarobot_artifact" "app" {
+  name   = %q
+  status = "locked"
+
+  source = {
+    dir = %q
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "main"
+        primary = true
+        port    = 8080
+
+        image_build_config = {
+          dockerfile = {
+            source = "provided"
+          }
+        }
+      }]
+    }]
+  }
+}
+
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = datarobot_artifact.app.artifact_id
+
+  runtime = {
+    container_groups = [{
+      replica_count    = 1
+      resource_bundles = ["cpu.small"]
+    }]
+  }
+
+  depends_on = [datarobot_artifact.app]
+}
+`, artifactName, sourceDir, workloadName)
+}
+
+func checkWorkloadArtifactIDMatches(artifactResourceName, workloadResourceName string, isMock bool) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		artifactRS, ok := s.RootModule().Resources[artifactResourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", artifactResourceName)
+		}
+		workloadRS, ok := s.RootModule().Resources[workloadResourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", workloadResourceName)
+		}
+
+		artifactID := artifactRS.Primary.Attributes["artifact_id"]
+		workloadArtifactID := workloadRS.Primary.Attributes["artifact_id"]
+		if artifactID == "" {
+			return fmt.Errorf("artifact_id is not set on %s", artifactResourceName)
+		}
+		if workloadArtifactID != artifactID {
+			return fmt.Errorf("workload artifact_id %q does not match artifact %q", workloadArtifactID, artifactID)
+		}
+
+		if isMock {
+			return nil
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("provider not found")
+		}
+		p.service = NewService(cl)
+
+		workload, err := p.service.GetWorkload(context.Background(), workloadRS.Primary.ID)
+		if err != nil {
+			return fmt.Errorf("GetWorkload(%s): %w", workloadRS.Primary.ID, err)
+		}
+		if workload.ArtifactID == nil || *workload.ArtifactID != artifactID {
+			got := ""
+			if workload.ArtifactID != nil {
+				got = *workload.ArtifactID
+			}
+			return fmt.Errorf("workload API artifact_id %q does not match %q", got, artifactID)
+		}
+
+		return nil
+	}
 }
 
 // ─── fixture helpers ───────────────────────────────────────────────────────────

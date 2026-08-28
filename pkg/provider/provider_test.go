@@ -83,6 +83,16 @@ func testAccPreCheck(t *testing.T) {
 	}
 }
 
+// testAccArtifactBuildPreCheck is required for acceptance tests that trigger artifact image builds.
+// Set DATAROBOT_SKIP_ARTIFACT_BUILD_ACC=1 to skip when the environment has no Image Build Service.
+func testAccArtifactBuildPreCheck(t *testing.T) {
+	t.Helper()
+	testAccPreCheck(t)
+	if os.Getenv("DATAROBOT_SKIP_ARTIFACT_BUILD_ACC") == "1" {
+		t.Skip("Skipping artifact build acceptance test: DATAROBOT_SKIP_ARTIFACT_BUILD_ACC=1")
+	}
+}
+
 // mockAPIKey sets a fake API key for a mock (non-acceptance) test and restores
 // the original on cleanup. globalTestCfg is shared package state; leaving it as
 // "fake" leaks into the parallel acceptance tests that bake globalTestCfg.ApiKey

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -199,6 +200,34 @@ func loadContainerBuildFromAPI(build *client.ArtifactContainerBuildInfo) *Artifa
 		Status:               types.StringValue(build.Status),
 		CreatedAt:            types.StringValue(build.CreatedAt),
 	}
+}
+
+func artifactBuildAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"artifact_image_build_id": types.StringType,
+		"status":                  types.StringType,
+		"created_at":              types.StringType,
+	}
+}
+
+func artifactBuildNull() types.Object {
+	return types.ObjectNull(artifactBuildAttrTypes())
+}
+
+func loadContainerBuildObjectFromAPI(build *client.ArtifactContainerBuildInfo) types.Object {
+	attrTypes := artifactBuildAttrTypes()
+	if build == nil {
+		return artifactBuildNull()
+	}
+	obj, diags := types.ObjectValue(attrTypes, map[string]attr.Value{
+		"artifact_image_build_id": types.StringValue(build.ArtifactImageBuildID),
+		"status":                  types.StringValue(build.Status),
+		"created_at":              types.StringValue(build.CreatedAt),
+	})
+	if diags.HasError() {
+		return types.ObjectNull(attrTypes)
+	}
+	return obj
 }
 
 func loadSecurityContextFromAPI(sc *client.ArtifactSecurityContext) *ArtifactSecurityContextModel {
