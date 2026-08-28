@@ -321,7 +321,10 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	// Keep the last-applied source.dir_hash. Refresh runs before plan; recomputing
+	// the hash from the current local tree here would hide file edits (for example
+	// uncommenting a tool in user_tools.py) because plan and refreshed state would
+	// already match. ModifyPlan computes the current hash for diffing.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

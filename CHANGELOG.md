@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- `datarobot_artifact` `source.dir_hash` is no longer recomputed from the local tree during Read/refresh. Refresh runs before plan, so overwriting the last-applied hash with the current disk contents made `terraform plan` report no changes after editing source files. The hash is still computed at plan time and stored after a successful apply.
+
 ### Added
 
 - `source.generate_ignore` on `datarobot_artifact` (default `true`): when `source.dir` has neither `.drignore` nor `.wapiignore`, write a default `.drignore` at apply (never overwrite). Uploads and `source.dir_hash` honor `.drignore` (gitignore syntax) plus system excludes (`.datarobot.yaml` is never uploaded).
