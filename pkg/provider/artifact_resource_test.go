@@ -334,9 +334,9 @@ func checkArtifactImageBuiltInAPI(resourceName string, isMock bool) resource.Tes
 		if got := artifactImageURIValue(container); got == "" {
 			return fmt.Errorf("image_uri not populated in API after build")
 		}
-		if container.Build == nil || container.Build.ArtifactImageBuildID == "" {
-			return fmt.Errorf("build metadata not populated in API after build")
-		}
+		// build.* is asserted from Terraform state above: WAPI can leave container.build
+		// empty or stale right after completion, which is why the provider pins it from
+		// WaitForArtifactBuild. Asserting it here would race that same lag.
 
 		return nil
 	}
