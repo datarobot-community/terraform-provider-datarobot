@@ -156,7 +156,26 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
+			m := ArtifactEnvironmentVariableModel{
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringNull(),
+				Value:          types.StringNull(),
+				DrCredentialID: types.StringNull(),
+				Key:            types.StringNull(),
+			}
+			if ev.Name != "" {
+				m.Name = types.StringValue(ev.Name)
+			}
+			switch ev.Source {
+			case client.EnvironmentVariableSourceCredential:
+				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+				m.Key = types.StringValue(ev.Key)
+			case client.EnvironmentVariableSourceAPIKey:
+				// Value is resolved at workload deploy time and is not returned by the API.
+			default:
+				m.Value = types.StringValue(ev.Value)
+			}
+			model.EnvironmentVars[i] = m
 		}
 	} else {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
