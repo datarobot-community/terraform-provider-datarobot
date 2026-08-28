@@ -16,6 +16,7 @@ require (
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.40.1
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
 	github.com/joho/godotenv v1.5.1
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.41.0
 )
