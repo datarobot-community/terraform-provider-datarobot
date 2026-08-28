@@ -864,10 +864,16 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsUnknown() {
+			return
+		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "string".`)
+		}
+		if ev.Value.IsUnknown() {
+			return
 		}
 		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
@@ -885,10 +891,16 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsUnknown() {
+			return
+		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
+		}
+		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
+			return
 		}
 		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
@@ -1391,17 +1403,17 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			envVar := client.ArtifactEnvironmentVariable{
-				Source: ev.Source.ValueString(),
-				Name:   ev.Name.ValueString(),
+			source := ev.Source.ValueString()
+			envVar := client.ArtifactEnvironmentVariable{Source: source}
+			if !ev.Name.IsNull() && !ev.Name.IsUnknown() {
+				envVar.Name = ev.Name.ValueString()
 			}
-			switch ev.Source.ValueString() {
+			switch source {
 			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
 			case client.EnvironmentVariableSourceAPIKey:
-				// Only source (and name, when set) are sent; the platform
-				// resolves the token value.
+				// Token value is resolved by workload-api at deploy time.
 			default:
 				envVar.Value = ev.Value.ValueString()
 			}
@@ -1625,7 +1637,26 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
+			m := ArtifactEnvironmentVariableModel{
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringNull(),
+				Value:          types.StringNull(),
+				DrCredentialID: types.StringNull(),
+				Key:            types.StringNull(),
+			}
+			if ev.Name != "" {
+				m.Name = types.StringValue(ev.Name)
+			}
+			switch ev.Source {
+			case client.EnvironmentVariableSourceCredential:
+				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+				m.Key = types.StringValue(ev.Key)
+			case client.EnvironmentVariableSourceAPIKey:
+				// Value is resolved at workload deploy time and is not returned by the API.
+			default:
+				m.Value = types.StringValue(ev.Value)
+			}
+			model.EnvironmentVars[i] = m
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
