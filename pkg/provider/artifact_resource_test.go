@@ -34,27 +34,21 @@ func TestAccArtifactDraftLifecycle(t *testing.T) {
 	testArtifactDraftResource(t, "draft-"+uuid.NewString()[:8])
 }
 
-func TestAccArtifactSourceUpload(t *testing.T) {
-	t.Parallel()
-	testArtifactSourceUpload(t, false, false)
-}
-
+// TestAccArtifactSourceUploadWithBuild supersedes the former TestAccArtifactSourceUpload:
+// the same upload flow, plus the build assertions. Running both meant two real image builds
+// for one set of coverage.
 func TestAccArtifactSourceUploadWithBuild(t *testing.T) {
 	t.Parallel()
 	testArtifactSourceUpload(t, false, true)
 }
 
+// TestAccArtifactLockedSourceWithBuild supersedes the former TestAccArtifactSourceUploadLocked,
+// which had to be skipped: workload-api returns 422 when locking with image_build_config but
+// no image_uri. The provider now triggers the build and waits, so image_uri is populated
+// before the lock and the locked flow is covered here.
 func TestAccArtifactLockedSourceWithBuild(t *testing.T) {
 	t.Parallel()
 	testArtifactSourceUploadLocked(t, false, true)
-}
-
-// TestAccArtifactSourceUploadLocked previously had to be skipped: workload-api returns 422
-// when locking with image_build_config but no image_uri. Now that the provider triggers the
-// build and waits for it, image_uri is populated before the lock, so the locked flow is
-// covered by the build-enabled variant.
-func TestAccArtifactSourceUploadLocked(t *testing.T) {
-	TestAccArtifactLockedSourceWithBuild(t)
 }
 
 func TestIntegrationArtifactSourceUpload(t *testing.T) {
@@ -462,8 +456,11 @@ func testArtifactSourceUpload(t *testing.T, isMock bool, withBuildChecks bool, m
 		svc.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 	}
 
+	// Any non-mock run uploads source with image_build_config and a default
+	// wait_for_build, so it needs the Image Build Service regardless of whether the
+	// build attributes are asserted.
 	preCheck := func() { testAccPreCheck(t) }
-	if withBuildChecks && !isMock {
+	if !isMock {
 		preCheck = func() { testAccArtifactBuildPreCheck(t) }
 	}
 
@@ -613,8 +610,11 @@ func testArtifactSourceUploadLocked(t *testing.T, isMock bool, withBuildChecks b
 		svc.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
 	}
 
+	// Any non-mock run uploads source with image_build_config and a default
+	// wait_for_build, so it needs the Image Build Service regardless of whether the
+	// build attributes are asserted.
 	lockedPreCheck := func() { testAccPreCheck(t) }
-	if withBuildChecks && !isMock {
+	if !isMock {
 		lockedPreCheck = func() { testAccArtifactBuildPreCheck(t) }
 	}
 
