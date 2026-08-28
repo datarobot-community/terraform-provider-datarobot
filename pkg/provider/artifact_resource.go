@@ -861,16 +861,10 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
-		if ev.Name.IsUnknown() {
-			return
-		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "string".`)
-		}
-		if ev.Value.IsUnknown() {
-			return
 		}
 		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
@@ -888,16 +882,10 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
-		if ev.Name.IsUnknown() {
-			return
-		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
-		}
-		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
-			return
 		}
 		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
