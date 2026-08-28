@@ -341,9 +341,15 @@ func artifactSourceGenerateIgnore(data *ArtifactResourceModel) bool {
 // These are raised during planning so the user reads them before anything is
 // uploaded, rather than after the catalog already has the file.
 //
-// A matcher that fails to load is not reported here. computeArtifactSourceDirHash
-// reads the same directory and turns that into an attribute error, so repeating
-// it would only print the problem twice.
+// A matcher that fails to load is not reported here, and which side covers that
+// depends on the branch computeArtifactSourceDirHash takes. Everywhere but the
+// default path -- generate_ignore on with no ignore file present -- compute
+// calls New on this same directory and turns the failure into an attribute
+// error, so repeating it would print the problem twice. On the default path
+// compute hashes from the template and opens nothing, so plan stays silent by
+// design. A directory sitting at the .drignore name, which Locate calls absent,
+// lands there; apply names it in the warning seedArtifactSourceIgnoreFile
+// raises when the write fails.
 func artifactSourceIgnoreDiagnostics(data *ArtifactResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
