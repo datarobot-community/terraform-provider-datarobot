@@ -249,7 +249,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "")
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "", &resp.Diagnostics)
 		if syncErr != nil {
 			var timeoutErr *client.ArtifactBuildTimeoutError
 			isTimeout := errors.As(syncErr, &timeoutErr)
@@ -380,7 +380,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
 		if syncErr != nil {
 			if createdNewVersion {
 				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)

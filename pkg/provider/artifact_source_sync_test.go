@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -494,7 +496,7 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := &client.Artifact{ID: artifactID}
 
-		got, uploaded, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID)
+		got, uploaded, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID, &diag.Diagnostics{})
 		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
@@ -522,7 +524,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
 
-		_, uploaded, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "")
+		_, uploaded, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{})
 		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
@@ -554,7 +556,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, ".drignore")); err != nil {
@@ -599,11 +601,114 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
 			t.Fatal("expected .drignore not to be written when generate_ignore is false")
+		}
+	})
+
+	t.Run("writes drignore even when the upload is skipped", func(t *testing.T) {
+		// Plan folds a synthetic .drignore into dir_hash, so a tree whose only
+		// pending change is that file plans as unchanged and the upload is
+		// skipped. Seeding inside the upload would leave the file plan promised
+		// unwritten, and state would record generate_ignore = true anyway.
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+
+		// No FilesAPI expectation: reaching the uploader at all fails the test.
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+
+		plan := testSourcePlanModel(t, dir, nil)
+		hash, err := computeArtifactSourceDirHash(plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan.Source.DirHash = hash
+		state := testSourcePlanModel(t, dir, nil, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+
+		_, uploaded, err := resource.syncArtifactSource(
+			context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if uploaded {
+			t.Fatal("expected the upload to be skipped")
+		}
+		written, err := os.ReadFile(filepath.Join(dir, ".drignore"))
+		if err != nil {
+			t.Fatalf("expected .drignore to be written without an upload: %v", err)
+		}
+		if !bytes.Equal(written, ignore.DefaultTemplate) {
+			t.Fatalf(".drignore = %q, want the default template", written)
+		}
+	})
+
+	t.Run("unwritable source dir warns and uploads with the template patterns", func(t *testing.T) {
+		// generate_ignore defaults to true, so a source.dir the process cannot
+		// write -- a checkout mounted read-only in CI -- must not fail an apply
+		// that worked before the attribute existed.
+		if os.Geteuid() == 0 {
+			t.Skip("root writes into a read-only directory")
+		}
+
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":      "print('hi')",
+			".venv/lib.py": "ignored",
+		})
+		if err := os.Chmod(dir, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		// Ahead of TempDir's own cleanup, which cannot remove a 0555 directory.
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		var diags diag.Diagnostics
+		if _, _, err := resource.syncArtifactSource(
+			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags); err != nil {
+			t.Fatalf("a read-only source.dir must not fail the apply: %v", err)
+		}
+		if diags.HasError() {
+			t.Fatalf("expected a warning, got errors: %v", diags.Errors())
+		}
+		if len(diags.Warnings()) != 1 {
+			t.Fatalf("warnings = %v, want exactly one", diags.Warnings())
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected no .drignore on a read-only directory")
+		}
+
+		// The fallback matcher is the template, so the upload is no wider than
+		// it would have been had the write succeeded.
+		foundMain := false
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == ".venv/lib.py" {
+				t.Fatalf("uploaded %q: the template patterns were not applied", p)
+			}
+			if p == "main.py" {
+				foundMain = true
+			}
+		}
+		if !foundMain {
+			t.Fatalf("uploaded paths = %v, want main.py", filesAPI.uploadToStagePaths)
 		}
 	})
 
@@ -635,7 +740,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Spec: artifactSpecWithCodeRef(catalogID, versionID),
 		}
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if filesAPI.catalogID != catalogID {
@@ -670,7 +775,7 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := artifactWithCodeRef(artifactID, catalogID, versionID)
 
-		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID, &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 	})
@@ -698,7 +803,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
 		if err == nil {
 			t.Fatal("expected upload error")
 		}
@@ -729,7 +834,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
 		if err == nil {
 			t.Fatal("expected patch error")
 		}
@@ -765,6 +870,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			nil,
 			draftArtifact,
 			"",
+			&diag.Diagnostics{},
 		)
 		if err != nil {
 			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
@@ -801,6 +907,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			state,
 			artifact,
 			artifactID,
+			&diag.Diagnostics{},
 		)
 		if err != nil {
 			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
@@ -834,6 +941,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			nil,
 			&client.Artifact{ID: artifactID, Status: client.ArtifactStatusDraft},
 			"",
+			&diag.Diagnostics{},
 		)
 		if err != nil {
 			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
@@ -870,6 +978,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			nil,
 			draftArtifact,
 			"",
+			&diag.Diagnostics{},
 		)
 		if err != nil {
 			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
@@ -903,6 +1012,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			state,
 			artifactFixtureDraftWithBuildConfig(artifactID, nil, "app"),
 			artifactID,
+			&diag.Diagnostics{},
 		)
 		if err == nil {
 			t.Fatal("expected upload error")
@@ -954,6 +1064,7 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 			nil,
 			draftArtifact,
 			"",
+			&diag.Diagnostics{},
 		)
 		if err == nil {
 			t.Fatal("expected build error")
