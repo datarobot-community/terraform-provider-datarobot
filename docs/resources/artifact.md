@@ -307,7 +307,7 @@ Read-Only:
 
 - `artifact_image_build_id` (String) Artifact image build ID.
 - `created_at` (String) Build creation timestamp (UTC).
-- `status` (String) Image build status at submit time.
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
 
 
 

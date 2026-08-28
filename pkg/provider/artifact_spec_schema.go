@@ -220,7 +220,7 @@ func artifactResourceBuildAttributes() map[string]schema.Attribute {
 		},
 		"status": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Image build status at submit time.",
+			MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 		},
 		"created_at": schema.StringAttribute{
 			Computed:            true,
@@ -430,7 +430,7 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 				},
 				"status": datasourceschema.StringAttribute{
 					Computed:            true,
-					MarkdownDescription: "Image build status at submit time.",
+					MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 				},
 				"created_at": datasourceschema.StringAttribute{
 					Computed:            true,
