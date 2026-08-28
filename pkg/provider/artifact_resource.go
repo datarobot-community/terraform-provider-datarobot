@@ -178,10 +178,22 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						MarkdownDescription: "Path to the local directory containing application source files to upload.",
 					},
 					"dir_hash": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged. Computed at plan time from the local tree; refresh keeps the last-applied value so file edits produce a plan diff.",
+						Computed: true,
+						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
+							"Used to detect changes and skip re-upload when unchanged. Files covered by a system exclude are never part of this hash.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"generate_ignore": schema.BoolAttribute{
+						Optional: true,
+						Computed: true,
+						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
+							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
+							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.",
+						Default: booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 					"wait_for_build": schema.BoolAttribute{
@@ -237,7 +249,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "")
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "", &resp.Diagnostics)
 		if syncErr != nil {
 			var timeoutErr *client.ArtifactBuildTimeoutError
 			isTimeout := errors.As(syncErr, &timeoutErr)
@@ -371,7 +383,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
 		if syncErr != nil {
 			if createdNewVersion {
 				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
@@ -476,7 +488,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
+		dirHash, err := computeArtifactSourceDirHash(&plan)
 		if err != nil {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("source").AtName("dir"),
@@ -486,6 +498,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 		plan.Source.DirHash = dirHash
+		resp.Diagnostics.Append(artifactSourceIgnoreDiagnostics(&plan)...)
 	}
 
 	var statePtr *ArtifactResourceModel
