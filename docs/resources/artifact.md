@@ -324,9 +324,9 @@ Required:
 
 Optional:
 
-- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. `.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.
+- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.
 - `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
 
 Read-Only:
 
-- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.
+- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip re-upload when unchanged. Files covered by a system exclude are never part of this hash.

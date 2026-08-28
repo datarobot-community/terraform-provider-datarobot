@@ -31,10 +31,9 @@ node_modules
 .ruff_cache
 
 # Terraform: source.dir can be the directory holding the configuration that
-# declares it. State files and the provider cache are system excludes; these
-# are the rest, and tfvars in particular tend to hold credentials.
-*.tfvars
-*.tfvars.json
+# declares it. State files, the provider cache and *.tfvars are system
+# excludes -- they carry credentials, so deleting a line here cannot bring
+# them back. These are the rest: useless in an image, but yours to upload.
 .terraform.lock.hcl
 .terraform.tfstate.lock.info
 

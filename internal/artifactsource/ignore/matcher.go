@@ -50,6 +50,15 @@ const (
 // directory as the configuration that declares it, and a state file uploaded
 // into an artifact is both useless to the container and a credential leak.
 //
+// Variable files are here for the same reason as state, not in the starter
+// template: a project that already has an ignore file never receives the
+// template, so a .wapiignore written by dr up sitting beside a
+// terraform.tfvars would upload the tfvars. Both hold the credentials the
+// configuration was given, both are input to Terraform rather than to the
+// image being built, and neither has a use inside a container. The rest of
+// the Terraform section stays in the template, where a project that wants to
+// upload its lock file can delete the line.
+//
 // Patterns must be lowercase. Match folds the path it is given, because macOS
 // and Windows preserve case without distinguishing it: a project holding a
 // differently-cased .DataRobot.yaml would otherwise upload it. The cost is that
@@ -64,6 +73,8 @@ var systemPatterns = []string{
 	".terraform",
 	"terraform.tfstate",
 	"terraform.tfstate.*",
+	"*.tfvars",
+	"*.tfvars.json",
 }
 
 // system holds systemPatterns compiled once. Matching only reads, so one

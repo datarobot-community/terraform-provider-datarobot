@@ -180,7 +180,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"dir_hash": schema.StringAttribute{
 						Computed: true,
 						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
-							"Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.",
+							"Used to detect changes and skip re-upload when unchanged. Files covered by a system exclude are never part of this hash.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -190,7 +190,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						Computed: true,
 						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
 							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
-							"`.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.",
+							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.",
 						Default: booldefault.StaticBool(true),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),

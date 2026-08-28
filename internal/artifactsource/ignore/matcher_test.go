@@ -31,12 +31,17 @@ func TestSystemExcludes_AlwaysApply(t *testing.T) {
 		{"terraform.tfstate", true},
 		{"terraform.tfstate.backup", true},
 		{"terraform.tfstate.d/env/terraform.tfstate", true},
+		{"terraform.tfvars", true},
+		{"prod.auto.tfvars", true},
+		{"terraform.tfvars.json", true},
+		{"main.tf", false},
 		// Nested occurrences: a vendored checkout's .git is as unwanted as the
 		// one at the root, and user patterns already match at any depth.
 		{"sub/.git/HEAD", true},
 		{"vendor/mod/.gitignore", true},
 		{"sub/.terraform/providers", true},
 		{"sub/terraform.tfstate.backup", true},
+		{"envs/prod/secrets.tfvars", true},
 		// The state directory is the one root-anchored entry, so CLI tool state
 		// under .datarobot/cli still uploads and a subproject copy is untouched.
 		{".datarobot/cli/state.json", false},
@@ -81,6 +86,7 @@ func TestSystemExcludes_NotOverridable(t *testing.T) {
 	m := FromLines([]string{
 		"!.wapi", "!.git", "!.datarobot.yaml", "!.terraform",
 		"!.datarobot/workload", "!terraform.tfstate",
+		"!*.tfvars", "!*.tfvars.json",
 	})
 
 	assert.True(t, m.Match(".wapi", true))
@@ -90,6 +96,28 @@ func TestSystemExcludes_NotOverridable(t *testing.T) {
 	assert.True(t, m.Match(".terraform", true))
 	assert.True(t, m.Match(".datarobot/workload", true))
 	assert.True(t, m.Match("terraform.tfstate", false))
+	assert.True(t, m.Match("terraform.tfvars", false))
+	assert.True(t, m.Match("terraform.tfvars.json", false))
+}
+
+// A project that already has an ignore file never receives the starter
+// template, so anything the template alone covered would upload. Variable files
+// carry the credentials the configuration was given, which is why they are
+// system excludes rather than template lines.
+func TestSystemExcludes_TfvarsWithLegacyIgnoreFileOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, LegacyFileName), []byte(".venv\n"), 0o644))
+
+	m, err := New(dir)
+	require.NoError(t, err)
+
+	assert.True(t, m.Match("terraform.tfvars", false))
+	assert.True(t, m.Match("prod.auto.tfvars", false))
+	assert.True(t, m.Match("terraform.tfvars.json", false))
+	assert.True(t, m.Match(".venv", true))
+	assert.False(t, m.Match("main.tf", false))
 }
 
 func TestUserPatterns(t *testing.T) {
@@ -311,19 +339,18 @@ func TestDefaultTemplate_ExcludesVenv(t *testing.T) {
 	assert.False(t, m.Match(FileName, false))
 }
 
-func TestDefaultTemplate_ExcludesTerraformSecrets(t *testing.T) {
+func TestDefaultTemplate_ExcludesTerraformWorkingFiles(t *testing.T) {
 	t.Parallel()
 
-	// .terraform/ and terraform.tfstate are system excludes; these are the rest
-	// of what a source.dir that doubles as the configuration directory holds.
+	// .terraform/, terraform.tfstate and *.tfvars are system excludes; these are
+	// the rest of what a source.dir that doubles as the configuration directory
+	// holds, and unlike the excludes a user may delete these lines.
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), DefaultTemplate, 0o644))
 
 	m, err := New(dir)
 	require.NoError(t, err)
 
-	assert.True(t, m.Match("secrets.tfvars", false))
-	assert.True(t, m.Match("terraform.tfvars.json", false))
 	assert.True(t, m.Match(".terraform.lock.hcl", false))
 	assert.True(t, m.Match(".terraform.tfstate.lock.info", false))
 	assert.False(t, m.Match("main.tf", false))
