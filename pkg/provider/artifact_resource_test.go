@@ -3825,7 +3825,9 @@ func TestArtifactResourceSourceReadPreservesDirHash(t *testing.T) {
 	sourceDir := writeArtifactSourceTree(t, map[string]string{
 		"user_tools.py": "# @dr_mcp_tool(tags={\"user\"})\nasync def user_tool_example():\n    pass\n",
 	})
-	appliedHash, err := computeFolderHash(types.StringValue(sourceDir))
+	appliedHash, err := computeArtifactSourceDirHash(&ArtifactResourceModel{
+		Source: &ArtifactSourceModel{Dir: types.StringValue(sourceDir)},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3843,7 +3845,9 @@ func TestArtifactResourceSourceReadPreservesDirHash(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceDir, "user_tools.py"), []byte("@dr_mcp_tool(tags={\"user\"})\nasync def user_tool_example():\n    pass\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	currentHash, err := computeFolderHash(types.StringValue(sourceDir))
+	currentHash, err := computeArtifactSourceDirHash(&ArtifactResourceModel{
+		Source: &ArtifactSourceModel{Dir: types.StringValue(sourceDir)},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
