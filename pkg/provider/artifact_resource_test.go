@@ -1188,6 +1188,8 @@ func TestValidateArtifactEnvironmentVar(t *testing.T) {
 		})
 		if !resp.Diagnostics.HasError() {
 			t.Fatal("expected validation error for api-key with value")
+		}
+	})
 
 	t.Run("unknown credential key defers validation", func(t *testing.T) {
 		resp := &tfresource.ValidateConfigResponse{}
