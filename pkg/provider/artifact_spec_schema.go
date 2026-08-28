@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -165,11 +166,11 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".`,
 		},
 		"name": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.`,
+			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).`,
 		},
 		"value": schema.StringAttribute{
 			Optional:            true,
@@ -190,7 +191,7 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token.`,
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
@@ -207,6 +208,23 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 		"key": datasourceschema.StringAttribute{
 			Computed:            true,
 			MarkdownDescription: `Key within the credential when source is "dr-credential".`,
+		},
+	}
+}
+
+func artifactResourceBuildAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"artifact_image_build_id": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Artifact image build ID.",
+		},
+		"status": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
+		},
+		"created_at": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Build creation timestamp (UTC).",
 		},
 	}
 }
@@ -280,6 +298,14 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			Optional:            true,
 			MarkdownDescription: "Container liveness check configuration.",
 			Attributes:          probeAttributes,
+		},
+		"build": schema.SingleNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Server-set image build metadata.",
+			Attributes:          artifactResourceBuildAttributes(),
+			PlanModifiers: []planmodifier.Object{
+				objectplanmodifier.UseStateForUnknown(),
+			},
 		},
 	}
 }
@@ -404,7 +430,7 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 				},
 				"status": datasourceschema.StringAttribute{
 					Computed:            true,
-					MarkdownDescription: "Image build status at submit time.",
+					MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 				},
 				"created_at": datasourceschema.StringAttribute{
 					Computed:            true,

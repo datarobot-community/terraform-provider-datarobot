@@ -11,6 +11,7 @@ const (
 	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
+	DataRobotDebugEnvVar        string = "DATAROBOT_DEBUG"
 	TimeoutMinutesEnvVar        string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent                   string = "DataRobotTerraformClient"
 
@@ -1037,6 +1038,7 @@ type ArtifactContainerModel struct {
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
 	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
 	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
+	Build            types.Object                       `tfsdk:"build"`
 }
 
 type ArtifactImageBuildConfigModel struct {

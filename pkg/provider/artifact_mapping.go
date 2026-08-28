@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -155,7 +156,26 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
+			m := ArtifactEnvironmentVariableModel{
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringNull(),
+				Value:          types.StringNull(),
+				DrCredentialID: types.StringNull(),
+				Key:            types.StringNull(),
+			}
+			if ev.Name != "" {
+				m.Name = types.StringValue(ev.Name)
+			}
+			switch ev.Source {
+			case client.EnvironmentVariableSourceCredential:
+				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+				m.Key = types.StringValue(ev.Key)
+			case client.EnvironmentVariableSourceAPIKey:
+				// Value is resolved at workload deploy time and is not returned by the API.
+			default:
+				m.Value = types.StringValue(ev.Value)
+			}
+			model.EnvironmentVars[i] = m
 		}
 	} else {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
@@ -185,20 +205,7 @@ func loadImageBuildConfigDSFromAPI(cfg *client.ArtifactImageBuildConfig) *Artifa
 		}
 	}
 	if cfg.Dockerfile != nil {
-		df := cfg.Dockerfile
-		dockerfileModel := &ArtifactDockerfileModel{
-			Source:                        types.StringValue(df.Source),
-			Path:                          types.StringValue(df.Path),
-			ExecutionEnvironmentID:        types.StringValue(df.ExecutionEnvironmentID),
-			ExecutionEnvironmentVersionID: types.StringValue(df.ExecutionEnvironmentVersionID),
-		}
-		if len(df.Entrypoint) > 0 {
-			dockerfileModel.Entrypoint = make([]types.String, len(df.Entrypoint))
-			for i, e := range df.Entrypoint {
-				dockerfileModel.Entrypoint[i] = types.StringValue(e)
-			}
-		}
-		model.Dockerfile = dockerfileModel
+		model.Dockerfile = loadDockerfileFromAPI(cfg.Dockerfile)
 	}
 	return model
 }
@@ -212,6 +219,34 @@ func loadContainerBuildFromAPI(build *client.ArtifactContainerBuildInfo) *Artifa
 		Status:               types.StringValue(build.Status),
 		CreatedAt:            types.StringValue(build.CreatedAt),
 	}
+}
+
+func artifactBuildAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"artifact_image_build_id": types.StringType,
+		"status":                  types.StringType,
+		"created_at":              types.StringType,
+	}
+}
+
+func artifactBuildNull() types.Object {
+	return types.ObjectNull(artifactBuildAttrTypes())
+}
+
+func loadContainerBuildObjectFromAPI(build *client.ArtifactContainerBuildInfo) types.Object {
+	attrTypes := artifactBuildAttrTypes()
+	if build == nil {
+		return artifactBuildNull()
+	}
+	obj, diags := types.ObjectValue(attrTypes, map[string]attr.Value{
+		"artifact_image_build_id": types.StringValue(build.ArtifactImageBuildID),
+		"status":                  types.StringValue(build.Status),
+		"created_at":              types.StringValue(build.CreatedAt),
+	})
+	if diags.HasError() {
+		return types.ObjectNull(attrTypes)
+	}
+	return obj
 }
 
 func loadSecurityContextFromAPI(sc *client.ArtifactSecurityContext) *ArtifactSecurityContextModel {

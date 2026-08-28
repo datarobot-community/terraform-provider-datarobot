@@ -1365,6 +1365,21 @@ func (mr *MockServiceMockRecorder) GetArtifactBuild(ctx, artifactID, buildID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifactBuild", reflect.TypeOf((*MockService)(nil).GetArtifactBuild), ctx, artifactID, buildID)
 }
 
+// GetArtifactBuildLogs mocks base method.
+func (m *MockService) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArtifactBuildLogs", ctx, artifactID, buildID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetArtifactBuildLogs indicates an expected call of GetArtifactBuildLogs.
+func (mr *MockServiceMockRecorder) GetArtifactBuildLogs(ctx, artifactID, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifactBuildLogs", reflect.TypeOf((*MockService)(nil).GetArtifactBuildLogs), ctx, artifactID, buildID)
+}
+
 // GetBatchPredictionJobDefinition mocks base method.
 func (m *MockService) GetBatchPredictionJobDefinition(ctx context.Context, id string) (*client.BatchPredictionJobDefinition, error) {
 	m.ctrl.T.Helper()

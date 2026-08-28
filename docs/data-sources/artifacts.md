@@ -115,7 +115,7 @@ Read-Only:
 
 - `artifact_image_build_id` (String) Artifact image build ID.
 - `created_at` (String) Build creation timestamp (UTC).
-- `status` (String) Image build status at submit time.
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
 
 
 <a id="nestedatt--artifacts--spec--container_groups--containers--environment_vars"></a>
@@ -126,7 +126,7 @@ Read-Only:
 - `dr_credential_id` (String) DataRobot credential ID when source is "dr-credential".
 - `key` (String) Key within the credential when source is "dr-credential".
 - `name` (String) Name of the environment variable. May be absent for "api-key" entries, in which case the token is injected as DATAROBOT_API_TOKEN.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token.
 - `value` (String) Value of the environment variable when source is "string".
 
 

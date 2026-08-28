@@ -38,13 +38,21 @@ resource "datarobot_artifact" "prebuilt" {
 # Create as draft so this example is copy-pasteable. After the image build
 # populates image_uri, set status = "locked". Applying locked without image_uri
 # is rejected by workload-api (422).
+#
+# wait_for_build = true (the default; set explicitly here) makes apply block
+# until the image build finishes and streams build log lines to the
+# provider's stderr while it waits. Terraform only shows provider stderr
+# when TF_LOG is set (TF_LOG=DEBUG or more verbose - it's also emitted via
+# tflog.Debug); on a plain `terraform apply` with TF_LOG unset, apply still
+# blocks until the build finishes, it just prints nothing in between.
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
   source = {
-    dir = "${path.module}/app"
+    dir            = "${path.module}/app"
+    wait_for_build = true
   }
 
   spec = {
@@ -189,6 +197,10 @@ Optional:
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
+Read-Only:
+
+- `build` (Attributes) Server-set image build metadata. (see [below for nested schema](#nestedatt--spec--container_groups--containers--build))
+
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
 ### Nested Schema for `spec.container_groups.containers.environment_vars`
 
@@ -196,8 +208,8 @@ Optional:
 
 - `dr_credential_id` (String) DataRobot credential ID. Required when source is "dr-credential".
 - `key` (String) Key within the credential. Required when source is "dr-credential".
-- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".
+- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".
 - `value` (String) Value of the environment variable. Required when source is "string".
 
 
@@ -226,7 +238,7 @@ Optional:
 - `entrypoint` (List of String) Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.
 - `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`.
 - `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`.
-- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.
+- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.
 - `source` (String) How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.
 
 
@@ -286,6 +298,16 @@ Optional:
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
 - `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
+
+
+<a id="nestedatt--spec--container_groups--containers--build"></a>
+### Nested Schema for `spec.container_groups.containers.build`
+
+Read-Only:
+
+- `artifact_image_build_id` (String) Artifact image build ID.
+- `created_at` (String) Build creation timestamp (UTC).
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
 
 
 

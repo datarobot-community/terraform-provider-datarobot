@@ -54,24 +54,41 @@ func artifactSourceWaitForBuild(plan *ArtifactResourceModel) bool {
 func (r *ArtifactResource) syncArtifactBuild(
 	ctx context.Context,
 	artifactID string,
+	artifactRepositoryID string,
 	waitForBuild bool,
 	opts *client.WaitForArtifactBuildOptions,
 ) (*client.Artifact, string, error) {
 	traceAPICall("TriggerArtifactBuild")
 	trigger, err := r.provider.service.TriggerArtifactBuild(ctx, artifactID)
 	if err != nil {
-		return nil, "", fmt.Errorf("trigger artifact build: %w", err)
+		return nil, "", r.enrichArtifactBuildError(ctx, artifactID, artifactRepositoryID, "", fmt.Errorf("trigger artifact build: %w", err))
 	}
 	if trigger == nil || len(trigger.BuildIDs) == 0 {
-		return nil, "", fmt.Errorf("trigger artifact build: empty buildIds")
+		return nil, "", r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			"",
+			fmt.Errorf("trigger artifact build: empty buildIds"),
+		)
 	}
 
 	buildID := trigger.BuildIDs[0]
 
+	var completedBuild *client.ArtifactBuild
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		if _, err := r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, opts); err != nil {
-			return nil, buildID, fmt.Errorf("wait for artifact build: %w", err)
+		waitOpts := artifactBuildWaitOptions(opts)
+		var err error
+		completedBuild, err = r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts)
+		if err != nil {
+			return nil, buildID, r.enrichArtifactBuildError(
+				ctx,
+				artifactID,
+				artifactRepositoryID,
+				buildID,
+				fmt.Errorf("wait for artifact build: %w", err),
+			)
 		}
 	}
 
@@ -82,12 +99,41 @@ func (r *ArtifactResource) syncArtifactBuild(
 		if !waitForBuild {
 			msg = "refresh artifact after build trigger"
 		}
-		return nil, buildID, fmt.Errorf("%s: %w", msg, err)
+		return nil, buildID, r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			buildID,
+			fmt.Errorf("%s: %w", msg, err),
+		)
+	}
+	if completedBuild != nil {
+		applyCompletedArtifactBuildToPrimaryContainer(artifact, completedBuild)
 	}
 	if waitForBuild && artifactPrimaryContainerImageURI(artifact) == "" {
-		return artifact, buildID, fmt.Errorf("artifact build completed but primary container image_uri is empty")
+		return artifact, buildID, r.enrichArtifactBuildError(
+			ctx,
+			artifactID,
+			artifactRepositoryID,
+			buildID,
+			fmt.Errorf("artifact build completed but primary container image_uri is empty"),
+		)
 	}
 	return artifact, buildID, nil
+}
+
+func artifactBuildWaitOptions(opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+	merged := &client.WaitForArtifactBuildOptions{}
+	if opts != nil {
+		*merged = *opts
+	}
+	if merged.OnOtelLogLine == nil {
+		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
+			line := client.FormatOtelLogEntry(entry)
+			emitArtifactBuildLogLine(line)
+		}
+	}
+	return merged
 }
 
 // artifactModifyPlanNeedsUnknownImageURI is true when apply will upload source and trigger
@@ -133,6 +179,48 @@ func artifactModifyPlanNeedsUnknownImageURI(plan *ArtifactResourceModel, state *
 	}
 
 	return state.Status.ValueString() == string(client.ArtifactStatusDraft)
+}
+
+// artifactBuildNeedsUnknownInPlan reports whether apply will replace the primary
+// container's build metadata. That happens when a build is about to run, and also
+// whenever Update creates a new artifact version for any reason (a plain name change,
+// for example): artifactContainerToClient never sends build, so the new version comes
+// back without it. Unlike image_uri, the create request cannot echo build back.
+func artifactBuildNeedsUnknownInPlan(plan, state *ArtifactResourceModel, isCreate bool) bool {
+	if artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) {
+		return true
+	}
+	if isCreate || state == nil {
+		return false
+	}
+	return artifactModifyPlanNeedsUnknownArtifactID(*plan, *state)
+}
+
+// applySourceManagedBuildToPlan marks the primary container's computed build metadata
+// unknown whenever apply will trigger a new image build. Without this, the schema's
+// UseStateForUnknown would carry the previous build forward as a known value and
+// Terraform would reject the refreshed metadata as an inconsistent result after apply.
+// Unlike image_uri there is no user-settable counterpart to preserve: a triggered build
+// always replaces this block.
+func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate bool) {
+	if plan.Spec == nil {
+		return
+	}
+	if !artifactBuildNeedsUnknownInPlan(plan, state, isCreate) {
+		return
+	}
+
+	attrTypes := artifactBuildAttrTypes()
+	for gi := range plan.Spec.ContainerGroups {
+		group := &plan.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if !artifactContainerIsPrimary(*container, *group) {
+				continue
+			}
+			container.Build = types.ObjectUnknown(attrTypes)
+		}
+	}
 }
 
 func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {
@@ -208,4 +296,66 @@ func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {
 	}
 
 	return artifact.Spec.ContainerGroups[0].Containers[0].ImageURI
+}
+
+// applyCompletedArtifactBuildToPrimaryContainer overwrites the primary container's
+// server-set build metadata with the build the provider just waited on. WAPI may
+// return stale container.build on GetArtifact immediately after a build completes.
+func applyCompletedArtifactBuildToPrimaryContainer(artifact *client.Artifact, build *client.ArtifactBuild) {
+	if artifact == nil || build == nil {
+		return
+	}
+
+	applyBuildInfoToPrimaryContainer(artifact, &client.ArtifactContainerBuildInfo{
+		ArtifactImageBuildID: build.ID,
+		Status:               build.Status,
+		CreatedAt:            build.CreatedAt,
+	})
+}
+
+// applyBuildInfoToPrimaryContainer writes buildInfo onto the primary container, falling
+// back to the first container when no container is flagged primary.
+func applyBuildInfoToPrimaryContainer(artifact *client.Artifact, buildInfo *client.ArtifactContainerBuildInfo) {
+	if artifact == nil || buildInfo == nil {
+		return
+	}
+
+	for gi := range artifact.Spec.ContainerGroups {
+		group := &artifact.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := &group.Containers[ci]
+			if container.Primary != nil && *container.Primary {
+				container.Build = buildInfo
+				return
+			}
+		}
+	}
+
+	if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
+		return
+	}
+	artifact.Spec.ContainerGroups[0].Containers[0].Build = buildInfo
+}
+
+// primaryContainerBuildInfo returns the build metadata currently pinned on the primary
+// container, or nil when there is none.
+func primaryContainerBuildInfo(artifact *client.Artifact) *client.ArtifactContainerBuildInfo {
+	if artifact == nil {
+		return nil
+	}
+
+	for gi := range artifact.Spec.ContainerGroups {
+		group := artifact.Spec.ContainerGroups[gi]
+		for ci := range group.Containers {
+			container := group.Containers[ci]
+			if container.Primary != nil && *container.Primary {
+				return container.Build
+			}
+		}
+	}
+
+	if len(artifact.Spec.ContainerGroups) == 0 || len(artifact.Spec.ContainerGroups[0].Containers) == 0 {
+		return nil
+	}
+	return artifact.Spec.ContainerGroups[0].Containers[0].Build
 }

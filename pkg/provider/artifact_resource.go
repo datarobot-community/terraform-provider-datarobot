@@ -58,9 +58,9 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		"path": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
-			Default:             stringdefault.StaticString("./Dockerfile"),
-			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.",
+			MarkdownDescription: "Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.",
 			PlanModifiers: []planmodifier.String{
+				artifactDockerfilePathPlanModifier{},
 				stringplanmodifier.UseStateForUnknown(),
 			},
 		},
@@ -261,6 +261,9 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 	if targetLocked && artifactSourceConfigured(&data) {
 		preLockArtifact := artifact
+		// The lock response can omit or lag container.build, which would discard the
+		// terminal build metadata syncArtifactBuild just pinned from WaitForArtifactBuild.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
 		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
 		if lockErr != nil {
 			r.rollbackArtifactCreate(ctx, preLockArtifact, !userSuppliedRepository)
@@ -268,6 +271,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 			return
 		}
 		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
@@ -389,6 +393,8 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		artifact.Status != client.ArtifactStatusLocked &&
 		(deferLock || lockedSourceCloneNeeded) {
 		preLockArtifact := artifact
+		// See the Create path: locking must not drop the pinned build metadata.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
 		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
 		if lockErr != nil {
 			if createdNewVersion || lockedSourceCloneNeeded {
@@ -398,6 +404,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
@@ -501,6 +508,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
 	applySourceManagedImageURIToPlan(configPtr, &plan, statePtr, isCreate)
+	applySourceManagedBuildToPlan(&plan, statePtr, isCreate)
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
@@ -853,12 +861,18 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 
 	switch source {
 	case client.EnvironmentVariableSourceString:
+		if ev.Name.IsUnknown() {
+			return
+		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "string".`)
 		}
-		if ev.Value.IsNull() || ev.Value.IsUnknown() {
+		if ev.Value.IsUnknown() {
+			return
+		}
+		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
 				`"value" is required when source is "string".`)
@@ -874,17 +888,23 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				`"key" must not be set when source is "string".`)
 		}
 	case client.EnvironmentVariableSourceCredential:
+		if ev.Name.IsUnknown() {
+			return
+		}
 		if ev.Name.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
 		}
-		if ev.DrCredentialID.IsNull() || ev.DrCredentialID.IsUnknown() {
+		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
+			return
+		}
+		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
 				`"dr_credential_id" is required when source is "dr-credential".`)
 		}
-		if ev.Key.IsNull() || ev.Key.IsUnknown() {
+		if !ev.Key.IsUnknown() && ev.Key.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
 				"Missing key",
 				`"key" is required when source is "dr-credential".`)
@@ -1253,6 +1273,13 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 				"`entrypoint` is required when dockerfile source is `generated`.",
 			)
 		}
+		if IsKnown(cfg.Dockerfile.Path) {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("path"),
+				"Conflicting dockerfile path",
+				"`path` is not used when dockerfile source is `generated` and would be silently discarded; remove it or set `source = \"provided\"`.",
+			)
+		}
 	case "provided":
 		// path defaults to ./Dockerfile at marshal time
 	default:
@@ -1373,17 +1400,17 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			envVar := client.ArtifactEnvironmentVariable{
-				Source: ev.Source.ValueString(),
-				Name:   ev.Name.ValueString(),
+			source := ev.Source.ValueString()
+			envVar := client.ArtifactEnvironmentVariable{Source: source}
+			if !ev.Name.IsNull() && !ev.Name.IsUnknown() {
+				envVar.Name = ev.Name.ValueString()
 			}
-			switch ev.Source.ValueString() {
+			switch source {
 			case client.EnvironmentVariableSourceCredential:
 				envVar.DrCredentialID = ev.DrCredentialID.ValueString()
 				envVar.Key = ev.Key.ValueString()
 			case client.EnvironmentVariableSourceAPIKey:
-				// Only source (and name, when set) are sent; the platform
-				// resolves the token value.
+				// Token value is resolved by workload-api at deploy time.
 			default:
 				envVar.Value = ev.Value.ValueString()
 			}
@@ -1607,7 +1634,26 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
-			model.EnvironmentVars[i] = environmentVarModelFromAPI(ev)
+			m := ArtifactEnvironmentVariableModel{
+				Source:         types.StringValue(ev.Source),
+				Name:           types.StringNull(),
+				Value:          types.StringNull(),
+				DrCredentialID: types.StringNull(),
+				Key:            types.StringNull(),
+			}
+			if ev.Name != "" {
+				m.Name = types.StringValue(ev.Name)
+			}
+			switch ev.Source {
+			case client.EnvironmentVariableSourceCredential:
+				m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+				m.Key = types.StringValue(ev.Key)
+			case client.EnvironmentVariableSourceAPIKey:
+				// Value is resolved at workload deploy time and is not returned by the API.
+			default:
+				m.Value = types.StringValue(ev.Value)
+			}
+			model.EnvironmentVars[i] = m
 		}
 	} else if prior != nil && prior.EnvironmentVars != nil {
 		model.EnvironmentVars = []ArtifactEnvironmentVariableModel{}
@@ -1616,6 +1662,7 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 	model.StartupProbe = loadProbeFromAPI(c.StartupProbe)
 	model.ReadinessProbe = loadProbeFromAPI(c.ReadinessProbe)
 	model.LivenessProbe = loadProbeFromAPI(c.LivenessProbe)
+	model.Build = loadContainerBuildObjectFromAPI(c.Build)
 
 	return model
 }
@@ -1672,6 +1719,7 @@ func loadDockerfileFromAPI(df *client.ArtifactDockerfileConfig) *ArtifactDockerf
 				model.Entrypoint[i] = types.StringValue(e)
 			}
 		}
+		model.Path = types.StringNull()
 		return model
 	}
 
