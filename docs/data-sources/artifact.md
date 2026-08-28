@@ -44,7 +44,7 @@ output "artifact_status" {
 - `spec` (Attributes) The artifact specification containing container group definitions. (see [below for nested schema](#nestedatt--spec))
 - `status` (String) Artifact status: `draft` or `locked`.
 - `tags` (Attributes List) Tags associated with this artifact. (see [below for nested schema](#nestedatt--tags))
-- `type` (String) The artifact type: `service` or `nim`.
+- `type` (String) The artifact type: `service`, `nim`, or `agent`.
 - `updated_at` (String) Timestamp of when the artifact was last updated.
 - `version` (Number) Version number of the artifact. Set only for locked artifacts.
 
@@ -65,6 +65,7 @@ Read-Only:
 
 Read-Only:
 
+- `a2a_enabled` (Boolean) Whether A2A card management and the A2A surface are enabled. Set on `agent` artifacts; omitted otherwise.
 - `container_groups` (Attributes List) List of container groups. (see [below for nested schema](#nestedatt--spec--container_groups))
 - `storage` (Attributes) NIM model weight storage configuration. (see [below for nested schema](#nestedatt--spec--storage))
 - `template_id` (String) ID of the template used to create this NIM artifact.
@@ -103,7 +104,7 @@ Read-Only:
 
 - `artifact_image_build_id` (String) Artifact image build ID.
 - `created_at` (String) Build creation timestamp (UTC).
-- `status` (String) Image build status at submit time.
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
 
 
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
@@ -170,6 +171,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -185,6 +187,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
@@ -229,6 +232,7 @@ Read-Only:
 - `period_seconds` (Number) How often (in seconds) to perform the probe.
 - `port` (Number) Port number to access on the container.
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
+- `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 

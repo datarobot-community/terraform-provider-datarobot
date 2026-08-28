@@ -93,7 +93,20 @@ func testAccArtifactBuildPreCheck(t *testing.T) {
 	}
 }
 
-func testAccFeatureFlagPreCheck(t *testing.T, flagName string) {
+// mockAPIKey sets a fake API key for a mock (non-acceptance) test and restores
+// the original on cleanup. globalTestCfg is shared package state; leaving it as
+// "fake" leaks into the parallel acceptance tests that bake globalTestCfg.ApiKey
+// into their provider config (e.g. the data source tests), causing spurious 401s.
+func mockAPIKey(t *testing.T) {
+	t.Helper()
+	orig := globalTestCfg.ApiKey
+	t.Cleanup(func() { globalTestCfg.ApiKey = orig })
+	globalTestCfg.ApiKey = "fake"
+}
+
+// testAccFeatureFlagPreCheck skips the test unless at least one of flagNames is
+// enabled on the server under test.
+func testAccFeatureFlagPreCheck(t *testing.T, flagNames ...string) {
 	t.Helper()
 	testAccPreCheck(t)
 	svc := client.NewService(cl)
@@ -105,13 +118,18 @@ func testAccFeatureFlagPreCheck(t *testing.T, flagName string) {
 		t.Logf("permissions: %v", userInfo.Permissions)
 	}
 
-	enabled, err := svc.IsFeatureFlagEnabled(context.Background(), flagName)
-	if err != nil {
-		t.Logf("Feature flag check error for %q: %v", flagName, err)
-		t.Skipf("Skipping test: unable to check feature flag %q: %v", flagName, err)
+	for _, flagName := range flagNames {
+		enabled, err := svc.IsFeatureFlagEnabled(context.Background(), flagName)
+		if err != nil {
+			// Keep going: another flag in the list may still grant access.
+			t.Logf("Feature flag check error for %q: %v", flagName, err)
+			continue
+		}
+		t.Logf("Feature flag %q = %v", flagName, enabled)
+		if enabled {
+			return
+		}
 	}
-	t.Logf("Feature flag %q = %v", flagName, enabled)
-	if !enabled {
-		t.Skipf("Skipping test: feature flag %q is not enabled on this server", flagName)
-	}
+
+	t.Skipf("Skipping test: none of the feature flags %v could be confirmed enabled on this server", flagNames)
 }
