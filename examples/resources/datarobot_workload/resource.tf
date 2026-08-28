@@ -95,8 +95,6 @@ resource "datarobot_workload" "api" {
       resource_bundles = ["cpu.small"]
     }]
   }
-
-  depends_on = [datarobot_artifact.app]
 }
 
 output "artifact_id" {
