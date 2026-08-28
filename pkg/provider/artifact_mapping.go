@@ -93,6 +93,7 @@ func loadArtifactSpecIntoDataSourceModel(spec client.ArtifactSpec) ArtifactSpecD
 	model := ArtifactSpecDataSourceModel{
 		ContainerGroups: groups,
 		TemplateID:      optionalStringValue(spec.TemplateID),
+		A2AEnabled:      optionalBoolValue(spec.A2AEnabled),
 	}
 	if spec.Storage != nil {
 		model.Storage = &ArtifactNimStorageModel{
@@ -101,6 +102,33 @@ func loadArtifactSpecIntoDataSourceModel(spec client.ArtifactSpec) ArtifactSpecD
 		}
 	}
 	return model
+}
+
+// environmentVarModelFromAPI maps an API environment variable to the shared
+// Terraform model. The name may be absent for api-key entries (the platform
+// stores an omitted name as absent and injects DATAROBOT_API_TOKEN), so an
+// empty name maps to null rather than "".
+func environmentVarModelFromAPI(ev client.ArtifactEnvironmentVariable) ArtifactEnvironmentVariableModel {
+	m := ArtifactEnvironmentVariableModel{
+		Source:         types.StringValue(ev.Source),
+		Name:           types.StringNull(),
+		Value:          types.StringNull(),
+		DrCredentialID: types.StringNull(),
+		Key:            types.StringNull(),
+	}
+	if ev.Name != "" {
+		m.Name = types.StringValue(ev.Name)
+	}
+	switch ev.Source {
+	case client.EnvironmentVariableSourceCredential:
+		m.DrCredentialID = types.StringValue(ev.DrCredentialID)
+		m.Key = types.StringValue(ev.Key)
+	case client.EnvironmentVariableSourceAPIKey:
+		// No value or credential fields; the platform resolves the token.
+	default:
+		m.Value = types.StringValue(ev.Value)
+	}
+	return m
 }
 
 func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContainerDSModel {
@@ -201,10 +229,14 @@ func artifactBuildAttrTypes() map[string]attr.Type {
 	}
 }
 
+func artifactBuildNull() types.Object {
+	return types.ObjectNull(artifactBuildAttrTypes())
+}
+
 func loadContainerBuildObjectFromAPI(build *client.ArtifactContainerBuildInfo) types.Object {
 	attrTypes := artifactBuildAttrTypes()
 	if build == nil {
-		return types.ObjectNull(attrTypes)
+		return artifactBuildNull()
 	}
 	obj, diags := types.ObjectValue(attrTypes, map[string]attr.Value{
 		"artifact_image_build_id": types.StringValue(build.ArtifactImageBuildID),

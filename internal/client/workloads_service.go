@@ -32,14 +32,13 @@ const (
 type AutoscalingPolicy struct {
 	ScalingMetric string  `json:"scalingMetric"`
 	Target        float64 `json:"target"`
-	MinCount      int64   `json:"minCount"`
-	MaxCount      int64   `json:"maxCount"`
-	Priority      *int64  `json:"priority,omitempty"`
 }
 
 type AutoscalingProperties struct {
-	Enabled  *bool               `json:"enabled,omitempty"`
-	Policies []AutoscalingPolicy `json:"policies"`
+	Enabled         *bool               `json:"enabled,omitempty"`
+	MinReplicaCount int64               `json:"minReplicaCount"`
+	MaxReplicaCount int64               `json:"maxReplicaCount"`
+	Policies        []AutoscalingPolicy `json:"policies"`
 }
 
 type ResourceAllocation struct {
@@ -68,14 +67,17 @@ type WorkloadRuntime struct {
 }
 
 type Workload struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Status      ProtonStatus       `json:"status"`
-	Importance  WorkloadImportance `json:"importance"`
-	ArtifactID  *string            `json:"artifactId"`
-	Endpoint    *string            `json:"endpoint"`
-	Runtime     WorkloadRuntime    `json:"runtime"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Status      ProtonStatus         `json:"status"`
+	Importance  WorkloadImportance   `json:"importance"`
+	Type        ArtifactType         `json:"type,omitempty"`
+	ArtifactID  *string              `json:"artifactId"`
+	Endpoint    *string              `json:"endpoint"`
+	Runtime     WorkloadRuntime      `json:"runtime"`
+	ProtonID    *string              `json:"protonId"`
+	Replacement *WorkloadReplacement `json:"replacement"`
 }
 
 type CreateWorkloadRequest struct {
@@ -215,6 +217,14 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 	return Patch[WorkloadReplacement](s.client, ctx, "/workloads/"+workloadID+"/settings", req)
 }
 
+// WaitForWorkloadReplacement polls workload.replacement (via GetWorkload) until
+// the in-flight replacement settles. It avoids the /replacement endpoint because
+// a "completed" record is deleted within ~1s (so /replacement 404s and races the
+// poll) while an "errored" record persists. That asymmetry makes the workload
+// record unambiguous: errored => failure; nil-while-running => completed (nil
+// can't be a masked failure, and the proton switch lands before nil appears).
+// A nil is only "done" after an active replacement was seen (seenActive) —
+// otherwise it's the brief gap before the API creates the record, so keep polling.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
@@ -232,40 +242,48 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 	}
 
 	deadline := time.Now().Add(timeout)
+	seenActive := false
+	var lastReplacement *WorkloadReplacement
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		replacement, err := s.GetWorkloadReplacement(ctx, workloadID)
+		workload, err := s.GetWorkload(ctx, workloadID)
 		if err != nil {
-			if errors.Is(err, &NotFoundError{}) {
-				return &WorkloadReplacement{
-					WorkloadID: workloadID,
-					Status:     ReplacementStatusCompleted,
-				}, nil
-			}
-			return nil, err
+			return lastReplacement, err
 		}
+		replacement := workload.Replacement
 
-		if IsReplacementTerminal(replacement.Status) {
-			if replacement.Status == ReplacementStatusErrored {
-				message := "workload replacement failed"
-				if replacement.Message != nil && *replacement.Message != "" {
-					message = *replacement.Message
-				}
-				return replacement, &ReplacementFailedError{Message: message}
+		switch {
+		case replacement != nil && replacement.Status == ReplacementStatusErrored:
+			message := "workload replacement failed"
+			if replacement.Message != nil && *replacement.Message != "" {
+				message = *replacement.Message
 			}
-			return replacement, nil
+			return replacement, &ReplacementFailedError{Message: message}
+
+		case replacement != nil:
+			lastReplacement = replacement
+			if replacement.Status == ReplacementStatusCompleted {
+				// Rarely observable (cleaned up within ~1s), but accept it when caught.
+				return replacement, nil
+			}
+			seenActive = true
+
+		default: // replacement == nil
+			if seenActive && workload.Status == ProtonStatusRunning {
+				return lastReplacement, nil
+			}
 		}
 
 		if time.Now().After(deadline) {
-			return replacement, fmt.Errorf(
-				"timeout waiting for workload %s replacement after %s (last status: %s)",
+			return lastReplacement, fmt.Errorf(
+				"timeout waiting for workload %s replacement after %s (workload status: %s)",
 				workloadID,
 				timeout,
-				replacement.Status,
+				workload.Status,
 			)
 		}
 
@@ -288,6 +306,7 @@ const (
 
 	ArtifactTypeService ArtifactType = "service"
 	ArtifactTypeNim     ArtifactType = "nim"
+	ArtifactTypeAgent   ArtifactType = "agent"
 )
 
 const (
@@ -297,7 +316,9 @@ const (
 )
 
 type ArtifactEnvironmentVariable struct {
-	Source         string `json:"source,omitempty"`
+	Source string `json:"source,omitempty"`
+	// Name is optional for the api-key source (the platform resolves an
+	// omitted name to DATAROBOT_API_TOKEN and stores it as absent).
 	Name           string `json:"name,omitempty"`
 	Value          string `json:"value,omitempty"`
 	DrCredentialID string `json:"drCredentialId,omitempty"`
@@ -314,6 +335,7 @@ type ArtifactProbeConfig struct {
 	PeriodSeconds       *int64            `json:"periodSeconds,omitempty"`
 	TimeoutSeconds      *int64            `json:"timeoutSeconds,omitempty"`
 	FailureThreshold    *int64            `json:"failureThreshold,omitempty"`
+	SuccessThreshold    *int64            `json:"successThreshold,omitempty"`
 }
 
 type ArtifactCapabilities struct {
@@ -394,6 +416,7 @@ type ArtifactSpec struct {
 	ContainerGroups []ArtifactContainerGroup  `json:"containerGroups"`
 	Storage         *ArtifactNimStorageConfig `json:"storage,omitempty"`
 	TemplateID      *string                   `json:"templateId,omitempty"`
+	A2AEnabled      *bool                     `json:"a2aEnabled,omitempty"`
 }
 
 type ArtifactUser struct {

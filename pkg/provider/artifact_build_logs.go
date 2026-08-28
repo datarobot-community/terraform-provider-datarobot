@@ -10,8 +10,12 @@ import (
 const artifactBuildLogsSeparator = "----------------------------------------"
 
 // artifactBuildLogWriter receives live artifact build log lines during apply.
-// Terraform hides tflog output unless TF_LOG is set, so build progress is written
-// to stderr by default.
+// Written to the provider's stderr. Terraform runs the provider as a go-plugin
+// child process and routes that stderr through its own logging pipeline, so
+// these lines surface only when TF_LOG is set (e.g. TF_LOG=DEBUG) - not on a
+// plain `terraform apply`, regardless of writing here vs. through tflog. The
+// build-failure error message includes a tailed log excerpt and a UI link
+// unconditionally, so a failure is diagnosable either way.
 var artifactBuildLogWriter io.Writer = os.Stderr
 
 func emitArtifactBuildLogLine(line string) {
