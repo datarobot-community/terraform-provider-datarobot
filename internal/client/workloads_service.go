@@ -71,6 +71,7 @@ type Workload struct {
 	Description string               `json:"description"`
 	Status      ProtonStatus         `json:"status"`
 	Importance  WorkloadImportance   `json:"importance"`
+	Type        ArtifactType         `json:"type,omitempty"`
 	ArtifactID  *string              `json:"artifactId"`
 	Endpoint    *string              `json:"endpoint"`
 	Runtime     WorkloadRuntime      `json:"runtime"`
@@ -304,6 +305,7 @@ const (
 
 	ArtifactTypeService ArtifactType = "service"
 	ArtifactTypeNim     ArtifactType = "nim"
+	ArtifactTypeAgent   ArtifactType = "agent"
 )
 
 const (
@@ -413,6 +415,7 @@ type ArtifactSpec struct {
 	ContainerGroups []ArtifactContainerGroup  `json:"containerGroups"`
 	Storage         *ArtifactNimStorageConfig `json:"storage,omitempty"`
 	TemplateID      *string                   `json:"templateId,omitempty"`
+	A2AEnabled      *bool                     `json:"a2aEnabled,omitempty"`
 }
 
 type ArtifactUser struct {

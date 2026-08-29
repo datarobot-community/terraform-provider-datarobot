@@ -16,6 +16,10 @@ Changes to `artifact_id` or `runtime` trigger an in-place workload replacement v
 ## Example Usage
 
 ```terraform
+# Basic: deploy a prebuilt container image as a workload, with an in-place
+# replacement policy. Artifact and runtime changes roll out in place; the
+# workload id and endpoint stay stable.
+
 resource "datarobot_artifact" "example" {
   name = "example-workload-artifact"
   type = "service"
@@ -65,6 +69,61 @@ output "datarobot_workload_endpoint" {
   value       = datarobot_workload.example.endpoint
   description = "Stable inference endpoint — unchanged across in-place replacements"
 }
+
+# Code-to-workload: upload local FastAPI source, build a container image, lock the artifact, deploy a workload.
+# The app runs uvicorn on port 8080 so the workload stays healthy (a one-shot script would exit and fail).
+
+resource "datarobot_artifact" "app" {
+  name        = "example-c2w-workload"
+  description = "Artifact built from local source for workload deployment"
+  status      = "locked"
+
+  source = {
+    dir = "${path.module}/app"
+    # wait_for_build defaults to true: upload, trigger build, poll until image_uri is ready, then lock
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "primary"
+        primary = true
+        port    = 8080
+
+        image_build_config = {
+          dockerfile = {
+            source = "provided"
+            path   = "./Dockerfile"
+          }
+        }
+      }]
+    }]
+  }
+}
+
+resource "datarobot_workload" "api" {
+  name        = "example-c2w-workload"
+  description = "Workload serving the built artifact"
+  importance  = "low"
+  artifact_id = datarobot_artifact.app.artifact_id
+
+  runtime = {
+    container_groups = [{
+      replica_count    = 1
+      resource_bundles = ["cpu.small"]
+    }]
+  }
+}
+
+output "artifact_id" {
+  value       = datarobot_artifact.app.artifact_id
+  description = "Locked artifact version ID deployed by the workload"
+}
+
+output "workload_endpoint" {
+  value       = datarobot_workload.api.endpoint
+  description = "Inference endpoint URL for the deployed workload"
+}
 ```
 
 ## In-place replacement
@@ -90,6 +149,8 @@ artifact_id = datarobot_artifact.app.artifact_id  # correct
 ```
 
 Typical flow: update `datarobot_artifact.spec` (e.g. new `image_uri`) → Terraform produces a new `artifact_id` → `datarobot_workload` detects the change and triggers in-place replacement.
+
+The computed `type` attribute mirrors the deployed artifact type (`service`, `nim`, or `agent`). It is not user-configurable; set `type` (and `spec.a2a_enabled` for agents) on `datarobot_artifact`.
 
 ## What triggers on update
 
@@ -138,6 +199,7 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 - `endpoint` (String) The inference endpoint URL for the Workload.
 - `id` (String) The ID of the Workload.
 - `status` (String) Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.
+- `type` (String) Artifact type mirrored by this workload: `service`, `nim`, or `agent`. Set from the deployed artifact; not user-configurable.
 
 <a id="nestedatt--runtime"></a>
 ### Nested Schema for `runtime`

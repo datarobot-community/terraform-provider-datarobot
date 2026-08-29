@@ -307,6 +307,30 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 	}
 }
 
+func TestWaitForWorkloadReplacementPropagatesNonNotFoundErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "backend unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-404 poll failure")
+	}
+	if errors.Is(err, &NotFoundError{}) {
+		t.Fatalf("did not expect NotFoundError, got %v", err)
+	}
+}
+
 func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
 	// A replacement that never settles (stuck non-terminal) must time out.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -426,5 +450,64 @@ func TestArtifactContainerOmitsEmptyImageURI(t *testing.T) {
 	}
 	if payload["imageUri"] != "nginx:latest" {
 		t.Fatalf("imageUri = %v, want %q", payload["imageUri"], "nginx:latest")
+	}
+}
+
+func TestArtifactSpecOmitsUnsetA2AEnabled(t *testing.T) {
+	t.Parallel()
+
+	spec := ArtifactSpec{
+		ContainerGroups: []ArtifactContainerGroup{},
+	}
+
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal spec: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal spec: %v", err)
+	}
+	if _, ok := payload["a2aEnabled"]; ok {
+		t.Fatalf("expected a2aEnabled to be omitted, got payload: %s", string(raw))
+	}
+
+	enabled := true
+	spec.A2AEnabled = &enabled
+	raw, err = json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal spec with a2aEnabled: %v", err)
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal spec with a2aEnabled: %v", err)
+	}
+	if payload["a2aEnabled"] != true {
+		t.Fatalf("a2aEnabled = %v, want true", payload["a2aEnabled"])
+	}
+}
+
+func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"id":"w1","name":"agent-wl","type":"agent","status":"running","importance":"low","runtime":{}}`)
+	var workload Workload
+	if err := json.Unmarshal(raw, &workload); err != nil {
+		t.Fatalf("unmarshal workload: %v", err)
+	}
+	if workload.Type != ArtifactTypeAgent {
+		t.Fatalf("Type = %q, want %q", workload.Type, ArtifactTypeAgent)
+	}
+
+	encoded, err := json.Marshal(workload)
+	if err != nil {
+		t.Fatalf("marshal workload: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("unmarshal encoded workload: %v", err)
+	}
+	if payload["type"] != "agent" {
+		t.Fatalf("encoded type = %v, want %q", payload["type"], "agent")
 	}
 }

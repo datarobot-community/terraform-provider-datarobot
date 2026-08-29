@@ -1,23 +1,23 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-)
-
-const (
-	artifactSourceTestCatalogID = "aaaaaaaaaaaaaaaaaaaaaaaa"
-	artifactSourceTestVersionID = "bbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
 func TestArtifactSourceConfigured(t *testing.T) {
@@ -216,10 +216,10 @@ func TestCatalogIDFromModel(t *testing.T) {
 					{
 						Primary: types.BoolValue(true),
 						ImageBuildConfig: &ArtifactImageBuildConfigModel{
-							CodeRef: &ArtifactCodeRefModel{
+							CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
 								CatalogID:        id,
 								CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
-							},
+							}),
 						},
 					},
 				},
@@ -265,10 +265,10 @@ func TestCatalogVersionIDFromModel(t *testing.T) {
 			ContainerGroups: []ArtifactContainerGroupModel{{
 				Containers: []ArtifactContainerModel{{
 					ImageBuildConfig: &ArtifactImageBuildConfigModel{
-						CodeRef: &ArtifactCodeRefModel{
+						CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
 							CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
 							CatalogVersionID: id,
-						},
+						}),
 					},
 				}},
 			}},
@@ -361,6 +361,66 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			t.Fatal("expected dir_hash to remain unset when directory is missing")
 		}
 	})
+
+	t.Run("ignores venv and datarobot yaml", func(t *testing.T) {
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "print('hi')"})
+		data := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+		refreshArtifactSourceDirHash(data)
+		base := data.Source.DirHash
+
+		if err := os.Mkdir(filepath.Join(dir, ".venv"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".venv", "lib.py"), []byte("ignored"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".datarobot.yaml"), []byte("spec: x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		refreshArtifactSourceDirHash(data)
+		if !data.Source.DirHash.Equal(base) {
+			t.Fatal("expected dir_hash to ignore .venv and .datarobot.yaml")
+		}
+	})
+}
+
+func TestComputeArtifactSourceDirHash_PlanMatchesAfterWritingDrignore(t *testing.T) {
+	t.Parallel()
+
+	dir := writeArtifactSourceTree(t, map[string]string{
+		"main.py":         "print('hi')",
+		".venv/lib.py":    "ignored",
+		".datarobot.yaml": "spec: x\n",
+	})
+	data := &ArtifactResourceModel{
+		Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+	}
+
+	before, err := computeArtifactSourceDirHash(data)
+	if err != nil {
+		t.Fatalf("plan-time hash: %v", err)
+	}
+	if !IsKnown(before) {
+		t.Fatal("expected plan-time dir_hash")
+	}
+
+	wrote, err := ignore.WriteDefaultDrignoreIfMissing(dir)
+	if err != nil {
+		t.Fatalf("WriteDefaultDrignoreIfMissing: %v", err)
+	}
+	if !wrote {
+		t.Fatal("expected default .drignore to be written")
+	}
+
+	after, err := computeArtifactSourceDirHash(data)
+	if err != nil {
+		t.Fatalf("after-write hash: %v", err)
+	}
+	if !before.Equal(after) {
+		t.Fatalf("dir_hash churned: plan %q vs after write %q", before.ValueString(), after.ValueString())
+	}
 }
 
 func TestRollbackArtifactCreate(t *testing.T) {
@@ -436,9 +496,12 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := &client.Artifact{ID: artifactID}
 
-		got, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID)
+		got, uploaded, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID, &diag.Diagnostics{})
 		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if uploaded {
+			t.Fatal("expected upload to be skipped when dir_hash unchanged")
 		}
 		if got != artifact {
 			t.Fatal("expected same artifact pointer when upload is skipped")
@@ -461,11 +524,191 @@ func TestSyncArtifactSource(t *testing.T) {
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, ""); err != nil {
+		_, uploaded, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{})
+		if err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if !uploaded {
+			t.Fatal("expected upload during create")
 		}
 		if filesAPI.createCatalogCalls == 0 && filesAPI.uploadFromZipNewCalls == 0 {
 			t.Fatal("expected Files API upload during create")
+		}
+	})
+
+	t.Run("writes drignore and skips venv and datarobot yaml", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":         "print('hi')",
+			".venv/lib.py":    "ignored",
+			".datarobot.yaml": "spec: x\n",
+		})
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{}); err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); err != nil {
+			t.Fatalf("expected .drignore to be written: %v", err)
+		}
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == ".datarobot.yaml" || p == ".venv/lib.py" {
+				t.Fatalf("uploaded ignored path %q", p)
+			}
+		}
+		foundMain := false
+		foundIgnore := false
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == "main.py" {
+				foundMain = true
+			}
+			if p == ".drignore" {
+				foundIgnore = true
+			}
+		}
+		if !foundMain || !foundIgnore {
+			t.Fatalf("uploaded paths = %v, want main.py and .drignore", filesAPI.uploadToStagePaths)
+		}
+	})
+
+	t.Run("generate_ignore false does not write drignore", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "print('hi')"})
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{
+				Dir:            types.StringValue(dir),
+				GenerateIgnore: types.BoolValue(false),
+			},
+		}
+
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diag.Diagnostics{}); err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected .drignore not to be written when generate_ignore is false")
+		}
+	})
+
+	t.Run("writes drignore even when the upload is skipped", func(t *testing.T) {
+		// Plan folds a synthetic .drignore into dir_hash, so a tree whose only
+		// pending change is that file plans as unchanged and the upload is
+		// skipped. Seeding inside the upload would leave the file plan promised
+		// unwritten, and state would record generate_ignore = true anyway.
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+
+		// No FilesAPI expectation: reaching the uploader at all fails the test.
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+
+		plan := testSourcePlanModel(t, dir, nil)
+		hash, err := computeArtifactSourceDirHash(plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan.Source.DirHash = hash
+		state := testSourcePlanModel(t, dir, nil, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+
+		_, uploaded, err := resource.syncArtifactSource(
+			context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if uploaded {
+			t.Fatal("expected the upload to be skipped")
+		}
+		written, err := os.ReadFile(filepath.Join(dir, ".drignore"))
+		if err != nil {
+			t.Fatalf("expected .drignore to be written without an upload: %v", err)
+		}
+		if !bytes.Equal(written, ignore.DefaultTemplate) {
+			t.Fatalf(".drignore = %q, want the default template", written)
+		}
+	})
+
+	t.Run("unwritable source dir warns and uploads with the template patterns", func(t *testing.T) {
+		// generate_ignore defaults to true, so a source.dir the process cannot
+		// write -- a checkout mounted read-only in CI -- must not fail an apply
+		// that worked before the attribute existed.
+		if os.Geteuid() == 0 {
+			t.Skip("root writes into a read-only directory")
+		}
+
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":      "print('hi')",
+			".venv/lib.py": "ignored",
+		})
+		if err := os.Chmod(dir, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		// Ahead of TempDir's own cleanup, which cannot remove a 0555 directory.
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		var diags diag.Diagnostics
+		if _, _, err := resource.syncArtifactSource(
+			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags); err != nil {
+			t.Fatalf("a read-only source.dir must not fail the apply: %v", err)
+		}
+		if diags.HasError() {
+			t.Fatalf("expected a warning, got errors: %v", diags.Errors())
+		}
+		if len(diags.Warnings()) != 1 {
+			t.Fatalf("warnings = %v, want exactly one", diags.Warnings())
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected no .drignore on a read-only directory")
+		}
+
+		// The fallback matcher is the template, so the upload is no wider than
+		// it would have been had the write succeeded.
+		foundMain := false
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == ".venv/lib.py" {
+				t.Fatalf("uploaded %q: the template patterns were not applied", p)
+			}
+			if p == "main.py" {
+				foundMain = true
+			}
+		}
+		if !foundMain {
+			t.Fatalf("uploaded paths = %v, want main.py", filesAPI.uploadToStagePaths)
 		}
 	})
 
@@ -497,7 +740,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			Spec: artifactSpecWithCodeRef(catalogID, versionID),
 		}
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 		if filesAPI.catalogID != catalogID {
@@ -532,7 +775,7 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		artifact := artifactWithCodeRef(artifactID, catalogID, versionID)
 
-		if _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID); err != nil {
+		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, artifactID, &diag.Diagnostics{}); err != nil {
 			t.Fatalf("syncArtifactSource() error = %v", err)
 		}
 	})
@@ -560,7 +803,7 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
 		if err == nil {
 			t.Fatal("expected upload error")
 		}
@@ -591,9 +834,251 @@ func TestSyncArtifactSource(t *testing.T) {
 			},
 		}
 
-		_, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID)
+		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
 		if err == nil {
 			t.Fatal("expected patch error")
+		}
+	})
+}
+
+func TestSyncArtifactSourceAndBuild(t *testing.T) {
+	t.Parallel()
+
+	const artifactID = "artifact-1"
+
+	t.Run("uploads source and waits for build on create", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		expectArtifactBuildAfterUpload(mockService, artifactID, artifactFixtureWithImageURI(patchedArtifact))
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "create"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()))
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+			&diag.Diagnostics{},
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if artifactPrimaryContainerImageURI(got) != artifactSourceTestImageURI {
+			t.Fatalf("image_uri = %q, want %q", artifactPrimaryContainerImageURI(got), artifactSourceTestImageURI)
+		}
+	})
+
+	t.Run("skips build when source upload is skipped", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+		hash, err := computeFolderHash(types.StringValue(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		spec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		plan := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+		})
+		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+		artifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			state,
+			artifact,
+			artifactID,
+			&diag.Diagnostics{},
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if got != artifact {
+			t.Fatal("expected same artifact when upload and build are skipped")
+		}
+	})
+
+	t.Run("skips build when plan has no image build config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID, Status: client.ArtifactStatusDraft}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "no-build"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(ArtifactContainerModel{
+			Primary:  types.BoolValue(true),
+			Port:     types.Int64Value(8080),
+			ImageURI: types.StringValue("nginx:latest"),
+		}))
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			&client.Artifact{ID: artifactID, Status: client.ArtifactStatusDraft},
+			"",
+			&diag.Diagnostics{},
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if got.ID != artifactID {
+			t.Fatalf("artifact_id = %q, want %q", got.ID, artifactID)
+		}
+	})
+
+	t.Run("wait_for_build false triggers build without waiting", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+		builtArtifact := artifactFixtureWithImageURI(patchedArtifact)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		expectArtifactBuildTriggerOnly(mockService, artifactID, builtArtifact)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "trigger-only"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.WaitForBuild = types.BoolValue(false)
+		})
+
+		got, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+			&diag.Diagnostics{},
+		)
+		if err != nil {
+			t.Fatalf("syncArtifactSourceAndBuild() error = %v", err)
+		}
+		if artifactPrimaryContainerImageURI(got) != artifactSourceTestImageURI {
+			t.Fatalf("image_uri = %q, want %q", artifactPrimaryContainerImageURI(got), artifactSourceTestImageURI)
+		}
+	})
+
+	t.Run("upload failure is returned without build sync error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		filesAPI.uploadErr = fmt.Errorf("upload failed")
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "fail"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+		})
+		state := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("old-hash")
+			m.ArtifactID = types.StringValue(artifactID)
+		})
+
+		_, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			state,
+			artifactFixtureDraftWithBuildConfig(artifactID, nil, "app"),
+			artifactID,
+			&diag.Diagnostics{},
+		)
+		if err == nil {
+			t.Fatal("expected upload error")
+		}
+		var buildErr *artifactBuildSyncError
+		if errors.As(err, &buildErr) {
+			t.Fatal("expected upload error, not artifactBuildSyncError")
+		}
+	})
+
+	t.Run("build failure wraps artifactBuildSyncError", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, nil, "app")
+		patchedArtifact := artifactSourcePatchedArtifact(draftArtifact, artifactSourceTestCatalogID, artifactSourceTestVersionID)
+		buildErr := &client.ArtifactBuildFailedError{
+			BuildID: artifactSourceTestBuildID,
+			Status:  client.ArtifactBuildStatusFailed,
+		}
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(patchedArtifact, nil)
+		gomock.InOrder(
+			mockService.EXPECT().
+				TriggerArtifactBuild(gomock.Any(), artifactID).
+				Return(&client.ArtifactBuildTriggerResponse{BuildIDs: []string{artifactSourceTestBuildID}}, nil),
+			mockService.EXPECT().
+				WaitForArtifactBuild(gomock.Any(), artifactID, artifactSourceTestBuildID, gomock.Any()).
+				Return(&client.ArtifactBuild{ID: artifactSourceTestBuildID, Status: client.ArtifactBuildStatusFailed}, buildErr),
+			mockService.EXPECT().
+				BaseURL().
+				Return("https://app.datarobot.com"),
+			mockService.EXPECT().
+				GetArtifactBuildLogs(gomock.Any(), artifactID, artifactSourceTestBuildID).
+				Return("[2026-06-09 10:00:00] ERROR: docker build failed", nil),
+		)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "build-fail"})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig()))
+
+		_, err := resource.syncArtifactSourceAndBuild(
+			context.Background(),
+			plan,
+			nil,
+			draftArtifact,
+			"",
+			&diag.Diagnostics{},
+		)
+		if err == nil {
+			t.Fatal("expected build error")
+		}
+		var syncBuildErr *artifactBuildSyncError
+		if !errors.As(err, &syncBuildErr) {
+			t.Fatalf("expected artifactBuildSyncError, got %T: %v", err, err)
+		}
+		var failedErr *client.ArtifactBuildFailedError
+		if !errors.As(syncBuildErr, &failedErr) {
+			t.Fatalf("expected wrapped ArtifactBuildFailedError, got %T: %v", syncBuildErr.Unwrap(), syncBuildErr.Unwrap())
+		}
+		if failedErr.BuildID != artifactSourceTestBuildID {
+			t.Fatalf("build_id = %q, want %q", failedErr.BuildID, artifactSourceTestBuildID)
 		}
 	})
 }
@@ -619,12 +1104,10 @@ func artifactSpecWithCodeRef(catalogID, versionID string) *ArtifactSpecModel {
 		ContainerGroups: []ArtifactContainerGroupModel{{
 			Containers: []ArtifactContainerModel{{
 				Primary: types.BoolValue(true),
-				ImageBuildConfig: &ArtifactImageBuildConfigModel{
-					CodeRef: &ArtifactCodeRefModel{
-						CatalogID:        types.StringValue(catalogID),
-						CatalogVersionID: types.StringValue(versionID),
-					},
-				},
+				ImageBuildConfig: imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue(catalogID),
+					CatalogVersionID: types.StringValue(versionID),
+				}),
 			}},
 		}},
 	}
@@ -659,6 +1142,7 @@ type syncTestFilesAPI struct {
 
 	createCatalogCalls    int
 	uploadFromZipNewCalls int
+	uploadToStagePaths    []string
 }
 
 func newSyncTestFilesAPI() *syncTestFilesAPI {
@@ -687,10 +1171,11 @@ func (m *syncTestFilesAPI) CreateStage(context.Context, string) (*filesapi.Stage
 	return &filesapi.StageResp{CatalogID: m.catalogID, StageID: "stage-1"}, nil
 }
 
-func (m *syncTestFilesAPI) UploadToStage(context.Context, string, string, string, int64, io.Reader) error {
+func (m *syncTestFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int64, _ io.Reader) error {
 	if m.uploadErr != nil {
 		return m.uploadErr
 	}
+	m.uploadToStagePaths = append(m.uploadToStagePaths, name)
 	return nil
 }
 
@@ -773,7 +1258,9 @@ func testDraftImageBuildContainer(primary types.Bool, name string) ArtifactConta
 	container := ArtifactContainerModel{
 		Primary: primary,
 		Port:    types.Int64Value(8080),
+		Build:   artifactBuildNull(),
 		ImageBuildConfig: &ArtifactImageBuildConfigModel{
+			CodeRef:    artifactCodeRefNull(),
 			Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
 		},
 	}
@@ -797,7 +1284,7 @@ func testSoleWithBuildConfig() ArtifactContainerModel {
 
 func testPrimaryWithCodeRef(codeRef *ArtifactCodeRefModel) ArtifactContainerModel {
 	container := testPrimaryWithBuildConfig()
-	container.ImageBuildConfig.CodeRef = codeRef
+	_ = setImageBuildConfigCodeRef(container.ImageBuildConfig, codeRef)
 	return container
 }
 
@@ -1006,7 +1493,7 @@ func TestSourceManagedCodeRefNeedsUnknown(t *testing.T) {
 			want:     true,
 		},
 		{
-			name: "locked spec change needs unknown",
+			name: "locked spec change with source clones and needs unknown code_ref",
 			plan: withSource("locked", "app-v2", hashA, artifactOne, draftSpec),
 			state: withSource("locked", "app", hashA, artifactOne, &ArtifactSpecModel{
 				ContainerGroups: []ArtifactContainerGroupModel{{
@@ -1058,23 +1545,23 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 		check    func(t *testing.T, plan *ArtifactResourceModel)
 	}{
 		{
-			name: "create sets unknown on primary",
+			name: "create clears code_ref on primary until apply",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() || !codeRef.CatalogVersionID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary, got %#v", codeRef)
+				if !codeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before apply, got %#v", codeRef)
 				}
 			},
 			isCreate: true,
 		},
 		{
-			name: "create sets unknown on sole container without primary flag",
+			name: "create clears code_ref on sole container without primary flag",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSoleWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if codeRef == nil || !codeRef.CatalogID.IsUnknown() {
-					t.Fatal("expected sole container to receive unknown code_ref")
+				if !codeRef.IsUnknown() {
+					t.Fatal("expected sole container to have unknown code_ref before apply")
 				}
 			},
 			isCreate: true,
@@ -1084,11 +1571,11 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary, got %#v", primaryCodeRef)
+				if !primaryCodeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before apply, got %#v", primaryCodeRef)
 				}
 				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
-				if sidecarCodeRef != nil {
+				if !sidecarCodeRef.IsNull() {
 					t.Fatalf("expected no code_ref on non-primary container, got %#v", sidecarCodeRef)
 				}
 			},
@@ -1105,16 +1592,17 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
+
 		{
 			name: "update with reordered containers copies primary code_ref from state",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testSidecarWithBuildConfig(), testPrimaryWithBuildConfig()), func(m *ArtifactResourceModel) {
@@ -1126,18 +1614,18 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				m.Source.DirHash = dirHashA
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef
+				primaryCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig)
 				if primaryCodeRef == nil || primaryCodeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected primary code_ref copied from state after reorder, got %#v", primaryCodeRef)
 				}
-				sidecarCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				sidecarCodeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if sidecarCodeRef != nil {
 					t.Fatalf("expected non-primary container to remain without code_ref, got %#v", sidecarCodeRef)
 				}
 			},
 		},
 		{
-			name: "update with changed dir_hash sets unknown on primary only",
+			name: "update with changed dir_hash clears code_ref on primary only",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()), func(m *ArtifactResourceModel) {
 				m.ArtifactID = types.StringValue("artifact-1")
 				m.Source.DirHash = dirHashB
@@ -1148,10 +1636,10 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			}),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
 				primaryCodeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
-				if primaryCodeRef == nil || !primaryCodeRef.CatalogID.IsUnknown() {
-					t.Fatalf("expected unknown code_ref on primary after source change, got %#v", primaryCodeRef)
+				if !primaryCodeRef.IsUnknown() {
+					t.Fatalf("expected unknown code_ref on primary before re-upload, got %#v", primaryCodeRef)
 				}
-				if plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef != nil {
+				if !plan.Spec.ContainerGroups[0].Containers[1].ImageBuildConfig.CodeRef.IsNull() {
 					t.Fatal("expected non-primary container to remain without code_ref")
 				}
 			},
@@ -1162,7 +1650,7 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 				Spec: testDraftSourceSpec(testPrimaryWithBuildConfig()),
 			},
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				if plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef != nil {
+				if imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig) != nil {
 					t.Fatal("expected no code_ref changes without source")
 				}
 			},
@@ -1171,7 +1659,7 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			name: "no-op when manual code_ref is set",
 			plan: testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithCodeRef(stateCodeRef))),
 			check: func(t *testing.T, plan *ArtifactResourceModel) {
-				codeRef := plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef
+				codeRef := imageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig)
 				if codeRef == nil || codeRef.CatalogID.ValueString() != stateCodeRef.CatalogID.ValueString() {
 					t.Fatalf("expected manual code_ref to be untouched, got %#v", codeRef)
 				}
@@ -1188,5 +1676,268 @@ func TestApplySourceManagedCodeRefsToPlan(t *testing.T) {
 			applySourceManagedCodeRefsToPlan(plan, tt.state, tt.isCreate)
 			tt.check(t, plan)
 		})
+	}
+}
+
+func TestArtifactLockedSourceCloneNeeded(t *testing.T) {
+	t.Parallel()
+
+	hashA := types.StringValue("hash-a")
+	hashB := types.StringValue("hash-b")
+	dir := t.TempDir()
+	draftSpec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+	artifactOne := types.StringValue("artifact-1")
+
+	modelWithSource := func(status string, hash types.String) ArtifactResourceModel {
+		return ArtifactResourceModel{
+			Status:     types.StringValue(status),
+			Name:       types.StringValue("app"),
+			ArtifactID: artifactOne,
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: hash,
+			},
+			Spec: draftSpec,
+		}
+	}
+
+	tests := []struct {
+		name  string
+		plan  ArtifactResourceModel
+		state ArtifactResourceModel
+		want  bool
+	}{
+		{
+			name:  "locked source change needs clone",
+			plan:  modelWithSource("locked", hashB),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
+			name:  "locked unchanged source skips clone",
+			plan:  modelWithSource("locked", hashA),
+			state: modelWithSource("locked", hashA),
+			want:  false,
+		},
+		{
+			name: "locked unchanged source ignores managed code_ref null in plan",
+			plan: modelWithSource("locked", hashA),
+			state: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.ImageBuildConfig = imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
+					CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
+					CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+				})
+				container.ImageBuildConfig.Dockerfile = &ArtifactDockerfileModel{Source: types.StringValue("provided")}
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			want: false,
+		},
+		{
+			name: "locked spec change with source needs clone",
+			plan: func() ArtifactResourceModel {
+				m := modelWithSource("locked", hashA)
+				spec := *m.Spec
+				group := spec.ContainerGroups[0]
+				container := group.Containers[0]
+				container.Port = types.Int64Value(9090)
+				group.Containers = []ArtifactContainerModel{container}
+				spec.ContainerGroups = []ArtifactContainerGroupModel{group}
+				m.Spec = &spec
+				return m
+			}(),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
+			name:  "draft source change does not use locked clone",
+			plan:  modelWithSource("draft", hashB),
+			state: modelWithSource("draft", hashA),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := artifactLockedSourceCloneNeeded(tt.plan, tt.state); got != tt.want {
+				t.Fatalf("artifactLockedSourceCloneNeeded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactModifyPlanNeedsUnknownArtifactID(t *testing.T) {
+	t.Parallel()
+
+	hashA := types.StringValue("hash-a")
+	hashB := types.StringValue("hash-b")
+	dir := t.TempDir()
+	draftSpec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{{
+				Primary: types.BoolValue(true),
+				Port:    types.Int64Value(8080),
+				ImageBuildConfig: &ArtifactImageBuildConfigModel{
+					Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+				},
+			}},
+		}},
+	}
+	artifactOne := types.StringValue("artifact-1")
+
+	modelWithSource := func(status string, hash types.String) ArtifactResourceModel {
+		return ArtifactResourceModel{
+			Status:     types.StringValue(status),
+			Name:       types.StringValue("app"),
+			ArtifactID: artifactOne,
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: hash,
+			},
+			Spec: draftSpec,
+		}
+	}
+
+	tests := []struct {
+		name  string
+		plan  ArtifactResourceModel
+		state ArtifactResourceModel
+		want  bool
+	}{
+		{
+			name:  "locked source-only change needs unknown artifact_id",
+			plan:  modelWithSource("locked", hashB),
+			state: modelWithSource("locked", hashA),
+			want:  true,
+		},
+		{
+			name:  "locked unchanged source and spec skips unknown",
+			plan:  modelWithSource("locked", hashA),
+			state: modelWithSource("locked", hashA),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := artifactModifyPlanNeedsUnknownArtifactID(tt.plan, tt.state); got != tt.want {
+				t.Fatalf("artifactModifyPlanNeedsUnknownArtifactID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestArtifactSourceIgnoreDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	sourceModel := func(dir string) *ArtifactResourceModel {
+		return &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+	}
+
+	writeFile := func(t *testing.T, dir, name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("*.tmp\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	tests := []struct {
+		name        string
+		files       []string
+		wantWarning bool
+		wantDetail  string
+	}{
+		{
+			name:  "no ignore file",
+			files: nil,
+		},
+		{
+			name:  "drignore only",
+			files: []string{ignore.FileName},
+		},
+		{
+			// The legacy name still works, so this is the only signal the user
+			// gets that it is on its way out.
+			name:        "legacy name in effect",
+			files:       []string{ignore.LegacyFileName},
+			wantWarning: true,
+			wantDetail:  ignore.LegacyFileName,
+		},
+		{
+			// .drignore wins outright, so the patterns in .wapiignore are inert
+			// and nothing else in an apply would say so.
+			name:        "second ignore file is inert",
+			files:       []string{ignore.FileName, ignore.LegacyFileName},
+			wantWarning: true,
+			wantDetail:  "not applied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			for _, name := range tt.files {
+				writeFile(t, dir, name)
+			}
+
+			diags := artifactSourceIgnoreDiagnostics(sourceModel(dir))
+
+			if got := diags.ErrorsCount(); got != 0 {
+				t.Fatalf("ErrorsCount() = %d, want 0 (%v)", got, diags.Errors())
+			}
+
+			want := 0
+			if tt.wantWarning {
+				want = 1
+			}
+			if got := diags.WarningsCount(); got != want {
+				t.Fatalf("WarningsCount() = %d, want %d (%v)", got, want, diags.Warnings())
+			}
+
+			if tt.wantDetail == "" {
+				return
+			}
+			w := diags.Warnings()[0]
+			if !strings.Contains(w.Summary()+w.Detail(), tt.wantDetail) {
+				t.Fatalf("warning %q / %q does not mention %q", w.Summary(), w.Detail(), tt.wantDetail)
+			}
+		})
+	}
+}
+
+func TestArtifactSourceIgnoreDiagnosticsSkipsUnknownDir(t *testing.T) {
+	t.Parallel()
+
+	for _, data := range []*ArtifactResourceModel{
+		nil,
+		{},
+		{Source: &ArtifactSourceModel{}},
+		{Source: &ArtifactSourceModel{Dir: types.StringUnknown()}},
+	} {
+		if diags := artifactSourceIgnoreDiagnostics(data); len(diags) != 0 {
+			t.Fatalf("artifactSourceIgnoreDiagnostics() = %v, want none", diags)
+		}
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
-	"github.com/google/go-querystring/query"
 )
 
 const (
@@ -280,6 +279,10 @@ type Service interface {
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
 	DeleteArtifactRepository(ctx context.Context, id string) error
+	TriggerArtifactBuild(ctx context.Context, artifactID string) (*ArtifactBuildTriggerResponse, error)
+	GetArtifactBuild(ctx context.Context, artifactID, buildID string) (*ArtifactBuild, error)
+	GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error)
+	WaitForArtifactBuild(ctx context.Context, artifactID, buildID string, opts *WaitForArtifactBuildOptions) (*ArtifactBuild, error)
 
 	// Workload (Workload API)
 	CreateWorkload(ctx context.Context, req *CreateWorkloadRequest) (*Workload, error)
@@ -780,29 +783,30 @@ func deploymentLogsTailLines() int {
 	return tailLines
 }
 
-type getDeploymentLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
+func formatOtelLogEntries(entries []OtelLogEntry) string {
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		lines = append(lines, FormatOtelLogEntry(entry))
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	queryReq := &getDeploymentLogsRequest{Limit: deploymentLogsTailLines()}
-	pathValues, _ := query.Values(queryReq)
-
-	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/deployment/"+id+"/logs/?"+pathValues.Encode())
+// getOtelEntityLogs takes limit from the caller rather than reading an env var
+// itself, so each entity keeps its own tail-length setting (e.g. deployments use
+// DeploymentLogsTailLinesEnvVar, artifact builds use ArtifactBuildLogsTailLinesEnvVar)
+// instead of every entity silently sharing whichever one this function happened to
+// call internally.
+func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string, limit int) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, limit)
 	if err != nil {
 		return "", err
 	}
 
-	lines := make([]string, 0, len(resp.Data))
-	for _, entry := range resp.Data {
-		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
-		if entry.StackTrace != "" {
-			line += "\n" + entry.StackTrace
-		}
-		lines = append(lines, line)
-	}
+	return formatOtelLogEntries(entries), nil
+}
 
-	return strings.Join(lines, "\n"), nil
+func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
+	return s.getOtelEntityLogs(ctx, "deployment", id, deploymentLogsTailLines())
 }
 
 func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {
@@ -1105,11 +1109,21 @@ func (s *ServiceImpl) GetUserInfo(ctx context.Context) (*UserInfo, error) {
 }
 
 func (s *ServiceImpl) IsFeatureFlagEnabled(ctx context.Context, flagName string) (bool, error) {
-	userInfo, err := s.GetUserInfo(ctx)
+	// Evaluate through the entitlements API: it resolves the effective value
+	// (user, group, and organization level), whereas /account/info/ only
+	// carries flags set directly on the user record.
+	resp, err := Post[EvaluateEntitlementsResponse](s.client, ctx, "/entitlements/evaluate/", &EvaluateEntitlementsRequest{
+		Entitlements: []Entitlement{{Name: flagName}},
+	})
 	if err != nil {
-		return false, fmt.Errorf("failed to fetch user info for feature flag %q: %w", flagName, err)
+		return false, fmt.Errorf("failed to evaluate feature flag %q: %w", flagName, err)
 	}
-	return userInfo.Permissions[flagName], nil
+	for _, entitlement := range resp.Entitlements {
+		if entitlement.Name == flagName {
+			return entitlement.Value, nil
+		}
+	}
+	return false, fmt.Errorf("feature flag %q missing from entitlements evaluation response", flagName)
 }
 
 // User MCP Tool Metadata Service Implementation.
