@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/google/go-querystring/query"
 )
 
 func TestOtelLogStreamStateEmitNew(t *testing.T) {
@@ -76,7 +78,7 @@ func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 
 	state := newOtelLogStreamState()
 	var got []string
-	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", state, func(e OtelLogEntry) {
+	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", "", state, func(e OtelLogEntry) {
 		got = append(got, e.Message)
 	})
 
@@ -97,7 +99,7 @@ func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 	// instead of walking pagination all over again.
 	requestPaths = nil
 	got = nil
-	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", state, func(e OtelLogEntry) {
+	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", "", state, func(e OtelLogEntry) {
 		got = append(got, e.Message)
 	})
 	if len(got) != 0 {
@@ -105,6 +107,27 @@ func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 	}
 	if len(requestPaths) != 1 {
 		t.Fatalf("expected repeat poll to stop after 1 page once caught up, got %d: %v", len(requestPaths), requestPaths)
+	}
+}
+
+func TestOtelLogsRequestIncludesBuildIDFilter(t *testing.T) {
+	values, err := query.Values(otelLogsRequest(100, "build-abc"))
+	if err != nil {
+		t.Fatalf("query.Values returned error: %v", err)
+	}
+	if got := values["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
+		t.Fatalf("expected searchKeys=build_id, got %v", got)
+	}
+	if got := values["searchValues"]; len(got) != 1 || got[0] != "build-abc" {
+		t.Fatalf("expected searchValues=build-abc, got %v", got)
+	}
+
+	empty, err := query.Values(otelLogsRequest(100, ""))
+	if err != nil {
+		t.Fatalf("query.Values returned error: %v", err)
+	}
+	if len(empty["searchKeys"]) != 0 || len(empty["searchValues"]) != 0 {
+		t.Fatalf("expected no search filters without build ID, got %v", empty)
 	}
 }
 

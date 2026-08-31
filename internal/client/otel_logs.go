@@ -16,7 +16,18 @@ const (
 )
 
 type getOtelLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
+	Limit        int      `url:"limit,omitempty"`
+	SearchKeys   []string `url:"searchKeys,omitempty"`
+	SearchValues []string `url:"searchValues,omitempty"`
+}
+
+func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
+	req := &getOtelLogsRequest{Limit: limit}
+	if buildID != "" {
+		req.SearchKeys = []string{"build_id"}
+		req.SearchValues = []string{buildID}
+	}
+	return req
 }
 
 func otelLogKey(entry OtelLogEntry) string {
@@ -32,9 +43,13 @@ func FormatOtelLogEntry(entry OtelLogEntry) string {
 	return line
 }
 
-func (s *ServiceImpl) getOtelEntityLogEntries(ctx context.Context, entityType, entityID string, limit int) ([]OtelLogEntry, error) {
-	queryReq := &getOtelLogsRequest{Limit: limit}
-	pathValues, _ := query.Values(queryReq)
+func (s *ServiceImpl) getOtelEntityLogEntries(
+	ctx context.Context,
+	entityType, entityID string,
+	limit int,
+	buildID string,
+) ([]OtelLogEntry, error) {
+	pathValues, _ := query.Values(otelLogsRequest(limit, buildID))
 
 	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/"+entityType+"/"+entityID+"/logs/?"+pathValues.Encode())
 	if err != nil {
@@ -77,12 +92,12 @@ func (st *otelLogStreamState) emitNew(entries []OtelLogEntry, onLine func(OtelLo
 // instead of just being reported late.
 func (s *ServiceImpl) pollNewOtelEntityLogs(
 	ctx context.Context,
-	entityType, entityID string,
+	entityType, entityID, buildID string,
 	state *otelLogStreamState,
 	onLine func(OtelLogEntry),
 ) {
 	basePath := "/otel/" + entityType + "/" + entityID + "/logs/"
-	pathValues, _ := query.Values(&getOtelLogsRequest{Limit: defaultOtelLogStreamPageSize})
+	pathValues, _ := query.Values(otelLogsRequest(defaultOtelLogStreamPageSize, buildID))
 	requestPath := basePath + "?" + pathValues.Encode()
 
 	var fresh []OtelLogEntry
@@ -111,7 +126,8 @@ func (s *ServiceImpl) pollNewOtelEntityLogs(
 
 // otelLogsNextPath turns a PaginatedResponse.Next value (an absolute URL) into
 // a request path relative to the configured API endpoint, the same way
-// GetAllPages handles the same field.
+// GetAllPages handles the same field. The server echoes the searchKeys /
+// searchValues filter back in Next, so following it keeps the build_id scope.
 func otelLogsNextPath(basePath, next string) string {
 	if idx := strings.Index(next, "?"); idx != -1 {
 		return basePath + next[idx:]

@@ -795,9 +795,11 @@ func formatOtelLogEntries(entries []OtelLogEntry) string {
 // itself, so each entity keeps its own tail-length setting (e.g. deployments use
 // DeploymentLogsTailLinesEnvVar, artifact builds use ArtifactBuildLogsTailLinesEnvVar)
 // instead of every entity silently sharing whichever one this function happened to
-// call internally.
-func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string, limit int) (string, error) {
-	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, limit)
+// call internally. buildID scopes the query to a single build via the
+// searchKeys/searchValues filter; pass "" for entities that have no build (e.g.
+// deployments) to fetch all of the entity's records.
+func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityID string, limit int, buildID string) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, entityType, entityID, limit, buildID)
 	if err != nil {
 		return "", err
 	}
@@ -806,7 +808,8 @@ func (s *ServiceImpl) getOtelEntityLogs(ctx context.Context, entityType, entityI
 }
 
 func (s *ServiceImpl) GetDeploymentLogs(ctx context.Context, id string) (string, error) {
-	return s.getOtelEntityLogs(ctx, "deployment", id, deploymentLogsTailLines())
+	// Deployments have no build to scope to, so no build_id filter.
+	return s.getOtelEntityLogs(ctx, "deployment", id, deploymentLogsTailLines(), "")
 }
 
 func (s *ServiceImpl) UpdateDeployment(ctx context.Context, id string, req *UpdateDeploymentRequest) (*Deployment, error) {

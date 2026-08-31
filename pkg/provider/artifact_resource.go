@@ -239,6 +239,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		createReq.Status = client.ArtifactStatusDraft
 	}
 
+	artifactApplyProgressCreating()
 	traceAPICall("CreateArtifact")
 	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
 	if err != nil {
