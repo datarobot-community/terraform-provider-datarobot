@@ -37,9 +37,6 @@ type ExecutionEnvironmentVersion struct {
 	Description    string `json:"description"`
 	BuildStatus    string `json:"buildStatus"`
 	DockerImageUri string `json:"sourceDockerImageUri"`
-	// BuildID identifies the OTel-logged build for this version. It becomes available
-	// some time after the build starts, so it may still be empty (e.g. a very fast
-	// failure) even once BuildStatus has moved past "processing".
 	BuildID string `json:"buildId,omitempty"`
 }
 
