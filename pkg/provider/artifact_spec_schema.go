@@ -187,6 +187,34 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 	}
 }
 
+func artifactResourceRouteAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"path": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.",
+			Validators:          RoutePathValidators(),
+		},
+		"auth": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: `Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.`,
+			Validators:          RouteAuthValidators(),
+		},
+	}
+}
+
+func artifactDataSourceRouteAttributes() map[string]datasourceschema.Attribute {
+	return map[string]datasourceschema.Attribute{
+		"path": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Route path relative to the workload root.",
+		},
+		"auth": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Authentication applied to this route.",
+		},
+	}
+}
+
 func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.Attribute {
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
@@ -277,6 +305,17 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
 		},
+		"routes": schema.ListNestedAttribute{
+			Optional: true,
+			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only, at most 50. " +
+				"The workload root (`/`) is authenticated by default unless declared here with another policy. " +
+				"Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster " +
+				"where it is not enabled fails with `Route configuration is disabled on this cluster`.",
+			Validators: RoutesListValidators(),
+			NestedObject: schema.NestedAttributeObject{
+				Attributes: artifactResourceRouteAttributes(),
+			},
+		},
 		"environment_vars": schema.ListNestedAttribute{
 			Optional:            true,
 			MarkdownDescription: "Environment variables for the container.",
@@ -336,6 +375,13 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 			Computed:            true,
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
+		},
+		"routes": datasourceschema.ListNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Routes exposed publicly from this container.",
+			NestedObject: datasourceschema.NestedAttributeObject{
+				Attributes: artifactDataSourceRouteAttributes(),
+			},
 		},
 		"environment_vars": datasourceschema.ListNestedAttribute{
 			Computed:            true,

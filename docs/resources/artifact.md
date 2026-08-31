@@ -30,6 +30,17 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
+        # Extra paths to expose from the workload's public endpoint, each with
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
+        routes = [{
+          path = "/index.html"
+          auth = "required"
+        }]
       }]
     }]
   }
@@ -197,6 +208,7 @@ Optional:
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
+- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only, at most 50. The workload root (`/`) is authenticated by default unless declared here with another policy. Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster where it is not enabled fails with `Route configuration is disabled on this cluster`. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
 Read-Only:
@@ -281,6 +293,15 @@ Optional:
 - `scheme` (String) Scheme to use for connecting to the host (HTTP or HTTPS).
 - `success_threshold` (Number) Minimum consecutive successes for the probe to be considered successful after having failed.
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
+
+
+<a id="nestedatt--spec--container_groups--containers--routes"></a>
+### Nested Schema for `spec.container_groups.containers.routes`
+
+Required:
+
+- `auth` (String) Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.
+- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.
 
 
 <a id="nestedatt--spec--container_groups--containers--startup_probe"></a>

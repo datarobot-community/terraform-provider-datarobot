@@ -4521,6 +4521,257 @@ func TestArtifactNeedsNewVersion_sidecarImageChangeWithSource(t *testing.T) {
 	}
 }
 
+func TestArtifactContainerToClient_routes(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+		Routes: []ArtifactContainerRouteModel{
+			{
+				Path: types.StringValue("/status"),
+				Auth: types.StringValue(client.RouteAuthDisabled),
+			},
+		},
+	})
+
+	if len(container.Routes) != 1 {
+		t.Fatalf("routes length: got %d, want 1", len(container.Routes))
+	}
+	if container.Routes[0].Path != "/status" {
+		t.Fatalf("unexpected route path: %q", container.Routes[0].Path)
+	}
+	if container.Routes[0].Auth != client.RouteAuthDisabled {
+		t.Fatalf("unexpected route auth: %q", container.Routes[0].Auth)
+	}
+}
+
+func TestArtifactContainerToClient_routesOmittedWhenUnset(t *testing.T) {
+	container := artifactContainerToClient(ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+	})
+
+	if container.Routes != nil {
+		t.Fatalf("expected no routes, got %v", container.Routes)
+	}
+}
+
+func TestLoadContainerFromAPI_routes(t *testing.T) {
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+		Routes: []client.ArtifactContainerRoute{
+			{Path: "/status", Auth: client.RouteAuthDisabled},
+		},
+	}, nil)
+
+	if len(model.Routes) != 1 {
+		t.Fatalf("routes length: got %d, want 1", len(model.Routes))
+	}
+	if got := model.Routes[0].Path.ValueString(); got != "/status" {
+		t.Fatalf("unexpected route path: %q", got)
+	}
+	if got := model.Routes[0].Auth.ValueString(); got != client.RouteAuthDisabled {
+		t.Fatalf("unexpected route auth: %q", got)
+	}
+}
+
+func TestContainersEqual_routes(t *testing.T) {
+	base := ArtifactContainerModel{
+		ImageURI: types.StringValue("registry.example/mcp:latest"),
+		Primary:  types.BoolValue(true),
+		Port:     types.Int64Value(8080),
+	}
+	changed := base
+	changed.Routes = []ArtifactContainerRouteModel{
+		{
+			Path: types.StringValue("/status"),
+			Auth: types.StringValue(client.RouteAuthDisabled),
+		},
+	}
+
+	if containersEqual(base, changed, false, false) {
+		t.Fatal("expected routes change to make containers unequal")
+	}
+	if !containersEqual(changed, changed, false, false) {
+		t.Fatal("expected identical routes to be equal")
+	}
+
+	authChanged := changed
+	authChanged.Routes = []ArtifactContainerRouteModel{
+		{
+			Path: types.StringValue("/status"),
+			Auth: types.StringValue(client.RouteAuthRequired),
+		},
+	}
+	if containersEqual(changed, authChanged, false, false) {
+		t.Fatal("expected auth-only route change to make containers unequal")
+	}
+
+	// Same length, same auth, different path: covers the Path.Equal half of the
+	// check, which a length-and-auth-only test leaves green when it is removed.
+	pathChanged := changed
+	pathChanged.Routes = []ArtifactContainerRouteModel{
+		{
+			Path: types.StringValue("/healthz"),
+			Auth: types.StringValue(client.RouteAuthDisabled),
+		},
+	}
+	if containersEqual(changed, pathChanged, false, false) {
+		t.Fatal("expected path-only route change to make containers unequal")
+	}
+}
+
+func TestLoadContainerFromAPI_routesEmptyListRoundTrip(t *testing.T) {
+	// `routes = []` is dropped from the request by omitempty and comes back absent.
+	// Without the prior-state fallback the applied state would be null and Terraform
+	// would fail with "Provider produced inconsistent result after apply".
+	prior := &ArtifactContainerModel{Routes: []ArtifactContainerRouteModel{}}
+
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	}, prior)
+
+	if model.Routes == nil {
+		t.Fatal("expected empty routes list to be preserved, got nil")
+	}
+	if len(model.Routes) != 0 {
+		t.Fatalf("routes length: got %d, want 0", len(model.Routes))
+	}
+}
+
+func TestLoadContainerFromAPI_routesUnsetStaysNull(t *testing.T) {
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	}, &ArtifactContainerModel{})
+
+	if model.Routes != nil {
+		t.Fatalf("expected nil routes, got %v", model.Routes)
+	}
+}
+
+func TestLoadContainerIntoDataSourceModel_routesEmptyList(t *testing.T) {
+	// Data source lists render as null when nil, which breaks `length(...routes)`
+	// in a config. environment_vars normalizes the same way.
+	model := loadContainerIntoDataSourceModel(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	})
+
+	if model.Routes == nil {
+		t.Fatal("expected empty routes list, got nil")
+	}
+	if len(model.Routes) != 0 {
+		t.Fatalf("routes length: got %d, want 0", len(model.Routes))
+	}
+}
+
+func TestValidateArtifactContainerRoutes(t *testing.T) {
+	t.Parallel()
+
+	containerPath := path.Root("spec").
+		AtName("container_groups").AtListIndex(0).
+		AtName("containers").AtListIndex(0)
+
+	hasDetail := func(diags diag.Diagnostics, substr string) bool {
+		for _, d := range diags.Errors() {
+			if strings.Contains(d.Detail(), substr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	routes := func(paths ...string) []ArtifactContainerRouteModel {
+		out := make([]ArtifactContainerRouteModel, len(paths))
+		for i, p := range paths {
+			out[i] = ArtifactContainerRouteModel{
+				Path: types.StringValue(p),
+				Auth: types.StringValue(client.RouteAuthDisabled),
+			}
+		}
+		return out
+	}
+
+	t.Run("explicit primary is allowed", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolValue(true),
+			Routes:  routes("/status"),
+		}, 2)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("sole container is auto-promoted to primary", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolNull(),
+			Routes:  routes("/status"),
+		}, 1)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("non-primary container is rejected", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolValue(false),
+			Routes:  routes("/status"),
+		}, 2)
+		if !hasDetail(resp.Diagnostics, "only permitted on the primary container") {
+			t.Fatalf("expected non-primary error, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("omitted primary with sibling containers is rejected", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolNull(),
+			Routes:  routes("/status"),
+		}, 2)
+		if !hasDetail(resp.Diagnostics, "only permitted on the primary container") {
+			t.Fatalf("expected non-primary error, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("duplicate paths are rejected", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolValue(true),
+			Routes:  routes("/status", "/healthz", "/status"),
+		}, 1)
+		if !hasDetail(resp.Diagnostics, `Route path "/status" is already declared at index 0`) {
+			t.Fatalf("expected duplicate path error, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("unknown paths defer validation", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolValue(true),
+			Routes: []ArtifactContainerRouteModel{
+				{Path: types.StringUnknown(), Auth: types.StringValue(client.RouteAuthDisabled)},
+				{Path: types.StringUnknown(), Auth: types.StringValue(client.RouteAuthDisabled)},
+			},
+		}, 1)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors for unknown paths, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+
+	t.Run("no routes is a no-op", func(t *testing.T) {
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactContainerRoutes(resp, containerPath, ArtifactContainerModel{
+			Primary: types.BoolValue(false),
+		}, 2)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("expected no errors, got: %v", resp.Diagnostics.Errors())
+		}
+	})
+}
+
 func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -728,6 +728,14 @@ func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreIm
 			return false
 		}
 	}
+	if len(a.Routes) != len(b.Routes) {
+		return false
+	}
+	for i := range a.Routes {
+		if !a.Routes[i].Path.Equal(b.Routes[i].Path) || !a.Routes[i].Auth.Equal(b.Routes[i].Auth) {
+			return false
+		}
+	}
 	if len(a.EnvironmentVars) != len(b.EnvironmentVars) {
 		return false
 	}
@@ -980,8 +988,54 @@ func validateArtifactContainer(
 		}
 	}
 
+	validateArtifactContainerRoutes(resp, containerPath, container, containerCount)
+
 	for ei, ev := range container.EnvironmentVars {
 		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+// validateArtifactContainerRoutes mirrors the Workload API route rules that the
+// schema cannot express: routes belong to the primary container only, and a path
+// may appear once per container (two entries would carry conflicting auth policies).
+func validateArtifactContainerRoutes(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if len(container.Routes) == 0 {
+		return
+	}
+
+	routesPath := containerPath.AtName("routes")
+
+	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
+	if !isPrimary && !autoPrimary {
+		resp.Diagnostics.AddAttributeError(
+			routesPath,
+			"Unsupported on non-primary container",
+			"`routes` is only permitted on the primary container.",
+		)
+	}
+
+	seen := make(map[string]int, len(container.Routes))
+	for ri, route := range container.Routes {
+		if route.Path.IsNull() || route.Path.IsUnknown() {
+			continue
+		}
+		routePath := route.Path.ValueString()
+		if first, ok := seen[routePath]; ok {
+			resp.Diagnostics.AddAttributeError(
+				routesPath.AtListIndex(ri).AtName("path"),
+				"Duplicate route path",
+				fmt.Sprintf("Route path %q is already declared at index %d. Each path may appear only once per container.", routePath, first),
+			)
+			continue
+		}
+		seen[routePath] = ri
 	}
 }
 
@@ -1407,6 +1461,16 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 		}
 	}
 
+	if len(c.Routes) > 0 {
+		container.Routes = make([]client.ArtifactContainerRoute, len(c.Routes))
+		for i, r := range c.Routes {
+			container.Routes[i] = client.ArtifactContainerRoute{
+				Path: r.Path.ValueString(),
+				Auth: r.Auth.ValueString(),
+			}
+		}
+	}
+
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
@@ -1639,6 +1703,20 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		for i, e := range c.Entrypoint {
 			model.Entrypoint[i] = types.StringValue(e)
 		}
+	}
+
+	if len(c.Routes) > 0 {
+		model.Routes = make([]ArtifactContainerRouteModel, len(c.Routes))
+		for i, r := range c.Routes {
+			model.Routes[i] = ArtifactContainerRouteModel{
+				Path: types.StringValue(r.Path),
+				Auth: types.StringValue(r.Auth),
+			}
+		}
+	} else if prior != nil && prior.Routes != nil {
+		// `routes = []` is omitted from the request and comes back absent. Keep the
+		// empty list rather than null so the applied state matches the config.
+		model.Routes = []ArtifactContainerRouteModel{}
 	}
 
 	if len(c.EnvironmentVars) > 0 {
