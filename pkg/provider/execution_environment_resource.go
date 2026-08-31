@@ -545,7 +545,7 @@ func waitForExecutionEnvironmentToBeReady(ctx context.Context, service client.Se
 			return backoff.Permanent(err)
 		}
 		if executionEnvironmentVersion.BuildStatus == "failed" {
-			logsURL := service.BaseURL() + "/registry/execution-environments/" + id + "/buildsLogs&executionEnvironmentVersion=" + executionEnvironmentVersion.ID
+			logsURL := service.BaseURL() + "/registry/execution-environments/" + id + "/buildsLogs?executionEnvironmentVersion=" + executionEnvironmentVersion.ID
 
 			traceAPICall("GetExecutionEnvironmentVersionBuildLog")
 			logs, logErr := service.GetExecutionEnvironmentVersionBuildLog(ctx, id, executionEnvironmentVersion.ID, executionEnvironmentVersion.BuildID)
