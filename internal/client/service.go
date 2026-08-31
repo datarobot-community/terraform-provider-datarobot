@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
+	"github.com/google/go-querystring/query"
 )
 
 const (
