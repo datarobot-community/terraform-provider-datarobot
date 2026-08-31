@@ -26,6 +26,12 @@ var _ resource.ResourceWithModifyPlan = &ExecutionEnvironmentResource{}
 
 const executionEnvironmentLogsSeparator = "----------------------------------------"
 
+// executionEnvironmentBuildLogsURL returns the DataRobot UI link for the given
+// execution environment version's build logs.
+func executionEnvironmentBuildLogsURL(baseURL, environmentId, versionId string) string {
+	return baseURL + "/registry/execution-environments/" + environmentId + "/builds-logs?executionEnvironmentVersion=" + versionId
+}
+
 // executionEnvironmentBuildFailedMessage is the diagnostic summary used whenever an
 // execution environment version fails to build; it's the only caller of
 // executionEnvironmentErrorMessageWithLogs, so it's a constant rather than a parameter.
@@ -230,10 +236,16 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 	}
 
 	traceAPICall("CreateExecutionEnvironmentVersion")
-	if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest); err != nil {
+	executionEnvironmentVersion, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest)
+	if err != nil {
 		resp.Diagnostics.AddError("Error creating Execution Environment Version", err.Error())
 		return
 	}
+
+	resp.Diagnostics.AddWarning(
+		"Execution Environment build started",
+		"You can follow the build's progress and logs live in the DataRobot UI at: "+executionEnvironmentBuildLogsURL(r.provider.service.BaseURL(), executionEnvironment.ID, executionEnvironmentVersion.ID),
+	)
 
 	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
 	if err != nil {
@@ -400,10 +412,16 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 			updateExecutionEnvironmentRequest.DockerImageUri = plan.DockerImageUri.ValueString()
 		}
 
-		if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest); err != nil {
+		executionEnvironmentVersion, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest)
+		if err != nil {
 			resp.Diagnostics.AddError("Error creating new Execution Environment Version", err.Error())
 			return
 		}
+
+		resp.Diagnostics.AddWarning(
+			"Execution Environment build started",
+			"You can follow the build's progress and logs live in the DataRobot UI at: "+executionEnvironmentBuildLogsURL(r.provider.service.BaseURL(), executionEnvironment.ID, executionEnvironmentVersion.ID),
+		)
 	}
 
 	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
@@ -545,7 +563,7 @@ func waitForExecutionEnvironmentToBeReady(ctx context.Context, service client.Se
 			return backoff.Permanent(err)
 		}
 		if executionEnvironmentVersion.BuildStatus == "failed" {
-			logsURL := service.BaseURL() + "/registry/execution-environments/" + id + "/buildsLogs?executionEnvironmentVersion=" + executionEnvironmentVersion.ID
+			logsURL := executionEnvironmentBuildLogsURL(service.BaseURL(), id, executionEnvironmentVersion.ID)
 
 			traceAPICall("GetExecutionEnvironmentVersionBuildLog")
 			logs, logErr := service.GetExecutionEnvironmentVersionBuildLog(ctx, id, executionEnvironmentVersion.ID, executionEnvironmentVersion.BuildID)

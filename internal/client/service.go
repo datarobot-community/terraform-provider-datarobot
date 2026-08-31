@@ -1161,8 +1161,11 @@ func (s *ServiceImpl) getExecutionEnvironmentVersionOtelBuildLog(ctx context.Con
 		return "", err
 	}
 
+	// The API returns entries oldest-first; reverse so the most recent line — usually
+	// the one that actually explains the failure — is the first thing a user sees.
 	lines := make([]string, 0, len(resp.Data))
-	for _, entry := range resp.Data {
+	for i := len(resp.Data) - 1; i >= 0; i-- {
+		entry := resp.Data[i]
 		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
 		if entry.StackTrace != "" {
 			line += "\n" + entry.StackTrace

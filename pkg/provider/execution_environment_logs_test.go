@@ -11,15 +11,23 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
+func TestExecutionEnvironmentBuildLogsURL(t *testing.T) {
+	got := executionEnvironmentBuildLogsURL("https://app.datarobot.com", "env-1", "ver-1")
+	want := "https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
 func TestExecutionEnvironmentErrorMessageWithLogs(t *testing.T) {
 	t.Run("includes logs and UI link on success", func(t *testing.T) {
-		msg := executionEnvironmentErrorMessageWithLogs("line1\nline2", nil, "https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1")
+		msg := executionEnvironmentErrorMessageWithLogs("line1\nline2", nil, "https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1")
 
 		for _, want := range []string{
 			"execution environment failed to build",
 			executionEnvironmentLogsSeparator,
 			"line1\nline2",
-			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("expected message to contain %q, got:\n%s", want, msg)
@@ -28,12 +36,12 @@ func TestExecutionEnvironmentErrorMessageWithLogs(t *testing.T) {
 	})
 
 	t.Run("falls back to UI link when log retrieval fails", func(t *testing.T) {
-		msg := executionEnvironmentErrorMessageWithLogs("", errors.New("boom"), "https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1")
+		msg := executionEnvironmentErrorMessageWithLogs("", errors.New("boom"), "https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1")
 
 		for _, want := range []string{
 			"execution environment failed to build",
 			"failed to retrieve build logs: boom",
-			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("expected message to contain %q, got:\n%s", want, msg)
@@ -42,12 +50,12 @@ func TestExecutionEnvironmentErrorMessageWithLogs(t *testing.T) {
 	})
 
 	t.Run("explains no logs yet when retrieval succeeds but returns nothing", func(t *testing.T) {
-		msg := executionEnvironmentErrorMessageWithLogs("", nil, "https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1")
+		msg := executionEnvironmentErrorMessageWithLogs("", nil, "https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1")
 
 		for _, want := range []string{
 			"execution environment failed to build",
 			"No build logs are available yet",
-			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+			"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("expected message to contain %q, got:\n%s", want, msg)
@@ -86,7 +94,7 @@ func TestWaitForExecutionEnvironmentToBeReadyFailedIncludesLogsAndUIURL(t *testi
 		"execution environment failed to build",
 		executionEnvironmentLogsSeparator,
 		"pip install failed",
-		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("expected error to contain %q, got:\n%s", want, err.Error())
@@ -122,7 +130,7 @@ func TestWaitForExecutionEnvironmentToBeReadyFailedNoLogsYet(t *testing.T) {
 	for _, want := range []string{
 		"execution environment failed to build",
 		"No build logs are available yet",
-		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("expected error to contain %q, got:\n%s", want, err.Error())
@@ -183,7 +191,7 @@ func TestWaitForExecutionEnvironmentToBeReadyLogRetrievalFailure(t *testing.T) {
 	for _, want := range []string{
 		"execution environment failed to build",
 		"failed to retrieve build logs: logs unavailable",
-		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/buildsLogs?executionEnvironmentVersion=ver-1",
+		"See full logs at: https://app.datarobot.com/registry/execution-environments/env-1/builds-logs?executionEnvironmentVersion=ver-1",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("expected error to contain %q, got:\n%s", want, err.Error())

@@ -62,6 +62,39 @@ func TestGetExecutionEnvironmentVersionBuildLogPrefersOtelWhenNonEmpty(t *testin
 	}
 }
 
+func TestGetExecutionEnvironmentVersionBuildLogOtelIsNewestFirst(t *testing.T) {
+	server := executionEnvironmentTestServer(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				// API returns oldest-first; "line3" is the most recent.
+				"data": []map[string]any{
+					otelLogEntryJSON("info", "line1"),
+					otelLogEntryJSON("info", "line2"),
+					otelLogEntryJSON("error", "line3"),
+				},
+				"next": "",
+			})
+		},
+		nil,
+	)
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetExecutionEnvironmentVersionBuildLog(context.Background(), "env-1", "ver-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetExecutionEnvironmentVersionBuildLog returned error: %v", err)
+	}
+
+	want := "[2026-07-09T16:14:50Z] ERROR: line3\n[2026-07-09T16:14:50Z] INFO: line2\n[2026-07-09T16:14:50Z] INFO: line1"
+	if logs != want {
+		t.Errorf("expected newest-first order:\n%s\ngot:\n%s", want, logs)
+	}
+}
+
 func TestGetExecutionEnvironmentVersionBuildLogSkipsOtelWhenBuildIDEmpty(t *testing.T) {
 	server := executionEnvironmentTestServer(t,
 		nil, // OTel must not be called when buildId is empty
