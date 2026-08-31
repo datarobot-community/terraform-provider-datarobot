@@ -37,7 +37,7 @@ type ExecutionEnvironmentVersion struct {
 	Description    string `json:"description"`
 	BuildStatus    string `json:"buildStatus"`
 	DockerImageUri string `json:"sourceDockerImageUri"`
-	BuildID string `json:"buildId,omitempty"`
+	BuildID        string `json:"buildId,omitempty"`
 }
 
 // ExecutionEnvironmentBuildLog is the response shape of the legacy per-version build
