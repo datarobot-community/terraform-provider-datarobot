@@ -62,12 +62,14 @@ func TestGetExecutionEnvironmentVersionBuildLogPrefersOtelWhenNonEmpty(t *testin
 	}
 }
 
-func TestGetExecutionEnvironmentVersionBuildLogOtelIsNewestFirst(t *testing.T) {
+func TestGetExecutionEnvironmentVersionBuildLogReversesOtelOldestFirstToNewestFirst(t *testing.T) {
 	server := executionEnvironmentTestServer(t,
 		func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				// API returns oldest-first; "line3" is the most recent.
+				// The API returns entries oldest-first; "line3" is the most recent.
+				// The assertion below checks that our output reverses this to
+				// newest-first — that's what's under test, not the API's own order.
 				"data": []map[string]any{
 					otelLogEntryJSON("info", "line1"),
 					otelLogEntryJSON("info", "line2"),
@@ -91,7 +93,7 @@ func TestGetExecutionEnvironmentVersionBuildLogOtelIsNewestFirst(t *testing.T) {
 
 	want := "[2026-07-09T16:14:50Z] ERROR: line3\n[2026-07-09T16:14:50Z] INFO: line2\n[2026-07-09T16:14:50Z] INFO: line1"
 	if logs != want {
-		t.Errorf("expected newest-first order:\n%s\ngot:\n%s", want, logs)
+		t.Errorf("expected output reversed to newest-first:\n%s\ngot:\n%s", want, logs)
 	}
 }
 
