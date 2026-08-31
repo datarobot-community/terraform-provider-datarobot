@@ -35,6 +35,7 @@
 - Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
 - `datarobot_artifact` `type = "agent"` and optional `spec.a2a_enabled` for Workload API agent artifacts (A2A card management). `a2a_enabled` is valid only when `type` is `agent`.
 - Computed `type` on `datarobot_workload`, mirroring the deployed artifact type (`service`, `nim`, or `agent`).
+- `datarobot_execution_environment` now surfaces the execution environment version's build logs (via the OTel logs API, falling back to the legacy per-version build log file when OTel has nothing recorded yet, tailed to the last 30 lines by default and overridable via `DATAROBOT_EXECUTION_ENVIRONMENT_BUILD_LOG_TAIL_LINES`) and a link to the build logs in the DataRobot UI in the error message when a version fails to build.
 ### Fixed
 
 - `datarobot_memory_space` updates no longer fail with `422 Unprocessable Entity` on `llmBaseUrl`. The provider sent an empty string for every attribute the config does not set, and the API parses `llmBaseUrl` as a URL, so any update to a memory space without `llm_base_url` was rejected. Unset attributes are now sent as null, which is also what the API requires to clear a stored value: it applies only the keys present in the request body, so an omitted key would leave the old value in place.
