@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"regexp"
+
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -998,5 +1000,25 @@ func RouteAuthValidators() []validator.String {
 			client.RouteAuthOptional,
 			client.RouteAuthDisabled,
 		),
+	}
+}
+
+// RoutePathValidators mirrors the Workload API constraints on a route path
+// (must start with "/", at most 1024 characters) so a bad path fails at plan
+// time instead of returning a 422 from the artifact create/update call.
+func RoutePathValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.LengthAtMost(client.RoutePathMaxLength),
+		stringvalidator.RegexMatches(
+			regexp.MustCompile(`^/`),
+			`must start with "/"`,
+		),
+	}
+}
+
+// RoutesListValidators caps the routes list at the Workload API maximum.
+func RoutesListValidators() []validator.List {
+	return []validator.List{
+		listvalidator.SizeAtMost(client.ArtifactContainerMaxRoutes),
 	}
 }

@@ -203,7 +203,7 @@ Optional:
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
-- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
+- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only, at most 50. The workload root (`/`) is authenticated by default unless declared here with another policy. Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster where it is not enabled fails with `Route configuration is disabled on this cluster`. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
 
 Read-Only:

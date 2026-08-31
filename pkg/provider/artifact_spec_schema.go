@@ -191,7 +191,8 @@ func artifactResourceRouteAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"path": schema.StringAttribute{
 			Required:            true,
-			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`.",
+			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.",
+			Validators:          RoutePathValidators(),
 		},
 		"auth": schema.StringAttribute{
 			Required:            true,
@@ -305,8 +306,12 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			MarkdownDescription: "Container entrypoint.",
 		},
 		"routes": schema.ListNestedAttribute{
-			Optional:            true,
-			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only. The workload root (`/`) is authenticated by default unless declared here with another policy.",
+			Optional: true,
+			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only, at most 50. " +
+				"The workload root (`/`) is authenticated by default unless declared here with another policy. " +
+				"Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster " +
+				"where it is not enabled fails with `Route configuration is disabled on this cluster`.",
+			Validators: RoutesListValidators(),
 			NestedObject: schema.NestedAttributeObject{
 				Attributes: artifactResourceRouteAttributes(),
 			},

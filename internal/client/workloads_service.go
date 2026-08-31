@@ -320,6 +320,13 @@ const (
 	RouteAuthDisabled = "disabled"
 )
 
+const (
+	// RoutePathMaxLength mirrors workload_api.schemas.containers.WorkloadRoute.path max_length.
+	RoutePathMaxLength = 1024
+	// ArtifactContainerMaxRoutes mirrors workload_api.schemas.containers.Container.routes max_length.
+	ArtifactContainerMaxRoutes = 50
+)
+
 // ArtifactContainerRoute is a workload route exposed publicly from a primary
 // container, e.g. an MCP server's OAuth discovery document. Mirrors
 // workload_api.schemas.containers.WorkloadRoute.

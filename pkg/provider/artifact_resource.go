@@ -988,8 +988,54 @@ func validateArtifactContainer(
 		}
 	}
 
+	validateArtifactContainerRoutes(resp, containerPath, container, containerCount)
+
 	for ei, ev := range container.EnvironmentVars {
 		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+// validateArtifactContainerRoutes mirrors the Workload API route rules that the
+// schema cannot express: routes belong to the primary container only, and a path
+// may appear once per container (two entries would carry conflicting auth policies).
+func validateArtifactContainerRoutes(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if len(container.Routes) == 0 {
+		return
+	}
+
+	routesPath := containerPath.AtName("routes")
+
+	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
+	if !isPrimary && !autoPrimary {
+		resp.Diagnostics.AddAttributeError(
+			routesPath,
+			"Unsupported on non-primary container",
+			"`routes` is only permitted on the primary container.",
+		)
+	}
+
+	seen := make(map[string]int, len(container.Routes))
+	for ri, route := range container.Routes {
+		if route.Path.IsNull() || route.Path.IsUnknown() {
+			continue
+		}
+		routePath := route.Path.ValueString()
+		if first, ok := seen[routePath]; ok {
+			resp.Diagnostics.AddAttributeError(
+				routesPath.AtListIndex(ri).AtName("path"),
+				"Duplicate route path",
+				fmt.Sprintf("Route path %q is already declared at index %d. Each path may appear only once per container.", routePath, first),
+			)
+			continue
+		}
+		seen[routePath] = ri
 	}
 }
 
