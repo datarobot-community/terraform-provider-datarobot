@@ -4609,6 +4609,49 @@ func TestContainersEqual_routes(t *testing.T) {
 	}
 }
 
+func TestLoadContainerFromAPI_routesEmptyListRoundTrip(t *testing.T) {
+	// `routes = []` is dropped from the request by omitempty and comes back absent.
+	// Without the prior-state fallback the applied state would be null and Terraform
+	// would fail with "Provider produced inconsistent result after apply".
+	prior := &ArtifactContainerModel{Routes: []ArtifactContainerRouteModel{}}
+
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	}, prior)
+
+	if model.Routes == nil {
+		t.Fatal("expected empty routes list to be preserved, got nil")
+	}
+	if len(model.Routes) != 0 {
+		t.Fatalf("routes length: got %d, want 0", len(model.Routes))
+	}
+}
+
+func TestLoadContainerFromAPI_routesUnsetStaysNull(t *testing.T) {
+	model := loadContainerFromAPI(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	}, &ArtifactContainerModel{})
+
+	if model.Routes != nil {
+		t.Fatalf("expected nil routes, got %v", model.Routes)
+	}
+}
+
+func TestLoadContainerIntoDataSourceModel_routesEmptyList(t *testing.T) {
+	// Data source lists render as null when nil, which breaks `length(...routes)`
+	// in a config. environment_vars normalizes the same way.
+	model := loadContainerIntoDataSourceModel(client.ArtifactContainer{
+		ImageURI: "registry.example/mcp:latest",
+	})
+
+	if model.Routes == nil {
+		t.Fatal("expected empty routes list, got nil")
+	}
+	if len(model.Routes) != 0 {
+		t.Fatalf("routes length: got %d, want 0", len(model.Routes))
+	}
+}
+
 func TestIntegrationArtifactDraftImageBuildConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

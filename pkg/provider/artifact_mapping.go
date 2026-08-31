@@ -161,6 +161,10 @@ func loadContainerIntoDataSourceModel(c client.ArtifactContainer) ArtifactContai
 				Auth: types.StringValue(r.Auth),
 			}
 		}
+	} else {
+		// An empty list rather than nil, so `length(...routes)` in a config reads
+		// zero instead of failing with "argument must not be null".
+		model.Routes = []ArtifactContainerRouteModel{}
 	}
 	if len(c.EnvironmentVars) > 0 {
 		model.EnvironmentVars = make([]ArtifactEnvironmentVariableModel, len(c.EnvironmentVars))

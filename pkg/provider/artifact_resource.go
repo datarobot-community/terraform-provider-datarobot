@@ -1667,6 +1667,10 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 				Auth: types.StringValue(r.Auth),
 			}
 		}
+	} else if prior != nil && prior.Routes != nil {
+		// `routes = []` is omitted from the request and comes back absent. Keep the
+		// empty list rather than null so the applied state matches the config.
+		model.Routes = []ArtifactContainerRouteModel{}
 	}
 
 	if len(c.EnvironmentVars) > 0 {
