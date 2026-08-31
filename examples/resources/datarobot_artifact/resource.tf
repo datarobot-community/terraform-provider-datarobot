@@ -16,10 +16,15 @@ resource "datarobot_artifact" "prebuilt" {
         primary   = true
         port      = 8080
         # Extra paths to expose from the workload's public endpoint, each with
-        # its own auth policy: "required", "optional", or "disabled".
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
         routes = [{
-          path = "/status"
-          auth = "disabled"
+          path = "/index.html"
+          auth = "required"
         }]
       }]
     }]

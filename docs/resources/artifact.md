@@ -31,10 +31,15 @@ resource "datarobot_artifact" "prebuilt" {
         primary   = true
         port      = 8080
         # Extra paths to expose from the workload's public endpoint, each with
-        # its own auth policy: "required", "optional", or "disabled".
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
         routes = [{
-          path = "/status"
-          auth = "disabled"
+          path = "/index.html"
+          auth = "required"
         }]
       }]
     }]
@@ -296,7 +301,7 @@ Optional:
 Required:
 
 - `auth` (String) Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.
-- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/`.
+- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.
 
 
 <a id="nestedatt--spec--container_groups--containers--startup_probe"></a>
