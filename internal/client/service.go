@@ -10,11 +10,15 @@ import (
 	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
+	"github.com/google/go-querystring/query"
 )
 
 const (
 	DeploymentLogsTailLinesEnvVar  = "DATAROBOT_DEPLOYMENT_LOGS_TAIL_LINES"
 	defaultDeploymentLogsTailLines = 30
+
+	ExecutionEnvironmentBuildLogTailLinesEnvVar  = "DATAROBOT_EXECUTION_ENVIRONMENT_BUILD_LOG_TAIL_LINES"
+	defaultExecutionEnvironmentBuildLogTailLines = 30
 )
 
 type Service interface {
@@ -238,6 +242,7 @@ type Service interface {
 	ListExecutionEnvironments(ctx context.Context) ([]ExecutionEnvironment, error)
 	CreateExecutionEnvironmentVersion(ctx context.Context, id string, req *CreateExecutionEnvironmentVersionRequest) (*ExecutionEnvironmentVersion, error)
 	GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error)
+	GetExecutionEnvironmentVersionBuildLog(ctx context.Context, id, versionId, buildId string) (string, error)
 
 	// Async Tasks
 	GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error)
@@ -1097,6 +1102,108 @@ func (s *ServiceImpl) CreateExecutionEnvironmentVersion(ctx context.Context, id 
 
 func (s *ServiceImpl) GetExecutionEnvironmentVersion(ctx context.Context, id, versionId string) (*ExecutionEnvironmentVersion, error) {
 	return Get[ExecutionEnvironmentVersion](s.client, ctx, "/executionEnvironments/"+id+"/versions/"+versionId+"/")
+}
+
+func executionEnvironmentBuildLogTailLines() int {
+	tailLines, err := strconv.Atoi(os.Getenv(ExecutionEnvironmentBuildLogTailLinesEnvVar))
+	if err != nil || tailLines <= 0 {
+		return defaultExecutionEnvironmentBuildLogTailLines
+	}
+	return tailLines
+}
+
+type getExecutionEnvironmentVersionBuildLogRequest struct {
+	Limit        int    `url:"limit,omitempty"`
+	SearchKeys   string `url:"searchKeys,omitempty"`
+	SearchValues string `url:"searchValues,omitempty"`
+}
+
+// GetExecutionEnvironmentVersionBuildLog prefers the OTel logs pipeline, but that
+// instrumentation is still being rolled out and can come back empty (or unavailable)
+// for accounts/builds it doesn't cover yet. When it has nothing to say, fall back to
+// the legacy per-version build log file the monolith writes for officially recognized
+// build failures — that endpoint isn't deprecated yet.
+//
+// buildId identifies the OTel-logged build and is distinct from versionId; it becomes
+// available some time after the build starts, so it may still be empty by the time a
+// build fails (e.g. a very fast failure). When empty, the OTel lookup is skipped
+// entirely (searching by an empty build_id wouldn't be meaningful) and we go straight
+// to the legacy endpoint, which is keyed by versionId instead.
+func (s *ServiceImpl) GetExecutionEnvironmentVersionBuildLog(ctx context.Context, id, versionId, buildId string) (string, error) {
+	var otelLogs string
+	var otelErr error
+	if buildId != "" {
+		otelLogs, otelErr = s.getExecutionEnvironmentVersionOtelBuildLog(ctx, id, buildId)
+		if otelLogs != "" {
+			return otelLogs, nil
+		}
+	}
+
+	legacyLogs, legacyErr := s.getExecutionEnvironmentVersionLegacyBuildLog(ctx, id, versionId)
+	if legacyErr == nil {
+		return legacyLogs, nil
+	}
+
+	// Both sources came up empty or failed outright; report whichever error exists,
+	// preferring the OTel one since it's the primary path.
+	if otelErr != nil {
+		return "", otelErr
+	}
+	return "", legacyErr
+}
+
+func (s *ServiceImpl) getExecutionEnvironmentVersionOtelBuildLog(ctx context.Context, id, buildId string) (string, error) {
+	queryReq := &getExecutionEnvironmentVersionBuildLogRequest{
+		Limit:        executionEnvironmentBuildLogTailLines(),
+		SearchKeys:   "build_id",
+		SearchValues: buildId,
+	}
+	pathValues, _ := query.Values(queryReq)
+
+	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/execution_environment/"+id+"/logs/?"+pathValues.Encode())
+	if err != nil {
+		return "", err
+	}
+
+	// The API returns entries oldest-first; reverse so the most recent line — usually
+	// the one that actually explains the failure — is the first thing a user sees.
+	lines := make([]string, 0, len(resp.Data))
+	for i := len(resp.Data) - 1; i >= 0; i-- {
+		entry := resp.Data[i]
+		line := fmt.Sprintf("[%s] %s: %s", entry.Timestamp, strings.ToUpper(entry.Level), entry.Message)
+		if entry.StackTrace != "" {
+			line += "\n" + entry.StackTrace
+		}
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
+func (s *ServiceImpl) getExecutionEnvironmentVersionLegacyBuildLog(ctx context.Context, id, versionId string) (string, error) {
+	resp, err := Get[ExecutionEnvironmentBuildLog](s.client, ctx, "/executionEnvironments/"+id+"/versions/"+versionId+"/buildLog/")
+	if err != nil {
+		return "", err
+	}
+
+	buildLog := resp.Log
+	if resp.Error != "" {
+		buildLog = strings.TrimRight(buildLog, "\n") + "\nERROR: " + resp.Error
+	}
+
+	return tailLastLines(buildLog, executionEnvironmentBuildLogTailLines()), nil
+}
+
+// tailLastLines returns the last n lines of s, or s unchanged if it has n lines or fewer.
+func tailLastLines(s string, n int) string {
+	if s == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
 }
 
 func (s *ServiceImpl) GetTaskStatus(ctx context.Context, id string) (*TaskStatusResponse, error) {

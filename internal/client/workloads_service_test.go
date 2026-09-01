@@ -490,24 +490,26 @@ func TestArtifactSpecOmitsUnsetA2AEnabled(t *testing.T) {
 func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	raw := []byte(`{"id":"w1","name":"agent-wl","type":"agent","status":"running","importance":"low","runtime":{}}`)
-	var workload Workload
-	if err := json.Unmarshal(raw, &workload); err != nil {
-		t.Fatalf("unmarshal workload: %v", err)
-	}
-	if workload.Type != ArtifactTypeAgent {
-		t.Fatalf("Type = %q, want %q", workload.Type, ArtifactTypeAgent)
-	}
+	for _, artifactType := range []ArtifactType{ArtifactTypeAgent, ArtifactTypeMCP} {
+		raw := []byte(`{"id":"w1","name":"wl","type":"` + string(artifactType) + `","status":"running","importance":"low","runtime":{}}`)
+		var workload Workload
+		if err := json.Unmarshal(raw, &workload); err != nil {
+			t.Fatalf("unmarshal workload type %q: %v", artifactType, err)
+		}
+		if workload.Type != artifactType {
+			t.Fatalf("Type = %q, want %q", workload.Type, artifactType)
+		}
 
-	encoded, err := json.Marshal(workload)
-	if err != nil {
-		t.Fatalf("marshal workload: %v", err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		t.Fatalf("unmarshal encoded workload: %v", err)
-	}
-	if payload["type"] != "agent" {
-		t.Fatalf("encoded type = %v, want %q", payload["type"], "agent")
+		encoded, err := json.Marshal(workload)
+		if err != nil {
+			t.Fatalf("marshal workload type %q: %v", artifactType, err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(encoded, &payload); err != nil {
+			t.Fatalf("unmarshal encoded workload type %q: %v", artifactType, err)
+		}
+		if payload["type"] != string(artifactType) {
+			t.Fatalf("encoded type = %v, want %q", payload["type"], artifactType)
+		}
 	}
 }

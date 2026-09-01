@@ -983,6 +983,7 @@ func ArtifactTypeValidators() []validator.String {
 			string(client.ArtifactTypeService),
 			string(client.ArtifactTypeNim),
 			string(client.ArtifactTypeAgent),
+			string(client.ArtifactTypeMCP),
 		),
 	}
 }

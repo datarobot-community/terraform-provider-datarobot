@@ -2134,6 +2134,12 @@ func TestLoadWorkloadIntoModelType(t *testing.T) {
 		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeAgent)
 	}
 
+	workload.Type = client.ArtifactTypeMCP
+	loadWorkloadIntoModel(workload, &data)
+	if data.Type.ValueString() != string(client.ArtifactTypeMCP) {
+		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeMCP)
+	}
+
 	workload.Type = ""
 	loadWorkloadIntoModel(workload, &data)
 	if !data.Type.IsNull() {
