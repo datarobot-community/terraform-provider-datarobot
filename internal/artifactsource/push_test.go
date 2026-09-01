@@ -2,10 +2,12 @@ package artifactsource_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +29,20 @@ type mockFilesAPI struct {
 	pollStatusCalls         int
 	deletePaths             []string
 	deleteCalls             int
+	allFilesCalls           int
+	allFilesArgs            []string
+	listVersionsCalls       int
+
+	// allFiles is the catalog version listing AllFiles serves, and allFilesErr
+	// the failure it reports instead.
+	allFiles     map[string]filesapi.FileMeta
+	allFilesErr  error
+	listVersions []filesapi.CatalogVersion
+
+	// deleteOmitsVersion makes DeleteFiles answer without naming the version it
+	// produced, which is what an API that replies 204 No Content looks like
+	// here, since the body is never decoded.
+	deleteOmitsVersion bool
 
 	catalogID string
 	stageID   string
@@ -83,8 +99,15 @@ func (m *mockFilesAPI) PollStatus(_ context.Context, _ string) (*filesapi.Status
 	return &filesapi.StatusResp{Status: filesapi.StatusCompleted}, nil
 }
 
-func (m *mockFilesAPI) AllFiles(context.Context, string, string) (map[string]filesapi.FileMeta, error) {
-	panic("not used")
+func (m *mockFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) (map[string]filesapi.FileMeta, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.allFilesCalls++
+	m.allFilesArgs = append(m.allFilesArgs, catalogID+"@"+versionID)
+	if m.allFilesErr != nil {
+		return nil, m.allFilesErr
+	}
+	return m.allFiles, nil
 }
 
 func (m *mockFilesAPI) DownloadFile(context.Context, string, string, string, io.Writer) (string, int64, error) {
@@ -95,11 +118,20 @@ func (m *mockFilesAPI) DeleteFiles(_ context.Context, _ string, paths []string) 
 	m.deleteCalls++
 	m.deletePaths = append(m.deletePaths, paths...)
 	m.version++
+	if m.deleteOmitsVersion {
+		return &filesapi.DeleteFilesResp{}, nil
+	}
 	return &filesapi.DeleteFilesResp{CatalogVersionID: versionID(m.version)}, nil
 }
 
 func (m *mockFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
-	panic("not used")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.listVersionsCalls++
+	if m.listVersions == nil {
+		return nil, nil
+	}
+	return m.listVersions, nil
 }
 
 func versionID(n int) string {
@@ -179,6 +211,17 @@ func TestPushDirectory_ZipPathExistingCatalogPolls(t *testing.T) {
 	assert.Equal(t, 1, mock.pollStatusCalls)
 }
 
+// remoteFromManifest describes a catalog version holding exactly what a previous
+// push uploaded. Deriving it from that push's own hashes keeps the two sides of
+// the comparison honest: the test never restates how a file is hashed.
+func remoteFromManifest(m artifactsource.Manifest) map[string]filesapi.FileMeta {
+	out := make(map[string]filesapi.FileMeta, len(m))
+	for path, meta := range m {
+		out[path] = filesapi.FileMeta{Hash: meta.Hash, Size: meta.Size}
+	}
+	return out
+}
+
 func TestPushDirectory_IncrementalNoChanges(t *testing.T) {
 	t.Parallel()
 
@@ -188,12 +231,15 @@ func TestPushDirectory_IncrementalNoChanges(t *testing.T) {
 	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
 	require.NoError(t, err)
 
-	mock2 := &mockFilesAPI{catalogID: "cat-existing", version: 5}
+	mock2 := &mockFilesAPI{
+		catalogID: "cat-existing",
+		version:   5,
+		allFiles:  remoteFromManifest(first.FileHashes),
+	}
 	second, err := artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
 		Dir:              root,
 		CatalogID:        first.CatalogID,
 		CatalogVersionID: first.CatalogVersionID,
-		BaseFiles:        first.FileHashes,
 	})
 	require.NoError(t, err)
 
@@ -216,12 +262,15 @@ func TestPushDirectory_IncrementalUploadsOnlyChangedFile(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "b.txt"), []byte("changed"), 0o644))
 
-	mock2 := &mockFilesAPI{catalogID: first.CatalogID, version: 2}
+	mock2 := &mockFilesAPI{
+		catalogID: first.CatalogID,
+		version:   2,
+		allFiles:  remoteFromManifest(first.FileHashes),
+	}
 	second, err := artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
 		Dir:              root,
 		CatalogID:        first.CatalogID,
 		CatalogVersionID: first.CatalogVersionID,
-		BaseFiles:        first.FileHashes,
 	})
 	require.NoError(t, err)
 
@@ -246,12 +295,15 @@ func TestPushDirectory_IncrementalDeletesRemovedFile(t *testing.T) {
 
 	require.NoError(t, os.Remove(filepath.Join(root, "b.txt")))
 
-	mock2 := &mockFilesAPI{catalogID: first.CatalogID, version: 2}
+	mock2 := &mockFilesAPI{
+		catalogID: first.CatalogID,
+		version:   2,
+		allFiles:  remoteFromManifest(first.FileHashes),
+	}
 	second, err := artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
 		Dir:              root,
 		CatalogID:        first.CatalogID,
 		CatalogVersionID: first.CatalogVersionID,
-		BaseFiles:        first.FileHashes,
 	})
 	require.NoError(t, err)
 
@@ -260,8 +312,251 @@ func TestPushDirectory_IncrementalDeletesRemovedFile(t *testing.T) {
 	assert.Equal(t, 1, mock2.deleteCalls)
 	assert.Empty(t, mock2.uploadToStagePaths)
 	assert.Len(t, second.FileHashes, 1)
+
+	// A delete-only push still has to name the version it produced: this value
+	// is written into the artifact's code_ref, and an empty one would leave the
+	// build with no code and unpin the base for every later push.
+	assert.NotEmpty(t, second.CatalogVersionID)
+	assert.NotEqual(t, first.CatalogVersionID, second.CatalogVersionID)
 }
 
+// The ordinary shape of a real edit: some files changed, others removed.
+func TestPushDirectory_IncrementalUploadsAndDeletesTogether(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "keep.txt"), []byte("keep"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "edit.txt"), []byte("before"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "drop.txt"), []byte("drop"), 0o644))
+
+	mock := &mockFilesAPI{}
+	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "edit.txt"), []byte("after"), 0o644))
+	require.NoError(t, os.Remove(filepath.Join(root, "drop.txt")))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "add.txt"), []byte("add"), 0o644))
+
+	mock2 := &mockFilesAPI{
+		catalogID: first.CatalogID,
+		version:   2,
+		allFiles:  remoteFromManifest(first.FileHashes),
+	}
+	second, err := artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        first.CatalogID,
+		CatalogVersionID: first.CatalogVersionID,
+	})
+	require.NoError(t, err)
+
+	assert.True(t, second.Incremental)
+	assert.ElementsMatch(t, []string{"edit.txt", "add.txt"}, mock2.uploadToStagePaths)
+	assert.Equal(t, []string{"drop.txt"}, mock2.deletePaths)
+	// The upload runs after the delete, so its version is the one that survives.
+	assert.NotEmpty(t, second.CatalogVersionID)
+	assert.Zero(t, mock2.listVersionsCalls)
+}
+
+// A delete-only push against an API that answers without naming the new version
+// has to look it up rather than report an empty one.
+func TestPushDirectory_DeleteOnlyResolvesVersionWhenResponseOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("aaa"), 0o644))
+
+	mock := &mockFilesAPI{}
+	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
+	require.NoError(t, err)
+
+	remote := remoteFromManifest(first.FileHashes)
+	remote["gone.txt"] = filesapi.FileMeta{Hash: "whatever", Size: 3}
+
+	mock2 := &mockFilesAPI{
+		catalogID:          first.CatalogID,
+		version:            2,
+		allFiles:           remote,
+		deleteOmitsVersion: true,
+		listVersions:       []filesapi.CatalogVersion{{ID: "ver-after-delete"}},
+	}
+	second, err := artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        first.CatalogID,
+		CatalogVersionID: first.CatalogVersionID,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"gone.txt"}, mock2.deletePaths)
+	assert.Equal(t, "ver-after-delete", second.CatalogVersionID)
+	assert.Equal(t, 1, mock2.listVersionsCalls)
+}
+
+func TestPushDirectory_DeleteOnlyFailsWhenVersionCannotBeResolved(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("aaa"), 0o644))
+
+	mock := &mockFilesAPI{}
+	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
+	require.NoError(t, err)
+
+	remote := remoteFromManifest(first.FileHashes)
+	remote["gone.txt"] = filesapi.FileMeta{Hash: "whatever", Size: 3}
+
+	mock2 := &mockFilesAPI{
+		catalogID:          first.CatalogID,
+		version:            2,
+		allFiles:           remote,
+		deleteOmitsVersion: true,
+	}
+	_, err = artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        first.CatalogID,
+		CatalogVersionID: first.CatalogVersionID,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve catalog version after delete")
+}
+
+// The base decides deletions, so it must never hold a path the walk could not
+// have produced. An ignored path is one the push would refuse to upload, and
+// deleting it would strip files from the catalog that the user never touched.
+func TestPushDirectory_BaseExcludesIgnoredPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "app.py"), []byte("app"), 0o644))
+
+	mock := &mockFilesAPI{}
+	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
+	require.NoError(t, err)
+
+	// The catalog still holds what earlier pushes sent, before a rule excluded it.
+	remote := remoteFromManifest(first.FileHashes)
+	remote[".venv/lib/python3.11/site-packages/x.py"] = filesapi.FileMeta{Hash: "aa", Size: 1}
+	remote["secrets.tfvars"] = filesapi.FileMeta{Hash: "bb", Size: 1}
+
+	ignoreVenvAndTfvars := func(relPath string, _ bool) bool {
+		return strings.HasPrefix(relPath, ".venv") || strings.HasSuffix(relPath, ".tfvars")
+	}
+
+	mock2 := &mockFilesAPI{catalogID: first.CatalogID, version: 2, allFiles: remote}
+	_, err = artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        first.CatalogID,
+		CatalogVersionID: first.CatalogVersionID,
+		Ignore:           ignoreVenvAndTfvars,
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, mock2.deletePaths)
+	assert.Zero(t, mock2.deleteCalls)
+}
+
+// An entry with no checksum cannot take part in a content comparison, and the
+// listing is not promised to describe only regular files, so handing such a
+// path to the delete call could take a whole subtree with it.
+func TestPushDirectory_BaseSkipsEntriesWithoutChecksum(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "app.py"), []byte("app"), 0o644))
+
+	mock := &mockFilesAPI{}
+	first, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{Dir: root})
+	require.NoError(t, err)
+
+	remote := remoteFromManifest(first.FileHashes)
+	remote["src"] = filesapi.FileMeta{Hash: "", Size: 0}
+
+	mock2 := &mockFilesAPI{catalogID: first.CatalogID, version: 2, allFiles: remote}
+	_, err = artifactsource.PushDirectory(context.Background(), mock2, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        first.CatalogID,
+		CatalogVersionID: first.CatalogVersionID,
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, mock2.deletePaths)
+}
+
+// A version that lists nothing is still a base: everything local is new, and
+// there is nothing to remove. Treating it as no base at all would quietly skip
+// the deletes on every later push.
+func TestPushDirectory_EmptyBaseUploadsEverythingWithoutWarning(t *testing.T) {
+	t.Parallel()
+
+	root := writeSmallTree(t)
+	mock := &mockFilesAPI{
+		catalogID: "cat-1",
+		version:   3,
+		allFiles:  map[string]filesapi.FileMeta{},
+	}
+
+	result, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        "cat-1",
+		CatalogVersionID: "ver-3",
+	})
+	require.NoError(t, err)
+
+	assert.NoError(t, result.BaseUnavailable)
+	assert.True(t, result.Incremental)
+	assert.Len(t, mock.uploadToStagePaths, 2)
+	assert.Zero(t, mock.deleteCalls)
+}
+
+// remoteManifest turns a path -> contents map into the listing AllFiles would
+// return for a catalog version holding exactly those files, so a test can state
+// the remote side the way it states the local one.
+func TestPushDirectory_BaseFailureFallsBackToFullUpload(t *testing.T) {
+	t.Parallel()
+
+	root := writeSmallTree(t)
+	mock := &mockFilesAPI{
+		catalogID:   "cat-1",
+		version:     2,
+		allFilesErr: errors.New("catalog version expired"),
+	}
+
+	result, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{
+		Dir:              root,
+		CatalogID:        "cat-1",
+		CatalogVersionID: "ver-2",
+	})
+	require.NoError(t, err)
+
+	require.Error(t, result.BaseUnavailable)
+	assert.Contains(t, result.BaseUnavailable.Error(), "catalog version expired")
+	assert.Contains(t, result.BaseUnavailable.Error(), "ver-2")
+
+	assert.False(t, result.Incremental)
+	assert.Len(t, mock.uploadToStagePaths, 2)
+	// No base means no way to tell a deletion from a file that was never there.
+	assert.Zero(t, mock.deleteCalls)
+}
+
+// A first push has no version to diff against and must not go looking for one.
+func TestPushDirectory_NoPinnedVersionSkipsBaseLookup(t *testing.T) {
+	t.Parallel()
+
+	root := writeSmallTree(t)
+	mock := &mockFilesAPI{catalogID: "cat-1"}
+
+	result, err := artifactsource.PushDirectory(context.Background(), mock, artifactsource.Options{
+		Dir:       root,
+		CatalogID: "cat-1",
+	})
+	require.NoError(t, err)
+
+	assert.Zero(t, mock.allFilesCalls)
+	assert.NoError(t, result.BaseUnavailable)
+	assert.False(t, result.Incremental)
+	assert.Len(t, mock.uploadToStagePaths, 2)
+}
+
+// An explicitly supplied base is used as given, without a lookup.
 func TestPushDirectory_EmptyDirectory(t *testing.T) {
 	t.Parallel()
 

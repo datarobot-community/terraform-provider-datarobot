@@ -3,12 +3,17 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
@@ -204,22 +209,38 @@ func TestArtifactSourceNeedsUpload(t *testing.T) {
 	}
 }
 
-func TestCatalogIDFromModel(t *testing.T) {
+func TestArtifactSourceBaseRef(t *testing.T) {
 	t.Parallel()
 
-	catalogID := "aaaaaaaaaaaaaaaaaaaaaaaa"
-	specWithCatalog := func(id types.String) *ArtifactSpecModel {
+	const (
+		stateCatalog   = "aaaaaaaaaaaaaaaaaaaaaaaa"
+		stateVersion   = "bbbbbbbbbbbbbbbbbbbbbbbb"
+		liveCatalog    = "cccccccccccccccccccccccc"
+		liveVersion    = "dddddddddddddddddddddddd"
+		sidecarCatalog = "eeeeeeeeeeeeeeeeeeeeeeee"
+	)
+
+	// The sidecar carries its own catalog and no version. Reading the two fields
+	// independently would pair this catalog with the primary's version and ask
+	// the API for a version that never belonged to it.
+	specWithSidecar := func(primary *ArtifactCodeRefModel) *ArtifactSpecModel {
 		return &ArtifactSpecModel{
 			ContainerGroups: []ArtifactContainerGroupModel{{
 				Containers: []ArtifactContainerModel{
-					{ImageURI: types.StringValue("sidecar:latest")},
 					{
-						Primary: types.BoolValue(true),
+						Name: types.StringValue("sidecar"),
 						ImageBuildConfig: &ArtifactImageBuildConfigModel{
 							CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
-								CatalogID:        id,
-								CatalogVersionID: types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbb"),
+								CatalogID:        types.StringValue(sidecarCatalog),
+								CatalogVersionID: types.StringNull(),
 							}),
+						},
+					},
+					{
+						Name:    types.StringValue("primary"),
+						Primary: types.BoolValue(true),
+						ImageBuildConfig: &ArtifactImageBuildConfigModel{
+							CodeRef: artifactCodeRefObject(primary),
 						},
 					},
 				},
@@ -227,77 +248,81 @@ func TestCatalogIDFromModel(t *testing.T) {
 		}
 	}
 
-	tests := []struct {
-		name string
-		data *ArtifactResourceModel
-		want string
-	}{
-		{name: "nil model", data: nil, want: ""},
-		{name: "nil spec", data: &ArtifactResourceModel{}, want: ""},
-		{name: "no code_ref", data: &ArtifactResourceModel{Spec: &ArtifactSpecModel{}}, want: ""},
-		{
-			name: "null catalog id skipped",
-			data: &ArtifactResourceModel{Spec: specWithCatalog(types.StringNull())},
-			want: "",
-		},
-		{
-			name: "known catalog id",
-			data: &ArtifactResourceModel{Spec: specWithCatalog(types.StringValue(catalogID))},
-			want: catalogID,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := catalogIDFromModel(tt.data); got != tt.want {
-				t.Fatalf("catalogIDFromModel() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCatalogVersionIDFromModel(t *testing.T) {
-	t.Parallel()
-
-	versionID := "bbbbbbbbbbbbbbbbbbbbbbbb"
-	specWithVersion := func(id types.String) *ArtifactSpecModel {
-		return &ArtifactSpecModel{
-			ContainerGroups: []ArtifactContainerGroupModel{{
-				Containers: []ArtifactContainerModel{{
-					ImageBuildConfig: &ArtifactImageBuildConfigModel{
-						CodeRef: artifactCodeRefObject(&ArtifactCodeRefModel{
-							CatalogID:        types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaa"),
-							CatalogVersionID: id,
-						}),
+	primaryName := "primary"
+	isPrimary := true
+	liveArtifact := &client.Artifact{
+		Spec: client.ArtifactSpec{
+			ContainerGroups: []client.ArtifactContainerGroup{{
+				Containers: []client.ArtifactContainer{{
+					Name:    &primaryName,
+					Primary: &isPrimary,
+					ImageBuildConfig: &client.ArtifactImageBuildConfig{
+						CodeRef: &client.ArtifactCodeRef{
+							DataRobot: client.ArtifactDataRobotCodeRef{
+								CatalogID:        liveCatalog,
+								CatalogVersionID: liveVersion,
+							},
+						},
 					},
 				}},
 			}},
-		}
+		},
 	}
 
 	tests := []struct {
-		name string
-		data *ArtifactResourceModel
-		want string
+		name        string
+		state       *ArtifactResourceModel
+		artifact    *client.Artifact
+		wantCatalog string
+		wantVersion string
 	}{
-		{name: "nil model", data: nil, want: ""},
-		{name: "nil spec", data: &ArtifactResourceModel{}, want: ""},
 		{
-			name: "known catalog version id",
-			data: &ArtifactResourceModel{Spec: specWithVersion(types.StringValue(versionID))},
-			want: versionID,
+			name:     "no state and no artifact",
+			state:    nil,
+			artifact: &client.Artifact{},
 		},
 		{
-			name: "unknown version id skipped",
-			data: &ArtifactResourceModel{Spec: specWithVersion(types.StringUnknown())},
-			want: "",
+			name: "primary code_ref wins over a sidecar",
+			state: &ArtifactResourceModel{Spec: specWithSidecar(&ArtifactCodeRefModel{
+				CatalogID:        types.StringValue(stateCatalog),
+				CatalogVersionID: types.StringValue(stateVersion),
+			})},
+			artifact:    liveArtifact,
+			wantCatalog: stateCatalog,
+			wantVersion: stateVersion,
+		},
+		{
+			name: "primary catalog without a version yields no version",
+			state: &ArtifactResourceModel{Spec: specWithSidecar(&ArtifactCodeRefModel{
+				CatalogID:        types.StringValue(stateCatalog),
+				CatalogVersionID: types.StringNull(),
+			})},
+			artifact:    liveArtifact,
+			wantCatalog: stateCatalog,
+			wantVersion: "",
+		},
+		{
+			name:        "state without a usable code_ref falls back to the artifact",
+			state:       &ArtifactResourceModel{Spec: &ArtifactSpecModel{}},
+			artifact:    liveArtifact,
+			wantCatalog: liveCatalog,
+			wantVersion: liveVersion,
+		},
+		{
+			name:        "imported resource with no state spec falls back to the artifact",
+			state:       nil,
+			artifact:    liveArtifact,
+			wantCatalog: liveCatalog,
+			wantVersion: liveVersion,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := catalogVersionIDFromModel(tt.data); got != tt.want {
-				t.Fatalf("catalogVersionIDFromModel() = %q, want %q", got, tt.want)
+			gotCatalog, gotVersion := artifactSourceBaseRef(tt.state, tt.artifact)
+			if gotCatalog != tt.wantCatalog || gotVersion != tt.wantVersion {
+				t.Fatalf("artifactSourceBaseRef() = (%q, %q), want (%q, %q)",
+					gotCatalog, gotVersion, tt.wantCatalog, tt.wantVersion)
 			}
 		})
 	}
@@ -473,8 +498,8 @@ func TestSyncArtifactSource(t *testing.T) {
 
 	const (
 		artifactID = "artifact-1"
-		catalogID  = "aaaaaaaaaaaaaaaaaaaaaaaa"
-		versionID  = "bbbbbbbbbbbbbbbbbbbbbbbb"
+		catalogID  = artifactSourceTestCatalogID
+		versionID  = artifactSourceTestVersionID
 	)
 
 	t.Run("skips upload when dir_hash unchanged", func(t *testing.T) {
@@ -533,6 +558,109 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 		if filesAPI.createCatalogCalls == 0 && filesAPI.uploadFromZipNewCalls == 0 {
 			t.Fatal("expected Files API upload during create")
+		}
+	})
+
+	// The end this whole path exists for: a file removed from source.dir has to
+	// leave the catalog, or it keeps reaching the image build.
+	t.Run("removes a deleted file from the catalog", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		filesAPI.catalogID = catalogID
+		filesAPI.allFiles = map[string]filesapi.FileMeta{
+			"main.py":  {Hash: hashOfString("kept"), Size: 4},
+			"gone.py":  {Hash: "0badc0de", Size: 3},
+			".venv/x":  {Hash: "0badc0de", Size: 3},
+			"stale.py": {Hash: "0badc0de", Size: 3},
+		}
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Eq(catalogID), gomock.Not(gomock.Eq(""))).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "kept"})
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+			Spec:   artifactSpecWithCodeRef(),
+		}
+		state := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir), DirHash: types.StringValue("stale")},
+			Spec:   artifactSpecWithCodeRef(),
+		}
+
+		diags := &diag.Diagnostics{}
+		_, uploaded, err := resource.syncArtifactSource(
+			context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, diags)
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if !uploaded {
+			t.Fatal("expected an upload")
+		}
+		if diags.HasError() || diags.WarningsCount() > 0 {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+
+		// gone.py and stale.py were pushed before and are gone now. .venv/x is
+		// excluded by the seeded .drignore, so the push would never upload it
+		// and must not delete it either.
+		sort.Strings(filesAPI.deletePaths)
+		want := []string{"gone.py", "stale.py"}
+		if !reflect.DeepEqual(filesAPI.deletePaths, want) {
+			t.Fatalf("deleted %v, want %v", filesAPI.deletePaths, want)
+		}
+		// main.py is unchanged since the base, so nothing is re-sent for it.
+		for _, p := range filesAPI.uploadToStagePaths {
+			if p == "main.py" {
+				t.Fatalf("re-uploaded an unchanged file: %v", filesAPI.uploadToStagePaths)
+			}
+		}
+	})
+
+	t.Run("warns and uploads everything when the base cannot be read", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		filesAPI.catalogID = catalogID
+		filesAPI.allFilesErr = errors.New("catalog version expired")
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "kept"})
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+			Spec:   artifactSpecWithCodeRef(),
+		}
+		state := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir), DirHash: types.StringValue("stale")},
+			Spec:   artifactSpecWithCodeRef(),
+		}
+
+		diags := &diag.Diagnostics{}
+		if _, _, err := resource.syncArtifactSource(
+			context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, diags); err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if diags.HasError() {
+			t.Fatalf("base read failure must not fail the apply: %v", diags)
+		}
+		if diags.WarningsCount() != 1 {
+			t.Fatalf("expected one warning, got %v", diags)
+		}
+		if filesAPI.deleteCalls != 0 {
+			t.Fatal("nothing may be deleted without a base to compare against")
+		}
+		if len(filesAPI.uploadToStagePaths) == 0 {
+			t.Fatal("expected the full tree to be uploaded")
 		}
 	})
 
@@ -730,14 +858,14 @@ func TestSyncArtifactSource(t *testing.T) {
 				Dir:     types.StringValue(dir),
 				DirHash: types.StringValue("new-hash"),
 			},
-			Spec: artifactSpecWithCodeRef(catalogID, versionID),
+			Spec: artifactSpecWithCodeRef(),
 		}
 		state := &ArtifactResourceModel{
 			Source: &ArtifactSourceModel{
 				Dir:     types.StringValue(dir),
 				DirHash: types.StringValue("old-hash"),
 			},
-			Spec: artifactSpecWithCodeRef(catalogID, versionID),
+			Spec: artifactSpecWithCodeRef(),
 		}
 
 		if _, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{}); err != nil {
@@ -1099,14 +1227,14 @@ func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-func artifactSpecWithCodeRef(catalogID, versionID string) *ArtifactSpecModel {
+func artifactSpecWithCodeRef() *ArtifactSpecModel {
 	return &ArtifactSpecModel{
 		ContainerGroups: []ArtifactContainerGroupModel{{
 			Containers: []ArtifactContainerModel{{
 				Primary: types.BoolValue(true),
 				ImageBuildConfig: imageBuildConfigWithCodeRef(&ArtifactCodeRefModel{
-					CatalogID:        types.StringValue(catalogID),
-					CatalogVersionID: types.StringValue(versionID),
+					CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+					CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
 				}),
 			}},
 		}},
@@ -1136,6 +1264,10 @@ func artifactWithCodeRef(artifactID, catalogID, versionID string) *client.Artifa
 }
 
 type syncTestFilesAPI struct {
+	// UploadToStage runs on UploadConcurrency goroutines, so everything it
+	// touches is guarded rather than only the slice it appends to.
+	mu sync.Mutex
+
 	catalogID string
 	version   int
 	uploadErr error
@@ -1143,6 +1275,14 @@ type syncTestFilesAPI struct {
 	createCatalogCalls    int
 	uploadFromZipNewCalls int
 	uploadToStagePaths    []string
+
+	// allFiles is the catalog version listing AllFiles serves, left nil by
+	// default so a test opts in to the incremental path by naming a base.
+	allFiles     map[string]filesapi.FileMeta
+	allFilesErr  error
+	deletePaths  []string
+	deleteCalls  int
+	listVersions []filesapi.CatalogVersion
 }
 
 func newSyncTestFilesAPI() *syncTestFilesAPI {
@@ -1172,6 +1312,8 @@ func (m *syncTestFilesAPI) CreateStage(context.Context, string) (*filesapi.Stage
 }
 
 func (m *syncTestFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int64, _ io.Reader) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.uploadErr != nil {
 		return m.uploadErr
 	}
@@ -1180,6 +1322,8 @@ func (m *syncTestFilesAPI) UploadToStage(_ context.Context, _, _, name string, _
 }
 
 func (m *syncTestFilesAPI) ApplyStage(context.Context, string, string, string) (*filesapi.ApplyStageResp, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.uploadErr != nil {
 		return nil, m.uploadErr
 	}
@@ -1221,19 +1365,31 @@ func (m *syncTestFilesAPI) PollStatus(context.Context, string) (*filesapi.Status
 }
 
 func (m *syncTestFilesAPI) AllFiles(context.Context, string, string) (map[string]filesapi.FileMeta, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.allFilesErr != nil {
+		return nil, m.allFilesErr
+	}
+	return m.allFiles, nil
 }
 
 func (m *syncTestFilesAPI) DownloadFile(context.Context, string, string, string, io.Writer) (string, int64, error) {
 	return "", 0, nil
 }
 
-func (m *syncTestFilesAPI) DeleteFiles(context.Context, string, []string) (*filesapi.DeleteFilesResp, error) {
-	return &filesapi.DeleteFilesResp{}, nil
+func (m *syncTestFilesAPI) DeleteFiles(_ context.Context, _ string, paths []string) (*filesapi.DeleteFilesResp, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deleteCalls++
+	m.deletePaths = append(m.deletePaths, paths...)
+	m.version++
+	return &filesapi.DeleteFilesResp{CatalogVersionID: syncTestVersionID(m.version)}, nil
 }
 
 func (m *syncTestFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.listVersions, nil
 }
 
 func syncTestVersionID(n int) string {
@@ -1940,4 +2096,11 @@ func TestArtifactSourceIgnoreDiagnosticsSkipsUnknownDir(t *testing.T) {
 			t.Fatalf("artifactSourceIgnoreDiagnostics() = %v, want none", diags)
 		}
 	}
+}
+
+// hashOfString is the digest the Files API reports for a stored file whose
+// contents are s, in the form hashFile produces locally.
+func hashOfString(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

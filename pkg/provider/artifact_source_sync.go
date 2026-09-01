@@ -32,40 +32,33 @@ func artifactSourceNeedsUpload(plan, state *ArtifactResourceModel, priorArtifact
 	return !plan.Source.DirHash.Equal(state.Source.DirHash)
 }
 
-func catalogIDFromModel(data *ArtifactResourceModel) string {
-	if data == nil || data.Spec == nil {
-		return ""
-	}
-	for _, group := range data.Spec.ContainerGroups {
-		for _, container := range group.Containers {
-			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
-			if ref == nil {
-				continue
-			}
-			if IsKnown(ref.CatalogID) {
-				return ref.CatalogID.ValueString()
-			}
+// artifactSourceBaseRef names the catalog and the version within it that the
+// last push wrote, which the next push reads back to diff against.
+//
+// The two are taken from one code_ref rather than searched for separately,
+// because the upload uses the catalog and the diff uses the version, and a pair
+// drawn from different containers describes a version that never belonged to
+// that catalog. The primary container is the one to read: it is where a
+// configured source lands, and PatchArtifactCodeRef writes back to it.
+//
+// The live artifact is the fallback for a state with no code_ref to offer,
+// which is where an imported resource starts, and where an apply that uploaded
+// but failed before recording the result leaves things. Both fields come from
+// whichever of the two answers, never one from each.
+func artifactSourceBaseRef(state *ArtifactResourceModel, artifact *client.Artifact) (string, string) {
+	if ref := primaryCodeRefFromState(state); ref != nil {
+		version := ""
+		if IsKnown(ref.CatalogVersionID) {
+			version = ref.CatalogVersionID.ValueString()
 		}
+		return ref.CatalogID.ValueString(), version
 	}
-	return ""
-}
 
-func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
-	if data == nil || data.Spec == nil {
-		return ""
+	if ref := client.ExtractCodeRef(artifact); ref != nil {
+		return ref.CatalogID, ref.CatalogVersionID
 	}
-	for _, group := range data.Spec.ContainerGroups {
-		for _, container := range group.Containers {
-			ref := imageBuildConfigCodeRef(container.ImageBuildConfig)
-			if ref == nil {
-				continue
-			}
-			if IsKnown(ref.CatalogVersionID) {
-				return ref.CatalogVersionID.ValueString()
-			}
-		}
-	}
-	return ""
+
+	return "", ""
 }
 
 // pushArtifactSource uploads absDir. seeded is the matcher to upload with when
@@ -73,17 +66,15 @@ func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
 // the source of truth as usual.
 func (r *ArtifactResource) pushArtifactSource(
 	ctx context.Context,
-	prior *ArtifactResourceModel,
 	existingCatalogID string,
+	existingCatalogVersionID string,
 	absDir string,
 	seeded *ignore.Matcher,
 ) (*artifactsource.Result, error) {
 	opts := artifactsource.Options{
-		Dir:       absDir,
-		CatalogID: existingCatalogID,
-	}
-	if prior != nil {
-		opts.CatalogVersionID = catalogVersionIDFromModel(prior)
+		Dir:              absDir,
+		CatalogID:        existingCatalogID,
+		CatalogVersionID: existingCatalogVersionID,
 	}
 
 	matcher := seeded
@@ -132,8 +123,13 @@ func artifactSourceAbsDir(data *ArtifactResourceModel) (string, error) {
 // true, so failing here would break applies that worked before the attribute
 // existed: a source.dir mounted read-only in CI, a 0555 tree, or a directory
 // sitting at the .drignore name. The upload falls back to the template's own
-// patterns, which is the set plan hashed, so the failure costs the user the
-// file on disk and nothing else. In particular it does not widen the upload.
+// patterns, which is the set plan hashed, so it does not widen the upload.
+//
+// It is not quite free, though. The ignore file is itself uploaded, so once a
+// push has stored one, a later push that cannot write it locally sees a path
+// present in the catalog and absent from the tree, and removes it there too.
+// The tree is the same either way; what the user loses is the copy in the
+// catalog, until an apply manages to write the file again.
 func seedArtifactSourceIgnoreFile(absDir string, generateIgnore bool, diags *diag.Diagnostics) *ignore.Matcher {
 	if !generateIgnore {
 		return nil
@@ -159,6 +155,43 @@ func seedArtifactSourceIgnoreFile(absDir string, generateIgnore bool, diags *dia
 	)
 
 	return ignore.FromDefaultTemplate()
+}
+
+// artifactSourceBaseDiagnostics warns when the upload could not read the
+// catalog version it was going to diff against and fell back to sending the
+// whole tree.
+//
+// This is a warning rather than an error because the upload itself succeeded:
+// every file in source.dir reached the catalog, and the image built from it is
+// the one the configuration asks for. What is missing is the other half of the
+// diff, the deletes, so a file removed from source.dir is still in the catalog
+// and still lands in the image.
+//
+// It is worth saying out loud rather than leaving to the next apply, because
+// the next apply will not retry on its own. A successful apply records the
+// current tree in source.dir_hash, so the plan after this one sees no change
+// and skips the upload entirely, and the stale file stays until something else
+// edits the directory. The way out is to re-run the apply after touching a
+// file, which is what the warning asks for.
+func artifactSourceBaseDiagnostics(result *artifactsource.Result, diags *diag.Diagnostics) {
+	if result == nil || result.BaseUnavailable == nil {
+		return
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		"Uploaded the full directory without removing deleted files",
+		fmt.Sprintf(
+			"%s\n\n"+
+				"Every file in the directory was uploaded, so the build has the code this "+
+				"configuration declares. What could not run is the comparison that removes "+
+				"files, so anything deleted from the directory since the last apply is still "+
+				"in the catalog and still reaches the image.\n\n"+
+				"This does not retry by itself: a successful apply records the directory as "+
+				"synced, so the next plan sees no change. To clear the leftovers, edit a file "+
+				"under the directory and apply again.",
+			result.BaseUnavailable),
+	)
 }
 
 func (r *ArtifactResource) syncArtifactSource(
@@ -187,17 +220,13 @@ func (r *ArtifactResource) syncArtifactSource(
 		return artifact, false, nil
 	}
 
-	catalogID := catalogIDFromModel(state)
-	if catalogID == "" {
-		if ref := client.ExtractCodeRef(artifact); ref != nil {
-			catalogID = ref.CatalogID
-		}
-	}
+	catalogID, catalogVersionID := artifactSourceBaseRef(state, artifact)
 
-	pushResult, err := r.pushArtifactSource(ctx, state, catalogID, absDir, seeded)
+	pushResult, err := r.pushArtifactSource(ctx, catalogID, catalogVersionID, absDir, seeded)
 	if err != nil {
 		return nil, false, fmt.Errorf("upload artifact source: %w", err)
 	}
+	artifactSourceBaseDiagnostics(pushResult, diags)
 
 	traceAPICall("PatchArtifactCodeRef")
 	artifact, err = r.provider.service.PatchArtifactCodeRef(

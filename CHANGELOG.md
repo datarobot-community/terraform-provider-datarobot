@@ -2,6 +2,12 @@
 
 ### Fixed
 
+- `datarobot_artifact` now removes files from the catalog when they are deleted from `source.dir`. Uploading is additive, so a new catalog version carries the previous version's files alongside the ones just sent; without a comparison against what was there before, a deleted file stayed in the catalog and kept reaching the image build. Each upload now reads back the catalog version recorded in state and diffs against it, so only added and modified files are sent instead of the whole tree, and paths that version holds which `source.dir` no longer has are deleted.
+
+  Only paths the provider would itself upload can be deleted: anything `.drignore` or a system exclude covers is left in the catalog untouched, so adding an ignore rule stops a path being uploaded without also removing the copy already there. The comparison covers the recorded version alone, so a file added to the catalog after it was recorded is left in place rather than read as a deletion; the corollary is that a file another tool changed in place is not restored, because the local copy still matches the version the diff is against. On an artifact adopted with `terraform import` the recorded version is whatever created it, so the first apply deletes everything in it that `source.dir` does not have.
+
+  If the recorded version cannot be read, the apply uploads the full tree and warns that deletions were not applied. The upload still succeeds, and the next apply that changes the tree reconciles the leftovers, since they are still in the version it reads back.
+
 - `datarobot_artifact` `source.dir_hash` is no longer recomputed from the local tree during Read/refresh. Refresh runs before plan, so overwriting the last-applied hash with the current disk contents made `terraform plan` report no changes after editing source files. The hash is still computed at plan time and stored after a successful apply.
 - `datarobot_workload` replacement wait no longer fails when `GET /workloads/{id}/replacement` returns 404. The Workload API detaches a finished replacement from the workload, so that 404 means the replacement completed. Apply now treats it as success.
 

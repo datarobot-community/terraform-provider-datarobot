@@ -171,7 +171,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional: true,
 				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
 					"When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
-					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version.",
+					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. " +
+					"Each upload is compared against the catalog version recorded in state, so only added and modified files are sent, and paths that version holds which `dir` no longer has are removed from the catalog. " +
+					"Only paths this resource would upload can be removed: whatever `.drignore` or a system exclude covers stays in the catalog untouched. " +
+					"The comparison covers that one version, so a file added to the catalog after it was recorded is left in place rather than read as a deletion. " +
+					"On an artifact adopted with `terraform import` the recorded version is whatever created it, so the first apply removes everything in it that `dir` does not have.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
