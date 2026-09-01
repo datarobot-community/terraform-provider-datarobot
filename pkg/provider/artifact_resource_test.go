@@ -5034,6 +5034,14 @@ func TestValidateArtifactA2AEnabled(t *testing.T) {
 			wantSummary: "Unsupported a2a_enabled",
 		},
 		{
+			name: "mcp with a2a_enabled",
+			data: ArtifactResourceModel{
+				Type: types.StringValue(string(client.ArtifactTypeMCP)),
+				Spec: specEnabled,
+			},
+			wantSummary: "Unsupported a2a_enabled",
+		},
+		{
 			name: "service without a2a_enabled",
 			data: ArtifactResourceModel{
 				Type: types.StringValue(string(client.ArtifactTypeService)),
