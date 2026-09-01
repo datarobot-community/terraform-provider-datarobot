@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 const artifactBuildLogsSeparator = "----------------------------------------"
@@ -20,8 +21,28 @@ const defaultArtifactBuildLogsTailLines = 30
 // way.
 var artifactBuildLogWriter io.Writer = os.Stderr
 
-func emitArtifactBuildLogLine(line string) {
-	emitArtifactApplyProgress(line)
+// artifactBuildLogLinePrefix labels a build log line with the build it came from.
+// Terraform runs resources in parallel, so two artifact builds in one apply stream
+// through this same writer; without the label their lines are indistinguishable even
+// though each stream is already filtered to its own build_id.
+func artifactBuildLogLinePrefix(buildID string) string {
+	if buildID == "" {
+		return ""
+	}
+	return "[build " + buildID + "] "
+}
+
+// emitArtifactBuildLogLine writes one build log record, labelled with its build. A
+// record may span several lines (an OTEL entry carrying a stack trace), so the label
+// is repeated on continuation lines and the whole record goes out in a single write -
+// concurrent builds share the writer, and one write per record keeps another build
+// from slipping a line into the middle of this one.
+func emitArtifactBuildLogLine(buildID, line string) {
+	if line == "" {
+		return
+	}
+	prefix := artifactBuildLogLinePrefix(buildID)
+	emitArtifactApplyProgress(prefix + strings.ReplaceAll(line, "\n", "\n"+prefix))
 }
 
 func emitArtifactApplyProgress(line string) {
