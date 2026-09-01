@@ -18,6 +18,7 @@
 - `examples/resources/datarobot_workload` example: end-to-end code-to-workload flow (`datarobot_artifact` with `source` + build wait → `datarobot_workload`).
 - `routes` attribute on `datarobot_artifact` container specs (primary containers only, at most 50): a list of `{ path, auth }` objects exposing additional paths from the workload's public endpoint with per-route authentication (`required`, `optional`, or `disabled`). Paths must start with `/`, be at most 1024 characters, and be unique within a container; all of this is checked at plan time. Route configuration is a cluster-level capability that is disabled by default — on a cluster without it, an artifact declaring `routes` fails with `Route configuration is disabled on this cluster`.
 - `datarobot_execution_environment` now surfaces the execution environment version's build logs (via the OTel logs API, falling back to the legacy per-version build log file when OTel has nothing recorded yet, tailed to the last 30 lines by default and overridable via `DATAROBOT_EXECUTION_ENVIRONMENT_BUILD_LOG_TAIL_LINES`) and a link to the build logs in the DataRobot UI in the error message when a version fails to build.
+- `datarobot_artifact` `type = "mcp"` for Workload API MCP server artifacts (same spec shape as `service`; scheduled and built like `service`). The computed `type` on `datarobot_workload` mirrors it, so a workload deploying an MCP artifact reports `type = "mcp"`.
 
 ### Changed
 
