@@ -11,6 +11,7 @@ const (
 	DataRobotApiKeyEnvVar       string = "DATAROBOT_API_TOKEN"
 	DataRobotEndpointEnvVar     string = "DATAROBOT_ENDPOINT"
 	DataRobotTraceContextEnvVar string = "DATAROBOT_TRACE_CONTEXT"
+	DataRobotDebugEnvVar        string = "DATAROBOT_DEBUG"
 	TimeoutMinutesEnvVar        string = "DATAROBOT_TIMEOUT_MINUTES"
 	UserAgent                   string = "DataRobotTerraformClient"
 
@@ -1009,10 +1010,12 @@ type ArtifactResourceModel struct {
 	Spec                 *ArtifactSpecModel   `tfsdk:"spec"`
 }
 
-// ArtifactSourceModel describes the local source tree uploaded to Files API.
+// ArtifactSourceModel describes a local source tree uploaded to Files API.
 type ArtifactSourceModel struct {
-	Dir     types.String `tfsdk:"dir"`
-	DirHash types.String `tfsdk:"dir_hash"`
+	Dir            types.String `tfsdk:"dir"`
+	DirHash        types.String `tfsdk:"dir_hash"`
+	GenerateIgnore types.Bool   `tfsdk:"generate_ignore"`
+	WaitForBuild   types.Bool   `tfsdk:"wait_for_build"`
 }
 
 type ArtifactSpecModel struct {
@@ -1031,15 +1034,17 @@ type ArtifactContainerModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	Routes           []ArtifactContainerRouteModel      `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`
 	LivenessProbe    *ArtifactProbeConfigModel          `tfsdk:"liveness_probe"`
 	ImageBuildConfig *ArtifactImageBuildConfigModel     `tfsdk:"image_build_config"`
+	Build            types.Object                       `tfsdk:"build"`
 }
 
 type ArtifactImageBuildConfigModel struct {
-	CodeRef    *ArtifactCodeRefModel    `tfsdk:"code_ref"`
+	CodeRef    types.Object             `tfsdk:"code_ref"`
 	Dockerfile *ArtifactDockerfileModel `tfsdk:"dockerfile"`
 }
 
@@ -1062,6 +1067,11 @@ type ArtifactEnvironmentVariableModel struct {
 	Value          types.String `tfsdk:"value"`
 	DrCredentialID types.String `tfsdk:"dr_credential_id"`
 	Key            types.String `tfsdk:"key"`
+}
+
+type ArtifactContainerRouteModel struct {
+	Path types.String `tfsdk:"path"`
+	Auth types.String `tfsdk:"auth"`
 }
 
 type ArtifactProbeConfigModel struct {
@@ -1133,6 +1143,7 @@ type ArtifactContainerDSModel struct {
 	Description      types.String                       `tfsdk:"description"`
 	Port             types.Int64                        `tfsdk:"port"`
 	Entrypoint       []types.String                     `tfsdk:"entrypoint"`
+	Routes           []ArtifactContainerRouteModel      `tfsdk:"routes"`
 	EnvironmentVars  []ArtifactEnvironmentVariableModel `tfsdk:"environment_vars"`
 	StartupProbe     *ArtifactProbeConfigModel          `tfsdk:"startup_probe"`
 	ReadinessProbe   *ArtifactProbeConfigModel          `tfsdk:"readiness_probe"`

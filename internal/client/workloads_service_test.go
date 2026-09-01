@@ -307,6 +307,30 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 	}
 }
 
+func TestWaitForWorkloadReplacementPropagatesNonNotFoundErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "backend unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-404 poll failure")
+	}
+	if errors.Is(err, &NotFoundError{}) {
+		t.Fatalf("did not expect NotFoundError, got %v", err)
+	}
+}
+
 func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
 	// A replacement that never settles (stuck non-terminal) must time out.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

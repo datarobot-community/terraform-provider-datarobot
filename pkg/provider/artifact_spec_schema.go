@@ -1,16 +1,50 @@
 package provider
 
 import (
+	"context"
+
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// artifactImageURIUseStateForUnknown carries the prior image_uri forward across plans only
+// when `source` is configured. Without `source`, image_uri behaves like a plain Optional
+// attribute: dropping it from config plans it null (clearing it), instead of Computed
+// silently keeping the last known value in state forever.
+type artifactImageURIUseStateForUnknown struct{}
+
+func (m artifactImageURIUseStateForUnknown) Description(ctx context.Context) string {
+	return "Carries the prior image_uri forward across plans only when `source` is configured."
+}
+
+func (m artifactImageURIUseStateForUnknown) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m artifactImageURIUseStateForUnknown) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	var source types.Object
+	diags := req.Config.GetAttribute(ctx, path.Root("source"), &source)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if source.IsNull() {
+		resp.PlanValue = req.ConfigValue
+		return
+	}
+
+	stringplanmodifier.UseStateForUnknown().PlanModifyString(ctx, req, resp)
+}
 
 func artifactResourceProbeAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
@@ -132,11 +166,11 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			Default:             stringdefault.StaticString(client.EnvironmentVariableSourceString),
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".`,
 		},
 		"name": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.`,
+			MarkdownDescription: `Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).`,
 		},
 		"value": schema.StringAttribute{
 			Optional:            true,
@@ -153,11 +187,39 @@ func artifactResourceEnvironmentVarAttributes() map[string]schema.Attribute {
 	}
 }
 
+func artifactResourceRouteAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"path": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: "Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.",
+			Validators:          RoutePathValidators(),
+		},
+		"auth": schema.StringAttribute{
+			Required:            true,
+			MarkdownDescription: `Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.`,
+			Validators:          RouteAuthValidators(),
+		},
+	}
+}
+
+func artifactDataSourceRouteAttributes() map[string]datasourceschema.Attribute {
+	return map[string]datasourceschema.Attribute{
+		"path": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Route path relative to the workload root.",
+		},
+		"auth": datasourceschema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Authentication applied to this route.",
+		},
+	}
+}
+
 func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.Attribute {
 	return map[string]datasourceschema.Attribute{
 		"source": datasourceschema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token.`,
+			MarkdownDescription: `Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token.`,
 		},
 		"name": datasourceschema.StringAttribute{
 			Computed:            true,
@@ -178,6 +240,23 @@ func artifactDataSourceEnvironmentVarAttributes() map[string]datasourceschema.At
 	}
 }
 
+func artifactResourceBuildAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"artifact_image_build_id": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Artifact image build ID.",
+		},
+		"status": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
+		},
+		"created_at": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Build creation timestamp (UTC).",
+		},
+	}
+}
+
 func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttributes map[string]schema.Attribute) map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"name": schema.StringAttribute{
@@ -190,9 +269,10 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 		},
 		"image_uri": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: "Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.",
+			Computed:            true,
+			MarkdownDescription: "Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.",
 			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
+				artifactImageURIUseStateForUnknown{},
 			},
 		},
 		"image_build_config": schema.SingleNestedAttribute{
@@ -225,6 +305,17 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
 		},
+		"routes": schema.ListNestedAttribute{
+			Optional: true,
+			MarkdownDescription: "Routes to expose publicly from this container. Primary containers only, at most 50. " +
+				"The workload root (`/`) is authenticated by default unless declared here with another policy. " +
+				"Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster " +
+				"where it is not enabled fails with `Route configuration is disabled on this cluster`.",
+			Validators: RoutesListValidators(),
+			NestedObject: schema.NestedAttributeObject{
+				Attributes: artifactResourceRouteAttributes(),
+			},
+		},
 		"environment_vars": schema.ListNestedAttribute{
 			Optional:            true,
 			MarkdownDescription: "Environment variables for the container.",
@@ -246,6 +337,14 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			Optional:            true,
 			MarkdownDescription: "Container liveness check configuration.",
 			Attributes:          probeAttributes,
+		},
+		"build": schema.SingleNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Server-set image build metadata.",
+			Attributes:          artifactResourceBuildAttributes(),
+			PlanModifiers: []planmodifier.Object{
+				objectplanmodifier.UseStateForUnknown(),
+			},
 		},
 	}
 }
@@ -276,6 +375,13 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 			Computed:            true,
 			ElementType:         types.StringType,
 			MarkdownDescription: "Container entrypoint.",
+		},
+		"routes": datasourceschema.ListNestedAttribute{
+			Computed:            true,
+			MarkdownDescription: "Routes exposed publicly from this container.",
+			NestedObject: datasourceschema.NestedAttributeObject{
+				Attributes: artifactDataSourceRouteAttributes(),
+			},
 		},
 		"environment_vars": datasourceschema.ListNestedAttribute{
 			Computed:            true,
@@ -370,7 +476,7 @@ func artifactDataSourceContainerAttributes(probeAttributes map[string]datasource
 				},
 				"status": datasourceschema.StringAttribute{
 					Computed:            true,
-					MarkdownDescription: "Image build status at submit time.",
+					MarkdownDescription: "Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.",
 				},
 				"created_at": datasourceschema.StringAttribute{
 					Computed:            true,

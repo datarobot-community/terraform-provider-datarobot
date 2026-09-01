@@ -31,18 +31,41 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
+        # Extra paths to expose from the workload's public endpoint, each with
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
+        routes = [{
+          path = "/index.html"
+          auth = "required"
+        }]
       }]
     }]
   }
 }
 
+# Create as draft so this example is copy-pasteable. After the image build
+# populates image_uri, set status = "locked". Applying locked without image_uri
+# is rejected by workload-api (422).
+#
+# wait_for_build = true (the default; set explicitly here) makes apply block
+# until the image build finishes and streams build log lines to the
+# provider's stderr while it waits. Terraform only shows provider stderr
+# when TF_LOG is set (TF_LOG=DEBUG or more verbose - it's also emitted via
+# tflog.Debug); on a plain `terraform apply` with TF_LOG unset, apply still
+# blocks until the build finishes, it just prints nothing in between.
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
   source = {
-    dir = "${path.module}/app"
+    dir            = "${path.module}/app"
+    wait_for_build = true
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -77,11 +100,13 @@ output "from_source_artifact_id" {
 
 resource "datarobot_artifact" "from_source_locked" {
   name        = "example-c2w-locked"
-  description = "Locked artifact with local source upload (clone → upload → lock)"
-  status      = "locked"
+  description = "Locked artifact with local source upload (create as draft → upload → build → lock)"
+  # The provider creates a draft, uploads source, triggers a build (waits by default), then locks.
+  status = "locked"
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -163,7 +188,7 @@ output "mcp_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
-- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version. (see [below for nested schema](#nestedatt--source))
+- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. (see [below for nested schema](#nestedatt--source))
 - `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service`, `nim`, `agent`, or `mcp`. Defaults to `service`.
 
@@ -199,13 +224,18 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Omit when using `image_build_config` on draft artifacts; required when status is `locked` and `image_build_config` is set.
+- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
 - `primary` (Boolean) Whether this is the primary container.
 - `readiness_probe` (Attributes) Container readiness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--readiness_probe))
+- `routes` (Attributes List) Routes to expose publicly from this container. Primary containers only, at most 50. The workload root (`/`) is authenticated by default unless declared here with another policy. Route configuration is a cluster-level capability that is disabled by default: setting this on a cluster where it is not enabled fails with `Route configuration is disabled on this cluster`. (see [below for nested schema](#nestedatt--spec--container_groups--containers--routes))
 - `startup_probe` (Attributes) Container startup check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--startup_probe))
+
+Read-Only:
+
+- `build` (Attributes) Server-set image build metadata. (see [below for nested schema](#nestedatt--spec--container_groups--containers--build))
 
 <a id="nestedatt--spec--container_groups--containers--environment_vars"></a>
 ### Nested Schema for `spec.container_groups.containers.environment_vars`
@@ -214,8 +244,8 @@ Optional:
 
 - `dr_credential_id` (String) DataRobot credential ID. Required when source is "dr-credential".
 - `key` (String) Key within the credential. Required when source is "dr-credential".
-- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key": when omitted, the platform injects the token as DATAROBOT_API_TOKEN.
-- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, "api-key" for a platform-managed DataRobot API token. Defaults to "string".
+- `name` (String) Name of the environment variable. Required when source is "string" or "dr-credential". Optional for "api-key" (defaults to DATAROBOT_API_TOKEN).
+- `source` (String) Source type: "string" for plain text values, "dr-credential" for DataRobot credentials, or "api-key" for a platform-managed per-workload DataRobot API token. Defaults to "string".
 - `value` (String) Value of the environment variable. Required when source is "string".
 
 
@@ -244,7 +274,7 @@ Optional:
 - `entrypoint` (List of String) Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.
 - `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`.
 - `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`.
-- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`.
+- `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.
 - `source` (String) How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.
 
 
@@ -287,6 +317,15 @@ Optional:
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
+<a id="nestedatt--spec--container_groups--containers--routes"></a>
+### Nested Schema for `spec.container_groups.containers.routes`
+
+Required:
+
+- `auth` (String) Authentication applied to this route: "required" rejects unauthenticated requests, "optional" authenticates when an Authorization header is present, "disabled" never attempts authentication.
+- `path` (String) Route path relative to the workload root, excluding the URL prefix the workload is mounted on. Must start with `/` and be at most 1024 characters. Paths must be unique within a container.
+
+
 <a id="nestedatt--spec--container_groups--containers--startup_probe"></a>
 ### Nested Schema for `spec.container_groups.containers.startup_probe`
 
@@ -306,6 +345,16 @@ Optional:
 - `timeout_seconds` (Number) Number of seconds after which the probe times out.
 
 
+<a id="nestedatt--spec--container_groups--containers--build"></a>
+### Nested Schema for `spec.container_groups.containers.build`
+
+Read-Only:
+
+- `artifact_image_build_id` (String) Artifact image build ID.
+- `created_at` (String) Build creation timestamp (UTC).
+- `status` (String) Image build status. With `source.wait_for_build` enabled (the default) this is the terminal status of the build the provider waited on; otherwise it is the status at submit time.
+
+
 
 
 
@@ -316,6 +365,11 @@ Required:
 
 - `dir` (String) Path to the local directory containing application source files to upload.
 
+Optional:
+
+- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.
+- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
+
 Read-Only:
 
-- `dir_hash` (String) SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.
+- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip re-upload when unchanged. Files covered by a system exclude are never part of this hash.

@@ -16,18 +16,41 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
+        # Extra paths to expose from the workload's public endpoint, each with
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
+        routes = [{
+          path = "/index.html"
+          auth = "required"
+        }]
       }]
     }]
   }
 }
 
+# Create as draft so this example is copy-pasteable. After the image build
+# populates image_uri, set status = "locked". Applying locked without image_uri
+# is rejected by workload-api (422).
+#
+# wait_for_build = true (the default; set explicitly here) makes apply block
+# until the image build finishes and streams build log lines to the
+# provider's stderr while it waits. Terraform only shows provider stderr
+# when TF_LOG is set (TF_LOG=DEBUG or more verbose - it's also emitted via
+# tflog.Debug); on a plain `terraform apply` with TF_LOG unset, apply still
+# blocks until the build finishes, it just prints nothing in between.
 resource "datarobot_artifact" "from_source" {
   name        = "example-c2w-draft"
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
   source = {
-    dir = "${path.module}/app"
+    dir            = "${path.module}/app"
+    wait_for_build = true
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -62,11 +85,13 @@ output "from_source_artifact_id" {
 
 resource "datarobot_artifact" "from_source_locked" {
   name        = "example-c2w-locked"
-  description = "Locked artifact with local source upload (clone → upload → lock)"
-  status      = "locked"
+  description = "Locked artifact with local source upload (create as draft → upload → build → lock)"
+  # The provider creates a draft, uploads source, triggers a build (waits by default), then locks.
+  status = "locked"
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {

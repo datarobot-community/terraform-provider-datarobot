@@ -753,3 +753,29 @@ type fakeFeatureFlagService struct {
 func (s *fakeFeatureFlagService) IsFeatureFlagEnabled(_ context.Context, flagName string) (bool, error) {
 	return s.evaluate(flagName)
 }
+
+// TestDebugEnabled verifies that verbose HTTP debug output is opt-in: unset and the
+// usual falsey spellings stay off, so a plain TF_LOG=DEBUG apply does not dump payloads.
+func TestDebugEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{
+		{"", false},
+		{"0", false},
+		{"false", false},
+		{"FALSE", false},
+		{"off", false},
+		{"no", false},
+		{"  ", false},
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{"yes", true},
+		{" 1 ", true},
+	} {
+		if got := debugEnabled(tc.value); got != tc.want {
+			t.Errorf("debugEnabled(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
