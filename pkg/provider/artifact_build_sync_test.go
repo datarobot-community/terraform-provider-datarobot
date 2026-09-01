@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
-	opts := artifactBuildWaitOptions(&client.WaitForArtifactBuildOptions{
+	opts := artifactBuildWaitOptions("build-1", &client.WaitForArtifactBuildOptions{
 		PollInterval: time.Millisecond,
 	})
 	if opts.OnOtelLogLine == nil {
@@ -25,6 +26,24 @@ func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
 	}
 	if opts.PollInterval != time.Millisecond {
 		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
+	}
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	opts.OnOtelLogLine(client.OtelLogEntry{
+		Timestamp: "2026-08-31 12:50:58.262213+00:00",
+		Level:     "info",
+		Message:   "#7 extracting sha256:abc 0.0s done",
+	})
+
+	want := "[build build-1] [2026-08-31 12:50:58.262213+00:00] INFO: #7 extracting sha256:abc 0.0s done\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnOtelLogLine wrote %q, want %q", got, want)
 	}
 }
 
