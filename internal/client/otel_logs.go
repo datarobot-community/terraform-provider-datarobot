@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 )
@@ -16,7 +17,18 @@ const (
 )
 
 type getOtelLogsRequest struct {
-	Limit int `url:"limit,omitempty"`
+	Limit        int      `url:"limit,omitempty"`
+	SearchKeys   []string `url:"searchKeys,omitempty"`
+	SearchValues []string `url:"searchValues,omitempty"`
+}
+
+func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
+	req := &getOtelLogsRequest{Limit: limit}
+	if buildID != "" {
+		req.SearchKeys = []string{"build_id"}
+		req.SearchValues = []string{buildID}
+	}
+	return req
 }
 
 func otelLogKey(entry OtelLogEntry) string {
@@ -32,9 +44,13 @@ func FormatOtelLogEntry(entry OtelLogEntry) string {
 	return line
 }
 
-func (s *ServiceImpl) getOtelEntityLogEntries(ctx context.Context, entityType, entityID string, limit int) ([]OtelLogEntry, error) {
-	queryReq := &getOtelLogsRequest{Limit: limit}
-	pathValues, _ := query.Values(queryReq)
+func (s *ServiceImpl) getOtelEntityLogEntries(
+	ctx context.Context,
+	entityType, entityID string,
+	limit int,
+	buildID string,
+) ([]OtelLogEntry, error) {
+	pathValues, _ := query.Values(otelLogsRequest(limit, buildID))
 
 	resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, "/otel/"+entityType+"/"+entityID+"/logs/?"+pathValues.Encode())
 	if err != nil {
@@ -69,24 +85,36 @@ func (st *otelLogStreamState) emitNew(entries []OtelLogEntry, onLine func(OtelLo
 	}
 }
 
-// pollNewOtelEntityLogs walks pages (server returns newest first) until it
+// pollNewArtifactOtelLogs walks pages (server returns newest first) until it
 // reaches an entry already emitted by a prior poll, or runs out of pages. A
 // single fixed-size page only covers the newest defaultOtelLogStreamPageSize
 // records; without following Next, a burst of more new records than that
 // between two polls would silently drop everything past the first page
 // instead of just being reported late.
-func (s *ServiceImpl) pollNewOtelEntityLogs(
+//
+// Artifact builds are the only stream the provider follows live, so this takes an
+// artifact id rather than the entity type/id pair getOtelEntityLogEntries needs for
+// its deployment callers.
+func (s *ServiceImpl) pollNewArtifactOtelLogs(
 	ctx context.Context,
-	entityType, entityID string,
+	artifactID, buildID string,
 	state *otelLogStreamState,
 	onLine func(OtelLogEntry),
 ) {
-	basePath := "/otel/" + entityType + "/" + entityID + "/logs/"
-	pathValues, _ := query.Values(&getOtelLogsRequest{Limit: defaultOtelLogStreamPageSize})
+	basePath := "/otel/artifact/" + artifactID + "/logs/"
+	pathValues, _ := query.Values(otelLogsRequest(defaultOtelLogStreamPageSize, buildID))
 	requestPath := basePath + "?" + pathValues.Encode()
 
 	var fresh []OtelLogEntry
-	for page := 0; page < maxOtelLogStreamPages && requestPath != ""; page++ {
+	// True when the walk stopped on maxOtelLogStreamPages with pages still unread, so
+	// records older than everything in `fresh` were never fetched and never will be.
+	hitPageCap := false
+	for page := 0; requestPath != ""; page++ {
+		if page >= maxOtelLogStreamPages {
+			hitPageCap = true
+			break
+		}
+
 		resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, requestPath)
 		if err != nil {
 			break
@@ -106,12 +134,38 @@ func (s *ServiceImpl) pollNewOtelEntityLogs(
 		requestPath = otelLogsNextPath(basePath, resp.Next)
 	}
 
+	if hitPageCap {
+		// Appended to the newest-first slice, so emitNew prints it before the records it
+		// precedes - where the missing ones would have been.
+		fresh = append(fresh, otelLogStreamGapEntry())
+	}
+
 	state.emitNew(fresh, onLine)
+}
+
+// otelLogStreamGapEntry is a provider-generated notice rather than a server record: it
+// marks where a single poll fell further behind than maxOtelLogStreamPages of catch-up
+// can cover. The cap keeps a runaway build from looping forever, but without this line
+// the truncation is invisible and the stream reads as complete.
+func otelLogStreamGapEntry() OtelLogEntry {
+	return OtelLogEntry{
+		Level: "warn",
+		// Same shape the server uses, so it sorts and renders with the real records.
+		Timestamp: time.Now().UTC().Format("2006-01-02 15:04:05.000000") + "+00:00",
+		Message: fmt.Sprintf(
+			"terraform-provider-datarobot: log stream fell behind by more than %d records "+
+				"(%d pages x %d); older records from this interval were skipped",
+			maxOtelLogStreamPages*defaultOtelLogStreamPageSize,
+			maxOtelLogStreamPages,
+			defaultOtelLogStreamPageSize,
+		),
+	}
 }
 
 // otelLogsNextPath turns a PaginatedResponse.Next value (an absolute URL) into
 // a request path relative to the configured API endpoint, the same way
-// GetAllPages handles the same field.
+// GetAllPages handles the same field. The server echoes the searchKeys /
+// searchValues filter back in Next, so following it keeps the build_id scope.
 func otelLogsNextPath(basePath, next string) string {
 	if idx := strings.Index(next, "?"); idx != -1 {
 		return basePath + next[idx:]

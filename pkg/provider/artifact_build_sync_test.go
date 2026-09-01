@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -14,14 +15,66 @@ import (
 )
 
 func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
-	opts := artifactBuildWaitOptions(&client.WaitForArtifactBuildOptions{
+	opts := artifactBuildWaitOptions("build-1", &client.WaitForArtifactBuildOptions{
 		PollInterval: time.Millisecond,
 	})
 	if opts.OnOtelLogLine == nil {
 		t.Fatal("expected OTEL log callback to be configured")
 	}
+	if opts.OnPoll == nil {
+		t.Fatal("expected OnPoll callback to be configured")
+	}
 	if opts.PollInterval != time.Millisecond {
 		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
+	}
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	opts.OnOtelLogLine(client.OtelLogEntry{
+		Timestamp: "2026-08-31 12:50:58.262213+00:00",
+		Level:     "info",
+		Message:   "#7 extracting sha256:abc 0.0s done",
+	})
+
+	want := "[build build-1] [2026-08-31 12:50:58.262213+00:00] INFO: #7 extracting sha256:abc 0.0s done\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnOtelLogLine wrote %q, want %q", got, want)
+	}
+}
+
+// WaitForArtifactBuild calls OnPoll every tick; only status transitions should print.
+func TestArtifactBuildWaitOptionsOnPollEmitsOnStatusChangeOnly(t *testing.T) {
+	opts := artifactBuildWaitOptions("build-1", nil)
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	for _, status := range []string{
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusBuilt,
+	} {
+		opts.OnPoll(&client.ArtifactBuild{ID: "build-1", ArtifactID: "art-1", Status: status})
+	}
+	opts.OnPoll(nil)
+
+	want := "Build build-1 for artifact art-1: PENDING\n" +
+		"Build build-1 for artifact art-1: IN_PROGRESS\n" +
+		"Build build-1 for artifact art-1: BUILT\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnPoll wrote\n%q\nwant\n%q", got, want)
 	}
 }
 
@@ -317,8 +370,13 @@ func TestSyncArtifactBuild(t *testing.T) {
 		if !strings.Contains(err.Error(), "docker build failed") {
 			t.Fatalf("expected enriched logs in error, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/"+artifactID+"/build-log") {
-			t.Fatalf("expected build-log UI URL in error, got: %v", err)
+		// The browsable UI page, not the token-gated OTEL API URL the excerpt came from.
+		wantURL := "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/" + artifactID + "/build-log"
+		if !strings.Contains(err.Error(), "See full logs at: "+wantURL) {
+			t.Fatalf("expected UI build-log link in error, got: %v", err)
+		}
+		if strings.Contains(err.Error(), "/api/v2/otel/") {
+			t.Fatalf("error must not link the token-gated OTEL API, got: %v", err)
 		}
 	})
 

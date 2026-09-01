@@ -53,6 +53,7 @@ type WaitForArtifactBuildOptions struct {
 	PollInterval  time.Duration
 	Timeout       time.Duration
 	OnOtelLogLine func(OtelLogEntry)
+	OnPoll        func(*ArtifactBuild)
 }
 
 type ArtifactBuildFailedError struct {
@@ -196,7 +197,7 @@ func formatArtifactBuildLogEntry(entry ArtifactBuildLogEntry) string {
 func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
 	body, err := getRaw(s.client, ctx, "/artifacts/"+artifactID+"/builds/"+buildID+"/logs")
 	if err != nil {
-		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines())
+		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines(), buildID)
 		if otelErr == nil && otelLogs != "" {
 			return otelLogs, nil
 		}
@@ -208,7 +209,7 @@ func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buil
 		return logs, nil
 	}
 
-	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines())
+	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines(), buildID)
 	if otelErr == nil && otelLogs != "" {
 		return otelLogs, nil
 	}
@@ -242,7 +243,7 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		if logState == nil {
 			return
 		}
-		s.pollNewOtelEntityLogs(ctx, "artifact", artifactID, logState, opts.OnOtelLogLine)
+		s.pollNewArtifactOtelLogs(ctx, artifactID, buildID, logState, opts.OnOtelLogLine)
 	}
 
 	for {
@@ -263,6 +264,10 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 				return build, &ArtifactBuildFailedError{BuildID: buildID, Status: build.Status}
 			}
 			return build, nil
+		}
+
+		if opts != nil && opts.OnPoll != nil {
+			opts.OnPoll(build)
 		}
 
 		if time.Now().After(deadline) {

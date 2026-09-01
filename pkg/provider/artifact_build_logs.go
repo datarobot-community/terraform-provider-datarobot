@@ -5,24 +5,68 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 const artifactBuildLogsSeparator = "----------------------------------------"
 
-// artifactBuildLogWriter receives live artifact build log lines during apply.
-// Written to the provider's stderr. Terraform runs the provider as a go-plugin
-// child process and routes that stderr through its own logging pipeline, so
-// these lines surface only when TF_LOG is set (e.g. TF_LOG=DEBUG) - not on a
-// plain `terraform apply`, regardless of writing here vs. through tflog. The
-// build-failure error message includes a tailed log excerpt and a UI link
-// unconditionally, so a failure is diagnosable either way.
+// artifactBuildLogWriter receives live artifact apply progress and build log
+// lines during apply. Written to the provider's stderr. Terraform runs the
+// provider as a go-plugin child process and routes that stderr through its own
+// logging pipeline, so these lines surface only when TF_LOG is set (e.g.
+// TF_LOG=DEBUG) - not on a plain `terraform apply`, regardless of writing here
+// vs. through tflog. The build-failure error message includes a tailed log
+// excerpt and a logs link unconditionally, so a failure is diagnosable either
+// way.
 var artifactBuildLogWriter io.Writer = os.Stderr
 
-func emitArtifactBuildLogLine(line string) {
+// artifactBuildLogLinePrefix labels a build log line with the build it came from.
+// Terraform runs resources in parallel, so two artifact builds in one apply stream
+// through this same writer; without the label their lines are indistinguishable even
+// though each stream is already filtered to its own build_id.
+func artifactBuildLogLinePrefix(buildID string) string {
+	if buildID == "" {
+		return ""
+	}
+	return "[build " + buildID + "] "
+}
+
+// emitArtifactBuildLogLine writes one build log record, labelled with its build. A
+// record may span several lines (an OTEL entry carrying a stack trace), so the label
+// is repeated on continuation lines and the whole record goes out in a single write -
+// concurrent builds share the writer, and one write per record keeps another build
+// from slipping a line into the middle of this one.
+func emitArtifactBuildLogLine(buildID, line string) {
+	if line == "" {
+		return
+	}
+	prefix := artifactBuildLogLinePrefix(buildID)
+	emitArtifactApplyProgress(prefix + strings.ReplaceAll(line, "\n", "\n"+prefix))
+}
+
+func emitArtifactApplyProgress(line string) {
 	if artifactBuildLogWriter == nil || line == "" {
 		return
 	}
 	_, _ = artifactBuildLogWriter.Write([]byte(line + "\n"))
+}
+
+func artifactApplyProgressCreating() {
+	emitArtifactApplyProgress("Creating artifact...")
+}
+
+func artifactApplyProgressUploading(artifactID string) {
+	// Not "Created ...": syncArtifactSource also runs on the Update draft path, which
+	// patches an artifact that already existed.
+	emitArtifactApplyProgress(fmt.Sprintf("Uploading code to artifact with id %s...", artifactID))
+}
+
+func artifactApplyProgressBuilding(artifactID string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Building artifact with id %s...", artifactID))
+}
+
+func artifactApplyProgressBuildStatus(artifactID, buildID, status string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Build %s for artifact %s: %s", buildID, artifactID, status))
 }
 
 // artifactBuildLogsURL returns the DataRobot UI link for artifact image build logs.
@@ -74,6 +118,10 @@ func (r *ArtifactResource) enrichArtifactBuildError(
 		return nil
 	}
 
+	// Deliberately the UI page, not the OTEL API URL the excerpt below is fetched from:
+	// that endpoint needs a Bearer token and answers JSON, so a reader clicking it gets a
+	// 401 instead of logs. build_id scoping applies to the fetched excerpt, which is where
+	// it matters; the link just has to open in a browser.
 	logsURL := artifactBuildLogsURL(r.provider.service.BaseURL(), artifactRepositoryID, artifactID)
 
 	var logs string
