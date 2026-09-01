@@ -3,7 +3,7 @@ package artifactsource
 import "sort"
 
 // PushPlan is the incremental upload blueprint: only paths that changed since
-// the last successful push (BaseFiles from Terraform state).
+// the last successful push.
 type PushPlan struct {
 	Uploads []string // added or modified paths
 	Deletes []string // removed since last push
@@ -19,7 +19,7 @@ func (p *PushPlan) sort() {
 	sort.Strings(p.Deletes)
 }
 
-// DiffPushOnly compares the previous manifest (Terraform state) to the current
+// DiffPushOnly compares the previous manifest to the current
 // local tree. Local is the source of truth; this is push-only (no downloads).
 func DiffPushOnly(base, local Manifest) *PushPlan {
 	plan := &PushPlan{}

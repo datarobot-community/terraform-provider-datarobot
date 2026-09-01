@@ -1,7 +1,8 @@
 package artifactsource
 
-// FileMeta is the per-file manifest entry stored in Terraform state.
-// Hash is SHA-256 hex (64 chars) as produced by hashFile.
+// FileMeta is one entry of a per-file manifest. Hash is SHA-256 hex (64 chars)
+// as produced by hashFile, which is also the form the Files API reports a
+// stored file's checksum in, so entries from either side compare directly.
 type FileMeta struct {
 	Hash string
 	Size int64
