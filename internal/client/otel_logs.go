@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 )
@@ -101,7 +102,15 @@ func (s *ServiceImpl) pollNewOtelEntityLogs(
 	requestPath := basePath + "?" + pathValues.Encode()
 
 	var fresh []OtelLogEntry
-	for page := 0; page < maxOtelLogStreamPages && requestPath != ""; page++ {
+	// True when the walk stopped on maxOtelLogStreamPages with pages still unread, so
+	// records older than everything in `fresh` were never fetched and never will be.
+	hitPageCap := false
+	for page := 0; requestPath != ""; page++ {
+		if page >= maxOtelLogStreamPages {
+			hitPageCap = true
+			break
+		}
+
 		resp, err := Get[PaginatedResponse[OtelLogEntry]](s.client, ctx, requestPath)
 		if err != nil {
 			break
@@ -121,7 +130,32 @@ func (s *ServiceImpl) pollNewOtelEntityLogs(
 		requestPath = otelLogsNextPath(basePath, resp.Next)
 	}
 
+	if hitPageCap {
+		// Appended to the newest-first slice, so emitNew prints it before the records it
+		// precedes - where the missing ones would have been.
+		fresh = append(fresh, otelLogStreamGapEntry())
+	}
+
 	state.emitNew(fresh, onLine)
+}
+
+// otelLogStreamGapEntry is a provider-generated notice rather than a server record: it
+// marks where a single poll fell further behind than maxOtelLogStreamPages of catch-up
+// can cover. The cap keeps a runaway build from looping forever, but without this line
+// the truncation is invisible and the stream reads as complete.
+func otelLogStreamGapEntry() OtelLogEntry {
+	return OtelLogEntry{
+		Level: "warn",
+		// Same shape the server uses, so it sorts and renders with the real records.
+		Timestamp: time.Now().UTC().Format("2006-01-02 15:04:05.000000") + "+00:00",
+		Message: fmt.Sprintf(
+			"terraform-provider-datarobot: log stream fell behind by more than %d records "+
+				"(%d pages x %d); older records from this interval were skipped",
+			maxOtelLogStreamPages*defaultOtelLogStreamPageSize,
+			maxOtelLogStreamPages,
+			defaultOtelLogStreamPageSize,
+		),
+	}
 }
 
 // otelLogsNextPath turns a PaginatedResponse.Next value (an absolute URL) into
