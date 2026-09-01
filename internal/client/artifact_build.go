@@ -243,7 +243,7 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		if logState == nil {
 			return
 		}
-		s.pollNewOtelEntityLogs(ctx, "artifact", artifactID, buildID, logState, opts.OnOtelLogLine)
+		s.pollNewArtifactOtelLogs(ctx, artifactID, buildID, logState, opts.OnOtelLogLine)
 	}
 
 	for {

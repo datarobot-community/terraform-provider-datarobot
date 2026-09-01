@@ -85,19 +85,23 @@ func (st *otelLogStreamState) emitNew(entries []OtelLogEntry, onLine func(OtelLo
 	}
 }
 
-// pollNewOtelEntityLogs walks pages (server returns newest first) until it
+// pollNewArtifactOtelLogs walks pages (server returns newest first) until it
 // reaches an entry already emitted by a prior poll, or runs out of pages. A
 // single fixed-size page only covers the newest defaultOtelLogStreamPageSize
 // records; without following Next, a burst of more new records than that
 // between two polls would silently drop everything past the first page
 // instead of just being reported late.
-func (s *ServiceImpl) pollNewOtelEntityLogs(
+//
+// Artifact builds are the only stream the provider follows live, so this takes an
+// artifact id rather than the entity type/id pair getOtelEntityLogEntries needs for
+// its deployment callers.
+func (s *ServiceImpl) pollNewArtifactOtelLogs(
 	ctx context.Context,
-	entityType, entityID, buildID string,
+	artifactID, buildID string,
 	state *otelLogStreamState,
 	onLine func(OtelLogEntry),
 ) {
-	basePath := "/otel/" + entityType + "/" + entityID + "/logs/"
+	basePath := "/otel/artifact/" + artifactID + "/logs/"
 	pathValues, _ := query.Values(otelLogsRequest(defaultOtelLogStreamPageSize, buildID))
 	requestPath := basePath + "?" + pathValues.Encode()
 

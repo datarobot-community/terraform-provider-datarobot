@@ -41,7 +41,7 @@ func TestOtelLogStreamStateEmitNew(t *testing.T) {
 }
 
 // A burst of more new records than fit in one page must not be silently
-// dropped: pollNewOtelEntityLogs should follow Next until it either catches up
+// dropped: pollNewArtifactOtelLogs should follow Next until it either catches up
 // with a previously-seen record or runs out of pages.
 func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 	var page2URL string
@@ -80,7 +80,7 @@ func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 
 	state := newOtelLogStreamState()
 	var got []string
-	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", "", state, func(e OtelLogEntry) {
+	svc.pollNewArtifactOtelLogs(context.Background(), "art-1", "", state, func(e OtelLogEntry) {
 		got = append(got, e.Message)
 	})
 
@@ -101,7 +101,7 @@ func TestPollNewOtelEntityLogsFollowsPaginationForBurst(t *testing.T) {
 	// instead of walking pagination all over again.
 	requestPaths = nil
 	got = nil
-	svc.pollNewOtelEntityLogs(context.Background(), "artifact", "art-1", "", state, func(e OtelLogEntry) {
+	svc.pollNewArtifactOtelLogs(context.Background(), "art-1", "", state, func(e OtelLogEntry) {
 		got = append(got, e.Message)
 	})
 	if len(got) != 0 {
@@ -140,8 +140,8 @@ func TestPollNewOtelEntityLogsWarnsWhenPageCapIsHit(t *testing.T) {
 	}
 
 	var got []OtelLogEntry
-	svc.pollNewOtelEntityLogs(
-		context.Background(), "artifact", "art-1", "build-1", newOtelLogStreamState(),
+	svc.pollNewArtifactOtelLogs(
+		context.Background(), "art-1", "build-1", newOtelLogStreamState(),
 		func(e OtelLogEntry) { got = append(got, e) },
 	)
 
