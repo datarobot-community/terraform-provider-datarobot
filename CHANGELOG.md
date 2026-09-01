@@ -1,3 +1,9 @@
+## [0.11.1] - 2026-09-01
+
+### Fixed
+
+- `datarobot_execution_environment`'s build logs link in the DataRobot UI now uses the correct query param (`environmentVersionId`) instead of `executionEnvironmentVersion`, which the UI didn't recognize. The "build started" live signal (via `tflog.Warn`, visible with `TF_LOG` set) is also now emitted once from the shared wait-for-ready path instead of being duplicated at each of the create/update call sites.
+
 ## [0.11.0] - 2026-09-01
 
 ### Fixed
