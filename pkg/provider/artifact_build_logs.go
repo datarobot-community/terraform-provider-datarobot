@@ -56,7 +56,9 @@ func artifactApplyProgressCreating() {
 }
 
 func artifactApplyProgressUploading(artifactID string) {
-	emitArtifactApplyProgress(fmt.Sprintf("Created artifact with id %s. Uploading code...", artifactID))
+	// Not "Created ...": syncArtifactSource also runs on the Update draft path, which
+	// patches an artifact that already existed.
+	emitArtifactApplyProgress(fmt.Sprintf("Uploading code to artifact with id %s...", artifactID))
 }
 
 func artifactApplyProgressBuilding(artifactID string) {
