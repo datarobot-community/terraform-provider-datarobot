@@ -47,6 +47,37 @@ func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
 	}
 }
 
+// WaitForArtifactBuild calls OnPoll every tick; only status transitions should print.
+func TestArtifactBuildWaitOptionsOnPollEmitsOnStatusChangeOnly(t *testing.T) {
+	opts := artifactBuildWaitOptions("build-1", nil)
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	for _, status := range []string{
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusBuilt,
+	} {
+		opts.OnPoll(&client.ArtifactBuild{ID: "build-1", ArtifactID: "art-1", Status: status})
+	}
+	opts.OnPoll(nil)
+
+	want := "Build build-1 for artifact art-1: PENDING\n" +
+		"Build build-1 for artifact art-1: IN_PROGRESS\n" +
+		"Build build-1 for artifact art-1: BUILT\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnPoll wrote\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestArtifactBuildNeededAfterUpload(t *testing.T) {
 	t.Parallel()
 

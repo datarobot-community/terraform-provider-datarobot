@@ -100,6 +100,30 @@ func TestEmitArtifactBuildLogLineDistinguishesConcurrentBuilds(t *testing.T) {
 	}
 }
 
+// The Update draft path patches an existing artifact, so the upload line must not claim
+// the artifact was just created.
+func TestArtifactApplyProgressMessages(t *testing.T) {
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	artifactApplyProgressUploading("art-1")
+	artifactApplyProgressBuildStatus("art-1", "build-1", "IN_PROGRESS")
+
+	got := buf.String()
+	want := "Uploading code to artifact with id art-1...\n" +
+		"Build build-1 for artifact art-1: IN_PROGRESS\n"
+	if got != want {
+		t.Fatalf("progress output =\n%q\nwant\n%q", got, want)
+	}
+	if strings.Contains(got, "Created artifact") {
+		t.Error("upload progress must not claim the artifact was created")
+	}
+}
+
 func TestArtifactBuildLogsURL(t *testing.T) {
 	got := artifactBuildLogsURL(
 		"https://app.datarobot.com",

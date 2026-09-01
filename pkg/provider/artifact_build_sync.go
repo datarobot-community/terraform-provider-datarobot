@@ -136,11 +136,16 @@ func artifactBuildWaitOptions(buildID string, opts *client.WaitForArtifactBuildO
 		}
 	}
 	if merged.OnPoll == nil {
+		// Status transitions only. WaitForArtifactBuild calls OnPoll every tick, so at the
+		// default 10s interval an unchanged status would repeat one line ~60 times before
+		// the timeout; the OTEL stream is the live heartbeat, this is the state machine.
+		lastStatus := ""
 		merged.OnPoll = func(build *client.ArtifactBuild) {
-			if build == nil {
+			if build == nil || build.Status == lastStatus {
 				return
 			}
-			artifactApplyProgressBuildPolling(build.ArtifactID, build.ID)
+			lastStatus = build.Status
+			artifactApplyProgressBuildStatus(build.ArtifactID, build.ID, build.Status)
 		}
 	}
 	return merged
