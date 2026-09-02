@@ -1695,6 +1695,21 @@ func (mr *MockServiceMockRecorder) GetExecutionEnvironmentVersion(ctx, id, versi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironmentVersion", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironmentVersion), ctx, id, versionId)
 }
 
+// GetExecutionEnvironmentVersionBuildLog mocks base method.
+func (m *MockService) GetExecutionEnvironmentVersionBuildLog(ctx context.Context, id, versionId, buildId string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionEnvironmentVersionBuildLog", ctx, id, versionId, buildId)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExecutionEnvironmentVersionBuildLog indicates an expected call of GetExecutionEnvironmentVersionBuildLog.
+func (mr *MockServiceMockRecorder) GetExecutionEnvironmentVersionBuildLog(ctx, id, versionId, buildId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionEnvironmentVersionBuildLog", reflect.TypeOf((*MockService)(nil).GetExecutionEnvironmentVersionBuildLog), ctx, id, versionId, buildId)
+}
+
 // GetGenAITaskStatus mocks base method.
 func (m *MockService) GetGenAITaskStatus(ctx context.Context, id string) (*client.TaskStatusResponse, error) {
 	m.ctrl.T.Helper()
@@ -2350,7 +2365,7 @@ func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.
 }
 
 // PatchArtifact indicates an expected call of PatchArtifact.
-func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PatchArtifact(ctx, id, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifact", reflect.TypeOf((*MockService)(nil).PatchArtifact), ctx, id, req)
 }
@@ -2365,7 +2380,7 @@ func (m *MockService) PatchArtifactCodeRef(ctx context.Context, artifactID, cata
 }
 
 // PatchArtifactCodeRef indicates an expected call of PatchArtifactCodeRef.
-func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID any) *gomock.Call {
+func (mr *MockServiceMockRecorder) PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchArtifactCodeRef", reflect.TypeOf((*MockService)(nil).PatchArtifactCodeRef), ctx, artifactID, catalogID, catalogVersionID)
 }
