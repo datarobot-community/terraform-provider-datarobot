@@ -10,9 +10,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"sync"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
@@ -33,15 +36,24 @@ func (f *fakeArtifactStore) Get(ctx context.Context, artifactID string) (Artifac
 	return f.GetFn(ctx, artifactID)
 }
 
-// fakeFilesAPI is the in-memory filesapi.Client fake used by engine
-// tests. Unexpected methods error loudly so off-happy-path drift fails
-// tests instead of silently returning zero values.
+// fakeFilesAPI is the in-memory filesapi.Client fake used by engine and
+// execute tests. Unexpected methods error loudly so off-happy-path drift
+// fails tests instead of silently returning zero values.
 type fakeFilesAPI struct {
 	allFiles       map[string]filesapi.FileMeta
 	allFilesErr    error
 	allFilesCalled bool
 	lastCatalogID  string
 	lastVersionID  string
+
+	// blobs is the remote file content DownloadFile serves, keyed by
+	// path; a path with no entry (and no downloadErr) is a test bug and
+	// fails the download. downloadErr forces a per-path failure.
+	blobs       map[string]string
+	downloadErr map[string]error
+
+	mu            sync.Mutex
+	downloadPaths []string
 }
 
 func (f *fakeFilesAPI) CreateCatalog(context.Context) (*filesapi.CatalogResp, error) {
@@ -82,8 +94,35 @@ func (f *fakeFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) 
 	return f.allFiles, nil
 }
 
-func (f *fakeFilesAPI) DownloadFile(context.Context, string, string, string, io.Writer) (string, int64, error) {
-	return "", 0, errors.New("fakeFilesAPI: DownloadFile not expected")
+func (f *fakeFilesAPI) DownloadFile(_ context.Context, _, _, path string, w io.Writer) (string, int64, error) {
+	f.mu.Lock()
+	f.downloadPaths = append(f.downloadPaths, path)
+	f.mu.Unlock()
+
+	if err := f.downloadErr[path]; err != nil {
+		return "", 0, err
+	}
+
+	body, ok := f.blobs[path]
+	if !ok {
+		return "", 0, fmt.Errorf("fakeFilesAPI: no remote content configured for %q", path)
+	}
+
+	n, err := io.WriteString(w, body)
+
+	return "", int64(n), err
+}
+
+// downloadedPaths returns the paths DownloadFile served, sorted so
+// assertions do not depend on worker scheduling.
+func (f *fakeFilesAPI) downloadedPaths() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	out := append([]string(nil), f.downloadPaths...)
+	sort.Strings(out)
+
+	return out
 }
 
 func (f *fakeFilesAPI) DeleteFiles(context.Context, string, []string) (*filesapi.DeleteFilesResp, error) {
