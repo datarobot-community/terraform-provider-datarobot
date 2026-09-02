@@ -68,6 +68,45 @@ func (c Classification) IsConflict() bool {
 // Action is the operation later PRs apply to a path during execute.
 type Action int
 
+// The four download actions -- ActDownloadModify, ActDownloadAdd,
+// ActDownloadDelete and ActDownloadOverDel -- are ported so this stays the
+// CLI's whole table, but nothing in datarobot_artifact reaches them as the
+// resource is wired today, and the Engine PR cannot simply hand them real I/O.
+//
+// What stands in the way is source.dir_hash. It is a Computed attribute, so
+// Terraform holds the provider to whatever the plan committed: if the plan
+// carries a known dir_hash, the state saved after apply has to be that same
+// value, or the apply ends in "Provider produced inconsistent result after
+// apply". Leaving the attribute unknown during plan is what buys the freedom
+// to return something else; committing a value spends it.
+//
+// dir_hash is a fingerprint of the source tree, and the provider takes that
+// fingerprint twice. ModifyPlan walks the directory during plan and commits
+// the digest it finds there (plan.Source.DirHash = dirHash in
+// pkg/provider/artifact_resource.go). Create and Update walk the same
+// directory again at the end of apply and save that digest instead
+// (refreshArtifactSourceDirHash). The two agree only for as long as apply
+// leaves the tree alone. Uploads do -- they read local files and push bytes at
+// the API. Downloads do not: add and modify create or overwrite a file under
+// source.dir, delete removes one. So the second fingerprint stops matching the
+// first, and Terraform fails the apply on the attribute rather than on the
+// download.
+//
+// The provider does already write one file during apply, and the reason that
+// one is legal is the reason downloads are not. computeArtifactSourceDirHash
+// folds a synthetic entry for the .drignore it is about to write -- the
+// embedded template's own hash and size -- into the plan-time digest, so plan
+// fingerprints the tree as it will look after apply rather than as it looks
+// now, and the two digests match. That works because the file is entirely
+// knowable during plan: fixed name, fixed bytes, no network. A download set is
+// not. Predicting it means fetching the remote manifest and diffing it against
+// base and local, and the remote can move between plan and apply even then.
+//
+// So before any of these four does real I/O, the Engine either stays push-only
+// -- classify against the remote, then execute only the skip and upload cells,
+// which leave the local tree untouched -- or gives up committing a known
+// dir_hash at plan time whenever a download could run, and accepts that the
+// attribute then plans as "known after apply".
 const (
 	ActSkip Action = iota
 	ActUploadModify
@@ -83,6 +122,9 @@ const (
 // ActionFor returns the action for a Classification. EDIT_DEL_CONFLICT maps
 // to ActDownloadOverDel rather than ActConflictCopy because the user already
 // deleted that file, so no .LOCAL copy is kept.
+//
+// The download actions it returns are unreachable in datarobot_artifact today;
+// the Action constants record what has to change before they are wired.
 func ActionFor(c Classification) Action {
 	switch c {
 	case ClsUnchanged, ClsConverged, ClsBothDeleted, ClsBothAddedSame:
