@@ -3,6 +3,7 @@
 ### Added
 
 - `internal/artifactsource/sync` engine can now apply the local half of a three-way sync plan (`ExecuteLocal`): it downloads remote-added and remote-modified files into `source.dir`, removes files the catalog deleted, and keeps conflicting local edits as `<path>.LOCAL.<timestamp>` copies while the remote version wins. Every touched path is backed up under `source.dir/.wapi/.rollback/` first, so a failed download restores the directory to its pre-sync state. Not yet reachable from `datarobot_artifact`: uploads, remote deletes, and persisting the new BASE manifest land in follow-up changes, and no resource calls the engine until then.
+- `internal/artifactsource/sync` engine can now apply the remote half of a three-way sync plan and persist its result (`ExecuteRemote`): it removes catalog files the user deleted locally, uploads added and modified files through the existing stage/zip backend, patches the artifact's primary `code_ref` to the resulting catalog version, and writes the new BASE manifest under `source.dir/.wapi/`. A failed upload or delete restores `source.dir` to its pre-sync state; a failure while writing `.wapi/` does not roll the catalog back, since the next sync reconciles. Still not reachable from `datarobot_artifact`: wiring the engine into the resource lands in a follow-up change.
 
 ## [0.11.1] - 2026-09-01
 
