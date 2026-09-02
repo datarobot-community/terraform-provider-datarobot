@@ -262,6 +262,27 @@ func TestAllFiles_RejectsHostilePath(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestAllFiles_RejectsBlankChecksum(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/files/cid-1/versions/v1/allFiles/", func(w http.ResponseWriter, _ *http.Request) {
+		page := filesapi.AllFilesResp{
+			Data: []filesapi.AllFilesItem{
+				{FileName: "ok.py", FileSize: 1, FileChecksum: "aa"},
+				{FileName: "blank.py", FileSize: 1, FileChecksum: ""},
+			},
+		}
+		assert.NoError(t, json.NewEncoder(w).Encode(page))
+	})
+
+	c := newTestClient(t, mux)
+
+	got, err := c.AllFiles(context.Background(), "cid-1", "v1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blank fileChecksum")
+	assert.Contains(t, err.Error(), "blank.py")
+	assert.Nil(t, got)
+}
+
 func TestDownloadFile_RejectsHostilePath(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("DownloadFile should reject hostile paths before reaching the server")
