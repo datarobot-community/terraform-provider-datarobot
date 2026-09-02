@@ -31,10 +31,11 @@ func fixedNow() time.Time { return time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC) 
 // path -> content maps. Remote content doubles as the bytes the fake
 // Files API serves, so downloads verify against real hashes and sizes.
 type syncFixture struct {
-	dir    string
-	files  *fakeFilesAPI
-	engine *Engine
-	plan   *SyncPlan
+	dir       string
+	files     *fakeFilesAPI
+	artifacts *fakeArtifactStore
+	engine    *Engine
+	plan      *SyncPlan
 }
 
 func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFixture {
@@ -73,9 +74,11 @@ func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFi
 
 	// The artifact reports ver-2 while .wapi/config.json still records
 	// ver-1: drifted, so Plan builds REMOTE from AllFiles.
-	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+	artifacts := &fakeArtifactStore{
 		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
-	})
+	}
+
+	e, err := New(dir, "art-1", files, artifacts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
 
@@ -84,7 +87,7 @@ func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFi
 	plan, err := e.Plan(context.Background())
 	require.NoError(t, err)
 
-	return &syncFixture{dir: dir, files: files, engine: e, plan: plan}
+	return &syncFixture{dir: dir, files: files, artifacts: artifacts, engine: e, plan: plan}
 }
 
 func readProjectFile(t *testing.T, dir, rel string) string {
