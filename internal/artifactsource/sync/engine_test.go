@@ -26,7 +26,32 @@ import (
 
 // fakeArtifactStore is the in-memory ArtifactStore used by engine tests.
 type fakeArtifactStore struct {
-	GetFn func(ctx context.Context, artifactID string) (ArtifactInfo, error)
+	GetFn   func(ctx context.Context, artifactID string) (ArtifactInfo, error)
+	PatchFn func(ctx context.Context, artifactID, catalogID, catalogVersionID string) error
+
+	// patches records every PatchCodeRef call, in order.
+	patches []patchCall
+}
+
+// patchCall is one recorded PatchCodeRef call.
+type patchCall struct {
+	ArtifactID       string
+	CatalogID        string
+	CatalogVersionID string
+}
+
+func (f *fakeArtifactStore) PatchCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) error {
+	f.patches = append(f.patches, patchCall{
+		ArtifactID:       artifactID,
+		CatalogID:        catalogID,
+		CatalogVersionID: catalogVersionID,
+	})
+
+	if f.PatchFn == nil {
+		return nil
+	}
+
+	return f.PatchFn(ctx, artifactID, catalogID, catalogVersionID)
 }
 
 func (f *fakeArtifactStore) Get(ctx context.Context, artifactID string) (ArtifactInfo, error) {
@@ -52,32 +77,100 @@ type fakeFilesAPI struct {
 	blobs       map[string]string
 	downloadErr map[string]error
 
-	mu            sync.Mutex
-	downloadPaths []string
+	// Upload and delete plumbing for the remote half. Each method stays
+	// loud ("not expected") until the test opts it in by setting the
+	// response it should return.
+	newCatalogID    string // CreateCatalog result
+	stageID         string // CreateStage result
+	stageVersionID  string // ApplyStage result
+	zipVersionID    string // UploadFromZipExisting result
+	deleteVersionID string // DeleteFiles result
+	uploadErr       error  // fails every UploadToStage call
+
+	mu                 sync.Mutex
+	downloadPaths      []string
+	staged             map[string]string // stage path -> uploaded bytes
+	stageCatalogIDs    []string
+	deletedPaths       [][]string
+	createCatalogCalls int
+	zipUploads         int
 }
 
 func (f *fakeFilesAPI) CreateCatalog(context.Context) (*filesapi.CatalogResp, error) {
-	return nil, errors.New("fakeFilesAPI: CreateCatalog not expected")
+	if f.newCatalogID == "" {
+		return nil, errors.New("fakeFilesAPI: CreateCatalog not expected")
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.createCatalogCalls++
+
+	return &filesapi.CatalogResp{CatalogID: f.newCatalogID}, nil
 }
 
-func (f *fakeFilesAPI) CreateStage(context.Context, string) (*filesapi.StageResp, error) {
-	return nil, errors.New("fakeFilesAPI: CreateStage not expected")
+func (f *fakeFilesAPI) CreateStage(_ context.Context, catalogID string) (*filesapi.StageResp, error) {
+	if f.stageID == "" {
+		return nil, errors.New("fakeFilesAPI: CreateStage not expected")
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.stageCatalogIDs = append(f.stageCatalogIDs, catalogID)
+
+	return &filesapi.StageResp{CatalogID: catalogID, StageID: f.stageID}, nil
 }
 
-func (f *fakeFilesAPI) UploadToStage(context.Context, string, string, string, int64, io.Reader) error {
-	return errors.New("fakeFilesAPI: UploadToStage not expected")
+// UploadToStage records the bytes it was handed so tests can assert that
+// the upload set carries local content, not just local paths. Workers run
+// in parallel, hence the mutex.
+func (f *fakeFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int64, body io.Reader) error {
+	if f.uploadErr != nil {
+		return f.uploadErr
+	}
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.staged == nil {
+		f.staged = make(map[string]string)
+	}
+	f.staged[name] = string(data)
+
+	return nil
 }
 
 func (f *fakeFilesAPI) ApplyStage(context.Context, string, string, string) (*filesapi.ApplyStageResp, error) {
-	return nil, errors.New("fakeFilesAPI: ApplyStage not expected")
+	if f.stageVersionID == "" {
+		return nil, errors.New("fakeFilesAPI: ApplyStage not expected")
+	}
+
+	return &filesapi.ApplyStageResp{CatalogVersionID: f.stageVersionID}, nil
 }
 
 func (f *fakeFilesAPI) UploadFromZipNew(context.Context, string, int64, io.Reader) (*filesapi.FromFileResp, error) {
 	return nil, errors.New("fakeFilesAPI: UploadFromZipNew not expected")
 }
 
-func (f *fakeFilesAPI) UploadFromZipExisting(context.Context, string, string, string, int64, io.Reader) (*filesapi.FromFileResp, error) {
-	return nil, errors.New("fakeFilesAPI: UploadFromZipExisting not expected")
+// UploadFromZipExisting returns no StatusID, so the upload completes
+// inline and PollStatus stays unexpected.
+func (f *fakeFilesAPI) UploadFromZipExisting(_ context.Context, catalogID, _, _ string, _ int64, _ io.Reader) (*filesapi.FromFileResp, error) {
+	if f.zipVersionID == "" {
+		return nil, errors.New("fakeFilesAPI: UploadFromZipExisting not expected")
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.zipUploads++
+
+	return &filesapi.FromFileResp{CatalogID: catalogID, CatalogVersionID: f.zipVersionID}, nil
 }
 
 func (f *fakeFilesAPI) PollStatus(context.Context, string) (*filesapi.StatusResp, error) {
@@ -125,8 +218,36 @@ func (f *fakeFilesAPI) downloadedPaths() []string {
 	return out
 }
 
-func (f *fakeFilesAPI) DeleteFiles(context.Context, string, []string) (*filesapi.DeleteFilesResp, error) {
-	return nil, errors.New("fakeFilesAPI: DeleteFiles not expected")
+func (f *fakeFilesAPI) DeleteFiles(_ context.Context, catalogID string, paths []string) (*filesapi.DeleteFilesResp, error) {
+	if f.deleteVersionID == "" {
+		return nil, errors.New("fakeFilesAPI: DeleteFiles not expected")
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.deletedPaths = append(f.deletedPaths, append([]string(nil), paths...))
+
+	return &filesapi.DeleteFilesResp{
+		CatalogID:        catalogID,
+		CatalogVersionID: f.deleteVersionID,
+		NumFiles:         len(paths),
+	}, nil
+}
+
+// stagedPaths returns the paths UploadToStage received, sorted so
+// assertions do not depend on worker scheduling.
+func (f *fakeFilesAPI) stagedPaths() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	out := make([]string, 0, len(f.staged))
+	for path := range f.staged {
+		out = append(out, path)
+	}
+	sort.Strings(out)
+
+	return out
 }
 
 func (f *fakeFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
