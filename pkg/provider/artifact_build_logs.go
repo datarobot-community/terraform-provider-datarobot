@@ -5,18 +5,43 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 const artifactBuildLogsSeparator = "----------------------------------------"
-const defaultArtifactBuildLogsTailLines = 30
 
-// artifactBuildLogWriter receives live artifact apply progress and build log lines.
-// Terraform hides tflog output unless TF_LOG is set, so apply progress is written
-// to stderr by default.
+// artifactBuildLogWriter receives live artifact apply progress and build log
+// lines during apply. Written to the provider's stderr. Terraform runs the
+// provider as a go-plugin child process and routes that stderr through its own
+// logging pipeline, so these lines surface only when TF_LOG is set (e.g.
+// TF_LOG=DEBUG) - not on a plain `terraform apply`, regardless of writing here
+// vs. through tflog. The build-failure error message includes a tailed log
+// excerpt and a logs link unconditionally, so a failure is diagnosable either
+// way.
 var artifactBuildLogWriter io.Writer = os.Stderr
 
-func emitArtifactBuildLogLine(line string) {
-	emitArtifactApplyProgress(line)
+// artifactBuildLogLinePrefix labels a build log line with the build it came from.
+// Terraform runs resources in parallel, so two artifact builds in one apply stream
+// through this same writer; without the label their lines are indistinguishable even
+// though each stream is already filtered to its own build_id.
+func artifactBuildLogLinePrefix(buildID string) string {
+	if buildID == "" {
+		return ""
+	}
+	return "[build " + buildID + "] "
+}
+
+// emitArtifactBuildLogLine writes one build log record, labelled with its build. A
+// record may span several lines (an OTEL entry carrying a stack trace), so the label
+// is repeated on continuation lines and the whole record goes out in a single write -
+// concurrent builds share the writer, and one write per record keeps another build
+// from slipping a line into the middle of this one.
+func emitArtifactBuildLogLine(buildID, line string) {
+	if line == "" {
+		return
+	}
+	prefix := artifactBuildLogLinePrefix(buildID)
+	emitArtifactApplyProgress(prefix + strings.ReplaceAll(line, "\n", "\n"+prefix))
 }
 
 func emitArtifactApplyProgress(line string) {
@@ -31,31 +56,17 @@ func artifactApplyProgressCreating() {
 }
 
 func artifactApplyProgressUploading(artifactID string) {
-	emitArtifactApplyProgress(fmt.Sprintf("Created artifact with id %s. Uploading code...", artifactID))
+	// Not "Created ...": syncArtifactSource also runs on the Update draft path, which
+	// patches an artifact that already existed.
+	emitArtifactApplyProgress(fmt.Sprintf("Uploading code to artifact with id %s...", artifactID))
 }
 
 func artifactApplyProgressBuilding(artifactID string) {
 	emitArtifactApplyProgress(fmt.Sprintf("Building artifact with id %s...", artifactID))
 }
 
-func artifactApplyProgressBuildPolling(artifactID, buildID string) {
-	emitArtifactApplyProgress(fmt.Sprintf("Build %s in progress for %s...", buildID, artifactID))
-}
-
-// artifactOtelBuildLogsURL returns the DataRobot public API URL for OTEL build logs
-// stored in datavolt (GET /api/v2/otel/artifact/{id}/logs/), scoped to one build.
-func artifactOtelBuildLogsURL(baseURL, artifactID, buildID string, limit int) string {
-	if artifactID == "" {
-		return baseURL + "/registry/service-artifacts"
-	}
-	if limit <= 0 {
-		limit = defaultArtifactBuildLogsTailLines
-	}
-	query := fmt.Sprintf("limit=%d", limit)
-	if buildID != "" {
-		query += "&searchKeys=build_id&searchValues=" + buildID
-	}
-	return baseURL + "/api/v2/otel/artifact/" + artifactID + "/logs/?" + query
+func artifactApplyProgressBuildStatus(artifactID, buildID, status string) {
+	emitArtifactApplyProgress(fmt.Sprintf("Build %s for artifact %s: %s", buildID, artifactID, status))
 }
 
 // artifactBuildLogsURL returns the DataRobot UI link for artifact image build logs.
@@ -107,16 +118,11 @@ func (r *ArtifactResource) enrichArtifactBuildError(
 		return nil
 	}
 
-	baseURL := r.provider.service.BaseURL()
-	logsURL := artifactBuildLogsURL(baseURL, artifactRepositoryID, artifactID)
-	if buildID != "" {
-		logsURL = artifactOtelBuildLogsURL(
-			baseURL,
-			artifactID,
-			buildID,
-			defaultArtifactBuildLogsTailLines,
-		)
-	}
+	// Deliberately the UI page, not the OTEL API URL the excerpt below is fetched from:
+	// that endpoint needs a Bearer token and answers JSON, so a reader clicking it gets a
+	// 401 instead of logs. build_id scoping applies to the fetched excerpt, which is where
+	// it matters; the link just has to open in a browser.
+	logsURL := artifactBuildLogsURL(r.provider.service.BaseURL(), artifactRepositoryID, artifactID)
 
 	var logs string
 	var logErr error

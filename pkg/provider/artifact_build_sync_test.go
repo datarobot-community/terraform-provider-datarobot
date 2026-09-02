@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
-	opts := artifactBuildWaitOptions(context.Background(), &client.WaitForArtifactBuildOptions{
+	opts := artifactBuildWaitOptions("build-1", &client.WaitForArtifactBuildOptions{
 		PollInterval: time.Millisecond,
 	})
 	if opts.OnOtelLogLine == nil {
@@ -25,6 +26,55 @@ func TestArtifactBuildWaitOptionsAddsOtelLogCallback(t *testing.T) {
 	}
 	if opts.PollInterval != time.Millisecond {
 		t.Fatalf("expected poll interval to be preserved, got %s", opts.PollInterval)
+	}
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	opts.OnOtelLogLine(client.OtelLogEntry{
+		Timestamp: "2026-08-31 12:50:58.262213+00:00",
+		Level:     "info",
+		Message:   "#7 extracting sha256:abc 0.0s done",
+	})
+
+	want := "[build build-1] [2026-08-31 12:50:58.262213+00:00] INFO: #7 extracting sha256:abc 0.0s done\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnOtelLogLine wrote %q, want %q", got, want)
+	}
+}
+
+// WaitForArtifactBuild calls OnPoll every tick; only status transitions should print.
+func TestArtifactBuildWaitOptionsOnPollEmitsOnStatusChangeOnly(t *testing.T) {
+	opts := artifactBuildWaitOptions("build-1", nil)
+
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	for _, status := range []string{
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusPending,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusInProgress,
+		client.ArtifactBuildStatusBuilt,
+	} {
+		opts.OnPoll(&client.ArtifactBuild{ID: "build-1", ArtifactID: "art-1", Status: status})
+	}
+	opts.OnPoll(nil)
+
+	want := "Build build-1 for artifact art-1: PENDING\n" +
+		"Build build-1 for artifact art-1: IN_PROGRESS\n" +
+		"Build build-1 for artifact art-1: BUILT\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("OnPoll wrote\n%q\nwant\n%q", got, want)
 	}
 }
 
@@ -320,8 +370,13 @@ func TestSyncArtifactBuild(t *testing.T) {
 		if !strings.Contains(err.Error(), "docker build failed") {
 			t.Fatalf("expected enriched logs in error, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "https://app.datarobot.com/api/v2/otel/artifact/"+artifactID+"/logs/?limit=30&searchKeys=build_id&searchValues="+buildID) {
-			t.Fatalf("expected OTEL logs API URL in error, got: %v", err)
+		// The browsable UI page, not the token-gated OTEL API URL the excerpt came from.
+		wantURL := "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/" + artifactID + "/build-log"
+		if !strings.Contains(err.Error(), "See full logs at: "+wantURL) {
+			t.Fatalf("expected UI build-log link in error, got: %v", err)
+		}
+		if strings.Contains(err.Error(), "/api/v2/otel/") {
+			t.Fatalf("error must not link the token-gated OTEL API, got: %v", err)
 		}
 	})
 
@@ -384,11 +439,17 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 	})
 
 	draftState := func(hash types.String) *ArtifactResourceModel {
-		state := testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
 			m.Source.DirHash = hash
 			m.ArtifactID = types.StringValue("artifact-1")
 		})
-		return state
+	}
+	lockedState := func(hash types.String) *ArtifactResourceModel {
+		return testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+			m.Status = types.StringValue("locked")
+			m.Source.DirHash = hash
+			m.ArtifactID = types.StringValue("artifact-1")
+		})
 	}
 
 	tests := []struct {
@@ -429,6 +490,35 @@ func TestArtifactModifyPlanNeedsUnknownImageURI(t *testing.T) {
 			}),
 			state: draftState(dirHash),
 			want:  true,
+		},
+		{
+			name:  "locked to draft source unchanged",
+			plan:  draftPlan,
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to draft source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name: "locked to locked source changed",
+			plan: testSourcePlanModel(t, dir, spec, func(m *ArtifactResourceModel) {
+				m.Status = types.StringValue("locked")
+				m.Source.DirHash = types.StringValue("new-hash")
+			}),
+			state: lockedState(dirHash),
+			want:  true,
+		},
+		{
+			name:  "locked to locked source unchanged",
+			plan:  lockedPlan,
+			state: lockedState(dirHash),
+			want:  false,
 		},
 	}
 
@@ -560,7 +650,7 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 			plan := cloneArtifactResourceModel(tt.plan)
 			setKnownImageURIs(plan)
 
-			applySourceManagedImageURIToPlan(plan, tt.state, tt.isCreate)
+			applySourceManagedImageURIToPlan(nil, plan, tt.state, tt.isCreate)
 
 			got := primaryPlanImageURI(plan)
 			if tt.wantPrimaryUnknown {
@@ -578,6 +668,42 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 	}
 
+	t.Run("manual image_uri in config is not marked unknown", func(t *testing.T) {
+		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+		plan := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Source.DirHash = types.StringValue("new-hash")
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+
+		applySourceManagedImageURIToPlan(config, plan, draftState(dirHash), false)
+
+		primary := primaryPlanImageURI(plan)
+		if primary.IsUnknown() || primary.ValueString() != "custom/image:1.0" {
+			t.Fatalf("expected manual image_uri to be preserved, got %v", primary)
+		}
+	})
+
+	t.Run("manual image_uri on create is preserved", func(t *testing.T) {
+		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
+		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+		plan := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
+			m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("custom/image:1.0")
+		})
+
+		applySourceManagedImageURIToPlan(config, plan, nil, true)
+
+		primary := primaryPlanImageURI(plan)
+		if primary.IsUnknown() || primary.ValueString() != "custom/image:1.0" {
+			t.Fatalf("expected manual image_uri on create to be preserved, got %v", primary)
+		}
+	})
+
 	t.Run("non-primary container image_uri unchanged", func(t *testing.T) {
 		multiSpec := testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig())
 		plan := testSourcePlanModel(t, dir, multiSpec, func(m *ArtifactResourceModel) {
@@ -585,7 +711,7 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 		setKnownImageURIs(plan)
 
-		applySourceManagedImageURIToPlan(plan, nil, true)
+		applySourceManagedImageURIToPlan(nil, plan, nil, true)
 
 		primary := primaryPlanImageURI(plan)
 		if !primary.IsUnknown() {

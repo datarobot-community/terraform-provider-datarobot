@@ -9,14 +9,18 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -75,10 +79,16 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 	}
 
+	codeRefAttrTypes := map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	}
+
 	imageBuildConfigAttributes := map[string]schema.Attribute{
 		"code_ref": schema.SingleNestedAttribute{
 			Optional:            true,
 			Computed:            true,
+			Default:             objectdefault.StaticValue(types.ObjectNull(codeRefAttrTypes)),
 			MarkdownDescription: "Reference to source code in the DataRobot catalog. Optional at create; required before image build or lock. When `source` is set, the provider uploads `source.dir` and populates this block.",
 			Attributes: map[string]schema.Attribute{
 				"catalog_id": schema.StringAttribute{
@@ -128,7 +138,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "The artifact type: `service` or `nim`. Defaults to `service`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, `agent`, or `mcp`. Defaults to `service`.",
+				Validators:          ArtifactTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -169,7 +180,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"dir_hash": schema.StringAttribute{
 						Computed: true,
 						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
-							"Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.",
+							"Used to detect changes and skip re-upload when unchanged. Files covered by a system exclude are never part of this hash.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -179,7 +190,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						Computed: true,
 						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
 							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
-							"`.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.",
+							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.",
 						Default: booldefault.StaticBool(true),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),
@@ -217,7 +228,7 @@ func (r *ArtifactResource) Configure(ctx context.Context, req resource.Configure
 func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, nil, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -236,27 +247,44 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		artifact, err = r.syncArtifactSourceAndBuild(ctx, &data, nil, artifact, "")
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "", &resp.Diagnostics)
+		if syncErr != nil {
+			var timeoutErr *client.ArtifactBuildTimeoutError
+			isTimeout := errors.As(syncErr, &timeoutErr)
+			if !isTimeout {
+				r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			}
 			summary := "Error uploading artifact source"
 			var buildErr *artifactBuildSyncError
-			if errors.As(err, &buildErr) {
-				summary = "Error building artifact image"
+			if errors.As(syncErr, &buildErr) {
+				if isTimeout {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
 			}
-			resp.Diagnostics.AddError(summary, err.Error())
+			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	if targetLocked && artifactSourceConfigured(&data) {
-		artifact, err = r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			r.rollbackArtifactCreate(ctx, artifact)
-			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
+		preLockArtifact := artifact
+		// The lock response can omit or lag container.build, which would discard the
+		// terminal build metadata syncArtifactBuild just pinned from WaitForArtifactBuild.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
+		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
+		if lockErr != nil {
+			r.rollbackArtifactCreate(ctx, preLockArtifact, !userSuppliedRepository)
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", lockErr.Error())
 			return
 		}
+		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	data.ID = types.StringValue(uuid.NewString())
@@ -294,15 +322,18 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	// Keep the last-applied source.dir_hash. Refresh runs before plan; recomputing
+	// the hash from the current local tree here would hide file edits (for example
+	// uncommenting a tool in user_tools.py) because plan and refreshed state would
+	// already match. ModifyPlan computes the current hash for diffing.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state ArtifactResourceModel
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, &state, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -315,7 +346,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	priorArtifactID := state.ArtifactID.ValueString()
-	pendingSourceUpload := artifactSourcePendingUpload(&plan, &state, priorArtifactID)
+	lockedSourceCloneNeeded := artifactLockedSourceCloneNeeded(plan, state)
 	deferLock := artifactSourceDeferLock(plan, state)
 
 	var artifact *client.Artifact
@@ -333,7 +364,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
 		}
-	case pendingSourceUpload:
+	case lockedSourceCloneNeeded:
 		createReq := artifactCreateRequest(plan)
 		createReq.Status = client.ArtifactStatusDraft
 		traceAPICall("CreateUpdatedArtifact")
@@ -351,32 +382,66 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
 	if artifactSourceConfigured(&plan) {
-		artifact, err = r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
-		if err != nil {
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
+		if syncErr != nil {
+			if createdNewVersion {
+				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
+			}
 			summary := "Error uploading artifact source"
 			var buildErr *artifactBuildSyncError
-			if errors.As(err, &buildErr) {
-				summary = "Error building artifact image"
+			if errors.As(syncErr, &buildErr) {
+				var timeoutErr *client.ArtifactBuildTimeoutError
+				if errors.As(syncErr, &timeoutErr) {
+					summary = "Timeout waiting for artifact image build"
+				} else {
+					summary = "Error building artifact image"
+				}
 			}
-			resp.Diagnostics.AddError(summary, err.Error())
+			resp.Diagnostics.AddError(summary, syncErr.Error())
 			return
 		}
+		artifact = syncedArtifact
 	}
 
 	if plan.Status.ValueString() == string(client.ArtifactStatusLocked) &&
 		artifact.Status != client.ArtifactStatusLocked &&
-		(deferLock || pendingSourceUpload) {
-		artifact, err = r.lockArtifact(ctx, artifact.ID)
-		if err != nil {
-			resp.Diagnostics.AddError("Error locking Artifact after source upload", err.Error())
+		(deferLock || lockedSourceCloneNeeded) {
+		preLockArtifact := artifact
+		// See the Create path: locking must not drop the pinned build metadata.
+		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
+		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
+		if lockErr != nil {
+			if createdNewVersion || lockedSourceCloneNeeded {
+				persistPartialArtifactUpdate(ctx, resp, preLockArtifact, &plan, &state)
+			}
+			resp.Diagnostics.AddError("Error locking Artifact after source upload", lockErr.Error())
 			return
 		}
+		artifact = lockedArtifact
+		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
 	refreshArtifactSourceDirHash(&plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// persistPartialArtifactUpdate records a newly created draft version in state when a later
+// step (source upload or lock) fails. The prior source.dir_hash is kept so a retry still
+// sees a pending upload instead of treating the new tree as already synced.
+func persistPartialArtifactUpdate(
+	ctx context.Context,
+	resp *resource.UpdateResponse,
+	artifact *client.Artifact,
+	plan, state *ArtifactResourceModel,
+) {
+	loadArtifactIntoModel(artifact, plan)
+	if plan.Source != nil && state.Source != nil {
+		plan.Source.DirHash = state.Source.DirHash
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -413,15 +478,14 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	isCreate := req.State.Raw.IsNull()
-	var state *ArtifactResourceModel
-	if !isCreate {
-		var stateVal ArtifactResourceModel
-		resp.Diagnostics.Append(req.State.Get(ctx, &stateVal)...)
+	var config ArtifactResourceModel
+	var configPtr *ArtifactResourceModel
+	if !req.Config.Raw.IsNull() {
+		resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		state = &stateVal
+		configPtr = &config
 	}
 
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
@@ -435,27 +499,161 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 		plan.Source.DirHash = dirHash
+		resp.Diagnostics.Append(artifactSourceIgnoreDiagnostics(&plan)...)
 	}
 
-	applySourceManagedCodeRefsToPlan(&plan, state, isCreate)
-	applySourceManagedImageURIToPlan(&plan, state, isCreate)
-	applySourceManagedBuildToPlan(&plan, state, isCreate)
-
+	var statePtr *ArtifactResourceModel
+	var state ArtifactResourceModel
+	isCreate := req.State.Raw.IsNull()
 	if !isCreate {
-		// artifact_repository_id is Optional+Computed. The Pulumi bridge passes null for unset
-		// Optional+Computed fields (bypassing UseStateForUnknown), so we restore it from state
-		// here to keep the plan accurate and avoid false positives in artifactNeedsNewVersion.
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		statePtr = &state
+
 		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
 		}
 
-		if artifactModifyPlanNeedsUnknownArtifactID(plan, *state) {
+		if artifactModifyPlanNeedsUnknownArtifactID(plan, state) {
 			plan.ArtifactID = types.StringUnknown()
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_id"), types.StringUnknown())...)
 		}
 	}
 
+	applySourceManagedCodeRefsToPlan(&plan, statePtr, isCreate)
+	applySourceManagedImageURIToPlan(configPtr, &plan, statePtr, isCreate)
+	applySourceManagedBuildToPlan(&plan, statePtr, isCreate)
+
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+func decodePlanArtifactModel(ctx context.Context, plan tfsdk.Plan, state *ArtifactResourceModel, data *ArtifactResourceModel) diag.Diagnostics {
+	var modifyResp resource.ModifyPlanResponse
+	modifyResp.Plan = plan
+
+	var diags diag.Diagnostics
+	diags.Append(nullUnknownCodeRefsForDecode(ctx, modifyResp.Plan, &modifyResp, state)...)
+	if diags.HasError() {
+		return diags
+	}
+	diags.Append(modifyResp.Plan.Get(ctx, data)...)
+	return diags
+}
+
+func nullUnknownCodeRefsForDecode(ctx context.Context, plan tfsdk.Plan, resp *resource.ModifyPlanResponse, state *ArtifactResourceModel) diag.Diagnostics {
+	return walkPlanCodeRefPaths(ctx, plan, func(codeRefPath path.Path, gi, ci int, isPrimary bool) diag.Diagnostics {
+		var codeRef types.Object
+		var diags diag.Diagnostics
+		diags.Append(plan.GetAttribute(ctx, codeRefPath, &codeRef)...)
+		if diags.HasError() || !codeRef.IsUnknown() {
+			return diags
+		}
+
+		if isPrimary {
+			if ref := primaryCodeRefFromState(state); ref != nil {
+				codeRefValue, valueDiags := types.ObjectValue(artifactCodeRefObjectType.AttrTypes, map[string]attr.Value{
+					"catalog_id":         ref.CatalogID,
+					"catalog_version_id": ref.CatalogVersionID,
+				})
+				diags.Append(valueDiags...)
+				if diags.HasError() {
+					return diags
+				}
+				diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, codeRefValue)...)
+				return diags
+			}
+		}
+
+		diags.Append(resp.Plan.SetAttribute(ctx, codeRefPath, types.ObjectNull(artifactCodeRefObjectType.AttrTypes))...)
+		return diags
+	})
+}
+
+func planObjectContainerIsPrimary(container types.Object, containerCount int) bool {
+	if container.IsNull() || container.IsUnknown() {
+		return false
+	}
+	attrs := container.Attributes()
+	primaryAttr, ok := attrs["primary"]
+	if !ok {
+		return containerCount == 1
+	}
+	primary, ok := primaryAttr.(types.Bool)
+	if !ok || primary.IsNull() || primary.IsUnknown() {
+		return containerCount == 1
+	}
+	return primary.ValueBool()
+}
+
+func walkPlanCodeRefPaths(ctx context.Context, plan tfsdk.Plan, fn func(path.Path, int, int, bool) diag.Diagnostics) diag.Diagnostics {
+	var spec types.Object
+	diags := plan.GetAttribute(ctx, path.Root("spec"), &spec)
+	if diags.HasError() || spec.IsNull() || spec.IsUnknown() {
+		return diags
+	}
+
+	specAttrs := spec.Attributes()
+	groupsAttr, ok := specAttrs["container_groups"]
+	if !ok {
+		return diags
+	}
+	groups, ok := groupsAttr.(types.List)
+	if !ok || groups.IsNull() || groups.IsUnknown() {
+		return diags
+	}
+
+	for gi, groupElem := range groups.Elements() {
+		group, ok := groupElem.(types.Object)
+		if !ok || group.IsNull() || group.IsUnknown() {
+			continue
+		}
+		groupAttrs := group.Attributes()
+		containersAttr, ok := groupAttrs["containers"]
+		if !ok {
+			continue
+		}
+		containers, ok := containersAttr.(types.List)
+		if !ok || containers.IsNull() || containers.IsUnknown() {
+			continue
+		}
+
+		for ci, containerElem := range containers.Elements() {
+			container, ok := containerElem.(types.Object)
+			if !ok || container.IsNull() || container.IsUnknown() {
+				continue
+			}
+			containerAttrs := container.Attributes()
+			buildConfigAttr, ok := containerAttrs["image_build_config"]
+			if !ok {
+				continue
+			}
+			buildConfig, ok := buildConfigAttr.(types.Object)
+			if !ok || buildConfig.IsNull() || buildConfig.IsUnknown() {
+				continue
+			}
+
+			codeRefPath := path.Root("spec").
+				AtName("container_groups").AtListIndex(gi).
+				AtName("containers").AtListIndex(ci).
+				AtName("image_build_config").AtName("code_ref")
+			diags.Append(fn(codeRefPath, gi, ci, planObjectContainerIsPrimary(container, len(containers.Elements())))...)
+			if diags.HasError() {
+				return diags
+			}
+		}
+	}
+
+	return diags
+}
+
+var artifactCodeRefObjectType = types.ObjectType{
+	AttrTypes: map[string]attr.Type{
+		"catalog_id":         types.StringType,
+		"catalog_version_id": types.StringType,
+	},
 }
 
 func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
@@ -474,33 +672,50 @@ func artifactNeedsNewVersion(plan, state ArtifactResourceModel) bool {
 	if len(plan.Spec.ContainerGroups) != len(state.Spec.ContainerGroups) {
 		return true
 	}
+	// When source manages code_ref / image_uri, plan values are null or pre-build while
+	// state holds the last upload/build results — ignore those managed diffs on the
+	// provider-managed primary container only; sidecar changes always count.
+	ignoreManagedCodeRef := artifactSourceConfigured(&plan) && !artifactHasManualCodeRef(plan.Spec)
+	ignoreManagedImageURI := artifactSourceConfigured(&plan)
 	for i := range plan.Spec.ContainerGroups {
-		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i]) {
+		if !containerGroupsEqual(plan.Spec.ContainerGroups[i], state.Spec.ContainerGroups[i], ignoreManagedCodeRef, ignoreManagedImageURI) {
 			return true
 		}
 	}
-	return false
+	return a2aEnabledNeedsNewVersion(plan.Spec.A2AEnabled, state.Spec.A2AEnabled)
 }
 
-func containerGroupsEqual(a, b ArtifactContainerGroupModel) bool {
+// a2aEnabledNeedsNewVersion reports a real on/off change. Config null and false
+// are the same wire value, so treating them as different would mint a new
+// locked-artifact version (and roll the workload) for no API change.
+func a2aEnabledNeedsNewVersion(plan, state types.Bool) bool {
+	return a2aEnabledOn(plan) != a2aEnabledOn(state)
+}
+
+func a2aEnabledOn(v types.Bool) bool {
+	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
+}
+
+func containerGroupsEqual(a, b ArtifactContainerGroupModel, ignoreManagedCodeRef, ignoreManagedImageURI bool) bool {
 	if len(a.Containers) != len(b.Containers) {
 		return false
 	}
 	for i := range a.Containers {
-		if !containersEqual(a.Containers[i], b.Containers[i]) {
+		skipImageURI := ignoreManagedImageURI && artifactContainerIsPrimary(a.Containers[i], a)
+		if !containersEqual(a.Containers[i], b.Containers[i], ignoreManagedCodeRef, skipImageURI) {
 			return false
 		}
 	}
 	return true
 }
 
-func containersEqual(a, b ArtifactContainerModel) bool {
+func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreImageURI bool) bool {
 	if !a.Name.Equal(b.Name) ||
-		!a.ImageURI.Equal(b.ImageURI) ||
+		(!ignoreImageURI && !a.ImageURI.Equal(b.ImageURI)) ||
 		!a.Primary.Equal(b.Primary) ||
 		!a.Description.Equal(b.Description) ||
 		!a.Port.Equal(b.Port) ||
-		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig) ||
+		!imageBuildConfigEqual(a.ImageBuildConfig, b.ImageBuildConfig, ignoreManagedCodeRef) ||
 		!probesEqual(a.StartupProbe, b.StartupProbe) ||
 		!probesEqual(a.ReadinessProbe, b.ReadinessProbe) ||
 		!probesEqual(a.LivenessProbe, b.LivenessProbe) {
@@ -511,6 +726,14 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 	}
 	for i := range a.Entrypoint {
 		if !a.Entrypoint[i].Equal(b.Entrypoint[i]) {
+			return false
+		}
+	}
+	if len(a.Routes) != len(b.Routes) {
+		return false
+	}
+	for i := range a.Routes {
+		if !a.Routes[i].Path.Equal(b.Routes[i].Path) || !a.Routes[i].Auth.Equal(b.Routes[i].Auth) {
 			return false
 		}
 	}
@@ -529,14 +752,14 @@ func containersEqual(a, b ArtifactContainerModel) bool {
 	return true
 }
 
-func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel) bool {
+func imageBuildConfigEqual(a, b *ArtifactImageBuildConfigModel, ignoreManagedCodeRef bool) bool {
 	if a == nil && b == nil {
 		return true
 	}
 	if a == nil || b == nil {
 		return false
 	}
-	if !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
+	if !ignoreManagedCodeRef && !codeRefEqual(imageBuildConfigCodeRef(a), imageBuildConfigCodeRef(b)) {
 		return false
 	}
 	return dockerfileEqual(a.Dockerfile, b.Dockerfile)
@@ -631,7 +854,8 @@ func probesEqual(a, b *ArtifactProbeConfigModel) bool {
 		a.InitialDelaySeconds.Equal(b.InitialDelaySeconds) &&
 		a.PeriodSeconds.Equal(b.PeriodSeconds) &&
 		a.TimeoutSeconds.Equal(b.TimeoutSeconds) &&
-		a.FailureThreshold.Equal(b.FailureThreshold)
+		a.FailureThreshold.Equal(b.FailureThreshold) &&
+		a.SuccessThreshold.Equal(b.SuccessThreshold)
 }
 
 func validateArtifactContainerGroupsCount(resp *resource.ValidateConfigResponse, groups []ArtifactContainerGroupModel) {
@@ -670,10 +894,7 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Missing name",
 				`"name" is required when source is "string".`)
 		}
-		if ev.Value.IsUnknown() {
-			return
-		}
-		if ev.Value.IsNull() {
+		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
 				`"value" is required when source is "string".`)
@@ -697,15 +918,12 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
 		}
-		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
-			return
-		}
-		if ev.DrCredentialID.IsNull() {
+		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
 				"Missing dr_credential_id",
 				`"dr_credential_id" is required when source is "dr-credential".`)
 		}
-		if ev.Key.IsNull() {
+		if !ev.Key.IsUnknown() && ev.Key.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("key"),
 				"Missing key",
 				`"key" is required when source is "dr-credential".`)
@@ -719,7 +937,7 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 		if !ev.Value.IsNull() && !ev.Value.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Unexpected field",
-				`"value" must not be set when source is "api-key".`)
+				`"value" must not be set when source is "api-key"; the platform resolves the token value.`)
 		}
 		if !ev.DrCredentialID.IsNull() && !ev.DrCredentialID.IsUnknown() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
@@ -766,13 +984,59 @@ func validateArtifactContainer(
 			resp.Diagnostics.AddAttributeError(
 				containerPath.AtName("image_build_config"),
 				"Incomplete build configuration for locked artifact",
-				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). With `source`, the provider uploads code and sets `code_ref`, but lock still fails until workload-api has populated `image_uri` from a completed build. Use `status = \"draft\"` until the image build finishes.",
+				"Locked artifacts with `image_build_config` require `image_uri` (complete the image build before locking). Use `status = \"draft\"` until the image build finishes.",
 			)
 		}
 	}
 
+	validateArtifactContainerRoutes(resp, containerPath, container, containerCount)
+
 	for ei, ev := range container.EnvironmentVars {
 		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+// validateArtifactContainerRoutes mirrors the Workload API route rules that the
+// schema cannot express: routes belong to the primary container only, and a path
+// may appear once per container (two entries would carry conflicting auth policies).
+func validateArtifactContainerRoutes(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if len(container.Routes) == 0 {
+		return
+	}
+
+	routesPath := containerPath.AtName("routes")
+
+	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
+	if !isPrimary && !autoPrimary {
+		resp.Diagnostics.AddAttributeError(
+			routesPath,
+			"Unsupported on non-primary container",
+			"`routes` is only permitted on the primary container.",
+		)
+	}
+
+	seen := make(map[string]int, len(container.Routes))
+	for ri, route := range container.Routes {
+		if route.Path.IsNull() || route.Path.IsUnknown() {
+			continue
+		}
+		routePath := route.Path.ValueString()
+		if first, ok := seen[routePath]; ok {
+			resp.Diagnostics.AddAttributeError(
+				routesPath.AtListIndex(ri).AtName("path"),
+				"Duplicate route path",
+				fmt.Sprintf("Route path %q is already declared at index %d. Each path may appear only once per container.", routePath, first),
+			)
+			continue
+		}
+		seen[routePath] = ri
 	}
 }
 
@@ -784,6 +1048,7 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 
 	validateArtifactSource(resp, data)
+	validateArtifactA2AEnabled(resp, data)
 
 	if data.Spec == nil {
 		return
@@ -808,6 +1073,34 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
 		}
 	}
+}
+
+func validateArtifactA2AEnabled(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Spec == nil {
+		return
+	}
+	if data.Spec.A2AEnabled.IsNull() || data.Spec.A2AEnabled.IsUnknown() {
+		return
+	}
+	// Root variables are unknown during Terraform's validate walk. Do not treat
+	// type = var.artifact_type as service or plan fails even when the value is agent.
+	if data.Type.IsUnknown() {
+		return
+	}
+
+	artifactType := string(client.ArtifactTypeService)
+	if !data.Type.IsNull() {
+		artifactType = data.Type.ValueString()
+	}
+	if artifactType == string(client.ArtifactTypeAgent) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("spec").AtName("a2a_enabled"),
+		"Unsupported a2a_enabled",
+		"`a2a_enabled` is only valid on agent artifacts.",
+	)
 }
 
 func validateArtifactSource(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
@@ -892,6 +1185,22 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 		)
 	}
 
+	status := string(client.ArtifactStatusLocked)
+	if !data.Status.IsNull() && !data.Status.IsUnknown() {
+		status = data.Status.ValueString()
+	}
+	if status == string(client.ArtifactStatusLocked) &&
+		!data.Source.WaitForBuild.IsNull() &&
+		!data.Source.WaitForBuild.IsUnknown() &&
+		!data.Source.WaitForBuild.ValueBool() &&
+		!artifactHasPrimaryImageURI(data.Spec) {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("wait_for_build"),
+			"Invalid wait_for_build on locked artifact",
+			"Locked artifacts require a completed image build before locking. Setting `wait_for_build = false` is only supported when `status = \"draft\"` or when `image_uri` is explicitly specified.",
+		)
+	}
+
 	if artifactHasManualCodeRef(data.Spec) {
 		resp.Diagnostics.AddAttributeError(
 			sourcePath,
@@ -899,6 +1208,25 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 			"Do not set `image_build_config.code_ref` when `source` is set; the provider manages `code_ref` from `source.dir`.",
 		)
 	}
+}
+
+func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
+	if spec == nil {
+		return false
+	}
+	for _, group := range spec.ContainerGroups {
+		for _, container := range group.Containers {
+			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+			if !isPrimary && len(group.Containers) == 1 &&
+				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
+				isPrimary = true
+			}
+			if isPrimary && !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
@@ -1010,6 +1338,13 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 				"`entrypoint` is required when dockerfile source is `generated`.",
 			)
 		}
+		if IsKnown(cfg.Dockerfile.Path) {
+			resp.Diagnostics.AddAttributeError(
+				dockerfilePath.AtName("path"),
+				"Conflicting dockerfile path",
+				"`path` is not used when dockerfile source is `generated` and would be silently discarded; remove it or set `source = \"provided\"`.",
+			)
+		}
 	case "provided":
 		// path defaults to ./Dockerfile at marshal time
 	default:
@@ -1037,7 +1372,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 		Description: data.Description.ValueString(),
 		Type:        client.ArtifactType(data.Type.ValueString()),
 		Status:      status,
-		Spec:        artifactSpecToClient(*data.Spec),
+		Spec:        artifactSpecToClient(*data.Spec, client.ArtifactType(data.Type.ValueString())),
 	}
 	if !data.ArtifactRepositoryID.IsNull() && !data.ArtifactRepositoryID.IsUnknown() {
 		repoID := data.ArtifactRepositoryID.ValueString()
@@ -1049,7 +1384,7 @@ func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactReq
 func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *client.PatchArtifactRequest {
 	name := plan.Name.ValueString()
 	description := plan.Description.ValueString()
-	spec := artifactSpecToClient(*plan.Spec)
+	spec := artifactSpecToClient(*plan.Spec, client.ArtifactType(plan.Type.ValueString()))
 
 	req := &client.PatchArtifactRequest{
 		Name:        &name,
@@ -1067,14 +1402,21 @@ func patchRequestFromPlan(plan, state ArtifactResourceModel, deferLock bool) *cl
 	return req
 }
 
-func artifactSpecToClient(spec ArtifactSpecModel) client.ArtifactSpec {
+func artifactSpecToClient(spec ArtifactSpecModel, artifactType client.ArtifactType) client.ArtifactSpec {
 	groups := make([]client.ArtifactContainerGroup, len(spec.ContainerGroups))
 	for i, g := range spec.ContainerGroups {
 		groups[i] = artifactContainerGroupToClient(g)
 	}
-	return client.ArtifactSpec{
+	out := client.ArtifactSpec{
 		ContainerGroups: groups,
 	}
+	// Agents always send a2aEnabled so a draft PATCH can turn it off. omitempty
+	// would drop a nil pointer and leave the stored API value unchanged.
+	if artifactType == client.ArtifactTypeAgent && !spec.A2AEnabled.IsUnknown() {
+		enabled := !spec.A2AEnabled.IsNull() && spec.A2AEnabled.ValueBool()
+		out.A2AEnabled = &enabled
+	}
+	return out
 }
 
 func artifactContainerGroupToClient(g ArtifactContainerGroupModel) client.ArtifactContainerGroup {
@@ -1117,6 +1459,16 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 		container.Entrypoint = make([]string, len(c.Entrypoint))
 		for i, e := range c.Entrypoint {
 			container.Entrypoint[i] = e.ValueString()
+		}
+	}
+
+	if len(c.Routes) > 0 {
+		container.Routes = make([]client.ArtifactContainerRoute, len(c.Routes))
+		for i, r := range c.Routes {
+			container.Routes[i] = client.ArtifactContainerRoute{
+				Path: r.Path.ValueString(),
+				Auth: r.Auth.ValueString(),
+			}
 		}
 	}
 
@@ -1238,6 +1590,10 @@ func artifactProbeToClient(probe *ArtifactProbeConfigModel) *client.ArtifactProb
 		v := probe.FailureThreshold.ValueInt64()
 		p.FailureThreshold = &v
 	}
+	if !probe.SuccessThreshold.IsNull() && !probe.SuccessThreshold.IsUnknown() {
+		v := probe.SuccessThreshold.ValueInt64()
+		p.SuccessThreshold = &v
+	}
 	return p
 }
 
@@ -1275,7 +1631,25 @@ func loadArtifactSpecFromAPI(spec client.ArtifactSpec, prior *ArtifactSpecModel)
 		}
 		groups[i] = ArtifactContainerGroupModel{Containers: containers}
 	}
-	return ArtifactSpecModel{ContainerGroups: groups}
+	return ArtifactSpecModel{
+		ContainerGroups: groups,
+		A2AEnabled:      loadA2AEnabledFromAPI(spec.A2AEnabled, prior),
+	}
+}
+
+func loadA2AEnabledFromAPI(apiValue *bool, prior *ArtifactSpecModel) types.Bool {
+	if prior != nil && !prior.A2AEnabled.IsNull() && !prior.A2AEnabled.IsUnknown() {
+		if apiValue != nil {
+			return types.BoolValue(*apiValue)
+		}
+		return prior.A2AEnabled
+	}
+	// Config omitted the flag. Keep null when the API is off so apply can
+	// round-trip; surface true so a UI-enabled A2A value shows as drift.
+	if apiValue != nil && *apiValue {
+		return types.BoolValue(true)
+	}
+	return types.BoolNull()
 }
 
 func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerModel) ArtifactContainerModel {
@@ -1330,6 +1704,20 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		for i, e := range c.Entrypoint {
 			model.Entrypoint[i] = types.StringValue(e)
 		}
+	}
+
+	if len(c.Routes) > 0 {
+		model.Routes = make([]ArtifactContainerRouteModel, len(c.Routes))
+		for i, r := range c.Routes {
+			model.Routes[i] = ArtifactContainerRouteModel{
+				Path: types.StringValue(r.Path),
+				Auth: types.StringValue(r.Auth),
+			}
+		}
+	} else if prior != nil && prior.Routes != nil {
+		// `routes = []` is omitted from the request and comes back absent. Keep the
+		// empty list rather than null so the applied state matches the config.
+		model.Routes = []ArtifactContainerRouteModel{}
 	}
 
 	if len(c.EnvironmentVars) > 0 {
@@ -1473,6 +1861,11 @@ func loadProbeFromAPI(probe *client.ArtifactProbeConfig) *ArtifactProbeConfigMod
 		m.FailureThreshold = types.Int64Value(*probe.FailureThreshold)
 	} else {
 		m.FailureThreshold = types.Int64Null()
+	}
+	if probe.SuccessThreshold != nil {
+		m.SuccessThreshold = types.Int64Value(*probe.SuccessThreshold)
+	} else {
+		m.SuccessThreshold = types.Int64Null()
 	}
 	return m
 }

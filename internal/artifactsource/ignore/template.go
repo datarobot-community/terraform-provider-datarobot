@@ -6,7 +6,9 @@ import (
 	_ "embed"
 )
 
-// CLI source: cli/internal/workload/wapi/template.go
+// CLI source: cli/internal/workload/wapi/template.go (embeds the CLI's own
+// drignore.tmpl). The provider's copy adds a Terraform section, because
+// source.dir can be the directory holding the configuration that declares it.
 //
 // DefaultTemplate is the .drignore content WriteDefaultDrignoreIfMissing
 // writes at source.dir when generate_ignore is true. Embedded so we don't

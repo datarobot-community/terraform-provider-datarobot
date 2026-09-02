@@ -11,26 +11,25 @@ import (
 // WriteDefaultDrignoreIfMissing writes DefaultTemplate to .drignore in
 // projectDir when neither .drignore nor .wapiignore exists. It never
 // overwrites an existing file. Returns true when a new file was written.
+//
+// Presence is Locate's answer rather than a second stat here, so the writer and
+// the reader cannot disagree about what counts as an ignore file. Where they
+// would differ is a directory sitting at one of these names: Locate calls that
+// absent, so the write is attempted and fails naming the real problem, instead
+// of being skipped and surfacing later as a read error from New.
 func WriteDefaultDrignoreIfMissing(projectDir string) (bool, error) {
-	if UserIgnoreExists(projectDir) {
+	if Locate(projectDir) != "" {
 		return false, nil
 	}
 
 	path := filepath.Join(projectDir, FileName)
-	if err := os.WriteFile(path, DefaultTemplate, 0o600); err != nil {
+	// 0644 rather than gosec's preferred 0600: this file is part of the user's
+	// source tree, gets committed, and is read by teammates and CI. Owner-only
+	// permissions on a file we created for them would be a surprise to debug.
+	//nolint:gosec // G306: a committed, team-shared ignore file is world-readable by design.
+	if err := os.WriteFile(path, DefaultTemplate, 0o644); err != nil {
 		return false, fmt.Errorf("write %s: %w", path, err)
 	}
 
 	return true, nil
-}
-
-// UserIgnoreExists reports whether projectDir already has .drignore or .wapiignore.
-func UserIgnoreExists(projectDir string) bool {
-	for _, name := range []string{FileName, LegacyFileName} {
-		if _, err := os.Stat(filepath.Join(projectDir, name)); err == nil {
-			return true
-		}
-	}
-
-	return false
 }

@@ -58,13 +58,69 @@ func TestEmitArtifactBuildLogLine(t *testing.T) {
 		artifactBuildLogWriter = oldWriter
 	}()
 
-	emitArtifactBuildLogLine("step 1")
-	emitArtifactBuildLogLine("")
+	emitArtifactBuildLogLine("build-1", "step 1")
+	emitArtifactBuildLogLine("build-2", "step 1")
+	// A record carrying a stack trace must keep every continuation line attributed.
+	emitArtifactBuildLogLine("build-1", "boom\n  at frame 1")
+	emitArtifactBuildLogLine("", "no build id")
+	emitArtifactBuildLogLine("build-1", "")
 
 	got := buf.String()
-	want := "step 1\n"
+	want := "[build build-1] step 1\n" +
+		"[build build-2] step 1\n" +
+		"[build build-1] boom\n[build build-1]   at frame 1\n" +
+		"no build id\n"
 	if got != want {
-		t.Fatalf("emitArtifactBuildLogLine() wrote %q, want %q", got, want)
+		t.Fatalf("emitArtifactBuildLogLine() wrote\n%q\nwant\n%q", got, want)
+	}
+}
+
+// Two builds running in the same apply share one writer; the build label is what makes
+// their interleaved lines separable.
+func TestEmitArtifactBuildLogLineDistinguishesConcurrentBuilds(t *testing.T) {
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	for _, buildID := range []string{"build-a", "build-b", "build-a"} {
+		emitArtifactBuildLogLine(buildID, "#7 extracting sha256:abc 0.0s done")
+	}
+
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %q", len(lines), buf.String())
+	}
+	for i, wantBuild := range []string{"build-a", "build-b", "build-a"} {
+		if !strings.HasPrefix(lines[i], "[build "+wantBuild+"] ") {
+			t.Errorf("line %d = %q, want prefix for %s", i, lines[i], wantBuild)
+		}
+	}
+}
+
+// The Update draft path patches an existing artifact, so the upload line must not claim
+// the artifact was just created.
+func TestArtifactApplyProgressMessages(t *testing.T) {
+	var buf bytes.Buffer
+	oldWriter := artifactBuildLogWriter
+	artifactBuildLogWriter = &buf
+	defer func() {
+		artifactBuildLogWriter = oldWriter
+	}()
+
+	artifactApplyProgressUploading("art-1")
+	artifactApplyProgressBuildStatus("art-1", "build-1", "IN_PROGRESS")
+
+	got := buf.String()
+	want := "Uploading code to artifact with id art-1...\n" +
+		"Build build-1 for artifact art-1: IN_PROGRESS\n"
+	if got != want {
+		t.Fatalf("progress output =\n%q\nwant\n%q", got, want)
+	}
+	if strings.Contains(got, "Created artifact") {
+		t.Error("upload progress must not claim the artifact was created")
 	}
 }
 
@@ -77,18 +133,5 @@ func TestArtifactBuildLogsURL(t *testing.T) {
 	want := "https://app.datarobot.com/registry/service-artifacts/repo-1/artifacts/art-1/build-log"
 	if got != want {
 		t.Fatalf("artifactBuildLogsURL() = %q, want %q", got, want)
-	}
-}
-
-func TestArtifactOtelBuildLogsURL(t *testing.T) {
-	got := artifactOtelBuildLogsURL(
-		"https://staging.datarobot.com",
-		"art-1",
-		"build-1",
-		30,
-	)
-	want := "https://staging.datarobot.com/api/v2/otel/artifact/art-1/logs/?limit=30&searchKeys=build_id&searchValues=build-1"
-	if got != want {
-		t.Fatalf("artifactOtelBuildLogsURL() = %q, want %q", got, want)
 	}
 }
