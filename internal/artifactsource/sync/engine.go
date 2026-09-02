@@ -3,17 +3,17 @@ package sync
 // CLI source: cli/internal/workload/sync/engine.go
 //
 // Provider differences from CLI:
-//   - Plan (phases 0-4, see phase.go) plus the local half of phase 5
-//     (ExecuteLocal, see execute.go). The remote half (uploads, remote
-//     deletes, code_ref patch) and phase 6 (persisting BASE) are not
-//     implemented here.
+//   - Phase 5 is split in two entry points instead of one phase5Execute:
+//     ExecuteLocal (execute.go) mutates source.dir, ExecuteRemote
+//     (execute_remote.go) mutates the catalog and then runs phase 6
+//     (state.go). The two are reviewed and wired separately because only
+//     the first changes files the user owns.
 //   - No Options{DryRun, ShowDiffs, Yes}: terraform apply has no TTY and is
 //     always non-interactive, remote-wins-on-conflict (see the plan's
 //     "Non-interactive policy" section) — there is nothing to gate on.
 //   - ArtifactStore is a narrow interface over the caller's own artifact
-//     client (Locked/CatalogID/CatalogVersionID) instead of the CLI's
-//     workload.Artifact, so this package stays independent of
-//     internal/client.
+//     client (Get + PatchCodeRef) instead of the CLI's workload.Artifact,
+//     so this package stays independent of internal/client.
 //   - Missing .wapi/ auto-initializes instead of erroring "not linked":
 //     there is no `dr workload code init` step in a Terraform-managed tree.
 
@@ -41,16 +41,18 @@ type ArtifactInfo struct {
 	CatalogVersionID string
 }
 
-// ArtifactStore fetches ArtifactInfo for the artifact backing this sync.
-// The resource adapts its own client.Artifact to this interface.
+// ArtifactStore reads and updates the artifact backing this sync. The
+// resource adapts its own client service to this interface; PatchCodeRef
+// wraps PatchArtifactCodeRef and discards the returned artifact.
 type ArtifactStore interface {
 	Get(ctx context.Context, artifactID string) (ArtifactInfo, error)
+	PatchCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) error
 }
 
 // Engine runs the CLI three-way sync pipeline (BASE / LOCAL / REMOTE)
 // against a single source.dir. Construct with New, call Plan, then
-// ExecuteLocal, then Close to release the .wapi/sync.lock acquired during
-// preflight.
+// ExecuteLocal, then ExecuteRemote, then Close to release the
+// .wapi/sync.lock acquired during preflight.
 type Engine struct {
 	projectDir string
 	artifactID string
@@ -70,6 +72,15 @@ type Engine struct {
 	staleNote      bool
 	rollback       *RollbackTree
 	conflictCopies []string
+	localApplied   bool
+
+	// Set by ExecuteRemote and phase 6: the catalog the uploads landed
+	// in, the version they produced, and the version persisted to
+	// .wapi/config.json (which falls back to the observed remote version
+	// on a pull-only sync).
+	newCatalogID    string
+	newVersionID    string
+	syncedVersionID string
 }
 
 // New constructs an Engine bound to projectDir. artifactID seeds .wapi/ on

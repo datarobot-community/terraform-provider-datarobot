@@ -5,7 +5,8 @@ package sync
 // Provider differences from CLI:
 //   - Local half only. ExecuteLocal keeps the rollback tree and the
 //     sync lock instead of finalizing them; the remote half (deletes,
-//     uploads, PatchArtifactCodeRef) and the BASE rewrite are not run here.
+//     uploads, PatchArtifactCodeRef) lives in execute_remote.go and the
+//     BASE rewrite that finalizes both in state.go.
 //   - Always the CLI's `--yes` path: terraform apply has no TTY, so
 //     conflicts resolve remote-wins with the local bytes kept as
 //     *.LOCAL.<ts>. There is no prompt and no display package.
@@ -42,12 +43,12 @@ var ErrLockReleased = errors.New("sync engine: Execute called after the sync loc
 // copied into .wapi/.rollback/ first, and any failure restores the tree to
 // its pre-execute state.
 //
-// The remote half (deletes, uploads, code_ref patch) and the new BASE
-// manifest are not applied here, so ExecuteLocal leaves .wapi/.rollback/
-// in place: a later phase still has to run and can still need to undo
-// these mutations. A caller that stops here must call DiscardRollback,
-// otherwise the next Plan's stale-rollback recovery treats this run as a
-// crash and reverts it.
+// The remote half (deletes, uploads, code_ref patch) is not applied here,
+// so ExecuteLocal leaves .wapi/.rollback/ in place: ExecuteRemote still has
+// to run and can still need to undo these mutations. It is the one that
+// discards the tree, once the new BASE manifest is on disk. A caller that
+// stops here instead must call DiscardRollback, otherwise the next Plan's
+// stale-rollback recovery treats this run as a crash and reverts it.
 //
 // The sync lock stays held so the remote half runs in the same session;
 // Close releases it. Calling ExecuteLocal after Close returns
@@ -57,12 +58,13 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 		return ErrNoPlan
 	}
 
-	if e.plan.IsEmpty() {
-		return nil
-	}
-
 	if e.lock == nil {
 		return ErrLockReleased
+	}
+
+	if e.plan.IsEmpty() {
+		e.localApplied = true
+		return nil
 	}
 
 	// Reject server-controlled traversal paths before any filesystem op
@@ -90,13 +92,14 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 	}
 
 	e.rollback = rb
+	e.localApplied = true
 
 	return nil
 }
 
 // DiscardRollback drops the retained .wapi/.rollback/ tree, committing the
-// mutations ExecuteLocal made. Phase 6 calls this once the new BASE
-// manifest is on disk; it is idempotent.
+// mutations ExecuteLocal made. Phase 6 (state.go) calls this once the new
+// BASE manifest is on disk; it is idempotent.
 func (e *Engine) DiscardRollback() error {
 	if e.rollback == nil {
 		return nil
