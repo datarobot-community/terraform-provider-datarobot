@@ -48,6 +48,33 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// emptyFileSHA256 is what hashFile returns for a zero-byte file. It matters to
+// Classify only as proof that a file which exists never hashes to "", so "" on
+// the local side always means absent rather than unknown.
+const emptyFileSHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+// The empty hash carries the whole meaning of "absent on that side", so a
+// present file whose hash is merely unknown must never reach Classify as "".
+// Pinned here because the wrong half of it is silent: a blank remote checksum
+// reads as a remote deletion and takes a local file with it.
+func TestClassify_EmptyHashMeansAbsentNotUnknown(t *testing.T) {
+	t.Parallel()
+
+	// A zero-byte file still has a digest, so it is present on every side it
+	// appears on -- never a deletion.
+	assert.Equal(t, ClsUnchanged, Classify(emptyFileSHA256, emptyFileSHA256, emptyFileSHA256))
+	assert.Equal(t, ClsLocalAdded, Classify("", emptyFileSHA256, ""))
+	assert.Equal(t, ClsRemoteAdded, Classify("", "", emptyFileSHA256))
+
+	// A file still on the remote, arriving with a blank checksum, is
+	// indistinguishable from one deleted there -- and the action deletes it
+	// locally. filesapi.AllFiles rejects such a row; every other remote
+	// manifest source has to do the same before it classifies.
+	got := Classify("X", "X", "")
+	assert.Equal(t, ClsRemoteDeleted, got)
+	assert.Equal(t, ActDownloadDelete, ActionFor(got))
+}
+
 func TestActionFor_EditDelConflictDownloadsOverDelete(t *testing.T) {
 	t.Parallel()
 

@@ -152,6 +152,17 @@ func ActionFor(c Classification) Action {
 
 // Classify maps the (base, local, remote) triple to a Classification. An
 // empty hash means absent on that side.
+//
+// Precondition: a hash is empty only when the path really is absent. A file
+// that exists but whose hash is unknown must not arrive as "". The local side
+// cannot break this -- hashFile returns a 64-char digest for every regular file
+// it reads, e3b0c442... for a zero-byte one, and reports a digest it could not
+// compute as an error rather than as "". The remote side can: filesapi.AllFiles
+// copies fileChecksum into FileMeta.Hash, so a listing row with a blank
+// checksum would arrive as remoteHash == "", classify REMOTE_DELETED, and
+// ActDownloadDelete a local file that is still on the remote. AllFiles rejects
+// such a row at the boundary; any other remote manifest source has to do the
+// same before it classifies.
 func Classify(baseHash, localHash, remoteHash string) Classification {
 	bExists := baseHash != ""
 	lExists := localHash != ""
