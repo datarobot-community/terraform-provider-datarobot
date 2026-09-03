@@ -20,34 +20,6 @@ type InitOptions struct {
 
 // Initialize creates .wapi/ with config.json, empty BASE manifest.json, and
 // .gitignore "*". Returns ErrAlreadyLinked if .wapi/ already exists.
-func Initialize(projectDir string, opts InitOptions) error {
-	if opts.ArtifactID == "" {
-		return fmt.Errorf("artifactId is required")
-	}
-
-	if err := os.Mkdir(wapiDir(projectDir), 0o755); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return ErrAlreadyLinked
-		}
-		return fmt.Errorf("create .wapi/ directory: %w", err)
-	}
-
-	now := time.Now().UTC()
-	cfg := Config{
-		ArtifactID:          opts.ArtifactID,
-		CatalogID:           stringPtr(opts.CatalogID),
-		LastSyncedVersionID: stringPtr(opts.LastSyncedVersionID),
-		CreatedAt:           now,
-		CLIVersion:          ProviderWriter,
-	}
-	if err := writeConfig(projectDir, cfg); err != nil {
-		return err
-	}
-	if err := writeManifest(projectDir, Manifest{Version: ManifestVersion}); err != nil {
-		return err
-	}
-	if err := atomicWriteFile(gitignorePath(projectDir), []byte(gitignoreContents)); err != nil {
-		return err
 func Initialize(projectDir string, opts InitOptions) (err error) {
 	if opts.ArtifactID == "" {
 		return fmt.Errorf("artifactId is required")
@@ -83,9 +55,6 @@ func Initialize(projectDir string, opts InitOptions) (err error) {
 	if err = writeManifest(projectDir, Manifest{Version: ManifestVersion}); err != nil {
 		return err
 	}
-
-	return nil
-}
 
 	return nil
 }
