@@ -255,3 +255,55 @@ func TestRoundTrip_InLegacyDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ManifestVersion, m.Version)
 }
+
+// --- CLI-written keys the provider does not own -------------------------------
+
+func TestSaveConfig_PreservesLastBuiltVersionID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	// Stand in for a CLI write: the provider never sets this key, but it must
+	// survive a load/save round trip because the CLI reads it to decide whether
+	// code moved since the last image build.
+	cliWritten := `{
+  "artifactId": "art-1",
+  "catalogId": "cat-1",
+  "lastSyncedVersionId": "ver-1",
+  "lastBuiltVersionId": "built-42",
+  "createdAt": "2026-04-10T09:15:00Z",
+  "cliVersion": "1.2.3"
+}`
+	require.NoError(t, os.WriteFile(configPath(dir), []byte(cliWritten), 0o600))
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.LastBuiltVersionID)
+	assert.Equal(t, "built-42", *cfg.LastBuiltVersionID)
+
+	require.NoError(t, SaveConfig(dir, cfg))
+
+	raw, err := os.ReadFile(configPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.Equal(t, "built-42", parsed["lastBuiltVersionId"])
+}
+
+func TestInitialize_WritesNullLastBuiltVersionID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	raw, err := os.ReadFile(configPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+
+	// The CLI validates this key with `omitempty`, so an explicit null is valid
+	// for a project the provider linked and nothing has built yet.
+	require.Contains(t, parsed, "lastBuiltVersionId")
+	assert.Nil(t, parsed["lastBuiltVersionId"])
+}
