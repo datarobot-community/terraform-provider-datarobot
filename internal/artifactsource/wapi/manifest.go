@@ -16,7 +16,8 @@ type FileMeta struct {
 	Size int64  `json:"size"`
 }
 
-// Manifest is .wapi/manifest.json — BASE from the last successful sync.
+// Manifest is the state directory's manifest.json — BASE from the last
+// successful sync.
 type Manifest struct {
 	Version         int                 `json:"version"`
 	SyncedAt        *time.Time          `json:"syncedAt"`
@@ -24,7 +25,8 @@ type Manifest struct {
 	Files           map[string]FileMeta `json:"files"`
 }
 
-// LoadManifest reads .wapi/manifest.json. Nil Files becomes an empty map.
+// LoadManifest reads manifest.json. Nil Files becomes an empty map, and a
+// version this build does not support is reported as corrupted.
 func LoadManifest(projectDir string) (Manifest, error) {
 	path := manifestPath(projectDir)
 	data, err := os.ReadFile(path)
@@ -42,11 +44,21 @@ func LoadManifest(projectDir string) (Manifest, error) {
 	if m.Files == nil {
 		m.Files = map[string]FileMeta{}
 	}
+	// The CLI pins this with `validate:"eq=1"`. Reading a version this build
+	// does not know would treat some future BASE format as if it were v1, and a
+	// misread BASE is a wrong three-way merge rather than a failed one.
+	if m.Version != ManifestVersion {
+		return Manifest{}, &CorruptedError{
+			Path: path,
+			Err:  fmt.Errorf("unsupported manifest version %d, want %d", m.Version, ManifestVersion),
+		}
+	}
 
 	return m, nil
 }
 
-// SaveManifest atomically writes .wapi/manifest.json.
+// SaveManifest atomically writes manifest.json. A zero Version is written as
+// ManifestVersion.
 func SaveManifest(projectDir string, m Manifest) error {
 	if err := writeManifest(projectDir, m); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -58,6 +70,13 @@ func SaveManifest(projectDir string, m Manifest) error {
 }
 
 func writeManifest(projectDir string, m Manifest) error {
+	// Both defaults keep a manifest built from a filesystem walk, rather than
+	// loaded from disk, writable without the caller restating constants: nil
+	// Files would emit "files": null, and a zero Version would emit
+	// "version": 0, which the CLI rejects as corrupted.
+	if m.Version == 0 {
+		m.Version = ManifestVersion
+	}
 	if m.Files == nil {
 		m.Files = map[string]FileMeta{}
 	}

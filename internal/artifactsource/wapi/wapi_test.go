@@ -307,3 +307,45 @@ func TestInitialize_WritesNullLastBuiltVersionID(t *testing.T) {
 	require.Contains(t, parsed, "lastBuiltVersionId")
 	assert.Nil(t, parsed["lastBuiltVersionId"])
 }
+
+// --- manifest version ---------------------------------------------------------
+
+func TestSaveManifest_DefaultsVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	// A manifest built from a filesystem walk rather than loaded from disk: a
+	// zero Version would reach the file as "version": 0, which the CLI rejects.
+	require.NoError(t, SaveManifest(dir, Manifest{
+		Files: map[string]FileMeta{"app.py": {Hash: "aaa", Size: 12}},
+	}))
+
+	raw, err := os.ReadFile(manifestPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.EqualValues(t, ManifestVersion, parsed["version"])
+
+	m, err := LoadManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, ManifestVersion, m.Version)
+}
+
+func TestLoadManifest_UnsupportedVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	for _, version := range []string{"0", "2"} {
+		raw := `{"version": ` + version + `, "syncedAt": null, "syncedVersionId": null, "files": {}}`
+		require.NoError(t, os.WriteFile(manifestPath(dir), []byte(raw), 0o600))
+
+		_, err := LoadManifest(dir)
+		var corrupted *CorruptedError
+		require.ErrorAs(t, err, &corrupted, "version %s must not load as a usable BASE", version)
+		assert.Equal(t, manifestPath(dir), corrupted.Path)
+	}
+}
