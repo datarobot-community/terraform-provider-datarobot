@@ -7,7 +7,7 @@ import (
 
 // CLI source: cli/internal/workload/wapi/paths.go
 //
-// History, checkouts, and .wapiignore paths are not ported.
+// History, checkouts, rollback, and .wapiignore paths are not ported.
 
 const (
 	// RootDirName is the single directory a project gives DataRobot. The CLI
