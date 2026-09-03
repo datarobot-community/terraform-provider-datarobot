@@ -9,6 +9,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
+	artifactsync "github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/sync"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -68,36 +69,114 @@ func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
 	return ""
 }
 
-// pushArtifactSource uploads absDir. seeded is the matcher to upload with when
-// the caller could not write the starter ignore file, nil when the directory is
-// the source of truth as usual.
-func (r *ArtifactResource) pushArtifactSource(
-	ctx context.Context,
-	prior *ArtifactResourceModel,
-	existingCatalogID string,
-	absDir string,
-	seeded *ignore.Matcher,
-) (*artifactsource.Result, error) {
-	opts := artifactsource.Options{
-		Dir:       absDir,
-		CatalogID: existingCatalogID,
-	}
-	if prior != nil {
-		opts.CatalogVersionID = catalogVersionIDFromModel(prior)
-	}
+// artifactSourceStore adapts the provider's client service to
+// sync.ArtifactStore. The artifact the resource already holds answers the
+// engine's read (it was just created or patched, so a GET would only
+// re-fetch what we have), and the artifact returned by the code_ref patch
+// is kept so the caller can write the server's fresh view into state
+// instead of the engine discarding it.
+type artifactSourceStore struct {
+	service client.Service
+	current *client.Artifact
+	patched *client.Artifact
+}
 
-	matcher := seeded
-	if matcher == nil {
-		var err error
-		matcher, err = ignore.New(absDir)
+func (s *artifactSourceStore) Get(ctx context.Context, artifactID string) (artifactsync.ArtifactInfo, error) {
+	artifact := s.current
+	if artifact == nil || artifact.ID != artifactID {
+		traceAPICall("GetArtifact")
+		fetched, err := s.service.GetArtifact(ctx, artifactID)
 		if err != nil {
-			return nil, fmt.Errorf("load ignore rules: %w", err)
+			return artifactsync.ArtifactInfo{}, err
 		}
+		artifact = fetched
 	}
-	opts.Ignore = matcher.Match
 
-	traceAPICall("PushDirectory")
-	return artifactsource.PushDirectory(ctx, r.provider.service.FilesAPI(), opts)
+	info := artifactsync.ArtifactInfo{Locked: artifact.Status == client.ArtifactStatusLocked}
+	if ref := client.ExtractCodeRef(artifact); ref != nil {
+		info.CatalogID = ref.CatalogID
+		info.CatalogVersionID = ref.CatalogVersionID
+	}
+
+	return info, nil
+}
+
+func (s *artifactSourceStore) PatchCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) error {
+	traceAPICall("PatchArtifactCodeRef")
+	artifact, err := s.service.PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID)
+	if err != nil {
+		return err
+	}
+	s.patched = artifact
+
+	return nil
+}
+
+// artifactSourceCatalogBinding is the catalog the directory already has
+// code in, for a tree that has never been synced by the engine and so has
+// no .wapi/ yet. Terraform state is preferred over the artifact's live
+// code_ref: a clone of a locked artifact is a fresh draft with no code_ref,
+// and its new version still belongs in the catalog state points at.
+func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client.Artifact) (catalogID, versionID string) {
+	catalogID = catalogIDFromModel(state)
+	versionID = catalogVersionIDFromModel(state)
+
+	ref := client.ExtractCodeRef(artifact)
+	if ref == nil {
+		return catalogID, versionID
+	}
+
+	if catalogID == "" {
+		catalogID = ref.CatalogID
+	}
+	if versionID == "" {
+		versionID = ref.CatalogVersionID
+	}
+
+	return catalogID, versionID
+}
+
+// runArtifactSourceSync reconciles absDir with the catalog using the CLI
+// three-way sync engine: BASE (source.dir/.wapi/manifest.json) against
+// LOCAL (the directory, minus .drignore and system excludes) against
+// REMOTE (the Files API catalog). It returns the sync result and, when the
+// engine repointed the artifact, the patched artifact.
+//
+// Unlike the push-only uploader it replaces, this can also write to
+// source.dir — remote-only files are downloaded and a file edited on both
+// sides is kept as <path>.LOCAL.<timestamp> while the remote version wins
+// (terraform apply has no TTY to prompt on, so it always runs the CLI's
+// --yes policy).
+func (r *ArtifactResource) runArtifactSourceSync(
+	ctx context.Context,
+	state *ArtifactResourceModel,
+	artifact *client.Artifact,
+	absDir string,
+) (result *artifactsync.Result, patched *client.Artifact, err error) {
+	store := &artifactSourceStore{service: r.provider.service, current: artifact}
+
+	engine, err := artifactsync.New(absDir, artifact.ID, r.provider.service.FilesAPI(), store)
+	if err != nil {
+		return nil, nil, err
+	}
+	engine.BindCatalog(artifactSourceCatalogBinding(state, artifact))
+
+	// Close releases .wapi/sync.lock. A failure to release would make the
+	// next apply fail on a lock nobody holds, so it is reported rather
+	// than dropped, unless the sync itself already failed.
+	defer func() {
+		if closeErr := engine.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("release sync lock: %w", closeErr)
+		}
+	}()
+
+	traceAPICall("SyncArtifactSource")
+	result, err = engine.Run(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return result, store.patched, nil
 }
 
 // artifactSourceAbsDir resolves source.dir. The ignore file is looked up at that
@@ -180,8 +259,8 @@ func (r *ArtifactResource) syncArtifactSource(
 		return nil, false, err
 	}
 
-	// Deliberately ahead of the upload gate below: see seedArtifactSourceIgnoreFile.
-	seeded := seedArtifactSourceIgnoreFile(absDir, artifactSourceGenerateIgnore(plan), diags)
+	// Deliberately ahead of the sync gate below: see seedArtifactSourceIgnoreFile.
+	seedArtifactSourceIgnoreFile(absDir, artifactSourceGenerateIgnore(plan), diags)
 
 	if !artifactSourceNeedsUpload(plan, state, priorArtifactID, artifact.ID) {
 		return artifact, false, nil
@@ -189,34 +268,47 @@ func (r *ArtifactResource) syncArtifactSource(
 
 	artifactApplyProgressUploading(artifact.ID)
 
-	catalogID := catalogIDFromModel(state)
-	if catalogID == "" {
-		if ref := client.ExtractCodeRef(artifact); ref != nil {
-			catalogID = ref.CatalogID
-		}
+	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, absDir)
+	if err != nil {
+		return nil, false, fmt.Errorf("sync artifact source: %w", err)
 	}
 
-	pushResult, err := r.pushArtifactSource(ctx, state, catalogID, absDir, seeded)
-	if err != nil {
-		return nil, false, fmt.Errorf("upload artifact source: %w", err)
-	}
+	artifactApplyProgressSourceSynced(result)
 
-	traceAPICall("PatchArtifactCodeRef")
-	artifact, err = r.provider.service.PatchArtifactCodeRef(
-		ctx,
-		artifact.ID,
-		pushResult.CatalogID,
-		pushResult.CatalogVersionID,
-	)
-	if err != nil {
-		return nil, true, fmt.Errorf("patch artifact code reference: %w", err)
+	if patched != nil {
+		artifact = patched
 	}
 
 	return artifact, true, nil
 }
 
-// syncArtifactSourceAndBuild uploads source when needed, then triggers an image build
-// when upload produced new code on a draft artifact with image_build_config.
+// artifactApplyProgressSourceSynced reports what the sync did to
+// source.dir. Downloads, local deletions and *.LOCAL.* copies all change
+// files the user owns, so they are announced during apply instead of left
+// for the user to find in a later `git status`.
+func artifactApplyProgressSourceSynced(result *artifactsync.Result) {
+	if result == nil {
+		return
+	}
+
+	if result.Uploaded+result.Downloaded+result.Deleted+result.Conflicts == 0 {
+		emitArtifactApplyProgress("Source already matches the catalog; nothing to sync.")
+		return
+	}
+
+	emitArtifactApplyProgress(fmt.Sprintf(
+		"Synced source: %d uploaded, %d downloaded, %d deleted, %d conflicted.",
+		result.Uploaded, result.Downloaded, result.Deleted, result.Conflicts,
+	))
+
+	for _, path := range result.ConflictCopies {
+		emitArtifactApplyProgress(fmt.Sprintf(
+			"Conflict on both sides: the catalog version won, your local file was kept as %s", path))
+	}
+}
+
+// syncArtifactSourceAndBuild syncs source when needed, then triggers an image build
+// when the sync ran against a draft artifact with image_build_config.
 func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	ctx context.Context,
 	plan *ArtifactResourceModel,
