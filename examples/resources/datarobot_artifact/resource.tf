@@ -24,6 +24,11 @@ resource "datarobot_artifact" "from_source" {
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
+  # apply synchronizes this directory with the catalog in both directions:
+  # local changes are uploaded, catalog-only files are downloaded, and a file
+  # edited on both sides keeps the catalog version while your bytes are saved
+  # as <path>.LOCAL.<timestamp>. Sync bookkeeping lives in app/.wapi/
+  # (gitignore it). .datarobot.yaml is never uploaded.
   source = {
     dir = "${path.module}/app"
     # generate_ignore = true  # default: write .drignore if missing; never overwrite
