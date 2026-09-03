@@ -15,7 +15,13 @@ package sync
 //     client (Get + PatchCodeRef) instead of the CLI's workload.Artifact,
 //     so this package stays independent of internal/client.
 //   - Missing .wapi/ auto-initializes instead of erroring "not linked":
-//     there is no `dr workload code init` step in a Terraform-managed tree.
+//     there is no `dr workload code init` step in a Terraform-managed tree,
+//     and BindCatalog lets the resource seed the catalog pointers the CLI
+//     would have taken from `init` flags.
+//   - The artifact ID is re-bound on every Plan instead of being fixed at
+//     init: Terraform, not .wapi/, owns artifact identity, and a source
+//     change on a locked artifact clones to a new artifact ID against the
+//     same directory (see gather in phase.go).
 
 import (
 	"context"
@@ -60,13 +66,22 @@ type Engine struct {
 	artifacts  ArtifactStore
 	nowFn      func() time.Time
 
-	config         wapi.Config
-	base           BaseManifest
-	local          LocalManifest
-	remote         RemoteManifest
-	catalogID      string
-	remoteVer      string
-	drifted        bool
+	seedCatalogID string
+	seedVersionID string
+
+	config    wapi.Config
+	base      BaseManifest
+	local     LocalManifest
+	remote    RemoteManifest
+	catalogID string
+	remoteVer string
+	// artifactVer is the version the artifact's own code_ref pointed at
+	// during gather, which is not always remoteVer: a draft cloned from a
+	// locked artifact starts with no code_ref at all, while .wapi/ still
+	// describes the version this directory last pushed.
+	artifactVer string
+	drifted     bool
+
 	plan           *SyncPlan
 	lock           *SyncLock
 	staleNote      bool
@@ -83,9 +98,10 @@ type Engine struct {
 	syncedVersionID string
 }
 
-// New constructs an Engine bound to projectDir. artifactID seeds .wapi/ on
-// the very first Plan call, when no .wapi/config.json exists yet; once
-// initialized, later Plan calls trust config.json's own ArtifactID.
+// New constructs an Engine bound to projectDir. artifactID is the artifact
+// this sync targets: it seeds .wapi/config.json when the directory has
+// none, and replaces the recorded ID on every later Plan, so a directory
+// follows its resource across artifact versions.
 func New(projectDir, artifactID string, files filesapi.Client, artifacts ArtifactStore) (*Engine, error) {
 	if projectDir == "" {
 		return nil, errors.New("sync.New: projectDir is required")
@@ -109,6 +125,23 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 		// suffix; production always uses the wall clock.
 		nowFn: time.Now,
 	}, nil
+}
+
+// BindCatalog seeds the catalog pointers .wapi/ is created with, for a
+// directory that has code in the catalog but no .wapi/ yet — the state a
+// tree is in when it was last uploaded by the push-only uploader this
+// engine replaces. Seeding both makes that first Plan a plain push
+// (BASE empty, REMOTE not drifted) instead of creating a second catalog
+// beside the one Terraform state already points at.
+//
+// Ignored once .wapi/config.json exists: from then on the file's own
+// pointers win. Must be called before Plan.
+//
+// No CLI counterpart: `dr artifact code init` takes the same values from
+// its own flags.
+func (e *Engine) BindCatalog(catalogID, catalogVersionID string) {
+	e.seedCatalogID = catalogID
+	e.seedVersionID = catalogVersionID
 }
 
 // Plan runs phases 0-4 (preflight, gather, manifests, diff, sort) and

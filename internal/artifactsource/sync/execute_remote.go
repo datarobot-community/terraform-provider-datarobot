@@ -136,7 +136,11 @@ func (e *Engine) applyRemoteDeletesAndUploads(ctx context.Context) error {
 		}
 	}
 
-	if newVersionID != "" && newVersionID != e.remoteVer {
+	// Compared against the artifact's own code_ref, not the remote
+	// baseline the diff ran against: a draft cloned from a locked
+	// artifact has no code_ref yet and still has to be pointed at the
+	// catalog version its directory matches, even when the plan was empty.
+	if newVersionID != "" && newVersionID != e.artifactVer {
 		if err := e.artifacts.PatchCodeRef(ctx, e.config.ArtifactID, newCatalogID, newVersionID); err != nil {
 			return fmt.Errorf("update artifact code_ref: %w", err)
 		}
