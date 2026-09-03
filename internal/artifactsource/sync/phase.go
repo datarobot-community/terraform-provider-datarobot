@@ -31,7 +31,11 @@ func (e *Engine) preflight() error {
 	e.staleNote = restored
 
 	if !wapi.Exists(e.projectDir) {
-		if err := wapi.Initialize(e.projectDir, wapi.InitOptions{ArtifactID: e.artifactID}); err != nil {
+		if err := wapi.Initialize(e.projectDir, wapi.InitOptions{
+			ArtifactID:          e.artifactID,
+			CatalogID:           e.seedCatalogID,
+			LastSyncedVersionID: e.seedVersionID,
+		}); err != nil {
 			return fmt.Errorf("auto-init .wapi/: %w", err)
 		}
 	}
@@ -52,6 +56,15 @@ func (e *Engine) gather(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read .wapi/config.json: %w", err)
 	}
+
+	// The caller's artifact ID wins over the one .wapi/ was initialized
+	// with. A source change on a locked artifact clones to a new draft
+	// artifact against the same directory and the same catalog, so
+	// config.json has to follow the resource instead of pinning the
+	// version that has since been superseded (which Get would then
+	// reject as locked). No CLI counterpart: `dr artifact code init`
+	// binds one artifact ID for the life of the directory.
+	cfg.ArtifactID = e.artifactID
 	e.config = cfg
 
 	manifest, err := wapi.LoadManifest(e.projectDir)
@@ -75,7 +88,17 @@ func (e *Engine) gather(ctx context.Context) error {
 	if cfg.CatalogID != nil && *cfg.CatalogID != "" {
 		e.catalogID = *cfg.CatalogID
 	}
+	e.artifactVer = info.CatalogVersionID
 	e.remoteVer = info.CatalogVersionID
+
+	// A freshly cloned draft carries no code_ref yet, so diff against the
+	// version this directory last pushed rather than against nothing:
+	// otherwise every clone re-uploads the whole tree, and the clone of an
+	// unchanged tree would leave the new artifact with no code at all.
+	if e.remoteVer == "" {
+		e.remoteVer = ptrOrEmpty(cfg.LastSyncedVersionID)
+	}
+
 	e.drifted = e.remoteVer != "" && e.remoteVer != ptrOrEmpty(cfg.LastSyncedVersionID)
 
 	return nil
