@@ -36,7 +36,11 @@ func (e *Engine) preflight() error {
 		// Initialize creates the state directory with a single atomic
 		// os.Mkdir, so a concurrent first Plan that loses the race adopts
 		// the winner's tree instead of failing on "already linked".
-		err := wapi.Initialize(e.projectDir, wapi.InitOptions{ArtifactID: e.artifactID})
+		err := wapi.Initialize(e.projectDir, wapi.InitOptions{
+			ArtifactID:          e.artifactID,
+			CatalogID:           e.seedCatalogID,
+			LastSyncedVersionID: e.seedVersionID,
+		})
 		if err != nil && !errors.Is(err, wapi.ErrAlreadyLinked) {
 			return fmt.Errorf("auto-init .wapi/: %w", err)
 		}
@@ -69,6 +73,15 @@ func (e *Engine) gather(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read .wapi/config.json: %w", err)
 	}
+
+	// The caller's artifact ID wins over the one .wapi/ was initialized
+	// with. A source change on a locked artifact clones to a new draft
+	// artifact against the same directory and the same catalog, so
+	// config.json has to follow the resource instead of pinning the
+	// version that has since been superseded (which Get would then
+	// reject as locked). No CLI counterpart: `dr artifact code init`
+	// binds one artifact ID for the life of the directory.
+	cfg.ArtifactID = e.artifactID
 	e.config = cfg
 
 	manifest, err := wapi.LoadManifest(e.projectDir)
@@ -76,18 +89,6 @@ func (e *Engine) gather(ctx context.Context) error {
 		return fmt.Errorf("read .wapi/manifest.json: %w", err)
 	}
 	e.base = baseFromManifest(manifest)
-
-	// The artifact this directory is bound to is the one we sync, and it
-	// has to be the one the caller asked for. cfg.ArtifactID wins on
-	// content (it survives across calls) but a divergence is a caller bug,
-	// not something to paper over: syncing artifact B's files into
-	// artifact A because .wapi/ still remembers A is worse than failing.
-	// Auto-init writes e.artifactID, so this can only fire on state that
-	// was already there.
-	if cfg.ArtifactID != e.artifactID {
-		return fmt.Errorf("%w: %s is bound to artifact %s, not %s",
-			ErrArtifactMismatch, wapi.Dir(e.projectDir), cfg.ArtifactID, e.artifactID)
-	}
 
 	info, err := e.artifacts.Get(ctx, cfg.ArtifactID)
 	if err != nil {
@@ -112,7 +113,17 @@ func (e *Engine) gather(ctx context.Context) error {
 	if cfg.CatalogID != nil && *cfg.CatalogID != "" {
 		e.catalogID = *cfg.CatalogID
 	}
+	e.artifactVer = info.CatalogVersionID
 	e.remoteVer = info.CatalogVersionID
+
+	// A freshly cloned draft carries no code_ref yet, so diff against the
+	// version this directory last pushed rather than against nothing:
+	// otherwise every clone re-uploads the whole tree, and the clone of an
+	// unchanged tree would leave the new artifact with no code at all.
+	if e.remoteVer == "" {
+		e.remoteVer = ptrOrEmpty(cfg.LastSyncedVersionID)
+	}
+
 	e.drifted = e.remoteVer != "" && e.remoteVer != ptrOrEmpty(cfg.LastSyncedVersionID)
 
 	return nil
