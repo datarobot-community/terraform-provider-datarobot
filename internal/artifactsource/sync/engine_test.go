@@ -705,3 +705,178 @@ func TestEngine_Plan_LocalAndRemoteDeletesDetected(t *testing.T) {
 	assert.Empty(t, plan.Conflicts)
 	assert.Empty(t, plan.Downloads)
 }
+
+// The tests below cover the Terraform-specific bindings the CLI has no
+// equivalent for: the artifact ID follows the resource across artifact
+// versions, and the catalog pointers can be seeded from Terraform state
+// for a tree that predates .wapi/.
+
+func TestEngine_Plan_RebindsArtifactIDFromCaller(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-old",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	var gotID string
+	e, err := New(dir, "art-new", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(_ context.Context, artifactID string) (ArtifactInfo, error) {
+			gotID = artifactID
+			return draftInfo("cat-1", "ver-1"), nil
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "art-new", gotID, "the caller's artifact ID must win over the one recorded in .wapi/")
+	assert.Equal(t, "art-new", e.config.ArtifactID)
+}
+
+func TestEngine_Plan_ClonedArtifactDiffsAgainstLastSyncedVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-old",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	files := &fakeFilesAPI{}
+	// A draft just cloned from a locked artifact: no code_ref of its own.
+	e, err := New(dir, "art-clone", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.True(t, plan.IsEmpty(), "an unchanged tree must not re-upload just because the artifact is new: %+v", plan)
+	assert.False(t, files.allFilesCalled, "the clone is not drifted, so REMOTE comes from BASE")
+	assert.Equal(t, "ver-1", e.remoteVer, "REMOTE is the version this directory last pushed")
+	assert.Empty(t, e.artifactVer, "the clone's own code_ref is still empty")
+}
+
+func TestEngine_ExecuteRemote_PointsClonedArtifactAtLastSyncedVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-old",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	files := &fakeFilesAPI{}
+	artifacts := &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	}
+
+	e, err := New(dir, "art-clone", files, artifacts)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	result, err := e.Run(context.Background())
+	require.NoError(t, err)
+
+	// Nothing changed on either side, but the clone still has to be
+	// pointed at the code its directory matches.
+	assert.Equal(t, []patchCall{{ArtifactID: "art-clone", CatalogID: "cat-1", CatalogVersionID: "ver-1"}}, artifacts.patches)
+	assert.Zero(t, result.Uploaded)
+	assert.Equal(t, "cat-1", result.CatalogID)
+	assert.Equal(t, "ver-1", result.CatalogVersionID)
+
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "art-clone", cfg.ArtifactID, "phase 6 persists the re-bound artifact ID")
+}
+
+func TestEngine_BindCatalog_SeedsWapiForATreeWithoutIt(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-state", "ver-state"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	// Terraform state says the tree already has code in cat-state; the
+	// first engine run must push into that catalog, not create a new one.
+	e.BindCatalog("cat-state", "ver-state")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "cat-state", e.catalogID)
+	assert.False(t, files.allFilesCalled, "a seeded version matches, so the catalog is not drifted")
+	assert.Len(t, plan.Uploads, 1, "BASE is empty, so the whole tree is pushed once")
+
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.CatalogID)
+	assert.Equal(t, "cat-state", *cfg.CatalogID)
+	require.NotNil(t, cfg.LastSyncedVersionID)
+	assert.Equal(t, "ver-state", *cfg.LastSyncedVersionID)
+}
+
+func TestEngine_BindCatalog_IgnoredOnceWapiExists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		CatalogID:           "cat-existing",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	e, err := New(dir, "art-1", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-existing", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.BindCatalog("cat-seed", "ver-seed")
+
+	_, err = e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "cat-existing", e.catalogID, ".wapi/config.json wins once it exists")
+}
