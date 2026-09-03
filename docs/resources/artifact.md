@@ -39,6 +39,11 @@ resource "datarobot_artifact" "from_source" {
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
+  # apply synchronizes this directory with the catalog in both directions:
+  # local changes are uploaded, catalog-only files are downloaded, and a file
+  # edited on both sides keeps the catalog version while your bytes are saved
+  # as <path>.LOCAL.<timestamp>. Sync bookkeeping lives in app/.wapi/
+  # (gitignore it). .datarobot.yaml is never uploaded.
   source = {
     dir = "${path.module}/app"
     # generate_ignore = true  # default: write .drignore if missing; never overwrite
@@ -121,7 +126,7 @@ output "from_source_locked_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.
 - `description` (String) The description of the Artifact.
-- `source` (Attributes) Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. (see [below for nested schema](#nestedatt--source))
+- `source` (Attributes) Local source directory to synchronize with the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider syncs, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. **Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.wapi/` (last-synced manifest, catalog pointers, lock file — safe to add to `.gitignore`), downloads files that exist in the catalog but not locally, removes local files that were deleted from the catalog, and, for a file edited both locally and in the catalog, keeps the catalog version at the original path while preserving your bytes as `<path>.LOCAL.<timestamp>` (`terraform apply` has no prompt, so the catalog always wins). `.datarobot.yaml` is never uploaded. (see [below for nested schema](#nestedatt--source))
 - `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service` or `nim`. Defaults to `service`.
 
@@ -279,13 +284,13 @@ Read-Only:
 
 Required:
 
-- `dir` (String) Path to the local directory containing application source files to upload.
+- `dir` (String) Path to the local directory containing application source files to synchronize. Apply may add, overwrite, or remove files in this directory — see the `source` description.
 
 Optional:
 
-- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. `.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`.
+- `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. `.datarobot.yaml` is always excluded from upload (system exclude), whether or not it appears in `.drignore`. The default template also excludes `*.LOCAL.*`, so the conflict copies the sync creates are not uploaded on the next apply; keep that pattern if you edit the file.
 - `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
 
 Read-Only:
 
-- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip re-upload when unchanged. `.datarobot.yaml` is never part of this hash.
+- `dir_hash` (String) SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. Used to detect changes and skip the sync when unchanged. `.datarobot.yaml` and `dir/.wapi/` are never part of this hash. Recomputed after apply, so files the sync downloaded are reflected in state.
