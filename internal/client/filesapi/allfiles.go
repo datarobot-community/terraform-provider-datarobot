@@ -6,6 +6,8 @@
 //   - Path normalization uses local SafeRelPath/NormalizePath (paths.go) instead of
 //     fileops.SafeRelPath/fileops.NormalizePath from cli/internal/workload/fileops.
 //   - allFilesURL is a method on *httpClient using c.endpointURL; CLI uses drapi.EndpointURL.
+//   - AllFiles rejects a listing row with a blank fileChecksum; the CLI passes it
+//     through. An empty hash is how sync.Classify spells "absent on that side".
 package filesapi
 
 import (
@@ -33,6 +35,15 @@ func (c *httpClient) AllFiles(ctx context.Context, catalogID, versionID string) 
 			key := NormalizePath(item.FileName)
 			if err := SafeRelPath(key); err != nil {
 				return nil, fmt.Errorf("remote manifest entry %q: %w", item.FileName, err)
+			}
+
+			// FileMeta.Hash is a SHA-256 hex digest, and the three-way sync
+			// table reads an empty hash as absent on that side. A blank
+			// checksum here would classify as REMOTE_DELETED and delete a
+			// local file that is still on the remote, so refuse the listing
+			// rather than return a row that cannot be told from a deletion.
+			if item.FileChecksum == "" {
+				return nil, fmt.Errorf("remote manifest entry %q: blank fileChecksum", item.FileName)
 			}
 
 			out[key] = FileMeta{Hash: item.FileChecksum, Size: item.FileSize}
