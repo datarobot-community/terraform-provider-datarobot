@@ -22,7 +22,11 @@ func TestInitialize_CreatesLayout(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	entries, err := os.ReadDir(filepath.Join(dir, DirName))
+	assert.Equal(t, filepath.Join(dir, RootDirName, StateDirName), Dir(dir),
+		"state belongs under the directory the CLI resolves, not the legacy root entry")
+	assert.NoDirExists(t, filepath.Join(dir, LegacyDirName))
+
+	entries, err := os.ReadDir(Dir(dir))
 	require.NoError(t, err)
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -179,5 +183,75 @@ func TestInitialize_EmptyArtifactID(t *testing.T) {
 	dir := t.TempDir()
 	err := Initialize(dir, InitOptions{})
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "artifactId")
+
+	// Initialize mkdirs the .datarobot parent on its way to the state dir, so
+	// this is what pins the check ahead of every filesystem change: a rejected
+	// call leaves the project exactly as it found it, with no stray parent.
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 	assert.False(t, Exists(dir))
+}
+
+// --- state directory location -------------------------------------------------
+
+func TestDir_FallsBackToLegacy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, LegacyDirName)
+	require.NoError(t, os.Mkdir(legacy, 0o755))
+
+	assert.Equal(t, legacy, Dir(dir), "an un-migrated project is read where its state still stands")
+	assert.True(t, Exists(dir))
+}
+
+func TestDir_PrefersCurrentOverLegacy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	current := filepath.Join(dir, RootDirName, StateDirName)
+	require.NoError(t, os.MkdirAll(current, 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, LegacyDirName), 0o755))
+
+	// Matches the CLI's EnsureMigrated: with both present the current location
+	// wins and the two trees are never merged.
+	assert.Equal(t, current, Dir(dir))
+}
+
+func TestInitialize_AlreadyLinkedAtLegacy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, LegacyDirName)
+	require.NoError(t, os.Mkdir(legacy, 0o755))
+
+	err := Initialize(dir, InitOptions{ArtifactID: "art-1"})
+	assert.ErrorIs(t, err, ErrAlreadyLinked)
+	assert.NoDirExists(t, filepath.Join(dir, RootDirName, StateDirName),
+		"a legacy-linked project must not acquire a second state directory")
+}
+
+func TestRoundTrip_InLegacyDir(t *testing.T) {
+	t.Parallel()
+
+	// A tree the CLI linked before the move, which nothing has migrated yet:
+	// the provider has to read and write that same config.json.
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, LegacyDirName), 0o755))
+
+	require.NoError(t, SaveConfig(dir, Config{ArtifactID: "art-1", CLIVersion: ProviderWriter}))
+	require.NoError(t, SaveManifest(dir, Manifest{Version: ManifestVersion}))
+
+	assert.FileExists(t, filepath.Join(dir, LegacyDirName, configFile))
+	assert.NoDirExists(t, filepath.Join(dir, RootDirName))
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "art-1", cfg.ArtifactID)
+
+	m, err := LoadManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, ManifestVersion, m.Version)
 }
