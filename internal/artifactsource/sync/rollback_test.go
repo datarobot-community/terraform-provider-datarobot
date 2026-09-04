@@ -82,7 +82,7 @@ func TestRollback_Init_NoWapiDir(t *testing.T) {
 	rt := NewRollbackTree(dir)
 	err := rt.Init()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".wapi directory does not exist")
+	assert.Contains(t, err.Error(), "sync state directory")
 }
 
 func TestRollback_NestedDirectories(t *testing.T) {

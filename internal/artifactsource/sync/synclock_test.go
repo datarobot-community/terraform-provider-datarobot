@@ -17,7 +17,7 @@ func TestAcquireLock_NotInitialized(t *testing.T) {
 	dir := t.TempDir()
 	_, err := AcquireLock(dir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".wapi directory does not exist")
+	assert.Contains(t, err.Error(), "sync state directory")
 }
 
 func TestAcquireLock_WapiIsFile(t *testing.T) {
@@ -29,7 +29,7 @@ func TestAcquireLock_WapiIsFile(t *testing.T) {
 
 	_, err := AcquireLock(dir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".wapi directory does not exist")
+	assert.Contains(t, err.Error(), "sync state directory")
 }
 
 func TestAcquireLock_Exclusivity(t *testing.T) {
