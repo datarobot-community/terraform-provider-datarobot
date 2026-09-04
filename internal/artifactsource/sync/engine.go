@@ -25,9 +25,11 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 )
 
-// ErrLockedArtifact is returned by Plan when the bound artifact is locked.
-// Locked artifacts are immutable; cloning to a new draft artifact remains
-// the resource's job before Plan runs again (mirrors CLI phase1_gather.go).
+// ErrLockedArtifact reports that the bound artifact is locked and so
+// cannot be written to. Plan does not return it — planning a locked
+// artifact is allowed and only reports the fact via ArtifactLocked (see
+// gather) — Execute does, once it lands (mirrors CLI phase1_gather.go,
+// where the check is gated on previewOnly and re-run in phase 5).
 var ErrLockedArtifact = errors.New("artifact is locked (immutable); cannot sync in place, clone to a draft first")
 
 // ErrArtifactMismatch is returned by Plan when the state directory is
@@ -72,6 +74,7 @@ type Engine struct {
 	plan      *SyncPlan
 	lock      *SyncLock
 	staleNote bool
+	locked    bool
 }
 
 // New constructs an Engine bound to projectDir. artifactID seeds .wapi/ on
@@ -131,6 +134,14 @@ func (e *Engine) Plan(ctx context.Context) (*SyncPlan, error) {
 // StaleRollbackRestored reports whether preflight restored a stale
 // .wapi/.rollback/ tree left by a previously interrupted sync.
 func (e *Engine) StaleRollbackRestored() bool { return e.staleNote }
+
+// ArtifactLocked reports whether the artifact this plan was built against
+// is locked. The plan is still accurate — it describes what a sync would
+// move — but nothing can be written into a locked artifact, so a caller
+// with a non-empty plan has to mint a new version (or clone to a draft)
+// before executing it. An empty plan against a locked artifact means
+// there is nothing to write and so nothing to clone for.
+func (e *Engine) ArtifactLocked() bool { return e.locked }
 
 // Close releases the sync lock. Idempotent; safe to call even if Plan
 // never ran or returned an error (which already releases the lock).

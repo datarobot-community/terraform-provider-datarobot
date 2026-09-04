@@ -287,10 +287,11 @@ func TestEngine_Plan_IgnoredFilesAbsentFromLocal(t *testing.T) {
 	assert.ElementsMatch(t, []string{"agent.py", ".drignore"}, uploadPaths)
 }
 
-func TestEngine_Plan_LockedArtifactRejected(t *testing.T) {
+func TestEngine_Plan_LockedArtifactStillPlans(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
 
 	e, err := New(dir, "art-1", &fakeFilesAPI{}, &fakeArtifactStore{
 		GetFn: func(context.Context, string) (ArtifactInfo, error) {
@@ -300,10 +301,83 @@ func TestEngine_Plan_LockedArtifactRejected(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
 
+	// CLI parity (phase1_gather.go's previewOnly exemption): a locked
+	// artifact must not refuse the plan, because the caller needs the diff
+	// to decide whether a new version is required at all. The rejection
+	// belongs to Execute.
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, plan.Uploads, 1, "the plan must still count the files a sync would move")
+	assert.True(t, e.ArtifactLocked(), "Plan must report the lock instead of failing on it")
+}
+
+func TestEngine_Plan_LockedArtifactEmptyPlanNeedsNoClone(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	agentHash, agentSize := hashContent("x")
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: agentHash, Size: agentSize}},
+	}))
+
+	e, err := New(dir, "art-1", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) {
+			return ArtifactInfo{Locked: true, CatalogID: "cat-1", CatalogVersionID: "ver-1"}, nil
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	// The case the preview exemption exists for: in sync with a locked
+	// artifact means no write is needed, so the caller can skip minting a
+	// new version entirely. Rejecting at Plan would have hidden that.
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty())
+	assert.True(t, e.ArtifactLocked())
+}
+
+func TestEngine_Plan_RejectsArtifactMismatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	// State already bound to art-1 (e.g. a prior Plan), then an Engine
+	// constructed for a different artifact — the clone-to-draft flow.
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1"}))
+
+	fetched := 0
+	e, err := New(dir, "art-2", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) {
+			fetched++
+			return draftInfo("", ""), nil
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
 	_, err = e.Plan(context.Background())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrLockedArtifact)
-	assert.Contains(t, err.Error(), "locked")
+	assert.ErrorIs(t, err, ErrArtifactMismatch)
+	assert.Contains(t, err.Error(), "art-1")
+	assert.Contains(t, err.Error(), "art-2")
+	assert.Zero(t, fetched, "must fail before syncing anything against the wrong artifact")
+
+	// The lock must be released so the caller can retry after rebinding.
+	lock, err := AcquireLock(dir)
+	require.NoError(t, err)
+	require.NoError(t, lock.Unlock())
+}
+
 
 	// The lock must be released so a later Plan (after the resource
 	// clones to a draft) is not blocked by this failed attempt.
