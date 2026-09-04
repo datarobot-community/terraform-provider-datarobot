@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 )
 
 // CLI source: cli/internal/workload/sync/rollback.go
@@ -26,7 +28,8 @@ type RollbackManifest struct {
 	CreatedFiles  []string `json:"createdFiles,omitempty"`
 }
 
-// RollbackTree manages backup and restoration of mutated files under .wapi/.rollback.
+// RollbackTree manages backup and restoration of mutated files under
+// the sync state directory's .rollback subdirectory.
 type RollbackTree struct {
 	projectDir  string
 	rollbackDir string
@@ -35,10 +38,10 @@ type RollbackTree struct {
 
 // NewRollbackTree constructs a RollbackTree for projectDir.
 func NewRollbackTree(projectDir string) *RollbackTree {
-	wapiDir := filepath.Join(projectDir, ".wapi")
+	stateDir := wapi.Dir(projectDir)
 	return &RollbackTree{
 		projectDir:  projectDir,
-		rollbackDir: filepath.Join(wapiDir, rollbackDirName),
+		rollbackDir: filepath.Join(stateDir, rollbackDirName),
 		manifest: RollbackManifest{
 			BackedUpFiles: make([]string, 0),
 			CreatedFiles:  make([]string, 0),
@@ -46,18 +49,19 @@ func NewRollbackTree(projectDir string) *RollbackTree {
 	}
 }
 
-// HasRollback reports whether a .wapi/.rollback directory exists in projectDir.
+// HasRollback reports whether a .rollback directory exists in projectDir's
+// sync state directory (resolved through wapi.Dir, see AcquireLock).
 func HasRollback(projectDir string) bool {
-	rollbackPath := filepath.Join(projectDir, ".wapi", rollbackDirName)
+	rollbackPath := filepath.Join(wapi.Dir(projectDir), rollbackDirName)
 	info, err := os.Stat(rollbackPath)
 	return err == nil && info.IsDir()
 }
 
-// Init creates the .wapi/.rollback directory if missing.
+// Init creates the .rollback directory in the sync state directory if missing.
 func (r *RollbackTree) Init() error {
-	wapiDir := filepath.Join(r.projectDir, ".wapi")
-	if _, err := os.Stat(wapiDir); err != nil {
-		return fmt.Errorf(".wapi directory does not exist: %w", err)
+	stateDir := wapi.Dir(r.projectDir)
+	if _, err := os.Stat(stateDir); err != nil {
+		return fmt.Errorf("sync state directory %s does not exist: %w", stateDir, err)
 	}
 
 	if err := os.MkdirAll(r.rollbackDir, 0755); err != nil {
@@ -66,7 +70,7 @@ func (r *RollbackTree) Init() error {
 	return nil
 }
 
-// Backup backs up projectDir/relPath into .wapi/.rollback/relPath.
+// Backup backs up projectDir/relPath into the rollback tree.
 // If the file does not exist locally (will be created by download), it tracks it for removal on rollback.
 func (r *RollbackTree) Backup(relPath string) error {
 	cleanRel, err := validateAndCleanRelPath(relPath)
@@ -99,18 +103,19 @@ func (r *RollbackTree) Backup(relPath string) error {
 	return r.saveManifest()
 }
 
-// Restore restores all backed up files to projectDir and cleans up .wapi/.rollback.
+// Restore restores all backed up files to projectDir and cleans up the rollback tree.
 func (r *RollbackTree) Restore() error {
 	return RestoreRollback(r.projectDir)
 }
 
-// RestoreRollback restores backed-up files from .wapi/.rollback into projectDir and deletes .wapi/.rollback.
+// RestoreRollback restores backed-up files from the rollback tree into
+// projectDir and deletes the tree.
 func RestoreRollback(projectDir string) error {
 	if !HasRollback(projectDir) {
 		return nil // No rollback tree to restore
 	}
 
-	rollbackPath := filepath.Join(projectDir, ".wapi", rollbackDirName)
+	rollbackPath := filepath.Join(wapi.Dir(projectDir), rollbackDirName)
 	manifestPath := filepath.Join(rollbackPath, manifestFileName)
 	if manifestData, err := os.ReadFile(manifestPath); err == nil {
 		var manifest RollbackManifest
@@ -166,7 +171,7 @@ func RestoreRollback(projectDir string) error {
 	return os.RemoveAll(rollbackPath)
 }
 
-// Discard removes .wapi/.rollback without restoring files.
+// Discard removes the rollback tree without restoring files.
 func (r *RollbackTree) Discard() error {
 	if _, err := os.Stat(r.rollbackDir); err == nil {
 		return os.RemoveAll(r.rollbackDir)
@@ -234,9 +239,13 @@ func validateAndCleanRelPath(rel string) (string, error) {
 	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || strings.HasPrefix(cleaned, "../") {
 		return "", fmt.Errorf("path escapes root directory")
 	}
+	// Guard both state locations: .datarobot/ (current root, which also
+	// holds other CLI tool state) and a legacy .wapi/ the CLI has not
+	// migrated yet. Backing either up would let a rollback rewrite the
+	// very state that describes the rollback.
 	parts := strings.Split(filepath.ToSlash(cleaned), "/")
-	if len(parts) > 0 && parts[0] == ".wapi" {
-		return "", fmt.Errorf("path targets .wapi directory")
+	if len(parts) > 0 && (parts[0] == wapi.RootDirName || parts[0] == wapi.LegacyDirName) {
+		return "", fmt.Errorf("path targets the %s state directory", parts[0])
 	}
 	return cleaned, nil
 }

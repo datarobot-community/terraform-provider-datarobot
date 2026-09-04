@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 )
 
 // CLI source: cli/internal/workload/sync/synclock.go
@@ -20,16 +22,20 @@ type SyncLock struct {
 	file     *os.File
 }
 
-// AcquireLock attempts to lock .wapi/sync.lock in projectDir.
-// Returns ErrLocked if the lock is already held.
+// AcquireLock attempts to lock sync.lock inside projectDir's sync state
+// directory. Returns ErrLocked if the lock is already held.
+//
+// The directory is resolved through wapi.Dir, not hardcoded: state lives
+// at .datarobot/workload/ and only falls back to a legacy .wapi/ that the
+// CLI has not migrated yet, so the lock has to follow it either way.
 func AcquireLock(projectDir string) (*SyncLock, error) {
-	wapiDir := filepath.Join(projectDir, ".wapi")
-	info, err := os.Stat(wapiDir)
+	stateDir := wapi.Dir(projectDir)
+	info, err := os.Stat(stateDir)
 	if err != nil || !info.IsDir() {
-		return nil, fmt.Errorf(".wapi directory does not exist in %s", projectDir)
+		return nil, fmt.Errorf("sync state directory %s does not exist", stateDir)
 	}
 
-	lockPath := filepath.Join(wapiDir, lockFileName)
+	lockPath := filepath.Join(stateDir, lockFileName)
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
