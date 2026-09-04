@@ -30,6 +30,14 @@ import (
 // the resource's job before Plan runs again (mirrors CLI phase1_gather.go).
 var ErrLockedArtifact = errors.New("artifact is locked (immutable); cannot sync in place, clone to a draft first")
 
+// ErrArtifactMismatch is returned by Plan when the state directory is
+// already bound to a different artifact than the Engine was constructed
+// for. Rebinding is not a config edit: BASE describes the *old*
+// artifact's catalog, so reusing it as the common ancestor of a different
+// artifact would produce a meaningless diff. Whoever wants to retarget a
+// source.dir has to reset BASE with it, which is the resource's call.
+var ErrArtifactMismatch = errors.New("state directory is bound to a different artifact")
+
 // ArtifactInfo is the minimal artifact view Plan needs: whether the
 // artifact is locked, and its current code_ref (empty CatalogID /
 // CatalogVersionID before any code has ever been uploaded).

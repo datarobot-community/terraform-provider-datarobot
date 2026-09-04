@@ -77,13 +77,33 @@ func (e *Engine) gather(ctx context.Context) error {
 	}
 	e.base = baseFromManifest(manifest)
 
+	// The artifact this directory is bound to is the one we sync, and it
+	// has to be the one the caller asked for. cfg.ArtifactID wins on
+	// content (it survives across calls) but a divergence is a caller bug,
+	// not something to paper over: syncing artifact B's files into
+	// artifact A because .wapi/ still remembers A is worse than failing.
+	// Auto-init writes e.artifactID, so this can only fire on state that
+	// was already there.
+	if cfg.ArtifactID != e.artifactID {
+		return fmt.Errorf("%w: %s is bound to artifact %s, not %s",
+			ErrArtifactMismatch, wapi.Dir(e.projectDir), cfg.ArtifactID, e.artifactID)
+	}
+
 	info, err := e.artifacts.Get(ctx, cfg.ArtifactID)
 	if err != nil {
 		return fmt.Errorf("fetch artifact %s: %w", cfg.ArtifactID, err)
 	}
-	if info.Locked {
-		return ErrLockedArtifact
-	}
+
+	// A locked artifact is immutable, so nothing can be pushed into it.
+	// That refuses a sync, but it must not refuse a plan: the caller asks
+	// for this diff before deciding what to do with the code, and on a
+	// locked artifact what it decides is to mint a new version and roll
+	// onto it. Refusing to count the files refuses the very deploy that
+	// gets past the lock. CLI parity: phase1_gather.go gates the same
+	// rejection on previewOnly, and phase 5 checks again, so the exemption
+	// cannot let a write through. Plan is preview by definition here —
+	// Execute is what returns ErrLockedArtifact once it lands.
+	e.locked = info.Locked
 
 	// Config's catalog ID is pinned for the artifact's draft lifetime and
 	// wins over the artifact's live code_ref, which may have been bumped
