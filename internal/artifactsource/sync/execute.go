@@ -81,10 +81,21 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 		return err
 	}
 
+	// ConflictCopies reports what is on disk, so an attempt starts from an
+	// empty list rather than carrying the entries of one already rolled
+	// back: a retry on the same Engine re-derives every copy from the plan.
+	e.conflictCopies = nil
+
 	if err := e.executeLocalPlan(ctx, rb); err != nil {
 		if restoreErr := rb.Restore(); restoreErr != nil {
+			// Restore stopped partway, so some *.LOCAL.<ts> copies may
+			// still be there. Keep reporting the ones this attempt made
+			// rather than hiding files the user has to deal with.
 			return errors.Join(err, fmt.Errorf("restore rollback: %w", restoreErr))
 		}
+
+		// A completed restore removed every copy this attempt created.
+		e.conflictCopies = nil
 
 		return err
 	}

@@ -410,3 +410,30 @@ func TestEngine_ExecuteLocal_RefusesPlanAboveRollbackCap(t *testing.T) {
 
 	assert.False(t, HasRollback(f.dir))
 }
+
+func TestEngine_ExecuteLocal_RolledBackRunReportsNoConflictCopies(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "local edit"},
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "remote edit", "added.py": "brand new"},
+	)
+
+	f.files.downloadErr = map[string]error{"added.py": errors.New("boom")}
+
+	require.ErrorContains(t, f.engine.ExecuteLocal(context.Background()), "boom")
+
+	// Restore deleted the *.LOCAL.<ts> copy applyConflictCopies had just
+	// made, so reporting it in a diagnostic would point the user at a
+	// path that is not on disk.
+	require.Empty(t, conflictCopiesOnDisk(t, f.dir))
+	assert.Empty(t, f.engine.ConflictCopies())
+
+	// A retry re-derives the copies from the same plan; it must not stack
+	// a second entry on top of the rolled-back attempt's.
+	f.files.downloadErr = nil
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+
+	assert.Equal(t, []string{"agent.py.LOCAL." + fixedStamp}, f.engine.ConflictCopies())
+}
