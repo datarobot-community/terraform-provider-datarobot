@@ -3,10 +3,11 @@ package sync
 // CLI source: cli/internal/workload/sync/phase0_preflight.go,
 // phase1_gather.go, phase2_manifests.go.
 //
-// Provider differences from CLI: phase0 auto-initializes .wapi/ instead
-// of failing with "not linked" (see engine.go doc comment); phase1/phase2
-// read from ArtifactInfo/filesapi.Client instead of workload.Artifact /
-// cli/internal/drapi/filesapi.
+// Provider differences from CLI: phase0 auto-initializes state instead
+// of failing with "not linked" (see engine.go doc comment) and restores a
+// stale rollback under the sync lock rather than ahead of it (see
+// preflight); phase1/phase2 read from ArtifactInfo/filesapi.Client instead
+// of workload.Artifact / cli/internal/drapi/filesapi.
 
 import (
 	"context"
@@ -19,28 +20,44 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 )
 
-// preflight (phase 0) recovers a stale rollback tree left by a crashed
-// prior sync, auto-initializes .wapi/ on the very first Plan call, and
-// acquires the exclusive sync lock. Recovery runs before the lock so a
-// crashed-mid-sync process gets cleaned up by whoever runs next.
+// preflight (phase 0) auto-initializes the sync state directory on the
+// very first Plan call, acquires the exclusive sync lock, and then
+// recovers a stale rollback tree left by a crashed prior sync.
+//
+// Ordering diverges from CLI phase0_preflight.go, which restores before
+// locking: restoring rewrites the working tree, so it has to happen under
+// the lock or it can undo the in-flight execute of a process that already
+// holds it (which would then also fail with ErrLocked). Crash recovery is
+// unaffected — the OS drops a dead holder's flock, so the next Plan to
+// take the lock is the one that restores. Init has to stay ahead of the
+// lock, because AcquireLock needs the state directory to exist.
 func (e *Engine) preflight() error {
+	if !wapi.Exists(e.projectDir) {
+		// Initialize creates the state directory with a single atomic
+		// os.Mkdir, so a concurrent first Plan that loses the race adopts
+		// the winner's tree instead of failing on "already linked".
+		err := wapi.Initialize(e.projectDir, wapi.InitOptions{ArtifactID: e.artifactID})
+		if err != nil && !errors.Is(err, wapi.ErrAlreadyLinked) {
+			return fmt.Errorf("auto-init .wapi/: %w", err)
+		}
+	}
+
+	// Re-Plan on an Engine that still holds the lock reuses it: flock is
+	// per open file description, so a second AcquireLock from this same
+	// process would fail with ErrLocked against our own held lock.
+	if e.lock == nil {
+		lock, err := AcquireLock(e.projectDir)
+		if err != nil {
+			return err
+		}
+		e.lock = lock
+	}
+
 	restored := HasRollback(e.projectDir)
 	if err := RestoreRollback(e.projectDir); err != nil {
 		return fmt.Errorf("recover stale rollback: %w", err)
 	}
 	e.staleNote = restored
-
-	if !wapi.Exists(e.projectDir) {
-		if err := wapi.Initialize(e.projectDir, wapi.InitOptions{ArtifactID: e.artifactID}); err != nil {
-			return fmt.Errorf("auto-init .wapi/: %w", err)
-		}
-	}
-
-	lock, err := AcquireLock(e.projectDir)
-	if err != nil {
-		return err
-	}
-	e.lock = lock
 
 	return nil
 }
