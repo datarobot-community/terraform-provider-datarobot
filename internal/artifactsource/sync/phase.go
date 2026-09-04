@@ -149,6 +149,15 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 		return nil
 	}
 
+	// CLI parity (phase2_manifests.go): with no catalog behind the
+	// artifact there is no remote manifest to fetch, so REMOTE is empty
+	// rather than an AllFiles call that can only fail. e.drifted already
+	// implies a non-empty remoteVer, so the catalog ID is the open half.
+	if e.catalogID == "" {
+		e.remote = RemoteManifest{}
+		return nil
+	}
+
 	remote, err := e.files.AllFiles(ctx, e.catalogID, e.remoteVer)
 	if err != nil {
 		return fmt.Errorf("fetch remote manifest: %w", err)

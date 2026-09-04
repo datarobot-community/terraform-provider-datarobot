@@ -378,10 +378,32 @@ func TestEngine_Plan_RejectsArtifactMismatch(t *testing.T) {
 	require.NoError(t, lock.Unlock())
 }
 
+func TestEngine_Plan_DriftedWithoutCatalogSkipsAllFiles(t *testing.T) {
+	t.Parallel()
 
-	// The lock must be released so a later Plan (after the resource
-	// clones to a draft) is not blocked by this failed attempt.
-	assert.NoError(t, e.Close())
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	files := &fakeFilesAPI{}
+
+	// Drifted (live version != last synced) but no catalog ID resolves
+	// from either config or the artifact. CLI parity: REMOTE is empty
+	// rather than an AllFiles("", ver) call that can only fail.
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", "ver-2"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.False(t, files.allFilesCalled, "must not call AllFiles with an empty catalog ID")
+	assert.Len(t, plan.Uploads, 1)
 }
 
 func TestEngine_Plan_AllFilesErrorReleasesLock(t *testing.T) {
