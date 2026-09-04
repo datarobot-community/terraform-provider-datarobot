@@ -473,3 +473,45 @@ func TestEngine_DiscardRollback_KeepsTreeWhenDiscardFails(t *testing.T) {
 	require.NoError(t, f.engine.DiscardRollback())
 	assert.False(t, HasRollback(f.dir))
 }
+
+func TestEngine_ExecuteLocal_RestoresFileReplacedByRemoteDirectory(t *testing.T) {
+	t.Parallel()
+
+	// The remote turned the file `swap` into a directory holding
+	// `swap/nested.py`, and the local side edited `swap`, so the conflict
+	// rename frees the path and the download re-creates it as a directory.
+	f := newSyncFixture(t,
+		map[string]string{"swap": "local edit", "calm.py": "unchanged"},
+		map[string]string{"swap": "base body", "calm.py": "unchanged"},
+		map[string]string{"swap/nested.py": "remote nested", "calm.py": "unchanged", "added.py": "brand new"},
+	)
+
+	require.Len(t, f.plan.Conflicts, 1)
+	require.Equal(t, ClsDelEditConflict, f.plan.Conflicts[0].Classification)
+	require.Len(t, f.plan.Downloads, 2)
+
+	// Hold `added.py` back until `swap/nested.py` has had its parent
+	// directory created, so the failure always lands after the swap.
+	swapped := make(chan struct{})
+
+	f.files.downloadErr = map[string]error{"added.py": errors.New("boom")}
+	f.files.downloadHook = func(path string) {
+		switch path {
+		case "swap/nested.py":
+			close(swapped)
+		case "added.py":
+			<-swapped
+		}
+	}
+
+	err := f.engine.ExecuteLocal(context.Background())
+	require.ErrorContains(t, err, "boom")
+	assert.NotContains(t, err.Error(), "restore rollback",
+		"restore must be able to write the original file back over the directory")
+
+	// The original file is back as a file, with its local bytes.
+	assert.Equal(t, "local edit", readProjectFile(t, f.dir, "swap"))
+	assert.Empty(t, conflictCopiesOnDisk(t, f.dir))
+	requireAbsent(t, f.dir, "added.py")
+	assert.False(t, HasRollback(f.dir), "a completed restore must remove .wapi/.rollback/")
+}

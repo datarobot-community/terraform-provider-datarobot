@@ -52,6 +52,11 @@ type fakeFilesAPI struct {
 	blobs       map[string]string
 	downloadErr map[string]error
 
+	// downloadHook, when set, runs at the start of every DownloadFile
+	// call. Tests use it to order otherwise-concurrent downloads against
+	// each other; it runs outside mu because it is allowed to block.
+	downloadHook func(path string)
+
 	mu            sync.Mutex
 	downloadPaths []string
 }
@@ -98,6 +103,10 @@ func (f *fakeFilesAPI) DownloadFile(_ context.Context, _, _, path string, w io.W
 	f.mu.Lock()
 	f.downloadPaths = append(f.downloadPaths, path)
 	f.mu.Unlock()
+
+	if f.downloadHook != nil {
+		f.downloadHook(path)
+	}
 
 	if err := f.downloadErr[path]; err != nil {
 		return "", 0, err

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -127,7 +128,13 @@ func RestoreRollback(projectDir string) error {
 					return fmt.Errorf("invalid manifest created file %q: %w", created, err)
 				}
 				p := filepath.Join(projectDir, cleanCreated)
-				_ = os.Remove(p)
+				// Already gone is fine: a failed download removes its
+				// own partial file. A removal that actually fails is
+				// not, though — callers read a nil error as "the tree
+				// is back to its pre-execute state".
+				if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("remove created file %s: %w", cleanCreated, err)
+				}
 			}
 
 			// Restore backed up files
@@ -139,6 +146,9 @@ func RestoreRollback(projectDir string) error {
 				src := filepath.Join(rollbackPath, cleanBackedUp)
 				dst := filepath.Join(projectDir, cleanBackedUp)
 				if _, statErr := os.Stat(src); statErr == nil {
+					if err := clearDirForFileRestore(dst); err != nil {
+						return fmt.Errorf("restore file %s: %w", cleanBackedUp, err)
+					}
 					if err := copyFile(src, dst); err != nil {
 						return fmt.Errorf("restore file %s: %w", cleanBackedUp, err)
 					}
@@ -162,6 +172,10 @@ func RestoreRollback(projectDir string) error {
 			return nil
 		}
 		dst := filepath.Join(projectDir, rel)
+		if err := clearDirForFileRestore(dst); err != nil {
+			return fmt.Errorf("restore file %s: %w", rel, err)
+		}
+
 		return copyFile(path, dst)
 	})
 	if walkErr != nil {
@@ -171,12 +185,63 @@ func RestoreRollback(projectDir string) error {
 	return os.RemoveAll(rollbackPath)
 }
 
+// clearDirForFileRestore removes a directory that took over a path the
+// rollback manifest recorded as a regular file, so the original bytes can
+// be written back over it.
+//
+// The remote can replace a file with a directory (foo becomes foo/bar).
+// Execute frees the path — the conflict rename moves foo aside — and the
+// download for foo/bar then re-creates foo as a directory. Without this,
+// a later failure leaves Restore unable to write foo back ("is a
+// directory"), so .rollback/ survives, every later Plan fails in
+// preflight recovery, and the original bytes never come back.
+//
+// Only empty scaffolding is cleared. Every file this sync wrote under the
+// path is a manifest CreatedFile that Restore removed just above, so what
+// is left should be directories; a surviving regular file is not this
+// sync's to delete and is reported instead.
+func clearDirForFileRestore(dst string) error {
+	// Nothing to clear unless a directory is actually in the way: an
+	// absent or unreadable path is copyFile's to create and report on.
+	if !isDir(dst) {
+		return nil
+	}
+
+	if err := filepath.WalkDir(dst, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(dst, path)
+		if relErr != nil {
+			rel = path
+		}
+
+		return fmt.Errorf("a directory holding %s occupies the path", filepath.ToSlash(rel))
+	}); err != nil {
+		return err
+	}
+
+	return os.RemoveAll(dst)
+}
+
 // Discard removes the rollback tree without restoring files.
 func (r *RollbackTree) Discard() error {
 	if _, err := os.Stat(r.rollbackDir); err == nil {
 		return os.RemoveAll(r.rollbackDir)
 	}
 	return nil
+}
+
+// isDir reports whether path is a directory. A path that cannot be
+// stat'ed is not one.
+func isDir(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.IsDir()
 }
 
 func (r *RollbackTree) saveManifest() error {

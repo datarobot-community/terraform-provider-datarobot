@@ -292,3 +292,93 @@ func TestRollback_Discard(t *testing.T) {
 	// Consecutive discard call should be idempotent
 	require.NoError(t, rt.Discard())
 }
+
+func TestRollback_RestoreOverDirectoryLeftByFileToDirSwap(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wapiDir := filepath.Join(dir, ".wapi")
+	require.NoError(t, os.Mkdir(wapiDir, 0755))
+
+	foo := filepath.Join(dir, "foo")
+	require.NoError(t, os.WriteFile(foo, []byte("original"), 0644))
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+	require.NoError(t, rt.Backup("foo"))
+
+	// Execute freed the path (conflict rename), so foo/bar is recorded as
+	// a created file, and the download then re-created foo as a directory.
+	require.NoError(t, os.Remove(foo))
+	require.NoError(t, rt.Backup("foo/bar"))
+	require.NoError(t, os.MkdirAll(foo, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(foo, "bar"), []byte("remote"), 0644))
+
+	require.NoError(t, rt.Restore())
+
+	body, err := os.ReadFile(foo)
+	require.NoError(t, err)
+	assert.Equal(t, "original", string(body))
+	assert.False(t, HasRollback(dir))
+}
+
+func TestRollback_RestoreRefusesToDeleteForeignFileInSwappedDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wapiDir := filepath.Join(dir, ".wapi")
+	require.NoError(t, os.Mkdir(wapiDir, 0755))
+
+	foo := filepath.Join(dir, "foo")
+	require.NoError(t, os.WriteFile(foo, []byte("original"), 0644))
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+	require.NoError(t, rt.Backup("foo"))
+	require.NoError(t, os.Remove(foo))
+
+	// A file this sync never tracked is sitting inside the directory that
+	// took the path over: clearing it is not the rollback's call.
+	require.NoError(t, os.MkdirAll(foo, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(foo, "untracked"), []byte("not ours"), 0644))
+
+	err := rt.Restore()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "untracked")
+	assert.FileExists(t, filepath.Join(foo, "untracked"))
+}
+
+func TestRollback_RestoreReportsUnremovableCreatedFile(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("skipping read-only directory test when running as root")
+	}
+
+	dir := t.TempDir()
+	wapiDir := filepath.Join(dir, ".wapi")
+	require.NoError(t, os.Mkdir(wapiDir, 0755))
+
+	sub := filepath.Join(dir, "sub")
+	require.NoError(t, os.Mkdir(sub, 0755))
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+
+	// Absent at backup time, so it is tracked as created; the download
+	// then wrote it, and the directory turned read-only underneath.
+	require.NoError(t, rt.Backup("sub/created.txt"))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "created.txt"), []byte("downloaded"), 0644))
+	require.NoError(t, os.Chmod(sub, 0o500))
+
+	t.Cleanup(func() { _ = os.Chmod(sub, 0o755) })
+
+	err := rt.Restore()
+	if err == nil {
+		t.Skip("skipping: filesystem did not enforce directory read-only permissions")
+	}
+
+	assert.Contains(t, err.Error(), "remove created file")
+	assert.True(t, HasRollback(dir),
+		"a restore that could not finish must keep the tree for the next attempt")
+}
