@@ -621,3 +621,42 @@ func TestEngine_Plan_RestoresRollbackOnlyUnderLock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "in-flight write\n", string(body), "must not roll back the lock holder's write")
 }
+
+func TestEngine_Plan_AutoInitToleratesAlreadyLinked(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	// Drive the lost-auto-init-race branch deterministically: with the
+	// state path occupied by a regular file, wapi.Exists reports false
+	// (not a directory) while Initialize's os.Mkdir fails with ErrExist
+	// and so returns ErrAlreadyLinked — exactly what a concurrent first
+	// Plan sees when another one created .wapi/ between those two calls.
+	// The real race can't be scheduled from a test.
+	stateDir := filepath.Join(dir, wapi.RootDirName, wapi.StateDirName)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stateDir), 0o755))
+	require.NoError(t, os.WriteFile(stateDir, []byte("occupied"), 0o644))
+
+	require.False(t, wapi.Exists(dir), "guard the precondition this test stands on")
+	require.ErrorIs(t,
+		wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1"}),
+		wapi.ErrAlreadyLinked,
+		"guard the precondition this test stands on")
+
+	e, err := New(dir, "art-1", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	// preflight must walk past ErrAlreadyLinked to the lock step and fail
+	// there (this contrived tree has no usable state directory) instead of
+	// bailing out at auto-init.
+	err = e.preflight()
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, wapi.ErrAlreadyLinked)
+	assert.NotContains(t, err.Error(), "auto-init",
+		"losing the auto-init race must not fail preflight")
+	assert.Contains(t, err.Error(), "sync state directory")
+}
