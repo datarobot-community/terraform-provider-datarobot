@@ -437,3 +437,39 @@ func TestEngine_ExecuteLocal_RolledBackRunReportsNoConflictCopies(t *testing.T) 
 
 	assert.Equal(t, []string{"agent.py.LOCAL." + fixedStamp}, f.engine.ConflictCopies())
 }
+
+func TestEngine_DiscardRollback_KeepsTreeWhenDiscardFails(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("skipping read-only directory test when running as root")
+	}
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "remote body"},
+	)
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+	require.True(t, HasRollback(f.dir))
+
+	// A read-only state directory makes RemoveAll(.rollback) fail.
+	stateDir := wapi.Dir(f.dir)
+	require.NoError(t, os.Chmod(stateDir, 0o500))
+
+	t.Cleanup(func() { _ = os.Chmod(stateDir, 0o755) })
+
+	if err := f.engine.DiscardRollback(); err == nil {
+		t.Skip("skipping: filesystem did not enforce directory read-only permissions")
+	}
+
+	require.NoError(t, os.Chmod(stateDir, 0o755))
+	require.True(t, HasRollback(f.dir), "the failed discard left the tree on disk")
+
+	// The engine must still hold the tree so the retry actually removes
+	// it; returning nil here would leave .rollback/ for the next Plan to
+	// mistake for a crashed sync and revert this run's mutations.
+	require.NoError(t, f.engine.DiscardRollback())
+	assert.False(t, HasRollback(f.dir))
+}

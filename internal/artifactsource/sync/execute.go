@@ -113,10 +113,17 @@ func (e *Engine) DiscardRollback() error {
 		return nil
 	}
 
-	err := e.rollback.Discard()
+	// Hold on to the tree when Discard fails: dropping it would turn the
+	// retry into a silent no-op while .wapi/.rollback/ is still on disk,
+	// and the next Plan's stale-rollback recovery would then revert the
+	// local mutations this run committed. Discard is itself idempotent.
+	if err := e.rollback.Discard(); err != nil {
+		return err
+	}
+
 	e.rollback = nil
 
-	return err
+	return nil
 }
 
 // ConflictCopies returns the *.LOCAL.<ts> paths ExecuteLocal created,
