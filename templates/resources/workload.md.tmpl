@@ -22,7 +22,7 @@ Changes to `artifact_id` or `runtime` call the Workload API **replacement** endp
 
 This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs.
 
-For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
+For a runnable end-to-end walkthrough with **two parallel workloads** (change `containous/whoami:latest` → `v1.5.0`), see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
 ## Artifact dual-ID wiring
 
@@ -55,7 +55,18 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 
 ## Apply duration
 
-Replacement is asynchronous. The provider polls `GET /workloads/{id}/replacement` until the rollout completes or errors. A single replacement can block `terraform apply` for **several minutes** while the platform performs rolling cutover.
+Replacement is asynchronous. For each `datarobot_workload` that needs a rollout, the provider calls the Workload API to **start** the replacement, then **polls** `GET /workloads/{id}` (via `workload.replacement`) until the rollout completes or errors. A single replacement can block that resource's update for **several minutes** while the platform performs rolling cutover.
+
+### Multiple workloads
+
+Independent workloads do **not** wait on each other. Terraform runs separate resource updates in parallel (default `-parallelism=10`) when there is no dependency between them. Each workload gets its own start + poll loop on a distinct workload ID, so N workloads replacing in one apply typically take about **one** replacement duration, not N × duration.
+
+Typical graph when every workload has its own artifact (see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement)):
+
+1. All changed `datarobot_artifact` resources update **in parallel**.
+2. All dependent `datarobot_workload` resources update **in parallel** — each triggers and polls its own replacement concurrently.
+
+When several workloads share one artifact, step 1 is a single artifact update, then step 2 still runs all workload replacements in parallel.
 
 If apply is interrupted mid-replacement, run `terraform apply` again — refresh reads the current replacement status and the provider reconciles.
 

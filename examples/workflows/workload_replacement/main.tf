@@ -1,13 +1,7 @@
-variable "workload_name" {
+variable "workload_name_prefix" {
   type        = string
-  description = "Name for the artifact and workload resources"
+  description = "Prefix for artifact and workload resource names"
   default     = "workload-replacement-example"
-}
-
-variable "container_image" {
-  type        = string
-  description = "Container image for the artifact. Change this and re-apply to trigger an in-place workload replacement."
-  default     = "containous/whoami:latest"
 }
 
 variable "replica_count" {
@@ -16,21 +10,19 @@ variable "replica_count" {
   default     = 2
 }
 
-terraform {
-  required_providers {
-    datarobot = {
-      source = "datarobot-community/datarobot"
-    }
+locals {
+  # Two independent artifact + workload pairs. Terraform updates them in parallel
+  # when container_image changes (default -parallelism=10).
+  workloads = {
+    alpha = "alpha"
+    beta  = "beta"
   }
 }
 
-provider "datarobot" {
-  # export DATAROBOT_API_TOKEN="your-api-key"
-  endpoint = "https://app.datarobot.com/api/v2"
-}
-
 resource "datarobot_artifact" "app" {
-  name = "${var.workload_name}-artifact"
+  for_each = local.workloads
+
+  name = "${var.workload_name_prefix}-${each.key}-artifact"
   type = "service"
 
   spec = {
@@ -39,7 +31,7 @@ resource "datarobot_artifact" "app" {
         containers = [
           {
             name       = "main"
-            image_uri  = var.container_image
+            image_uri  = "containous/whoami:latest" // -> change this to "containous/whoami:v1.5.0" to trigger replacement
             port       = 8080
             primary    = true
             entrypoint = ["/whoami", "--port", "8080"]
@@ -51,9 +43,11 @@ resource "datarobot_artifact" "app" {
 }
 
 resource "datarobot_workload" "api" {
-  name        = var.workload_name
-  description = "Workload replacement workflow example"
-  artifact_id = datarobot_artifact.app.artifact_id
+  for_each = local.workloads
+
+  name        = "${var.workload_name_prefix}-${each.key}"
+  description = "Parallel workload replacement example (${each.key})"
+  artifact_id = datarobot_artifact.app[each.key].artifact_id
 
   runtime = {
     container_groups = [
@@ -69,17 +63,23 @@ resource "datarobot_workload" "api" {
   }
 }
 
-output "workload_id" {
-  value       = datarobot_workload.api.id
-  description = "Workload ID — stable across artifact and runtime updates (in-place replacement)"
+output "workload_ids" {
+  value = {
+    for key, workload in datarobot_workload.api : key => workload.id
+  }
+  description = "Workload IDs — stable across artifact and runtime updates (in-place replacement)"
 }
 
-output "workload_endpoint" {
-  value       = datarobot_workload.api.endpoint
-  description = "Inference endpoint — stable across in-place replacements"
+output "workload_endpoints" {
+  value = {
+    for key, workload in datarobot_workload.api : key => workload.endpoint
+  }
+  description = "Inference endpoints — stable across in-place replacements"
 }
 
-output "artifact_version_id" {
-  value       = datarobot_artifact.app.artifact_id
-  description = "Current artifact version ID deployed on the workload"
+output "artifact_version_ids" {
+  value = {
+    for key, artifact in datarobot_artifact.app : key => artifact.artifact_id
+  }
+  description = "Current artifact version IDs deployed on each workload"
 }

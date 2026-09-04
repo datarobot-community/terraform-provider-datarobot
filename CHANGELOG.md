@@ -38,8 +38,8 @@
 
 ### Added
 
+- Documentation and examples for in-place `datarobot_workload` replacement: operator guide in `docs/resources/workload.md` (WAPI rolling replacement vs legacy destroy/create, artifact dual-ID wiring, update-trigger table, parallel apply duration), registry example at `examples/resources/datarobot_workload/`, and runnable parallel workflow (two artifacts, two workloads) at `examples/workflows/workload_replacement/`.
 - `source` block on `datarobot_artifact`: upload a local directory (`source.dir`) to the DataRobot catalog on create and update, auto-populate the primary container's `image_build_config.code_ref`, and track changes via computed `source.dir_hash`. Requires a primary container with `image_build_config`. On draft artifacts, uploads are applied in-place; on locked artifacts, source changes clone to a new draft version, upload, patch `code_ref`, and lock the new version. Manual `code_ref` and `source` are mutually exclusive.
-- Documentation and examples for in-place `datarobot_workload` replacement: operator guide in `docs/resources/workload.md` (WAPI rolling replacement vs legacy destroy/create, artifact dual-ID wiring, update-trigger table, apply duration), registry example at `examples/resources/datarobot_workload/`, and runnable workflow at `examples/workflows/workload_replacement/`.
 - Plan-time handling for provider-managed `image_build_config.code_ref` when `source` is set: unknown values are decoded as null on create and restored from the primary container's state on update (including container reorder), so Terraform plan/apply stays consistent with computed catalog references.
 - `datarobot_artifact` `type = "agent"` and optional `spec.a2a_enabled` for Workload API agent artifacts (A2A card management). `a2a_enabled` is valid only when `type` is `agent`.
 - Computed `type` on `datarobot_workload`, mirroring the deployed artifact type (`service`, `nim`, or `agent`).
