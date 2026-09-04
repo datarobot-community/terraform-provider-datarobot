@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- Bumped the Go toolchain in `go.mod` from `1.26.6` to `1.27.0`. Not security-motivated — `govulncheck` reports no vulnerabilities on either version; this moves the provider onto the current Go release line so future patch fixes land there. Toolchain-only change; no dependency or provider behavior change. All CI jobs resolve Go via `go-version-file: go.mod`, so this also raises the version used to build releases. Note that linting requires golangci-lint `v2.13.2` or newer (the first release built with go1.27); the `build-and-test` workflow pins `version: latest`, so it picks this up automatically, but local installs older than `v2.13.2` will fail with "the Go language version (go1.26) used to build golangci-lint is lower than the targeted Go version (1.27.0)".
+
 ## [0.11.1] - 2026-09-01
 
 ### Fixed
