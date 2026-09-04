@@ -545,3 +545,42 @@ func TestEngine_Plan_LocalAndRemoteDeletesDetected(t *testing.T) {
 	assert.Empty(t, plan.Conflicts)
 	assert.Empty(t, plan.Downloads)
 }
+
+func TestEngine_Plan_RepeatPlanKeepsHeldLock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	artifacts := &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	}
+
+	e, err := New(dir, "art-1", &fakeFilesAPI{}, artifacts)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	first, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	require.Len(t, first.Uploads, 1)
+
+	// Re-planning on an Engine that already holds the lock must reuse it
+	// rather than flock against itself and then release on the way out.
+	writeProjectFiles(t, dir, map[string]string{"helper.py": "y"})
+	second, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, second.Uploads, 2, "re-Plan must pick up files added since the first Plan")
+
+	// The lock survived the second Plan: a separate Engine still can't take it.
+	other, err := New(dir, "art-1", &fakeFilesAPI{}, artifacts)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Close() })
+
+	_, err = other.Plan(context.Background())
+	assert.ErrorIs(t, err, ErrLocked, "re-Plan must not have dropped the lock held since the first Plan")
+
+	require.NoError(t, e.Close())
+
+	_, err = other.Plan(context.Background())
+	assert.NoError(t, err)
+}

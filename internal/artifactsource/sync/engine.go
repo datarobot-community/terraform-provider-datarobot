@@ -94,7 +94,13 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 // Plan runs phases 0-4 (preflight, gather, manifests, diff, sort) and
 // returns the resulting SyncPlan without mutating the remote catalog or
 // the local working tree (beyond acquiring the lock / recovering a stale
-// rollback). The lock is held until Close releases it.
+// rollback). The lock is held until Close releases it, or until a failing
+// Plan releases it on the way out.
+//
+// Plan may be called again on the same Engine to refresh the plan (the
+// resource re-plans between terraform plan and apply); the repeat call
+// reuses the lock this Engine already holds instead of deadlocking
+// against itself. An Engine is not safe for concurrent use.
 func (e *Engine) Plan(ctx context.Context) (*SyncPlan, error) {
 	if err := e.preflight(); err != nil {
 		return nil, e.joinReleaseErr(err)
@@ -136,7 +142,9 @@ func (e *Engine) releaseLock() error {
 }
 
 // joinReleaseErr releases the lock and joins any release failure with err
-// so a caller sees both instead of silently losing the lock error.
+// so a caller sees both instead of silently losing the lock error. Only
+// Plan's own failure paths call it, so the lock it drops is always one
+// this Engine holds and no longer needs.
 func (e *Engine) joinReleaseErr(err error) error {
 	if relErr := e.releaseLock(); relErr != nil {
 		return errors.Join(err, fmt.Errorf("release lock: %w", relErr))
