@@ -3,16 +3,17 @@ package sync
 // CLI source: cli/internal/workload/sync/engine.go
 //
 // Provider differences from CLI:
-//   - Plan only (phases 0-4, see phase.go). Execute (phases 5-6: downloads,
-//     conflict copies, uploads, remote deletes, persisting BASE) ships in a later PR.
+//   - Plan (phases 0-4, see phase.go) plus the local half of phase 5
+//     (ExecuteLocal, see execute.go). The remote half (uploads, remote
+//     deletes, code_ref patch) and phase 6 (persisting BASE) are not
+//     implemented here.
 //   - No Options{DryRun, ShowDiffs, Yes}: terraform apply has no TTY and is
 //     always non-interactive, remote-wins-on-conflict (see the plan's
-//     "Non-interactive policy" section) — there is nothing to gate on yet
-//     since Plan never mutates anything.
+//     "Non-interactive policy" section) — there is nothing to gate on.
 //   - ArtifactStore is a narrow interface over the caller's own artifact
 //     client (Locked/CatalogID/CatalogVersionID) instead of the CLI's
 //     workload.Artifact, so this package stays independent of
-//     internal/client. The resource adapts client.Artifact to it in a later PR.
+//     internal/client.
 //   - Missing .wapi/ auto-initializes instead of erroring "not linked":
 //     there is no `dr workload code init` step in a Terraform-managed tree.
 
@@ -20,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
@@ -56,25 +58,29 @@ type ArtifactStore interface {
 }
 
 // Engine runs the CLI three-way sync pipeline (BASE / LOCAL / REMOTE)
-// against a single source.dir. Construct with New, call Plan, then Close
-// to release the .wapi/sync.lock acquired during preflight.
+// against a single source.dir. Construct with New, call Plan, then
+// ExecuteLocal, then Close to release the .wapi/sync.lock acquired during
+// preflight.
 type Engine struct {
 	projectDir string
 	artifactID string
 	files      filesapi.Client
 	artifacts  ArtifactStore
+	nowFn      func() time.Time
 
-	config    wapi.Config
-	base      BaseManifest
-	local     LocalManifest
-	remote    RemoteManifest
-	catalogID string
-	remoteVer string
-	drifted   bool
-	plan      *SyncPlan
-	lock      *SyncLock
-	staleNote bool
-	locked    bool
+	config         wapi.Config
+	base           BaseManifest
+	local          LocalManifest
+	remote         RemoteManifest
+	catalogID      string
+	remoteVer      string
+	drifted        bool
+	plan           *SyncPlan
+	lock           *SyncLock
+	staleNote      bool
+	locked         bool
+	rollback       *RollbackTree
+	conflictCopies []string
 }
 
 // New constructs an Engine bound to projectDir. artifactID seeds .wapi/ on
@@ -99,6 +105,9 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 		artifactID: artifactID,
 		files:      files,
 		artifacts:  artifacts,
+		// Seam for tests that assert on the *.LOCAL.<ts> conflict-copy
+		// suffix; production always uses the wall clock.
+		nowFn: time.Now,
 	}, nil
 }
 
