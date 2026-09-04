@@ -584,3 +584,40 @@ func TestEngine_Plan_RepeatPlanKeepsHeldLock(t *testing.T) {
 	_, err = other.Plan(context.Background())
 	assert.NoError(t, err)
 }
+
+func TestEngine_Plan_RestoresRollbackOnlyUnderLock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1"}))
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "original content\n"})
+
+	// Stand in for another process mid-execute: it holds .wapi/sync.lock
+	// and has an active rollback tree protecting its in-flight write.
+	holder, err := AcquireLock(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Unlock() })
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+	require.NoError(t, rt.Backup("agent.py"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.py"), []byte("in-flight write\n"), 0o644))
+
+	e, err := New(dir, "art-1", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	assert.ErrorIs(t, err, ErrLocked)
+
+	// Preflight bailed at the lock, so the holder's rollback tree and its
+	// in-flight write are both untouched.
+	assert.True(t, HasRollback(dir), "must not restore a rollback tree owned by the lock holder")
+	assert.False(t, e.StaleRollbackRestored())
+
+	body, err := os.ReadFile(filepath.Join(dir, "agent.py"))
+	require.NoError(t, err)
+	assert.Equal(t, "in-flight write\n", string(body), "must not roll back the lock holder's write")
+}
