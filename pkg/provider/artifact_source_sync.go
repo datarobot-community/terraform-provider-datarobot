@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
@@ -114,9 +115,10 @@ func (s *artifactSourceStore) PatchCodeRef(ctx context.Context, artifactID, cata
 
 // artifactSourceCatalogBinding is the catalog the directory already has
 // code in, for a tree that has never been synced by the engine and so has
-// no .wapi/ yet. Terraform state is preferred over the artifact's live
-// code_ref: a clone of a locked artifact is a fresh draft with no code_ref,
-// and its new version still belongs in the catalog state points at.
+// no sync state directory yet. Terraform state is preferred over the
+// artifact's live code_ref: a clone of a locked artifact is a fresh draft
+// with no code_ref, and its new version still belongs in the catalog state
+// points at.
 func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client.Artifact) (catalogID, versionID string) {
 	catalogID = catalogIDFromModel(state)
 	versionID = catalogVersionIDFromModel(state)
@@ -137,21 +139,29 @@ func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client
 }
 
 // runArtifactSourceSync reconciles absDir with the catalog using the CLI
-// three-way sync engine: BASE (source.dir/.wapi/manifest.json) against
-// LOCAL (the directory, minus .drignore and system excludes) against
-// REMOTE (the Files API catalog). It returns the sync result and, when the
-// engine repointed the artifact, the patched artifact.
+// three-way sync engine: BASE (the last synced manifest under
+// absDir/.datarobot/workload/) against LOCAL (the directory, minus .drignore
+// and system excludes) against REMOTE (the Files API catalog). It returns
+// the sync result and, when the engine repointed the artifact, the patched
+// artifact.
 //
 // Unlike the push-only uploader it replaces, this can also write to
-// source.dir — remote-only files are downloaded and a file edited on both
-// sides is kept as <path>.LOCAL.<timestamp> while the remote version wins
-// (terraform apply has no TTY to prompt on, so it always runs the CLI's
-// --yes policy).
+// source.dir: remote-only files are downloaded and files the catalog
+// dropped are removed, each announced through diags. A file edited on both
+// sides since the last sync is refused before anything is written, the way
+// the CLI's non-interactive mode refuses it: terraform apply has no TTY to
+// ask on, and picking the catalog's version silently would replace an edit
+// the user has not seen lose.
+//
+// seeded is the matcher to walk with when the starter ignore file could not
+// be written, nil when the directory is the source of truth as usual.
 func (r *ArtifactResource) runArtifactSourceSync(
 	ctx context.Context,
 	state *ArtifactResourceModel,
 	artifact *client.Artifact,
 	absDir string,
+	seeded *ignore.Matcher,
+	diags *diag.Diagnostics,
 ) (result *artifactsync.Result, patched *client.Artifact, err error) {
 	store := &artifactSourceStore{service: r.provider.service, current: artifact}
 
@@ -160,8 +170,9 @@ func (r *ArtifactResource) runArtifactSourceSync(
 		return nil, nil, err
 	}
 	engine.BindCatalog(artifactSourceCatalogBinding(state, artifact))
+	engine.UseIgnore(seeded)
 
-	// Close releases .wapi/sync.lock. A failure to release would make the
+	// Close releases the sync lock. A failure to release would make the
 	// next apply fail on a lock nobody holds, so it is reported rather
 	// than dropped, unless the sync itself already failed.
 	defer func() {
@@ -171,12 +182,115 @@ func (r *ArtifactResource) runArtifactSourceSync(
 	}()
 
 	traceAPICall("SyncArtifactSource")
-	result, err = engine.Run(ctx)
+	plan, err := engine.Plan(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if plan.HasConflicts() {
+		return nil, nil, artifactSourceConflictError(absDir, plan.ConflictPaths())
+	}
+
+	if err := engine.ExecuteLocal(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	result, err = engine.ExecuteRemote(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	artifactSourceMutationWarning(diags, plan)
+
 	return result, store.patched, nil
+}
+
+// artifactSourceConflictError is the refusal for a plan in which a file
+// changed both under source.dir and in the catalog since the last sync.
+// The DataRobot CLI reads the same state directory, so it can resolve the
+// conflict in place; the apply itself has touched nothing.
+func artifactSourceConflictError(absDir string, conflicts []string) error {
+	return fmt.Errorf(
+		"%d file(s) changed both in %s and in the catalog since the last sync:\n%s\n\n"+
+			"terraform apply cannot ask which side wins, so nothing was uploaded or written. "+
+			"Resolve the conflict in that directory with the DataRobot CLI: `dr artifact code sync` shows both versions and asks per file, "+
+			"and `dr artifact code sync --yes --accept-remote` takes the catalog version while keeping your copy as <path>.LOCAL.<timestamp>. "+
+			"Then run terraform apply again",
+		len(conflicts), absDir, artifactSourcePathList(conflicts))
+}
+
+// artifactSourceMutationWarning names the files the sync wrote or removed
+// under source.dir. Terraform only plans the resource's attributes, so a
+// download or a local removal would otherwise first show up in a later
+// `git status`.
+func artifactSourceMutationWarning(diags *diag.Diagnostics, plan *artifactsync.SyncPlan) {
+	if diags == nil || plan == nil {
+		return
+	}
+
+	written := make([]string, 0, len(plan.Downloads))
+	for _, fa := range plan.Downloads {
+		written = append(written, fa.Path)
+	}
+
+	var removed []string
+	for _, fa := range plan.Deletes {
+		if fa.Action == artifactsync.ActDownloadDelete {
+			removed = append(removed, fa.Path)
+		}
+	}
+
+	if len(written)+len(removed) == 0 {
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString("The catalog had changes this directory did not, so the sync brought them down.")
+	if len(written) > 0 {
+		fmt.Fprintf(&b, "\n\nWritten (%d):\n%s", len(written), artifactSourcePathList(written))
+	}
+	if len(removed) > 0 {
+		fmt.Fprintf(&b, "\n\nRemoved (%d):\n%s", len(removed), artifactSourcePathList(removed))
+	}
+	b.WriteString("\n\nThese files now match the catalog. Review the change (a version control diff shows exactly what moved) before committing it.")
+
+	diags.AddAttributeWarning(path.Root("source").AtName("dir"), "Source directory updated from the catalog", b.String())
+}
+
+// artifactSourcePathListMax bounds the paths a diagnostic spells out; the
+// count in the same message says how many there really were.
+const artifactSourcePathListMax = 20
+
+func artifactSourcePathList(paths []string) string {
+	shown := paths
+	if len(shown) > artifactSourcePathListMax {
+		shown = shown[:artifactSourcePathListMax]
+	}
+
+	lines := make([]string, 0, len(shown)+1)
+	for _, p := range shown {
+		lines = append(lines, "  "+p)
+	}
+	if rest := len(paths) - len(shown); rest > 0 {
+		lines = append(lines, fmt.Sprintf("  ... and %d more", rest))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// plannedArtifactSourceDirHash is the dir_hash a plan commits to. A tree
+// that matches state keeps the known value, so the plan shows no diff. A
+// tree that differs plans as unknown rather than as the digest just
+// computed: apply reconciles the directory with the catalog and can add or
+// remove files while doing so, and the value saved afterwards has to be the
+// digest of what is on disk then. A known value here would fail that apply
+// with "inconsistent result" whenever the sync pulled anything.
+func plannedArtifactSourceDirHash(current types.String, state *ArtifactResourceModel) types.String {
+	if state != nil && state.Source != nil && IsKnown(state.Source.DirHash) && current.Equal(state.Source.DirHash) {
+		return current
+	}
+
+	return types.StringUnknown()
 }
 
 // artifactSourceAbsDir resolves source.dir. The ignore file is looked up at that
@@ -260,7 +374,7 @@ func (r *ArtifactResource) syncArtifactSource(
 	}
 
 	// Deliberately ahead of the sync gate below: see seedArtifactSourceIgnoreFile.
-	seedArtifactSourceIgnoreFile(absDir, artifactSourceGenerateIgnore(plan), diags)
+	seeded := seedArtifactSourceIgnoreFile(absDir, artifactSourceGenerateIgnore(plan), diags)
 
 	if !artifactSourceNeedsUpload(plan, state, priorArtifactID, artifact.ID) {
 		return artifact, false, nil
@@ -268,7 +382,7 @@ func (r *ArtifactResource) syncArtifactSource(
 
 	artifactApplyProgressUploading(artifact.ID)
 
-	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, absDir)
+	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, absDir, seeded, diags)
 	if err != nil {
 		return nil, false, fmt.Errorf("sync artifact source: %w", err)
 	}
@@ -282,29 +396,24 @@ func (r *ArtifactResource) syncArtifactSource(
 	return artifact, true, nil
 }
 
-// artifactApplyProgressSourceSynced reports what the sync did to
-// source.dir. Downloads, local deletions and *.LOCAL.* copies all change
-// files the user owns, so they are announced during apply instead of left
-// for the user to find in a later `git status`.
+// artifactApplyProgressSourceSynced reports the sync's counts on the apply
+// progress stream. Files written or removed under source.dir are also
+// raised as a warning diagnostic (artifactSourceMutationWarning), since the
+// progress stream is only visible with TF_LOG set.
 func artifactApplyProgressSourceSynced(result *artifactsync.Result) {
 	if result == nil {
 		return
 	}
 
-	if result.Uploaded+result.Downloaded+result.Deleted+result.Conflicts == 0 {
+	if result.Uploaded+result.Downloaded+result.Deleted == 0 {
 		emitArtifactApplyProgress("Source already matches the catalog; nothing to sync.")
 		return
 	}
 
 	emitArtifactApplyProgress(fmt.Sprintf(
-		"Synced source: %d uploaded, %d downloaded, %d deleted, %d conflicted.",
-		result.Uploaded, result.Downloaded, result.Deleted, result.Conflicts,
+		"Synced source: %d uploaded, %d downloaded, %d deleted.",
+		result.Uploaded, result.Downloaded, result.Deleted,
 	))
-
-	for _, path := range result.ConflictCopies {
-		emitArtifactApplyProgress(fmt.Sprintf(
-			"Conflict on both sides: the catalog version won, your local file was kept as %s", path))
-	}
 }
 
 // syncArtifactSourceAndBuild syncs source when needed, then triggers an image build

@@ -375,7 +375,22 @@ func TestUploadFromZipExisting(t *testing.T) {
 			return
 		}
 
+		// The server reads the overwrite mode from the form, not the query
+		// (a query-only REPLACE is accepted and ignored, and every existing
+		// path gets renamed), so the field must precede the file part.
 		part, err := mr.NextPart()
+		if !assert.NoError(t, err) {
+			return
+		}
+
+		assert.Equal(t, "overwrite", part.FormName())
+		fieldValue, err := io.ReadAll(part)
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.Equal(t, "REPLACE", string(fieldValue))
+
+		part, err = mr.NextPart()
 		if !assert.NoError(t, err) {
 			return
 		}

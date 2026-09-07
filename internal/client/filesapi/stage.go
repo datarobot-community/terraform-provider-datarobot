@@ -41,7 +41,7 @@ func (c *httpClient) UploadToStage(ctx context.Context, catalogID, stageID, name
 	)
 
 	// CLI: newStreamingMultipartRequest(requestURL, ...) without transport/ctx
-	req, err := newStreamingMultipartRequest(c.transport, ctx, requestURL, nil, name, size, body)
+	req, err := newStreamingMultipartRequest(c.transport, ctx, requestURL, nil, nil, name, size, body)
 	if err != nil {
 		return err
 	}

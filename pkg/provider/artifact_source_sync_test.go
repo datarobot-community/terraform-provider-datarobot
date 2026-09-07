@@ -306,6 +306,37 @@ func TestCatalogVersionIDFromModel(t *testing.T) {
 	}
 }
 
+func TestPlannedArtifactSourceDirHash(t *testing.T) {
+	t.Parallel()
+
+	current := types.StringValue("current")
+	withHash := func(hash types.String) *ArtifactResourceModel {
+		return &ArtifactResourceModel{Source: &ArtifactSourceModel{DirHash: hash}}
+	}
+
+	cases := []struct {
+		name  string
+		state *ArtifactResourceModel
+		want  types.String
+	}{
+		{name: "create plans unknown", state: nil, want: types.StringUnknown()},
+		{name: "state without source plans unknown", state: &ArtifactResourceModel{}, want: types.StringUnknown()},
+		{name: "unknown in state plans unknown", state: withHash(types.StringUnknown()), want: types.StringUnknown()},
+		{name: "changed tree plans unknown", state: withHash(types.StringValue("previous")), want: types.StringUnknown()},
+		{name: "unchanged tree keeps the known value", state: withHash(types.StringValue("current")), want: current},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := plannedArtifactSourceDirHash(current, tc.state); !got.Equal(tc.want) {
+				t.Fatalf("plannedArtifactSourceDirHash() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRefreshArtifactSourceDirHash(t *testing.T) {
 	t.Parallel()
 
@@ -652,10 +683,11 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 	})
 
-	t.Run("unwritable source dir warns and uploads with the template patterns", func(t *testing.T) {
-		// generate_ignore defaults to true, so a source.dir the process cannot
-		// write -- a checkout mounted read-only in CI -- must not fail an apply
-		// that worked before the attribute existed.
+	t.Run("unwritable source dir fails with the state directory named", func(t *testing.T) {
+		// The three-way sync keeps its last-synced manifest under source.dir,
+		// so a directory the process cannot write -- a checkout mounted
+		// read-only in CI -- cannot be synced. The push-only uploader used to
+		// accept it; the refusal has to say what it needs.
 		if os.Geteuid() == 0 {
 			t.Skip("root writes into a read-only directory")
 		}
@@ -665,9 +697,6 @@ func TestSyncArtifactSource(t *testing.T) {
 		filesAPI := newSyncTestFilesAPI()
 
 		mockService.EXPECT().FilesAPI().Return(filesAPI)
-		mockService.EXPECT().
-			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
-			Return(&client.Artifact{ID: artifactID}, nil)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 		dir := writeArtifactSourceTree(t, map[string]string{
@@ -685,9 +714,52 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 
 		var diags diag.Diagnostics
+		_, _, err := resource.syncArtifactSource(
+			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags)
+		if err == nil {
+			t.Fatal("expected a read-only source.dir to be refused")
+		}
+		if !strings.Contains(err.Error(), "must be writable") {
+			t.Fatalf("refusal must say the directory has to be writable, got: %v", err)
+		}
+		if filesAPI.uploadCalls() != 0 {
+			t.Fatalf("uploaded %d file(s) before failing", filesAPI.uploadCalls())
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected no .drignore on a read-only directory")
+		}
+	})
+
+	t.Run("directory at the drignore name warns and uploads with the template patterns", func(t *testing.T) {
+		// The starter ignore file cannot be written, but the directory itself
+		// can be: the sync must walk with the template's patterns, the set
+		// plan hashed, rather than with no patterns at all.
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":      "print('hi')",
+			".venv/lib.py": "ignored",
+		})
+		if err := os.Mkdir(filepath.Join(dir, ignore.FileName), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		var diags diag.Diagnostics
 		if _, _, err := resource.syncArtifactSource(
 			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags); err != nil {
-			t.Fatalf("a read-only source.dir must not fail the apply: %v", err)
+			t.Fatalf("a directory at the ignore file's name must not fail the apply: %v", err)
 		}
 		if diags.HasError() {
 			t.Fatalf("expected a warning, got errors: %v", diags.Errors())
@@ -695,23 +767,20 @@ func TestSyncArtifactSource(t *testing.T) {
 		if len(diags.Warnings()) != 1 {
 			t.Fatalf("warnings = %v, want exactly one", diags.Warnings())
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
-			t.Fatal("expected no .drignore on a read-only directory")
-		}
 
 		// The fallback matcher is the template, so the upload is no wider than
 		// it would have been had the write succeeded.
 		foundMain := false
 		for _, p := range filesAPI.uploadToStagePaths {
-			if p == ".venv/lib.py" {
-				t.Fatalf("uploaded %q: the template patterns were not applied", p)
-			}
 			if p == "main.py" {
 				foundMain = true
 			}
+			if strings.HasPrefix(p, ".venv/") {
+				t.Fatalf("uploaded %q: the template's patterns were not applied", p)
+			}
 		}
 		if !foundMain {
-			t.Fatalf("uploaded paths = %v, want main.py", filesAPI.uploadToStagePaths)
+			t.Fatalf("main.py was not uploaded: %v", filesAPI.uploadToStagePaths)
 		}
 	})
 
@@ -854,15 +923,16 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 
 	const artifactID = "artifact-1"
 
-	// syncOnce wires a resource around filesAPI and syncs dir once.
-	syncOnce := func(
+	// syncOnceWithDiags wires a resource around filesAPI and syncs dir
+	// once, collecting the diagnostics the sync raised.
+	syncOnceWithDiags := func(
 		t *testing.T,
 		mockService *mock_client.MockService,
 		dir string,
 		artifact *client.Artifact,
 		priorArtifactID string,
 		state *ArtifactResourceModel,
-	) (*client.Artifact, bool, error) {
+	) (*client.Artifact, bool, diag.Diagnostics, error) {
 		t.Helper()
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
@@ -873,7 +943,25 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 			},
 		}
 
-		return resource.syncArtifactSource(context.Background(), plan, state, artifact, priorArtifactID)
+		var diags diag.Diagnostics
+		got, synced, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, priorArtifactID, &diags)
+
+		return got, synced, diags, err
+	}
+
+	syncOnce := func(
+		t *testing.T,
+		mockService *mock_client.MockService,
+		dir string,
+		artifact *client.Artifact,
+		priorArtifactID string,
+		state *ArtifactResourceModel,
+	) (*client.Artifact, bool, error) {
+		t.Helper()
+
+		got, synced, _, err := syncOnceWithDiags(t, mockService, dir, artifact, priorArtifactID, state)
+
+		return got, synced, err
 	}
 
 	// syncedState is the state a previous apply would have left behind:
@@ -939,10 +1027,10 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 
 		// The rollback tree is committed, so the next apply cannot revert
-		// this one. (.wapi/sync.lock stays on disk by design; the retry
+		// this one. (The lock file stays on disk by design; the retry
 		// case below covers that it is released.)
-		if _, err := os.Stat(filepath.Join(dir, wapi.DirName, ".rollback")); err == nil {
-			t.Fatal("expected .wapi/.rollback to be gone after a successful sync")
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
+			t.Fatal("expected the rollback tree to be gone after a successful sync")
 		}
 	})
 
@@ -1057,8 +1145,18 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		filesAPI.remoteFile("helper.py", "from-remote")
 
 		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
-		if _, _, err := syncOnce(t, mockService, dir, drifted, artifactID, syncedState(dir)); err != nil {
+		_, _, diags, err := syncOnceWithDiags(t, mockService, dir, drifted, artifactID, syncedState(dir))
+		if err != nil {
 			t.Fatalf("drifted syncArtifactSource() error = %v", err)
+		}
+
+		// Writing into the user's directory is announced, not left for a
+		// later `git status` to reveal.
+		if diags.WarningsCount() != 1 {
+			t.Fatalf("expected one warning about the written file, got %v", diags)
+		}
+		if detail := diags.Warnings()[0].Detail(); !strings.Contains(detail, "helper.py") {
+			t.Fatalf("warning does not name the written file: %q", detail)
 		}
 
 		got, err := os.ReadFile(filepath.Join(dir, "helper.py"))
@@ -1081,6 +1179,69 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 		if _, ok := manifest.Files["helper.py"]; !ok {
 			t.Fatalf("BASE manifest is missing the downloaded file: %v", manifest.Files)
+		}
+	})
+
+	t.Run("file edited on both sides refuses before touching anything", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		firstRunUploads := filesAPI.uploadCalls()
+
+		// Both sides moved main.py since the last sync.
+		mirrorRemoteTree(t, filesAPI, dir, ignore.FileName)
+		filesAPI.remoteFile("main.py", "remote edit")
+		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("local edit"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+		_, _, err := syncOnce(t, mockService, dir, drifted, artifactID, syncedState(dir))
+		if err == nil {
+			t.Fatal("expected the conflicting plan to be refused")
+		}
+		if !strings.Contains(err.Error(), "main.py") || !strings.Contains(err.Error(), "dr artifact code sync") {
+			t.Fatalf("refusal must name the file and the way out, got: %v", err)
+		}
+
+		// Nothing moved in either direction.
+		if got := filesAPI.uploadCalls(); got != firstRunUploads {
+			t.Fatalf("refused sync issued %d upload call(s), want none", got-firstRunUploads)
+		}
+		if len(filesAPI.downloadedPaths) != 0 {
+			t.Fatalf("refused sync downloaded %v, want nothing", filesAPI.downloadedPaths)
+		}
+		body, err := os.ReadFile(filepath.Join(dir, "main.py"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "local edit" {
+			t.Fatalf("main.py = %q, want the local edit kept", body)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.Contains(entry.Name(), ".LOCAL.") {
+				t.Fatalf("refused sync must not leave conflict copies, found %s", entry.Name())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
+			t.Fatal("refused sync must not leave a rollback tree")
 		}
 	})
 
@@ -1121,7 +1282,7 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err == nil {
 			t.Fatal("expected the upload failure to surface")
 		}
-		if _, err := os.Stat(filepath.Join(dir, wapi.DirName, ".rollback")); err == nil {
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
 			t.Fatal("expected the rollback tree to be unwound after a failed sync")
 		}
 

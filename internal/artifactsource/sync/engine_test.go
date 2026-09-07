@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	"github.com/stretchr/testify/assert"
@@ -514,37 +515,107 @@ func TestEngine_Plan_LockedArtifactEmptyPlanNeedsNoClone(t *testing.T) {
 	assert.True(t, e.ArtifactLocked())
 }
 
-func TestEngine_Plan_RejectsArtifactMismatch(t *testing.T) {
+func TestEngine_Plan_RejectsCatalogMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
 
-	// State already bound to art-1 (e.g. a prior Plan), then an Engine
-	// constructed for a different artifact — the clone-to-draft flow.
-	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1"}))
+	// State pinned to cat-1 by an earlier sync, then an Engine for an
+	// artifact whose code lives somewhere else: an import of an unrelated
+	// artifact into a resource that reuses this directory, for instance.
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
 
-	fetched := 0
-	e, err := New(dir, "art-2", &fakeFilesAPI{}, &fakeArtifactStore{
-		GetFn: func(context.Context, string) (ArtifactInfo, error) {
-			fetched++
-			return draftInfo("", ""), nil
-		},
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-2", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-2", "ver-9"), nil },
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
 
 	_, err = e.Plan(context.Background())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrArtifactMismatch)
-	assert.Contains(t, err.Error(), "art-1")
+	assert.ErrorIs(t, err, ErrCatalogMismatch)
+	assert.Contains(t, err.Error(), "cat-1")
+	assert.Contains(t, err.Error(), "cat-2")
 	assert.Contains(t, err.Error(), "art-2")
-	assert.Zero(t, fetched, "must fail before syncing anything against the wrong artifact")
+	assert.False(t, files.allFilesCalled, "must fail before diffing against the wrong catalog")
 
-	// The lock must be released so the caller can retry after rebinding.
+	// The lock must be released so the caller can retry after re-linking.
 	lock, err := AcquireLock(dir)
 	require.NoError(t, err)
 	require.NoError(t, lock.Unlock())
+}
+
+func TestEngine_Plan_RebindsArtifactWithoutCodeRefToPinnedCatalog(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	// A resource destroyed and re-created over a synced directory: the new
+	// artifact has no code yet, and the directory's catalog is still the
+	// right place for it. The rebind is allowed and BASE is kept.
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-old",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	e, err := New(dir, "art-new", &fakeFilesAPI{}, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty(), "BASE still describes this directory: %+v", plan)
+	assert.Equal(t, "cat-1", e.catalogID)
+	assert.Equal(t, "art-new", e.config.ArtifactID)
+}
+
+func TestEngine_Plan_UsesInjectedIgnoreMatcher(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{
+		"agent.py":       "x",
+		".venv/lib/a.py": "vendored",
+	})
+
+	store := &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	}
+
+	// No ignore file on disk: the directory alone would upload .venv.
+	bare, err := New(dir, "art-1", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	barePlan, err := bare.Plan(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, bare.Close())
+	require.Len(t, barePlan.Uploads, 2, "guard the precondition this test stands on")
+
+	// The resource hashed the tree with the template's patterns and could
+	// not write them to disk; the sync has to walk with the same set.
+	seeded, err := New(dir, "art-1", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = seeded.Close() })
+	seeded.UseIgnore(ignore.FromDefaultTemplate())
+
+	plan, err := seeded.Plan(context.Background())
+	require.NoError(t, err)
+	require.Len(t, plan.Uploads, 1)
+	assert.Equal(t, "agent.py", plan.Uploads[0].Path)
 }
 
 func TestEngine_Plan_DriftedWithoutCatalogSkipsAllFiles(t *testing.T) {
@@ -717,7 +788,7 @@ func TestEngine_Plan_NoStaleRollbackToRestore(t *testing.T) {
 	assert.False(t, e.StaleRollbackRestored())
 }
 
-func TestEngine_Plan_ConfigCatalogIDWinsOverArtifactCatalogID(t *testing.T) {
+func TestEngine_Plan_DriftUsesPinnedCatalogAndLiveVersion(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -738,10 +809,11 @@ func TestEngine_Plan_ConfigCatalogIDWinsOverArtifactCatalogID(t *testing.T) {
 	files := &fakeFilesAPI{allFiles: map[string]filesapi.FileMeta{"agent.py": {Hash: hash, Size: size}}}
 	e, err := New(dir, "art-1", files, &fakeArtifactStore{
 		GetFn: func(context.Context, string) (ArtifactInfo, error) {
-			// The artifact's live code_ref reports a different catalog
-			// than the one pinned in .wapi/config.json; config must win
-			// (it stays pinned for the artifact's draft lifetime).
-			return draftInfo("cat-other-live", "ver-2"), nil
+			// Another writer moved the artifact's code_ref to a newer
+			// version of the pinned catalog. The version is what marks
+			// the remote as drifted; the catalog stays the pinned one
+			// (a code_ref in a different catalog is ErrCatalogMismatch).
+			return draftInfo("cat-config", "ver-2"), nil
 		},
 	})
 	require.NoError(t, err)

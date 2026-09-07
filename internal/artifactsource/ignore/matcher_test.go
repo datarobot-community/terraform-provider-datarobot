@@ -355,3 +355,36 @@ func TestDefaultTemplate_ExcludesTerraformWorkingFiles(t *testing.T) {
 	assert.True(t, m.Match(".terraform.tfstate.lock.info", false))
 	assert.False(t, m.Match("main.tf", false))
 }
+
+func TestIsBackupCopy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"agent.py.LOCAL.20260901T120000Z", true},
+		{"sub/dir/agent.py.LOCAL.20260901T120000Z", true},
+		{"agent.py", false},
+		{"agent.LOCAL.txt", false},
+		{"notes.LOCAL.2026", false},
+		{"agent.py.LOCAL.20260901T120000Z.bak", false},
+	}
+
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, IsBackupCopy(tc.path), tc.path)
+	}
+}
+
+func TestMatch_ExcludesBackupCopiesRegardlessOfUserFile(t *testing.T) {
+	t.Parallel()
+
+	// A user file that says nothing about them, and one that would even
+	// re-include them: the engine's own copies are never sync input.
+	for _, m := range []*Matcher{FromLines(nil), FromLines([]string{"!*.LOCAL.*"})} {
+		assert.True(t, m.Match("agent.py.LOCAL.20260901T120000Z", false))
+		assert.True(t, m.Match("sub/agent.py.LOCAL.20260901T120000Z", false))
+		assert.False(t, m.Match("agent.py", false))
+		assert.False(t, m.Match("agent.LOCAL.txt", false))
+	}
+}

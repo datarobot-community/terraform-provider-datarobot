@@ -15,16 +15,18 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"sort"
 )
 
 const multipartFormField = "file"
 
-// CLI: newStreamingMultipartRequest(requestURL, query, filename, size, body) — no transport/ctx.
+// CLI: newStreamingMultipartRequest(requestURL, query, filename, size, body), no transport/ctx/fields.
 func newStreamingMultipartRequest(
 	transport HTTPTransport,
 	ctx context.Context,
 	requestURL string,
 	query url.Values,
+	fields url.Values,
 	filename string,
 	size int64,
 	body io.Reader,
@@ -33,7 +35,7 @@ func newStreamingMultipartRequest(
 		requestURL += "?" + query.Encode()
 	}
 
-	contentType, prologue, epilogue, err := multipartFraming(filename)
+	contentType, prologue, epilogue, err := multipartFraming(fields, filename)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +62,31 @@ func newStreamingMultipartRequest(
 	return req, nil
 }
 
-// Identical logic to CLI multipartFraming.
-func multipartFraming(filename string) (string, []byte, []byte, error) {
+// multipartFraming builds the multipart prologue (form fields, then the file
+// part's header) and epilogue around a streamed file body.
+//
+// CLI multipartFraming has no form fields. They exist here because the
+// fromFile endpoint reads its options from the form, not the query string:
+// see UploadFromZipExisting.
+func multipartFraming(fields url.Values, filename string) (string, []byte, []byte, error) {
 	var head bytes.Buffer
 
 	w := multipart.NewWriter(&head)
+
+	// Sorted so the request bytes are stable for a given set of fields.
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		for _, v := range fields[k] {
+			if err := w.WriteField(k, v); err != nil {
+				return "", nil, nil, fmt.Errorf("write multipart field %s: %w", k, err)
+			}
+		}
+	}
 
 	hdr := make(textproto.MIMEHeader)
 	hdr.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, multipartFormField, filename))

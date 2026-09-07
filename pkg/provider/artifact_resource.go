@@ -172,19 +172,19 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "Local source directory to synchronize with the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
 					"When source content changes, the provider syncs, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
 					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. " +
-					"**Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.wapi/` " +
-					"(last-synced manifest, catalog pointers, lock file — safe to add to `.gitignore`), downloads files that exist in the catalog but not locally, removes local files that were deleted from the catalog, and, for a file edited both locally and in the catalog, " +
-					"keeps the catalog version at the original path while preserving your bytes as `<path>.LOCAL.<timestamp>` (`terraform apply` has no prompt, so the catalog always wins). `.datarobot.yaml` is never uploaded.",
+					"**Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` " +
+					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
+					"A file edited both locally and in the catalog since the last sync fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. `.datarobot.yaml` is never uploaded.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
-						MarkdownDescription: "Path to the local directory containing application source files to synchronize. Apply may add, overwrite, or remove files in this directory — see the `source` description.",
+						MarkdownDescription: "Path to the local directory containing application source files to synchronize. Apply may add, overwrite, or remove files in this directory, and keeps sync state under `dir/.datarobot/workload/`, so the directory must be writable; see the `source` description.",
 					},
 					"dir_hash": schema.StringAttribute{
 						Computed: true,
 						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
 							"Used to detect changes and skip the sync when unchanged. Files covered by a system exclude, including the sync state directory, are never part of this hash. " +
-							"Recomputed after apply, so files the sync downloaded are reflected in state.",
+							"When the directory differs from state it plans as known after apply, because the sync may add or remove files under `dir`; the value recorded is the digest of the directory once the sync is done.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -194,8 +194,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						Computed: true,
 						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
 							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
-							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files. " +
-							"The default template also excludes `*.LOCAL.*`, so the conflict copies the sync creates are not uploaded on the next apply; keep that pattern if you edit the file.",
+							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, the `<path>.LOCAL.<timestamp>` copies the DataRobot CLI's sync keeps, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.",
 						Default: booldefault.StaticBool(true),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),
@@ -493,6 +492,17 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		configPtr = &config
 	}
 
+	var statePtr *ArtifactResourceModel
+	var state ArtifactResourceModel
+	isCreate := req.State.Raw.IsNull()
+	if !isCreate {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		statePtr = &state
+	}
+
 	if plan.Source != nil && IsKnown(plan.Source.Dir) {
 		dirHash, err := computeArtifactSourceDirHash(&plan)
 		if err != nil {
@@ -503,20 +513,11 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			)
 			return
 		}
-		plan.Source.DirHash = dirHash
+		plan.Source.DirHash = plannedArtifactSourceDirHash(dirHash, statePtr)
 		resp.Diagnostics.Append(artifactSourceIgnoreDiagnostics(&plan)...)
 	}
 
-	var statePtr *ArtifactResourceModel
-	var state ArtifactResourceModel
-	isCreate := req.State.Raw.IsNull()
 	if !isCreate {
-		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		statePtr = &state
-
 		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID

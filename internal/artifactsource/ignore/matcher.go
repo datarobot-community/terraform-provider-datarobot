@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -31,7 +33,24 @@ const (
 	// one, and ignoring it would upload the .venv, node_modules and .env it was
 	// written to keep out.
 	LegacyFileName = ".wapiignore"
+
+	// BackupInfix separates a path from the timestamp in the *.LOCAL copy the
+	// sync engine writes when the remote wins over a local file. The engine
+	// builds "<path>" + BackupInfix + "<stamp>"; IsBackupCopy matches the same
+	// shape so those copies are never uploaded on the next sync.
+	BackupInfix = ".LOCAL."
 )
+
+// backupCopyPattern matches a *.LOCAL.<stamp> copy's basename, where <stamp>
+// is the engine's ISO-8601 basic UTC format (20060102T150405Z). Kept tight so
+// a real file that merely contains ".LOCAL." is not swept up.
+var backupCopyPattern = regexp.MustCompile(`\.LOCAL\.[0-9]{8}T[0-9]{6}Z$`)
+
+// IsBackupCopy reports whether relPath is one of the sync engine's *.LOCAL
+// copies. CLI source: cli/internal/workload/ignore/matcher.go.
+func IsBackupCopy(relPath string) bool {
+	return backupCopyPattern.MatchString(path.Base(relPath))
+}
 
 // systemPatterns are always-ignored paths, not overridable by the user file.
 // Ordering mirrors the CLI's systemExcludes so the two lists diff cleanly.
@@ -276,6 +295,15 @@ func (m *Matcher) Match(relPath string, isDir bool) bool {
 	}
 
 	if system.MatchesPath(strings.ToLower(probe)) {
+		return true
+	}
+
+	// The engine's own *.LOCAL copies are never sync input, whatever the
+	// user's ignore file says: uploading one would push a copy of the file
+	// that was just overwritten, and every later sync would see it as a new
+	// local file. The starter template lists the pattern too, for readers
+	// and for older CLIs; this is what holds when the template is not used.
+	if IsBackupCopy(relPath) {
 		return true
 	}
 

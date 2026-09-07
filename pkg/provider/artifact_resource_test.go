@@ -2616,9 +2616,15 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 			containers[ci] = container
 			isPrimary := container.Primary != nil && *container.Primary
 			if isPrimary || (container.Primary == nil && ci == 0) {
-				if containers[ci].ImageBuildConfig == nil {
-					containers[ci].ImageBuildConfig = &client.ArtifactImageBuildConfig{}
+				// Copy the build config rather than writing through the
+				// pointer base shares: the sync engine reads the code_ref
+				// of the artifact it is handed, so aliasing would give the
+				// "before" artifact the "after" catalog.
+				buildConfig := client.ArtifactImageBuildConfig{}
+				if containers[ci].ImageBuildConfig != nil {
+					buildConfig = *containers[ci].ImageBuildConfig
 				}
+				containers[ci].ImageBuildConfig = &buildConfig
 				containers[ci].ImageBuildConfig.CodeRef = &client.ArtifactCodeRef{
 					Type: "datarobot",
 					DataRobot: client.ArtifactDataRobotCodeRef{
@@ -2884,6 +2890,15 @@ func diagErrorSummary(diags diag.Diagnostics) string {
 	return diags.Errors()[0].Summary()
 }
 
+// diagErrorDetail is the first error's detail, for failure messages that
+// would otherwise only name the summary the resource attached.
+func diagErrorDetail(diags diag.Diagnostics) string {
+	if !diags.HasError() {
+		return ""
+	}
+	return diags.Errors()[0].Detail()
+}
+
 func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -3052,7 +3067,7 @@ func TestArtifactResourceSourceUpdateLockedSourceChangeCloneLock(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.ArtifactID.ValueString() != newLockedArtifactID {
 		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
@@ -3131,7 +3146,7 @@ func TestArtifactResourceSourceUpdateLockedSpecChangeCloneLock(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.ArtifactID.ValueString() != newLockedArtifactID {
 		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
@@ -3204,7 +3219,7 @@ func TestArtifactResourceSourceUpdateDraftLockWithSourceChange(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.Status.ValueString() != "locked" {
 		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
@@ -3494,7 +3509,7 @@ func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.Name.ValueString() != updatedName {
 		t.Fatalf("name = %q, want %q", updated.Name.ValueString(), updatedName)
@@ -3545,7 +3560,7 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 
 	_, diags = testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 }
 

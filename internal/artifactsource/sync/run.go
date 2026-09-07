@@ -15,7 +15,7 @@ import "context"
 // still call Plan / ExecuteLocal / ExecuteRemote directly.
 //
 // Run does not release the sync lock — the caller owns Close, so a
-// failure mid-pipeline still frees .wapi/sync.lock:
+// failure mid-pipeline still frees it:
 //
 //	engine, err := sync.New(dir, artifactID, files, store)
 //	...
@@ -23,8 +23,13 @@ import "context"
 //	result, err := engine.Run(ctx)
 //
 // An empty plan still runs both halves: they no-op on the network and on
-// disk, but phase 6 records the observed catalog version in .wapi/, which
-// is what keeps the next Plan on the non-drifted fast path.
+// disk, but phase 6 records the observed catalog version in the state
+// directory, which is what keeps the next Plan on the non-drifted fast
+// path.
+//
+// Run applies a plan with conflicts remote-wins; a caller that must not
+// (terraform apply, which cannot ask) checks SyncPlan.HasConflicts after
+// Plan and stops there instead of calling Run.
 func (e *Engine) Run(ctx context.Context) (*Result, error) {
 	if _, err := e.Plan(ctx); err != nil {
 		return nil, err

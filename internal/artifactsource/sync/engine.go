@@ -14,14 +14,20 @@ package sync
 //   - ArtifactStore is a narrow interface over the caller's own artifact
 //     client (Get + PatchCodeRef) instead of the CLI's workload.Artifact,
 //     so this package stays independent of internal/client.
-//   - Missing .wapi/ auto-initializes instead of erroring "not linked":
-//     there is no `dr workload code init` step in a Terraform-managed tree,
-//     and BindCatalog lets the resource seed the catalog pointers the CLI
-//     would have taken from `init` flags.
+//   - A missing state directory (.datarobot/workload/, see the wapi
+//     package) auto-initializes instead of erroring "not linked": there is
+//     no `dr artifact code init` step in a Terraform-managed tree, and
+//     BindCatalog lets the resource seed the catalog pointers the CLI would
+//     have taken from `init` flags.
 //   - The artifact ID is re-bound on every Plan instead of being fixed at
-//     init: Terraform, not .wapi/, owns artifact identity, and a source
-//     change on a locked artifact clones to a new artifact ID against the
-//     same directory (see gather in phase.go).
+//     init: Terraform, not the state directory, owns artifact identity, and
+//     a source change on a locked artifact clones to a new artifact ID
+//     against the same directory (see gather in phase.go). What the
+//     directory stays bound to is the catalog; ErrCatalogMismatch guards
+//     that.
+//   - UseIgnore lets the resource hand over the ignore matcher it already
+//     resolved, so the walk applies the same patterns plan hashed with even
+//     when the directory could not be given its starter .drignore.
 
 import (
 	"context"
@@ -29,6 +35,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 )
@@ -40,13 +47,13 @@ import (
 // where the check is gated on previewOnly and re-run in phase 5).
 var ErrLockedArtifact = errors.New("artifact is locked (immutable); cannot sync in place, clone to a draft first")
 
-// ErrArtifactMismatch is returned by Plan when the state directory is
-// already bound to a different artifact than the Engine was constructed
-// for. Rebinding is not a config edit: BASE describes the *old*
-// artifact's catalog, so reusing it as the common ancestor of a different
-// artifact would produce a meaningless diff. Whoever wants to retarget a
-// source.dir has to reset BASE with it, which is the resource's call.
-var ErrArtifactMismatch = errors.New("state directory is bound to a different artifact")
+// ErrCatalogMismatch is returned by Plan when the state directory pins one
+// catalog while the artifact the Engine was constructed for keeps its code
+// in another. Following the artifact would not be a config edit: BASE
+// describes the pinned catalog, so reusing it as the common ancestor of a
+// different one would produce a meaningless diff. Whoever wants to retarget
+// a source.dir has to reset its state directory with it.
+var ErrCatalogMismatch = errors.New("state directory is bound to a different catalog")
 
 // ArtifactInfo is the minimal artifact view Plan needs: whether the
 // artifact is locked, and its current code_ref (empty CatalogID /
@@ -67,14 +74,15 @@ type ArtifactStore interface {
 
 // Engine runs the CLI three-way sync pipeline (BASE / LOCAL / REMOTE)
 // against a single source.dir. Construct with New, call Plan, then
-// ExecuteLocal, then ExecuteRemote, then Close to release the
-// .wapi/sync.lock acquired during preflight.
+// ExecuteLocal, then ExecuteRemote, then Close to release the sync lock
+// acquired during preflight.
 type Engine struct {
 	projectDir string
 	artifactID string
 	files      filesapi.Client
 	artifacts  ArtifactStore
 	nowFn      func() time.Time
+	ignore     *ignore.Matcher // nil: read the directory's own ignore file
 
 	seedCatalogID string
 	seedVersionID string
@@ -87,8 +95,8 @@ type Engine struct {
 	remoteVer string
 	// artifactVer is the version the artifact's own code_ref pointed at
 	// during gather, which is not always remoteVer: a draft cloned from a
-	// locked artifact starts with no code_ref at all, while .wapi/ still
-	// describes the version this directory last pushed.
+	// locked artifact starts with no code_ref at all, while the state
+	// directory still describes the version this directory last pushed.
 	artifactVer string
 	drifted     bool
 
@@ -102,16 +110,16 @@ type Engine struct {
 
 	// Set by ExecuteRemote and phase 6: the catalog the uploads landed
 	// in, the version they produced, and the version persisted to
-	// .wapi/config.json (which falls back to the observed remote version
-	// on a pull-only sync).
+	// config.json (which falls back to the observed remote version on a
+	// pull-only sync).
 	newCatalogID    string
 	newVersionID    string
 	syncedVersionID string
 }
 
 // New constructs an Engine bound to projectDir. artifactID is the artifact
-// this sync targets: it seeds .wapi/config.json when the directory has
-// none, and replaces the recorded ID on every later Plan, so a directory
+// this sync targets: it seeds config.json when the directory has no state
+// yet, and replaces the recorded ID on every later Plan, so a directory
 // follows its resource across artifact versions.
 func New(projectDir, artifactID string, files filesapi.Client, artifacts ArtifactStore) (*Engine, error) {
 	if projectDir == "" {
@@ -138,21 +146,31 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 	}, nil
 }
 
-// BindCatalog seeds the catalog pointers .wapi/ is created with, for a
-// directory that has code in the catalog but no .wapi/ yet — the state a
-// tree is in when it was last uploaded by the push-only uploader this
-// engine replaces. Seeding both makes that first Plan a plain push
-// (BASE empty, REMOTE not drifted) instead of creating a second catalog
-// beside the one Terraform state already points at.
+// BindCatalog seeds the catalog pointers the state directory is created
+// with, for a directory that has code in the catalog but no state yet:
+// the shape a tree is in when it was last uploaded by the push-only
+// uploader this engine replaces. Seeding both makes that first Plan a
+// plain push (BASE empty, REMOTE not drifted) instead of creating a second
+// catalog beside the one Terraform state already points at.
 //
-// Ignored once .wapi/config.json exists: from then on the file's own
-// pointers win. Must be called before Plan.
+// Ignored once config.json exists: from then on the file's own pointers
+// win. Must be called before Plan.
 //
 // No CLI counterpart: `dr artifact code init` takes the same values from
 // its own flags.
 func (e *Engine) BindCatalog(catalogID, catalogVersionID string) {
 	e.seedCatalogID = catalogID
 	e.seedVersionID = catalogVersionID
+}
+
+// UseIgnore makes Plan walk source.dir with m instead of loading the
+// directory's own ignore file. The resource calls it when it could not
+// write the starter .drignore: plan hashed the tree with the template's
+// patterns, and the sync has to upload that same set rather than the wider
+// one a directory with no ignore file would produce. A nil m restores the
+// default. Must be called before Plan.
+func (e *Engine) UseIgnore(m *ignore.Matcher) {
+	e.ignore = m
 }
 
 // Plan runs phases 0-4 (preflight, gather, manifests, diff, sort) and
@@ -185,7 +203,7 @@ func (e *Engine) Plan(ctx context.Context) (*SyncPlan, error) {
 }
 
 // StaleRollbackRestored reports whether preflight restored a stale
-// .wapi/.rollback/ tree left by a previously interrupted sync.
+// rollback tree left by a previously interrupted sync.
 func (e *Engine) StaleRollbackRestored() bool { return e.staleNote }
 
 // ArtifactLocked reports whether the artifact this plan was built against

@@ -42,7 +42,7 @@ func (e *Engine) preflight() error {
 			LastSyncedVersionID: e.seedVersionID,
 		})
 		if err != nil && !errors.Is(err, wapi.ErrAlreadyLinked) {
-			return fmt.Errorf("auto-init .wapi/: %w", err)
+			return fmt.Errorf("create sync state directory (source.dir must be writable, the sync keeps its last-synced manifest there): %w", err)
 		}
 	}
 
@@ -66,27 +66,30 @@ func (e *Engine) preflight() error {
 	return nil
 }
 
-// gather (phase 1) loads on-disk .wapi/ state, fetches the artifact, and
+// gather (phase 1) loads the on-disk sync state, fetches the artifact, and
 // computes the drift flag phase2 uses to decide whether to call AllFiles.
 func (e *Engine) gather(ctx context.Context) error {
 	cfg, err := wapi.LoadConfig(e.projectDir)
 	if err != nil {
-		return fmt.Errorf("read .wapi/config.json: %w", err)
+		return fmt.Errorf("read sync state config.json: %w", err)
 	}
 
-	// The caller's artifact ID wins over the one .wapi/ was initialized
-	// with. A source change on a locked artifact clones to a new draft
-	// artifact against the same directory and the same catalog, so
-	// config.json has to follow the resource instead of pinning the
-	// version that has since been superseded (which Get would then
-	// reject as locked). No CLI counterpart: `dr artifact code init`
-	// binds one artifact ID for the life of the directory.
+	// The caller's artifact ID wins over the one the state directory was
+	// initialized with. A source change on a locked artifact clones to a
+	// new draft artifact against the same directory and the same catalog,
+	// and a destroyed-and-recreated resource starts a new artifact over a
+	// directory that was synced before, so config.json has to follow the
+	// resource instead of pinning an artifact that has been superseded.
+	// What the directory is really bound to is the catalog, and gather
+	// checks that below once the artifact is known. No CLI counterpart:
+	// `dr artifact code init` binds one artifact ID for the life of the
+	// directory.
 	cfg.ArtifactID = e.artifactID
 	e.config = cfg
 
 	manifest, err := wapi.LoadManifest(e.projectDir)
 	if err != nil {
-		return fmt.Errorf("read .wapi/manifest.json: %w", err)
+		return fmt.Errorf("read sync state manifest.json: %w", err)
 	}
 	e.base = baseFromManifest(manifest)
 
@@ -105,6 +108,18 @@ func (e *Engine) gather(ctx context.Context) error {
 	// cannot let a write through. Plan is preview by definition here —
 	// Execute is what returns ErrLockedArtifact once it lands.
 	e.locked = info.Locked
+
+	// BASE describes one catalog, the one config.json pins. An artifact
+	// with no code_ref yet is fine (a draft just cloned from a locked
+	// artifact, or a resource re-created over a synced directory), and so
+	// is one whose code_ref points at the pinned catalog. One whose code
+	// lives in a different catalog is not: diffing against a BASE that
+	// never described that catalog would upload and delete the wrong
+	// files, so refuse and let the user re-link the directory.
+	if pinned := ptrOrEmpty(cfg.CatalogID); pinned != "" && info.CatalogID != "" && info.CatalogID != pinned {
+		return fmt.Errorf("%w: %s records catalog %s, but artifact %s has its code in catalog %s; remove that directory to re-link this source tree to the artifact's catalog",
+			ErrCatalogMismatch, wapi.Dir(e.projectDir), pinned, e.artifactID, info.CatalogID)
+	}
 
 	// Config's catalog ID is pinned for the artifact's draft lifetime and
 	// wins over the artifact's live code_ref, which may have been bumped
@@ -133,9 +148,13 @@ func (e *Engine) gather(ctx context.Context) error {
 // either fast-paths REMOTE from BASE (not drifted — the solo-developer
 // path) or fetches it from the Files API (drifted).
 func (e *Engine) buildManifests(ctx context.Context) error {
-	matcher, err := ignore.New(e.projectDir)
-	if err != nil {
-		return fmt.Errorf("load ignore rules: %w", err)
+	matcher := e.ignore
+	if matcher == nil {
+		var err error
+		matcher, err = ignore.New(e.projectDir)
+		if err != nil {
+			return fmt.Errorf("load ignore rules: %w", err)
+		}
 	}
 
 	files, err := artifactsource.CollectLocalFiles(e.projectDir, matcher.Match)
