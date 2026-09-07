@@ -14,6 +14,7 @@ import (
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -252,21 +253,71 @@ func TestEngine_ExecuteRemote_StateSaveFailureKeepsRemoteVersion(t *testing.T) {
 	)
 	stageResponses(f.files, "ver-3")
 
-	// Make .wapi/manifest.json un-writable by turning it into a
-	// directory: the atomic rename over it fails.
-	manifestPath := filepath.Join(f.dir, wapi.DirName, "manifest.json")
+	// Make the state manifest un-writable by turning it into a directory:
+	// the atomic rename over it fails.
+	manifestPath := filepath.Join(wapi.Dir(f.dir), "manifest.json")
 	require.NoError(t, os.Remove(manifestPath))
 	require.NoError(t, os.Mkdir(manifestPath, 0o755))
 
 	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
 
 	_, err := f.engine.ExecuteRemote(context.Background())
-	require.ErrorContains(t, err, "save .wapi/manifest.json")
+	require.ErrorContains(t, err, "save sync state manifest.json")
 
-	// The catalog has already advanced, so phase 6 must not roll it back;
-	// the next apply reconciles from the retained rollback tree.
+	// The catalog has already advanced, so phase 6 must not roll it back,
+	// and the rollback tree is gone: the working tree is what the catalog
+	// now holds, so there is nothing a later Plan should restore.
 	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, f.artifacts.patches)
 	assert.Equal(t, "local edit", readProjectFile(t, f.dir, "agent.py"))
+	assert.False(t, HasRollback(f.dir))
+}
+
+func TestEngine_ExecuteRemote_StateSaveFailureKeepsWorkingTreeAndConverges(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "local edit"},
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "base body", "added.py": "pulled"},
+	)
+	stageResponses(f.files, "ver-3")
+
+	manifestPath := filepath.Join(wapi.Dir(f.dir), "manifest.json")
+	require.NoError(t, os.Remove(manifestPath))
+	require.NoError(t, os.Mkdir(manifestPath, 0o755))
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+	require.Equal(t, "pulled", readProjectFile(t, f.dir, "added.py"))
+
+	_, err := f.engine.ExecuteRemote(context.Background())
+	require.ErrorContains(t, err, "save sync state manifest.json")
+
+	// The upload went through and the artifact points at it, so the
+	// downloaded file stays: restoring the pre-sync tree here would have
+	// the next Plan read added.py as a local deletion and push it.
+	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, f.artifacts.patches)
+	assert.Equal(t, "pulled", readProjectFile(t, f.dir, "added.py"))
+	assert.Equal(t, "local edit", readProjectFile(t, f.dir, "agent.py"))
+	assert.False(t, HasRollback(f.dir))
+	require.NoError(t, f.engine.Close())
+
+	// Next apply: config.json still names ver-1 while the artifact reports
+	// ver-3, so REMOTE is re-fetched. The catalog now carries the upload,
+	// and the working tree already matches it, so nothing is left to do.
+	require.NoError(t, os.RemoveAll(manifestPath))
+	require.NoError(t, wapi.SaveManifest(f.dir, wapi.Manifest{Version: wapi.ManifestVersion, Files: map[string]wapi.FileMeta{}}))
+	editHash, editSize := hashContent("local edit")
+	f.files.allFiles["agent.py"] = filesapi.FileMeta{Hash: editHash, Size: editSize}
+
+	next, err := New(f.dir, "art-1", f.files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-3"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = next.Close() })
+
+	plan, err := next.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty(), "working tree and catalog already agree: %+v", plan)
 }
 
 func TestEngine_ExecuteRemote_RefusedBeforeExecuteLocal(t *testing.T) {

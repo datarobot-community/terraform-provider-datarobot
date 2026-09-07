@@ -53,16 +53,15 @@ type Result struct {
 // ExecuteRemote applies the remote half of the plan and then persists the
 // new BASE: it deletes the paths the user removed locally, uploads added
 // and modified files, patches the artifact's primary code_ref to the
-// resulting catalog version, and writes .wapi/config.json plus
-// .wapi/manifest.json.
+// resulting catalog version, and writes the state directory's config.json
+// and manifest.json.
 //
-// A failure in the remote half restores source.dir from the
-// .wapi/.rollback/ tree ExecuteLocal left behind, so a failed apply does
-// not leave downloaded or renamed files in the user's directory. A failure
-// while persisting BASE deliberately does not: the catalog has already
-// advanced, and undoing it is not possible, so the next Plan reconciles
-// instead (the retained rollback tree makes that next run start from the
-// pre-sync tree).
+// A failure in the remote half restores source.dir from the rollback tree
+// ExecuteLocal left behind, so a failed apply does not leave downloaded or
+// renamed files in the user's directory. A failure while persisting BASE
+// deliberately does not: the catalog has already advanced, and undoing it
+// is not possible, so the working tree is left matching the catalog and
+// the next Plan reconciles the state directory (see persistState).
 //
 // The sync lock is not released here; Close does that.
 func (e *Engine) ExecuteRemote(ctx context.Context) (*Result, error) {

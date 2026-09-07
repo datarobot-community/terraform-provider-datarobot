@@ -3,12 +3,15 @@ package sync
 // CLI source: cli/internal/workload/sync/phase6_state.go
 //
 // Provider differences from CLI:
-//   - No .wapi/history.log entry (AppendHistory is CLI UX and was not
-//     ported, see the wapi package doc) and no Result.Duration.
-//   - A failure to drop the rollback tree is reported instead of ignored:
-//     a retained tree makes the next Plan restore the pre-sync working
-//     directory over content the catalog has already accepted, so it must
-//     not pass silently.
+//   - No history.log entry (AppendHistory is CLI UX and was not ported,
+//     see the wapi package doc) and no Result.Duration.
+//   - The rollback tree is dropped before the new state is written, not
+//     after, and a failure to drop it is reported instead of ignored. See
+//     persistState for why the order matters.
+//   - manifest.json is written before config.json, so a crash between the
+//     two leaves the directory looking drifted (config still names the
+//     old version) and the next Plan re-fetches REMOTE, rather than
+//     looking in sync with a BASE that is one sync stale.
 
 import (
 	"fmt"
@@ -17,15 +20,24 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 )
 
-// persistState (phase 6) records the sync in .wapi/: the catalog pointers
-// in config.json, the new BASE manifest, and then the rollback tree drop
-// that commits ExecuteLocal's working-tree mutations.
+// persistState (phase 6) commits the sync: it drops the rollback tree that
+// guarded ExecuteLocal's working-tree mutations, then records the new BASE
+// manifest and the catalog pointers in the state directory.
 //
-// Order matters. BASE is written before the rollback tree is discarded, so
-// a crash in between leaves the tree for the next Plan to recover. Nothing
-// here rolls the catalog back: by this point the remote has advanced, and
-// an error only means .wapi/ is behind, which the next apply reconciles.
+// The rollback tree goes first. By now the catalog has advanced, so the
+// working tree is right and the pre-sync copies in the rollback tree are
+// wrong: a later Plan that restored them would revert downloads the
+// catalog already agrees with, and against a freshly written BASE it would
+// then read the missing files as local deletions to push. With the tree
+// gone, a crash anywhere after this point leaves a working tree that
+// matches the catalog and a BASE at most one sync behind, which the next
+// Plan reconciles by re-fetching REMOTE. Nothing here rolls the catalog
+// back; an error only means the state directory is behind.
 func (e *Engine) persistState() error {
+	if err := e.DiscardRollback(); err != nil {
+		return fmt.Errorf("sync completed but the rollback tree could not be dropped: %w", err)
+	}
+
 	now := e.nowFn().UTC()
 
 	cfg := e.config
@@ -46,20 +58,16 @@ func (e *Engine) persistState() error {
 		cfg.LastSyncedVersionID = &syncedVersionID
 	}
 
-	if err := wapi.SaveConfig(e.projectDir, cfg); err != nil {
-		return fmt.Errorf("save .wapi/config.json: %w", err)
+	if err := wapi.SaveManifest(e.projectDir, e.newBaseManifest(syncedVersionID, now)); err != nil {
+		return fmt.Errorf("save sync state manifest.json: %w", err)
 	}
 
-	if err := wapi.SaveManifest(e.projectDir, e.newBaseManifest(syncedVersionID, now)); err != nil {
-		return fmt.Errorf("save .wapi/manifest.json: %w", err)
+	if err := wapi.SaveConfig(e.projectDir, cfg); err != nil {
+		return fmt.Errorf("save sync state config.json: %w", err)
 	}
 
 	e.config = cfg
 	e.syncedVersionID = syncedVersionID
-
-	if err := e.DiscardRollback(); err != nil {
-		return fmt.Errorf("sync completed but the rollback tree could not be dropped: %w", err)
-	}
 
 	return nil
 }

@@ -9,7 +9,12 @@ package sync
 //     BASE rewrite that finalizes both in state.go.
 //   - Always the CLI's `--yes` path: terraform apply has no TTY, so
 //     conflicts resolve remote-wins with the local bytes kept as
-//     *.LOCAL.<ts>. There is no prompt and no display package.
+//     *.LOCAL.<ts>. There is no prompt and no display package. The
+//     resource does not let a plan with conflicts reach this point (the
+//     CLI's non-interactive mode refuses one too), so the copies are a
+//     safety net for callers that execute such a plan anyway.
+//   - RollbackMaxFiles counts only the rows the rollback tree has to hold
+//     (see rollbackFileCount), not uploads.
 //   - RollbackTree.Backup records an absent path as a created-file
 //     itself, so the CLI's separate rb.TrackCreated calls collapse into
 //     Backup here.
@@ -34,17 +39,17 @@ const conflictCopyStampFormat = "20060102T150405Z"
 var ErrNoPlan = errors.New("sync engine: Execute called before Plan")
 
 // ErrLockReleased is returned when ExecuteLocal runs after Close, i.e.
-// without the .wapi/sync.lock that guards mutations of source.dir.
+// without the sync lock that guards mutations of source.dir.
 var ErrLockReleased = errors.New("sync engine: Execute called after the sync lock was released")
 
 // ExecuteLocal applies the local half of the plan: conflict copies, then
 // remote-to-local downloads and the local removals the remote asked for.
 // It mutates source.dir. Every path it is about to overwrite or unlink is
-// copied into .wapi/.rollback/ first, and any failure restores the tree to
-// its pre-execute state.
+// copied into the state directory's .rollback/ tree first, and any failure
+// restores the tree to its pre-execute state.
 //
 // The remote half (deletes, uploads, code_ref patch) is not applied here,
-// so ExecuteLocal leaves .wapi/.rollback/ in place: ExecuteRemote still has
+// so ExecuteLocal leaves the rollback tree in place: ExecuteRemote still has
 // to run and can still need to undo these mutations. It is the one that
 // discards the tree, once the new BASE manifest is on disk. A caller that
 // stops here instead must call DiscardRollback, otherwise the next Plan's
@@ -62,6 +67,15 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 		return ErrLockReleased
 	}
 
+	// Above the empty-plan return, as in CLI phase5Execute: phase 6 records
+	// a sync against the artifact for an empty plan too, and recording one
+	// against something immutable is the same lie as performing it. Plan
+	// only reports the lock (ArtifactLocked) so the caller can decide to
+	// mint a new version first; this is the check that keeps a write out.
+	if e.locked {
+		return ErrLockedArtifact
+	}
+
 	if e.plan.IsEmpty() {
 		e.localApplied = true
 		return nil
@@ -74,8 +88,8 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 		return err
 	}
 
-	if n := planFileCount(e.plan); n > RollbackMaxFiles {
-		return fmt.Errorf("sync plan touches %d files, above RollbackMaxFiles=%d; refusing to run", n, RollbackMaxFiles)
+	if n := rollbackFileCount(e.plan); n > RollbackMaxFiles {
+		return fmt.Errorf("sync would rewrite %d local files (downloads, local removals and conflict copies), above RollbackMaxFiles=%d; refusing to run without a usable rollback", n, RollbackMaxFiles)
 	}
 
 	rb := NewRollbackTree(e.projectDir)
@@ -108,7 +122,7 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 	return nil
 }
 
-// DiscardRollback drops the retained .wapi/.rollback/ tree, committing the
+// DiscardRollback drops the retained rollback tree, committing the
 // mutations ExecuteLocal made. Phase 6 (state.go) calls this once the new
 // BASE manifest is on disk; it is idempotent.
 func (e *Engine) DiscardRollback() error {
@@ -117,7 +131,7 @@ func (e *Engine) DiscardRollback() error {
 	}
 
 	// Hold on to the tree when Discard fails: dropping it would turn the
-	// retry into a silent no-op while .wapi/.rollback/ is still on disk,
+	// retry into a silent no-op while the rollback tree is still on disk,
 	// and the next Plan's stale-rollback recovery would then revert the
 	// local mutations this run committed. Discard is itself idempotent.
 	if err := e.rollback.Discard(); err != nil {
@@ -306,6 +320,12 @@ func validateServerPaths(plan *SyncPlan) error {
 	return nil
 }
 
-func planFileCount(plan *SyncPlan) int {
-	return len(plan.Uploads) + len(plan.Downloads) + len(plan.Deletes) + len(plan.Conflicts)
+// rollbackFileCount is the number of plan rows ExecuteLocal backs up before
+// touching them: downloads, the local removals the remote asked for, and
+// conflict copies. Uploads are deliberately left out, which is where this
+// differs from CLI phase5Execute: the cap exists to bound the rollback tree,
+// and an upload never enters it. Counting uploads would refuse the first
+// sync of any tree above the cap, which the push-only uploader accepted.
+func rollbackFileCount(plan *SyncPlan) int {
+	return len(plan.Downloads) + len(remoteDeletedPaths(plan)) + len(plan.Conflicts)
 }
