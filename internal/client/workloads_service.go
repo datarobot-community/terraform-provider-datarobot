@@ -306,6 +306,7 @@ const (
 	ArtifactTypeService ArtifactType = "service"
 	ArtifactTypeNim     ArtifactType = "nim"
 	ArtifactTypeAgent   ArtifactType = "agent"
+	ArtifactTypeMCP     ArtifactType = "mcp"
 )
 
 const (

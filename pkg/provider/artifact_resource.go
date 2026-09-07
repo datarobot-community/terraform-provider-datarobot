@@ -138,7 +138,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`. Defaults to `service`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, `agent`, or `mcp`. Defaults to `service`.",
 				Validators:          ArtifactTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -239,6 +239,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		createReq.Status = client.ArtifactStatusDraft
 	}
 
+	artifactApplyProgressCreating()
 	traceAPICall("CreateArtifact")
 	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
 	if err != nil {
