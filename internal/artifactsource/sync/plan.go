@@ -55,9 +55,14 @@ func (p *SyncPlan) Sort() {
 	sort.Slice(p.Conflicts, func(i, j int) bool { return p.Conflicts[i].Path < p.Conflicts[j].Path })
 }
 
-// HasConflicts reports whether any conflict-class rows exist.
+// HasConflicts reports whether any conflict-class row exists, wherever it
+// is routed. EDIT_DEL_CONFLICT executes as a download (nothing local is
+// lost by it) and so lives in Downloads, but it is still a change on both
+// sides, and a caller that refuses conflicts has to see it. The CLI's gate
+// looks at Conflicts only and restores such a file; a non-interactive
+// apply should not bring back a file the user deleted.
 func (p *SyncPlan) HasConflicts() bool {
-	return len(p.Conflicts) > 0
+	return len(p.ConflictPaths()) > 0
 }
 
 // IsEmpty reports whether the plan has nothing to do.
@@ -89,11 +94,17 @@ func (p *SyncPlan) TotalDownloadBytes() int64 {
 	return n
 }
 
-// ConflictPaths returns the conflict paths sorted alphabetically.
+// ConflictPaths returns the paths of every conflict-class row, sorted:
+// the Conflicts group plus the EDIT_DEL_CONFLICT rows routed to Downloads.
 func (p *SyncPlan) ConflictPaths() []string {
 	out := make([]string, 0, len(p.Conflicts))
 	for _, fa := range p.Conflicts {
 		out = append(out, fa.Path)
+	}
+	for _, fa := range p.Downloads {
+		if fa.Classification == ClsEditDelConflict {
+			out = append(out, fa.Path)
+		}
 	}
 	sort.Strings(out)
 

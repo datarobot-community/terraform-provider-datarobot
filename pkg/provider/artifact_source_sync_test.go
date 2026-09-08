@@ -1356,6 +1356,45 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 	})
 
+	t.Run("a file deleted locally and edited in the catalog is refused", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared", "util.py": "v1"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		uploadsSoFar := filesAPI.uploadCalls()
+
+		// The catalog edited util.py; the user deleted it here.
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+		filesAPI.remoteFile("util.py", "remote edit")
+		filesAPI.newestVersion("ver-remote")
+		if err := os.Remove(filepath.Join(dir, "util.py")); err != nil {
+			t.Fatal(err)
+		}
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+
+		_, _, err := syncOnce(t, mockService, dir, drifted, artifactID, syncedState(dir))
+		if err == nil || !strings.Contains(err.Error(), "util.py") || !strings.Contains(err.Error(), "both sides") {
+			t.Fatalf("error = %v, want the deleted-and-edited file refused", err)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "util.py")); statErr == nil {
+			t.Fatal("util.py must not be restored by a refused sync")
+		}
+		if filesAPI.uploadCalls() != uploadsSoFar {
+			t.Fatal("refused sync must upload nothing")
+		}
+	})
+
 	t.Run("a second resource over a synced directory is refused", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockService := mock_client.NewMockService(ctrl)

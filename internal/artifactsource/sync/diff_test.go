@@ -122,6 +122,10 @@ func TestDiff_EditDelConflictIsDownload(t *testing.T) {
 	assert.Equal(t, ClsEditDelConflict, plan.Downloads[0].Classification)
 	assert.Equal(t, ActDownloadOverDel, plan.Downloads[0].Action)
 	assert.Empty(t, plan.Conflicts)
+
+	// Routed as a download, still a change on both sides for the refusal.
+	assert.True(t, plan.HasConflicts())
+	assert.Equal(t, []string{"gone.py"}, plan.ConflictPaths())
 }
 
 func TestDiff_DelEditConflictIsConflict(t *testing.T) {

@@ -357,7 +357,7 @@ func artifactSourceStaleRollbackWarning(diags *diag.Diagnostics, absDir string) 
 // conflict in place; the apply itself has touched nothing.
 func artifactSourceConflictError(absDir string, conflicts []string) error {
 	return fmt.Errorf(
-		"%d file(s) changed both in %s and in the catalog since the last sync:\n%s\n\n"+
+		"%d file(s) changed on both sides since the last sync, edited or deleted in %s and edited or deleted in the catalog:\n%s\n\n"+
 			"terraform apply cannot ask which side wins, so nothing was uploaded or written. "+
 			"Resolve the conflict in that directory with the DataRobot CLI: `dr artifact code sync` shows both versions and asks per file, "+
 			"and `dr artifact code sync --yes --accept-remote` takes the catalog version while keeping your copy as <path>.LOCAL.<timestamp>. "+
