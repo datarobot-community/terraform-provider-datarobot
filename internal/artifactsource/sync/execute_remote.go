@@ -21,9 +21,9 @@ package sync
 //     its own display package, which is not ported.
 //   - Remote deletes go out in RemoteDeleteBatchSize chunks; the CLI's
 //     applyDeletes sends every path in one request.
-//   - An upload that reports no catalog version is an error. The CLI
-//     takes whatever the uploader returns, which would skip the code_ref
-//     patch and still record the sync.
+//   - An upload or delete that reports no catalog version is an error.
+//     The CLI takes whatever the uploader returns, which would skip the
+//     code_ref patch and still record the sync.
 //   - A phase 6 failure comes back as *StatePersistError, so the caller
 //     can tell "catalog advanced, state directory behind" apart from a
 //     failed upload.
@@ -164,6 +164,14 @@ func (e *Engine) applyRemoteDeletesAndUploads(ctx context.Context) error {
 	// artifact has no code_ref yet and still has to be pointed at the
 	// catalog version its directory matches, even when the plan was empty.
 	if newVersionID != "" && newVersionID != e.artifactVer {
+		// Unreachable through ExecuteLocal, which refuses a non-empty plan
+		// on a locked artifact, and an empty plan leaves newVersionID at
+		// the artifact's own version; kept so the invariant does not rest
+		// on that ordering.
+		if e.locked {
+			return ErrLockedArtifact
+		}
+
 		if err := e.artifacts.PatchCodeRef(ctx, e.config.ArtifactID, newCatalogID, newVersionID); err != nil {
 			return fmt.Errorf("update artifact code_ref: %w", err)
 		}
@@ -194,9 +202,14 @@ func (e *Engine) applyRemoteDeletes(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("delete remote files %d-%d of %d: %w", start+1, end, len(paths), err)
 		}
 
-		if resp != nil && resp.CatalogVersionID != "" {
-			versionID = resp.CatalogVersionID
+		// Same rule as uploads: a delete that cannot say where it landed
+		// would skip the code_ref patch and let phase 6 record a BASE
+		// without these paths against a version that still holds them.
+		if resp == nil || resp.CatalogVersionID == "" {
+			return "", fmt.Errorf("delete remote files %d-%d of %d: the Files API reported no catalog version for the delete", start+1, end, len(paths))
 		}
+
+		versionID = resp.CatalogVersionID
 	}
 
 	return versionID, nil

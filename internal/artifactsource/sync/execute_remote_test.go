@@ -458,3 +458,54 @@ func TestEngine_ExecuteRemote_KeepsUnknownStateKeys(t *testing.T) {
 	assert.JSONEq(t, `{"cluster":"eu-1"}`, string(cfg.Extra["deployTarget"]))
 	assert.Equal(t, "ver-2", *cfg.LastSyncedVersionID)
 }
+
+func TestEngine_ExecuteRemote_DeleteWithoutVersionFails(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "same"},
+		map[string]string{"agent.py": "same", "gone.py": "dropped"},
+		map[string]string{"agent.py": "same", "gone.py": "dropped"},
+	)
+	f.files.deleteNoVersion = true
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+
+	_, err := f.engine.ExecuteRemote(context.Background())
+	require.ErrorContains(t, err, "no catalog version for the delete")
+
+	// Nothing recorded: no code_ref patch, BASE still lists the path,
+	// config still names the pre-sync version.
+	assert.Empty(t, f.artifacts.patches)
+	assert.Contains(t, loadBase(t, f.dir), "gone.py")
+	cfg, err := wapi.LoadConfig(f.dir)
+	require.NoError(t, err)
+	assert.Equal(t, "ver-1", *cfg.LastSyncedVersionID)
+}
+
+func TestEngine_ExecuteRemote_EmptyPlanOnLockedArtifactRecordsTheSync(t *testing.T) {
+	t.Parallel()
+
+	// The catalog re-uploaded identical bytes (ver-1 -> ver-2, same
+	// content), so the directory is behind on paper only.
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "same"},
+		map[string]string{"agent.py": "same"},
+		map[string]string{"agent.py": "same"},
+	)
+	require.True(t, f.plan.IsEmpty())
+	f.engine.locked = true
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+	result, err := f.engine.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+
+	// Nothing was written into the immutable artifact; the directory's
+	// bookkeeping caught up with the version it already matches.
+	assert.Empty(t, f.artifacts.patches)
+	assert.Equal(t, "ver-2", result.CatalogVersionID)
+	cfg, err := wapi.LoadConfig(f.dir)
+	require.NoError(t, err)
+	assert.Equal(t, "ver-2", *cfg.LastSyncedVersionID)
+	assert.False(t, HasRollback(f.dir))
+}

@@ -176,7 +176,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
 					"A file edited both locally and in the catalog since the last sync fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
 					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
-					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs another live artifact is refused. `.datarobot.yaml` is never uploaded.",
+					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -359,6 +359,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	var artifact *client.Artifact
 	var err error
+	sourceSynced := false
 
 	switch {
 	case state.Status.ValueString() == string(client.ArtifactStatusDraft):
@@ -371,6 +372,41 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
+		}
+	case lockedSourceCloneNeeded && !artifactNeedsNewVersion(plan, state) && artifactSourceLocallyUnchanged(&plan, &state):
+		// The catalog moved while the directory did not. Whether that
+		// needs a new version depends on what the sync finds, so plan
+		// against the locked artifact first: a directory behind the
+		// resource on paper only, or a catalog that re-uploaded identical
+		// bytes, plans empty, and an empty plan records itself against the
+		// locked version without minting another (no build, no workload
+		// roll). Only a plan with work clones to a draft, and a conflict
+		// is refused before any clone exists. A directory that changed
+		// locally skips this and clones straight away: its plan has work.
+		traceAPICall("GetArtifact")
+		locked, getErr := r.provider.service.GetArtifact(ctx, priorArtifactID)
+		if getErr != nil {
+			resp.Diagnostics.AddError("Error reading Artifact", getErr.Error())
+			return
+		}
+		synced, _, syncErr := r.syncArtifactSource(ctx, &plan, &state, locked, priorArtifactID, &resp.Diagnostics)
+		switch {
+		case errors.Is(syncErr, errArtifactSourceNeedsVersion):
+			createReq := artifactCreateRequest(plan)
+			createReq.Status = client.ArtifactStatusDraft
+			traceAPICall("CreateUpdatedArtifact")
+			artifact, err = r.provider.service.CreateArtifact(ctx, createReq)
+			if err != nil {
+				resp.Diagnostics.AddError("Error creating draft Artifact for source update", err.Error())
+				return
+			}
+		case syncErr != nil:
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			return
+		default:
+			artifact = synced
+			sourceSynced = true
+			lockedSourceCloneNeeded = false
 		}
 	case lockedSourceCloneNeeded:
 		createReq := artifactCreateRequest(plan)
@@ -400,7 +436,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	createdNewVersion := artifact.ID != priorArtifactID
-	if artifactSourceConfigured(&plan) {
+	if artifactSourceConfigured(&plan) && !sourceSynced {
 		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
 		if syncErr != nil {
 			if createdNewVersion {

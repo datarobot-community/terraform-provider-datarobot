@@ -19,6 +19,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+// errArtifactSourceNeedsVersion is how runArtifactSourceSync reports a
+// locked artifact whose directory has changes to sync: nothing can be
+// written into it, so the caller has to mint a new version and sync that.
+// Its own error, rather than the engine's, so the caller can tell "clone"
+// from a failure.
+var errArtifactSourceNeedsVersion = errors.New("artifact is locked (immutable) and the directory has changes to sync; a new version has to be created first")
+
 func artifactSourceConfigured(data *ArtifactResourceModel) bool {
 	return data.Source != nil && IsKnown(data.Source.Dir)
 }
@@ -37,13 +44,15 @@ func artifactSourceNeedsUpload(plan, state *ArtifactResourceModel, priorArtifact
 }
 
 // artifactSourceRemoteDrifted reports whether the catalog version the
-// artifact points at has moved past the one source.dir last synced. State
-// carries the artifact's code_ref as Read refreshed it; the directory's
-// last sync is in its state directory. They differ when the code_ref was
-// re-pointed from somewhere else: the DataRobot CLI syncing this artifact
-// from another checkout, or this resource last applied from one. Without
-// this a plan for an unchanged tree shows nothing, and the catalog's
-// changes never come down.
+// artifact points at differs from the one source.dir last synced. State
+// carries the primary container's code_ref as Read refreshed it (the one
+// the sync patches and reads); the directory's last sync is in its state
+// directory. They differ when the code_ref was re-pointed from somewhere
+// else: the DataRobot CLI syncing this artifact from another checkout,
+// this resource last applied from one, or a rollback to an earlier
+// version. Without this a plan for an unchanged tree shows nothing, and
+// the catalog's changes never come down. Which way the catalog moved is
+// the sync's question, not the plan's: a rollback is refused there.
 //
 // A directory with no state yet has nothing to compare. One bound to a
 // different catalog is left alone: that mismatch is refused, with the way
@@ -53,10 +62,11 @@ func artifactSourceRemoteDrifted(plan, state *ArtifactResourceModel) bool {
 		return false
 	}
 
-	liveVersion := catalogVersionIDFromModel(state)
-	if liveVersion == "" {
+	ref := primaryCodeRefFromState(state)
+	if ref == nil || !IsKnown(ref.CatalogVersionID) {
 		return false
 	}
+	liveVersion := ref.CatalogVersionID.ValueString()
 
 	absDir, err := artifactSourceAbsDir(plan)
 	if err != nil {
@@ -68,7 +78,7 @@ func artifactSourceRemoteDrifted(plan, state *ArtifactResourceModel) bool {
 		return false
 	}
 
-	if cfg.CatalogID != nil && *cfg.CatalogID != "" && *cfg.CatalogID != catalogIDFromModel(state) {
+	if cfg.CatalogID != nil && *cfg.CatalogID != "" && *cfg.CatalogID != ref.CatalogID.ValueString() {
 		return false
 	}
 
@@ -87,14 +97,19 @@ func artifactSourceDriftWarning(diags *diag.Diagnostics, plan, state *ArtifactRe
 		return
 	}
 
+	liveVersion := ""
+	if ref := primaryCodeRefFromState(state); ref != nil {
+		liveVersion = ref.CatalogVersionID.ValueString()
+	}
+
 	diags.AddAttributeWarning(
 		path.Root("source").AtName("dir"),
 		"Catalog changed since the last sync",
 		fmt.Sprintf(
-			"The artifact's code is at catalog version %s, which %s has not synced yet. "+
-				"Apply brings the catalog's changes down into the directory (every file it writes or removes is reported) and, on a locked artifact, builds a new version that includes them. "+
-				"A file changed on both sides fails the apply and is named.",
-			catalogVersionIDFromModel(state), plan.Source.Dir.ValueString()),
+			"The artifact's code is at catalog version %s, which %s has not synced. "+
+				"Apply brings the catalog's changes down into the directory (every file it writes or removes is reported) and, on a locked artifact whose directory then differs, builds a new version that includes them. "+
+				"A file changed on both sides fails the apply and is named, and so does a catalog that moved backwards to an older version.",
+			liveVersion, plan.Source.Dir.ValueString()),
 	)
 }
 
@@ -152,12 +167,19 @@ func (s *artifactSourceStore) Get(ctx context.Context, artifactID string) (artif
 		traceAPICall("GetArtifact")
 		fetched, err := s.service.GetArtifact(ctx, artifactID)
 		if err != nil {
+			var notFound *client.NotFoundError
+			if errors.As(err, &notFound) {
+				return artifactsync.ArtifactInfo{}, fmt.Errorf("%w: %v", artifactsync.ErrArtifactNotFound, err)
+			}
 			return artifactsync.ArtifactInfo{}, err
 		}
 		artifact = fetched
 	}
 
 	info := artifactsync.ArtifactInfo{Locked: artifact.Status == client.ArtifactStatusLocked}
+	if artifact.ArtifactRepositoryID != nil {
+		info.RepositoryID = *artifact.ArtifactRepositoryID
+	}
 	if ref := client.ExtractCodeRef(artifact); ref != nil {
 		info.CatalogID = ref.CatalogID
 		info.CatalogVersionID = ref.CatalogVersionID
@@ -202,49 +224,6 @@ func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client
 	return catalogID, versionID
 }
 
-// refuseForeignSourceDir rejects a directory whose sync state names an
-// artifact that still exists and lives in a different artifact repository
-// than the one being synced: that is a second resource over one directory.
-// The other shapes a re-bound directory takes are allowed, since the engine
-// follows the resource across artifact IDs on purpose: a clone of a locked
-// artifact stays in its repository, and a destroyed-and-recreated resource
-// leaves behind an artifact that no longer exists.
-//
-// Two resources sharing a directory would not just race for its lock. The
-// second would attach to the first's catalog, and from then on each sync
-// would treat its own artifact's version as REMOTE and pull the other
-// resource's upload back out of the working tree.
-func (r *ArtifactResource) refuseForeignSourceDir(ctx context.Context, absDir string, artifact *client.Artifact) error {
-	if artifact == nil || artifact.ArtifactRepositoryID == nil {
-		return nil
-	}
-
-	cfg, err := wapi.LoadConfig(absDir)
-	if err != nil {
-		return nil //nolint:nilerr // no readable state binds the directory to anything yet
-	}
-	if cfg.ArtifactID == "" || cfg.ArtifactID == artifact.ID {
-		return nil
-	}
-
-	traceAPICall("GetArtifact")
-	other, err := r.provider.service.GetArtifact(ctx, cfg.ArtifactID)
-	if err != nil {
-		// Gone is the re-created resource. Anything else is not for this
-		// check to decide on: it exists to catch a misconfiguration, not
-		// to add a failure mode to every apply.
-		return nil //nolint:nilerr // a directory whose owner cannot be read is not refused
-	}
-
-	if other.ArtifactRepositoryID == nil || *other.ArtifactRepositoryID == *artifact.ArtifactRepositoryID {
-		return nil
-	}
-
-	return fmt.Errorf("%s already backs artifact %s (repository %s), which still exists: a directory can back only one datarobot_artifact resource, because the sync state under it describes one catalog. "+
-		"Give this resource its own directory, or remove %s if that artifact is no longer managed from here",
-		absDir, other.ID, *other.ArtifactRepositoryID, wapi.Dir(absDir))
-}
-
 // runArtifactSourceSync reconciles absDir with the catalog using the CLI
 // three-way sync engine: BASE (the last synced manifest under
 // absDir/.datarobot/workload/) against LOCAL (the directory, minus .drignore
@@ -266,14 +245,11 @@ func (r *ArtifactResource) runArtifactSourceSync(
 	ctx context.Context,
 	state *ArtifactResourceModel,
 	artifact *client.Artifact,
+	priorArtifactID string,
 	absDir string,
 	seeded *ignore.Matcher,
 	diags *diag.Diagnostics,
 ) (result *artifactsync.Result, patched *client.Artifact, err error) {
-	if err := r.refuseForeignSourceDir(ctx, absDir, artifact); err != nil {
-		return nil, nil, err
-	}
-
 	store := &artifactSourceStore{service: r.provider.service, current: artifact}
 
 	engine, err := artifactsync.New(absDir, artifact.ID, r.provider.service.FilesAPI(), store)
@@ -281,6 +257,7 @@ func (r *ArtifactResource) runArtifactSourceSync(
 		return nil, nil, err
 	}
 	engine.BindCatalog(artifactSourceCatalogBinding(state, artifact))
+	engine.PreviousArtifact(priorArtifactID)
 	engine.UseIgnore(seeded)
 
 	// Close releases the sync lock. A failure to release would make the
@@ -306,14 +283,14 @@ func (r *ArtifactResource) runArtifactSourceSync(
 		return nil, nil, artifactSourceConflictError(absDir, plan.ConflictPaths())
 	}
 
-	// A locked artifact whose directory already matches it: nothing to
-	// write, and the engine would (rightly) refuse to record a sync
-	// against something immutable. The resource does not normally get
-	// here, since it clones a locked artifact before syncing a changed
-	// tree and keeps the version when nothing changed, but a caller that
-	// does has nothing to do rather than an error to report.
-	if engine.ArtifactLocked() && plan.IsEmpty() {
-		return nil, nil, nil
+	// A locked artifact cannot take a plan with work: the caller has to
+	// mint a new version and sync that. An empty plan goes through: it
+	// writes nothing into the artifact and only records that the directory
+	// matches the version it already points at, which is what keeps a
+	// benign drift (identical bytes re-uploaded, or a directory behind on
+	// paper only) from minting a version.
+	if engine.ArtifactLocked() && !plan.IsEmpty() {
+		return nil, nil, errArtifactSourceNeedsVersion
 	}
 
 	if err := engine.ExecuteLocal(ctx); err != nil {
@@ -551,22 +528,24 @@ func (r *ArtifactResource) syncArtifactSource(
 
 	artifactApplyProgressUploading(artifact.ID)
 
-	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, absDir, seeded, diags)
+	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, priorArtifactID, absDir, seeded, diags)
 	if err != nil {
 		return nil, false, fmt.Errorf("sync artifact source: %w", err)
 	}
 
-	if result == nil {
-		return artifact, false, nil
-	}
-
 	artifactApplyProgressSourceSynced(result)
+
+	// The sync did work when it moved files in either direction or pointed
+	// the artifact at a version. A plan that turned out empty against an
+	// artifact already on that version did neither, and there is nothing
+	// to build for it.
+	worked := patched != nil || result.Uploaded+result.Downloaded+result.DeletedRemote+result.DeletedLocal > 0
 
 	if patched != nil {
 		artifact = patched
 	}
 
-	return artifact, true, nil
+	return artifact, worked, nil
 }
 
 // artifactApplyProgressSourceSynced reports the sync's counts on the apply
@@ -604,7 +583,14 @@ func (r *ArtifactResource) syncArtifactSourceAndBuild(
 		return nil, err
 	}
 
-	if !artifactBuildNeededAfterUpload(plan, artifact, uploaded) {
+	// A sync that moved nothing still leaves a new draft to build: a clone
+	// of a locked artifact is created with the version's code_ref already
+	// on it, so its sync finds nothing to move or re-point, and yet it has
+	// never been built. An existing draft that synced empty keeps whatever
+	// image it has; only an artifact minted by this apply is built for
+	// having none.
+	newArtifact := artifact != nil && artifact.ID != priorArtifactID
+	if !artifactBuildNeededAfterUpload(plan, artifact, uploaded || (newArtifact && artifactDraftHasNoImage(artifact))) {
 		return artifact, nil
 	}
 
@@ -619,6 +605,20 @@ func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	}
 
 	return artifact, nil
+}
+
+// artifactDraftHasNoImage reports whether artifact's primary container has
+// neither an image nor a build in flight that will produce one.
+func artifactDraftHasNoImage(artifact *client.Artifact) bool {
+	if artifact == nil || artifactPrimaryContainerImageURI(artifact) != "" {
+		return false
+	}
+
+	if build := primaryContainerBuildInfo(artifact); build != nil && build.Status != "" && !client.IsTerminalArtifactBuildStatus(build.Status) {
+		return false
+	}
+
+	return true
 }
 
 func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
@@ -674,6 +674,23 @@ func artifactUpdateKeepsLockedVersion(plan, state ArtifactResourceModel) bool {
 		return false
 	}
 	return !artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+}
+
+// artifactSourceLocallyUnchanged reports whether the tree under source.dir
+// still hashes to what state recorded, so the plan's dir_hash is unknown
+// for another reason: the catalog moved. It hashes the tree again rather
+// than trusting the plan, which carries unknown either way.
+func artifactSourceLocallyUnchanged(plan, state *ArtifactResourceModel) bool {
+	if state == nil || state.Source == nil || !IsKnown(state.Source.DirHash) {
+		return false
+	}
+
+	current, err := computeArtifactSourceDirHash(plan)
+	if err != nil {
+		return false
+	}
+
+	return current.Equal(state.Source.DirHash)
 }
 
 // artifactSourceDeferLock is true when a draft→locked transition must wait until after source upload.

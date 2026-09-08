@@ -92,7 +92,14 @@ type fakeFilesAPI struct {
 	stageNoVersion  bool   // ApplyStage succeeds but reports no version
 	zipVersionID    string // UploadFromZipExisting result
 	deleteVersionID string // DeleteFiles result
+	deleteNoVersion bool   // DeleteFiles succeeds but reports no version
 	uploadErr       error  // fails every UploadToStage call
+
+	// versions is the catalog history ListVersions serves, newest first.
+	// Nil serves the ids the tests in this package use for drift, in the
+	// order their names suggest, so a fixture that only needs "the live
+	// version is newer than the last synced one" says nothing.
+	versions []string
 
 	mu                 sync.Mutex
 	downloadPaths      []string
@@ -233,7 +240,7 @@ func (f *fakeFilesAPI) downloadedPaths() []string {
 }
 
 func (f *fakeFilesAPI) DeleteFiles(_ context.Context, catalogID string, paths []string) (*filesapi.DeleteFilesResp, error) {
-	if f.deleteVersionID == "" {
+	if f.deleteVersionID == "" && !f.deleteNoVersion {
 		return nil, errors.New("fakeFilesAPI: DeleteFiles not expected")
 	}
 
@@ -241,6 +248,10 @@ func (f *fakeFilesAPI) DeleteFiles(_ context.Context, catalogID string, paths []
 	defer f.mu.Unlock()
 
 	f.deletedPaths = append(f.deletedPaths, append([]string(nil), paths...))
+
+	if f.deleteNoVersion {
+		return &filesapi.DeleteFilesResp{CatalogID: catalogID}, nil
+	}
 
 	return &filesapi.DeleteFilesResp{
 		CatalogID:        catalogID,
@@ -265,7 +276,17 @@ func (f *fakeFilesAPI) stagedPaths() []string {
 }
 
 func (f *fakeFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
-	return nil, errors.New("fakeFilesAPI: ListVersions not expected")
+	ids := f.versions
+	if ids == nil {
+		ids = []string{"ver-9", "ver-3", "ver-2", "ver-1"}
+	}
+
+	out := make([]filesapi.CatalogVersion, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, filesapi.CatalogVersion{ID: id})
+	}
+
+	return out, nil
 }
 
 func writeProjectFiles(t *testing.T, dir string, files map[string]string) {
@@ -540,6 +561,8 @@ func TestEngine_Plan_RejectsCatalogMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-1")
 
 	_, err = e.Plan(context.Background())
 	require.Error(t, err)
@@ -580,6 +603,8 @@ func TestEngine_Plan_RebindsArtifactWithoutCodeRefToPinnedCatalog(t *testing.T) 
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-old")
 
 	plan, err := e.Plan(context.Background())
 	require.NoError(t, err)
@@ -1034,6 +1059,8 @@ func TestEngine_Plan_RebindsArtifactIDFromCaller(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-old")
 
 	_, err = e.Plan(context.Background())
 	require.NoError(t, err)
@@ -1067,6 +1094,8 @@ func TestEngine_Plan_ClonedArtifactDiffsAgainstLastSyncedVersion(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-old")
 
 	plan, err := e.Plan(context.Background())
 	require.NoError(t, err)
@@ -1103,6 +1132,8 @@ func TestEngine_ExecuteRemote_PointsClonedArtifactAtLastSyncedVersion(t *testing
 	e, err := New(dir, "art-clone", files, artifacts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-old")
 
 	result, err := e.Run(context.Background())
 	require.NoError(t, err)
@@ -1211,6 +1242,8 @@ func TestEngine_BindCatalog_VersionIsTheBaselineForAnArtifactWithoutCodeRef(t *t
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
+	// The directory is bound to this resource's previous artifact: a clone, not a second resource.
+	e.PreviousArtifact("art-1")
 
 	e.BindCatalog("cat-1", "ver-2")
 
@@ -1222,4 +1255,253 @@ func TestEngine_BindCatalog_VersionIsTheBaselineForAnArtifactWithoutCodeRef(t *t
 	assert.Empty(t, plan.Uploads)
 	require.Len(t, plan.Downloads, 1)
 	assert.Equal(t, "helper.py", plan.Downloads[0].Path)
+}
+
+// linkedDir is a project directory with one file, whose state directory
+// last synced ver-1 of cat-1 with that file in BASE.
+func linkedDir(t *testing.T, artifactID string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          artifactID,
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	return dir
+}
+
+func TestEngine_Plan_RefusesRolledBackCatalog(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	// BASE holds agent.py and extra.py from ver-2; the artifact was
+	// re-pointed at ver-1, which never had extra.py.
+	writeProjectFiles(t, dir, map[string]string{"extra.py": "only in ver-2"})
+	hash, size := hashContent("x")
+	extraHash, extraSize := hashContent("only in ver-2")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}, "extra.py": {Hash: extraHash, Size: extraSize}},
+	}))
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	two := "ver-2"
+	cfg.LastSyncedVersionID = &two
+	require.NoError(t, wapi.SaveConfig(dir, cfg))
+
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+		versions: []string{"ver-2", "ver-1"},
+	}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.ErrorIs(t, err, ErrCatalogRolledBack)
+	assert.ErrorContains(t, err, "older than the version this directory last synced")
+
+	// Refused before anything was read or written: extra.py is still
+	// there, and the state directory still says ver-2.
+	assert.Equal(t, "only in ver-2", readProjectFile(t, dir, "extra.py"))
+	after, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "ver-2", *after.LastSyncedVersionID)
+	assert.False(t, files.allFilesCalled, "no REMOTE is fetched for a merge that is refused")
+
+	// A failed Plan releases the lock.
+	lock, err := AcquireLock(dir)
+	require.NoError(t, err)
+	require.NoError(t, lock.Unlock())
+}
+
+func TestEngine_Plan_RefusesUnorderableDrift(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{},
+		versions: []string{"ver-7"}, // neither ver-2 (live) nor ver-1 (last synced) is in the history served
+	}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.ErrorContains(t, err, "could not place versions")
+	assert.False(t, files.allFilesCalled)
+}
+
+func TestEngine_Plan_ForwardDriftPassesTheOrderCheck(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	hash, size := hashContent("x")
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+		versions: []string{"ver-2", "ver-1"},
+	}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, files.allFilesCalled)
+	assert.True(t, plan.IsEmpty())
+}
+
+func TestEngine_Plan_RefusesDirectoryBoundToAnotherLiveArtifact(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	var asked []string
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			asked = append(asked, id)
+			return draftInfo("cat-1", "ver-1"), nil // art-1 is alive
+		},
+	}
+	e, err := New(dir, "art-2", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.ErrorIs(t, err, ErrDirectoryOwned)
+	assert.ErrorContains(t, err, "already backs artifact art-1")
+	assert.Equal(t, []string{"art-2", "art-1"}, asked, "the artifact being synced, then the owner")
+
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "art-1", cfg.ArtifactID, "the refusal leaves the binding alone")
+}
+
+func TestEngine_Plan_AllowsDirectoryBoundToAnOlderVersionOfTheSameRepository(t *testing.T) {
+	t.Parallel()
+
+	// A checkout that last applied two versions ago: its state names
+	// art-1, the resource is now on art-3, and both live in repo-a.
+	dir := linkedDir(t, "art-1")
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			switch id {
+			case "art-1":
+				return ArtifactInfo{CatalogID: "cat-1", CatalogVersionID: "ver-1", RepositoryID: "repo-a"}, nil
+			case "art-3":
+				return ArtifactInfo{RepositoryID: "repo-a"}, nil
+			}
+			return ArtifactInfo{}, errors.New("unexpected artifact " + id)
+		},
+	}
+	e, err := New(dir, "art-3", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.PreviousArtifact("art-2")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty())
+	assert.Equal(t, "art-3", e.config.ArtifactID)
+}
+
+func TestEngine_Plan_RefusesDirectoryBoundToAnotherRepository(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			if id == "art-1" {
+				return ArtifactInfo{CatalogID: "cat-1", CatalogVersionID: "ver-1", RepositoryID: "repo-a"}, nil
+			}
+			return ArtifactInfo{RepositoryID: "repo-b"}, nil
+		},
+	}
+	e, err := New(dir, "art-2", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.ErrorIs(t, err, ErrDirectoryOwned)
+	assert.ErrorContains(t, err, "repository repo-a")
+}
+
+func TestEngine_Plan_AllowsDirectoryBoundToThePreviousArtifact(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			if id != "art-clone" {
+				return ArtifactInfo{}, errors.New("only the artifact being synced should be read")
+			}
+			return draftInfo("", ""), nil
+		},
+	}
+	e, err := New(dir, "art-clone", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.PreviousArtifact("art-1")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty())
+}
+
+func TestEngine_Plan_AllowsDirectoryBoundToAGoneArtifact(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-old")
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			if id == "art-old" {
+				return ArtifactInfo{}, fmt.Errorf("%w: 404", ErrArtifactNotFound)
+			}
+			return draftInfo("", ""), nil
+		},
+	}
+	e, err := New(dir, "art-new", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty())
+	assert.Equal(t, "art-new", e.config.ArtifactID, "the directory follows the re-created resource")
+}
+
+func TestEngine_Plan_OwnerLookupFailureIsReported(t *testing.T) {
+	t.Parallel()
+
+	dir := linkedDir(t, "art-1")
+	store := &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			if id == "art-1" {
+				return ArtifactInfo{}, errors.New("503 from the API")
+			}
+			return draftInfo("", ""), nil
+		},
+	}
+	e, err := New(dir, "art-2", &fakeFilesAPI{}, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.ErrorContains(t, err, "check which artifact")
+	require.ErrorContains(t, err, "503 from the API")
 }

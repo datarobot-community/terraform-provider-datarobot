@@ -70,8 +70,23 @@ func (e *Engine) preflight() error {
 // computes the drift flag phase2 uses to decide whether to call AllFiles.
 func (e *Engine) gather(ctx context.Context) error {
 	cfg, err := wapi.LoadConfig(e.projectDir)
+	if errors.Is(err, wapi.ErrNotInitialized) {
+		// The directory exists (preflight saw it) but config.json is not
+		// there yet: another process is between creating the directory
+		// and writing its files. Same answer as a held lock.
+		return fmt.Errorf("%w: another sync is initializing %s", ErrLocked, wapi.Dir(e.projectDir))
+	}
 	if err != nil {
 		return fmt.Errorf("read sync state config.json: %w", err)
+	}
+
+	info, err := e.artifacts.Get(ctx, e.artifactID)
+	if err != nil {
+		return fmt.Errorf("fetch artifact %s: %w", e.artifactID, err)
+	}
+
+	if err := e.refuseOwnedDirectory(ctx, cfg.ArtifactID, info); err != nil {
+		return err
 	}
 
 	// The caller's artifact ID wins over the one the state directory was
@@ -93,11 +108,6 @@ func (e *Engine) gather(ctx context.Context) error {
 	}
 	e.base = baseFromManifest(manifest)
 	e.baseExtra = manifest.Extra
-
-	info, err := e.artifacts.Get(ctx, cfg.ArtifactID)
-	if err != nil {
-		return fmt.Errorf("fetch artifact %s: %w", cfg.ArtifactID, err)
-	}
 
 	// A locked artifact is immutable, so nothing can be pushed into it.
 	// That refuses a sync, but it must not refuse a plan: the caller asks
@@ -150,6 +160,95 @@ func (e *Engine) gather(ctx context.Context) error {
 	}
 
 	e.drifted = e.remoteVer != "" && e.remoteVer != ptrOrEmpty(cfg.LastSyncedVersionID)
+
+	if e.drifted {
+		if err := e.refuseRolledBackCatalog(ctx, ptrOrEmpty(cfg.LastSyncedVersionID)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// refuseOwnedDirectory (phase 1, under the sync lock so a parallel apply
+// cannot slip past it) rejects a state directory bound to an artifact that
+// still exists and belongs to another lineage than current. The shapes a
+// re-bound directory legitimately takes are what the rebind in gather
+// exists for, and all pass: a clone of a locked artifact (PreviousArtifact,
+// or any older version from the same artifact repository, which is where a
+// checkout that last applied a few versions ago sits) and a
+// destroyed-and-recreated resource, whose old artifact is gone. The
+// lineage is the artifact repository, because that is what every version
+// of one resource shares; two resources deliberately pointed at one
+// repository and one directory are indistinguishable from one resource's
+// history and are not caught here.
+func (e *Engine) refuseOwnedDirectory(ctx context.Context, owner string, current ArtifactInfo) error {
+	if owner == "" || owner == e.artifactID || owner == e.previousArtifactID {
+		return nil
+	}
+
+	other, err := e.artifacts.Get(ctx, owner)
+	if errors.Is(err, ErrArtifactNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("check which artifact %s is bound to: %w", wapi.Dir(e.projectDir), err)
+	}
+
+	if other.RepositoryID != "" && other.RepositoryID == current.RepositoryID {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %s already backs artifact %s (repository %s), which still exists: a directory can back only one artifact repository, the versions of one datarobot_artifact resource, because the sync state under it describes one catalog. "+
+		"Give this resource its own directory, or remove %s if that artifact is no longer managed from here",
+		ErrDirectoryOwned, e.projectDir, owner, other.RepositoryID, wapi.Dir(e.projectDir))
+}
+
+// versionOrderLimit bounds the catalog history read to order two versions.
+// A catalog gains one version per sync, so hundreds is generous; a version
+// further back than that is refused as unorderable rather than guessed.
+const versionOrderLimit = 500
+
+// refuseRolledBackCatalog (phase 1) checks that a drifted catalog moved
+// forward: the version the artifact points at has to be newer than the one
+// the directory last synced. Older means the artifact was re-pointed
+// backwards, a rollback, and BASE is then a descendant of REMOTE rather
+// than an ancestor of both sides. Diffing against it would classify every
+// file added since as REMOTE_DELETED and unlink it locally, so the sync
+// refuses and leaves the choice to the caller. No CLI counterpart: the CLI
+// merges against whatever code_ref it finds.
+func (e *Engine) refuseRolledBackCatalog(ctx context.Context, lastSynced string) error {
+	if lastSynced == "" || e.catalogID == "" {
+		return nil
+	}
+
+	versions, err := e.files.ListVersions(ctx, e.catalogID, versionOrderLimit)
+	if err != nil {
+		return fmt.Errorf("order catalog versions %s and %s: %w", ShortVer(lastSynced), ShortVer(e.remoteVer), err)
+	}
+
+	// Newest first, as the Files API lists them.
+	liveIdx, lastIdx := -1, -1
+	for i, v := range versions {
+		if v.ID == e.remoteVer {
+			liveIdx = i
+		}
+		if v.ID == lastSynced {
+			lastIdx = i
+		}
+	}
+
+	stateDir := wapi.Dir(e.projectDir)
+	if liveIdx < 0 || lastIdx < 0 {
+		return fmt.Errorf("could not place versions %s (artifact) and %s (last synced) in the history of catalog %s, so the sync cannot tell whether the catalog moved forward; "+
+			"resolve in the directory with the DataRobot CLI (`dr artifact code sync`), or remove %s to make the directory the source of truth again",
+			ShortVer(e.remoteVer), ShortVer(lastSynced), e.catalogID, stateDir)
+	}
+	if liveIdx > lastIdx {
+		return fmt.Errorf("%w: artifact %s points at catalog version %s, older than the version this directory last synced (%s). A sync against it would read every file added since as deleted and remove it locally. "+
+			"Re-point the artifact forward, resolve in the directory with the DataRobot CLI (`dr artifact code sync`), or remove %s to make the directory the source of truth again",
+			ErrCatalogRolledBack, e.artifactID, ShortVer(e.remoteVer), ShortVer(lastSynced), stateDir)
+	}
 
 	return nil
 }

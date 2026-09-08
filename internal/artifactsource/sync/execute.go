@@ -67,18 +67,22 @@ func (e *Engine) ExecuteLocal(ctx context.Context) error {
 		return ErrLockReleased
 	}
 
-	// Above the empty-plan return, as in CLI phase5Execute: phase 6 records
-	// a sync against the artifact for an empty plan too, and recording one
-	// against something immutable is the same lie as performing it. Plan
-	// only reports the lock (ArtifactLocked) so the caller can decide to
-	// mint a new version first; this is the check that keeps a write out.
-	if e.locked {
-		return ErrLockedArtifact
-	}
-
 	if e.plan.IsEmpty() {
 		e.localApplied = true
 		return nil
+	}
+
+	// Below the empty-plan return, unlike CLI phase5Execute, which refuses
+	// any execute against a locked artifact. An empty plan writes nothing
+	// into the artifact: phase 6 only records that the directory matches
+	// the version the artifact already points at, which holds for an
+	// immutable artifact by definition, and recording it is what stops a
+	// benign drift (a re-upload of identical bytes) from minting a version
+	// on every apply. Plan only reports the lock (ArtifactLocked) so the
+	// caller can decide to mint a new version first; this is the check
+	// that keeps a write out.
+	if e.locked {
+		return ErrLockedArtifact
 	}
 
 	// Reject server-controlled traversal paths before any filesystem op

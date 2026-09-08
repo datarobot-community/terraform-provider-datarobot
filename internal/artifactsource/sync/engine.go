@@ -56,6 +56,29 @@ var ErrLockedArtifact = errors.New("artifact is locked (immutable); cannot sync 
 // a source.dir has to reset its state directory with it.
 var ErrCatalogMismatch = errors.New("state directory is bound to a different catalog")
 
+// ErrCatalogRolledBack is returned by Plan when the artifact's code_ref
+// points at a catalog version older than the one the directory last
+// synced. The three-way merge takes BASE for a common ancestor of both
+// sides; a BASE that is a descendant of REMOTE would read every file added
+// since as a remote deletion and unlink it locally. Someone re-pointed the
+// artifact backwards on purpose (a rollback), and a merge cannot resolve
+// that: the caller has to say which side wins.
+var ErrCatalogRolledBack = errors.New("catalog rolled back behind the directory's last sync")
+
+// ErrDirectoryOwned is returned by Plan when the state directory is bound
+// to an artifact that still exists and belongs to another lineage than the
+// one being synced: neither the same artifact, nor the one the caller says
+// it supersedes, nor one from the same artifact repository. That is a
+// second resource over one directory. Two syncs over one directory would
+// each treat their own artifact's version as REMOTE and pull the other's
+// upload back out of the working tree.
+var ErrDirectoryOwned = errors.New("directory already backs another artifact repository")
+
+// ErrArtifactNotFound is what ArtifactStore.Get wraps when the artifact no
+// longer exists. gather treats a state directory bound to such an artifact
+// as free: a destroyed-and-recreated resource leaves exactly that behind.
+var ErrArtifactNotFound = errors.New("artifact not found")
+
 // ArtifactInfo is the minimal artifact view Plan needs: whether the
 // artifact is locked, and its current code_ref (empty CatalogID /
 // CatalogVersionID before any code has ever been uploaded).
@@ -63,11 +86,17 @@ type ArtifactInfo struct {
 	Locked           bool
 	CatalogID        string
 	CatalogVersionID string
+	// RepositoryID is the artifact repository the artifact belongs to,
+	// which every version of one resource shares; empty when unknown.
+	RepositoryID string
 }
 
 // ArtifactStore reads and updates the artifact backing this sync. The
 // resource adapts its own client service to this interface; PatchCodeRef
-// wraps PatchArtifactCodeRef and discards the returned artifact.
+// wraps PatchArtifactCodeRef and discards the returned artifact. Get
+// returns an error wrapping ErrArtifactNotFound for an artifact that no
+// longer exists, which gather relies on to tell a re-created resource from
+// a second one.
 type ArtifactStore interface {
 	Get(ctx context.Context, artifactID string) (ArtifactInfo, error)
 	PatchCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) error
@@ -87,6 +116,10 @@ type Engine struct {
 
 	seedCatalogID string
 	seedVersionID string
+
+	// previousArtifactID is the artifact the caller managed before
+	// artifactID; a state directory still bound to it is the caller's own.
+	previousArtifactID string
 
 	config wapi.Config
 	base   BaseManifest
@@ -170,6 +203,14 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 func (e *Engine) BindCatalog(catalogID, catalogVersionID string) {
 	e.seedCatalogID = catalogID
 	e.seedVersionID = catalogVersionID
+}
+
+// PreviousArtifact names the artifact the caller managed before
+// artifactID, so a state directory still bound to it is recognized as the
+// caller's own rather than another resource's: a locked artifact clones to
+// a new draft over the same directory. Must be called before Plan.
+func (e *Engine) PreviousArtifact(artifactID string) {
+	e.previousArtifactID = artifactID
 }
 
 // UseIgnore makes Plan walk source.dir with m instead of loading the
