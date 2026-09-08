@@ -202,6 +202,49 @@ func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client
 	return catalogID, versionID
 }
 
+// refuseForeignSourceDir rejects a directory whose sync state names an
+// artifact that still exists and lives in a different artifact repository
+// than the one being synced: that is a second resource over one directory.
+// The other shapes a re-bound directory takes are allowed, since the engine
+// follows the resource across artifact IDs on purpose: a clone of a locked
+// artifact stays in its repository, and a destroyed-and-recreated resource
+// leaves behind an artifact that no longer exists.
+//
+// Two resources sharing a directory would not just race for its lock. The
+// second would attach to the first's catalog, and from then on each sync
+// would treat its own artifact's version as REMOTE and pull the other
+// resource's upload back out of the working tree.
+func (r *ArtifactResource) refuseForeignSourceDir(ctx context.Context, absDir string, artifact *client.Artifact) error {
+	if artifact == nil || artifact.ArtifactRepositoryID == nil {
+		return nil
+	}
+
+	cfg, err := wapi.LoadConfig(absDir)
+	if err != nil {
+		return nil //nolint:nilerr // no readable state binds the directory to anything yet
+	}
+	if cfg.ArtifactID == "" || cfg.ArtifactID == artifact.ID {
+		return nil
+	}
+
+	traceAPICall("GetArtifact")
+	other, err := r.provider.service.GetArtifact(ctx, cfg.ArtifactID)
+	if err != nil {
+		// Gone is the re-created resource. Anything else is not for this
+		// check to decide on: it exists to catch a misconfiguration, not
+		// to add a failure mode to every apply.
+		return nil //nolint:nilerr // a directory whose owner cannot be read is not refused
+	}
+
+	if other.ArtifactRepositoryID == nil || *other.ArtifactRepositoryID == *artifact.ArtifactRepositoryID {
+		return nil
+	}
+
+	return fmt.Errorf("%s already backs artifact %s (repository %s), which still exists: a directory can back only one datarobot_artifact resource, because the sync state under it describes one catalog. "+
+		"Give this resource its own directory, or remove %s if that artifact is no longer managed from here",
+		absDir, other.ID, *other.ArtifactRepositoryID, wapi.Dir(absDir))
+}
+
 // runArtifactSourceSync reconciles absDir with the catalog using the CLI
 // three-way sync engine: BASE (the last synced manifest under
 // absDir/.datarobot/workload/) against LOCAL (the directory, minus .drignore
@@ -227,6 +270,10 @@ func (r *ArtifactResource) runArtifactSourceSync(
 	seeded *ignore.Matcher,
 	diags *diag.Diagnostics,
 ) (result *artifactsync.Result, patched *client.Artifact, err error) {
+	if err := r.refuseForeignSourceDir(ctx, absDir, artifact); err != nil {
+		return nil, nil, err
+	}
+
 	store := &artifactSourceStore{service: r.provider.service, current: artifact}
 
 	engine, err := artifactsync.New(absDir, artifact.ID, r.provider.service.FilesAPI(), store)

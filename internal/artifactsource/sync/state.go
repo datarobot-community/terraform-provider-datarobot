@@ -107,5 +107,6 @@ func (e *Engine) newBaseManifest(syncedVersionID string, syncedAt time.Time) wap
 		SyncedAt:        &syncedAt,
 		SyncedVersionID: &syncedVersionID,
 		Files:           files,
+		Extra:           e.baseExtra,
 	}
 }

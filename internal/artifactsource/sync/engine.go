@@ -31,6 +31,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -87,8 +88,11 @@ type Engine struct {
 	seedCatalogID string
 	seedVersionID string
 
-	config    wapi.Config
-	base      BaseManifest
+	config wapi.Config
+	base   BaseManifest
+	// baseExtra is what the loaded manifest.json held beyond the fields
+	// this build knows (a newer CLI's keys); phase 6 writes it back.
+	baseExtra map[string]json.RawMessage
 	local     LocalManifest
 	remote    RemoteManifest
 	catalogID string

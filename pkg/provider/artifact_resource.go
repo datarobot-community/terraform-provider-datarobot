@@ -176,7 +176,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
 					"A file edited both locally and in the catalog since the last sync fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
 					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
-					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, and two resources syncing the same directory in one apply contend for its lock. `.datarobot.yaml` is never uploaded.",
+					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs another live artifact is refused. `.datarobot.yaml` is never uploaded.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -537,7 +537,7 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 		plan.Source.DirHash = plannedArtifactSourceDirHash(dirHash, statePtr)
-		if IsKnown(plan.Source.DirHash) && artifactSourceRemoteDrifted(&plan, statePtr) {
+		if artifactSourceRemoteDrifted(&plan, statePtr) {
 			plan.Source.DirHash = types.StringUnknown()
 			artifactSourceDriftWarning(&resp.Diagnostics, &plan, statePtr)
 		}

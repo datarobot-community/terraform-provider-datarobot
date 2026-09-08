@@ -92,6 +92,7 @@ func (e *Engine) gather(ctx context.Context) error {
 		return fmt.Errorf("read sync state manifest.json: %w", err)
 	}
 	e.base = baseFromManifest(manifest)
+	e.baseExtra = manifest.Extra
 
 	info, err := e.artifacts.Get(ctx, cfg.ArtifactID)
 	if err != nil {

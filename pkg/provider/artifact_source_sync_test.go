@@ -1354,6 +1354,79 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 	})
 
+	t.Run("a second resource over a synced directory is refused", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		repoA, repoB := "repo-a", "repo-b"
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+		// The directory's state names artifact-1, which is alive in its own repository.
+		mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).
+			Return(&client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, nil).
+			Times(2)
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		_, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil)
+		if err == nil || !strings.Contains(err.Error(), "already backs artifact "+artifactID) {
+			t.Fatalf("error = %v, want the directory refused for a second resource", err)
+		}
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ArtifactID != artifactID {
+			t.Fatalf("config artifactId = %q, want the first resource's %q left alone", cfg.ArtifactID, artifactID)
+		}
+
+		// A new version in the same repository is the same resource: allowed.
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-3", ArtifactRepositoryID: &repoA}, artifactID, syncedState(dir)); err != nil {
+			t.Fatalf("clone in the same repository: %v", err)
+		}
+	})
+
+	t.Run("a re-created resource over a synced directory is allowed once the old artifact is gone", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		repoA, repoB := "repo-a", "repo-b"
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+		mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(nil, &client.NotFoundError{Resource: "artifact"})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil); err != nil {
+			t.Fatalf("re-created resource over the directory: %v", err)
+		}
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ArtifactID != "artifact-2" {
+			t.Fatalf("config artifactId = %q, want the re-created resource's artifact-2", cfg.ArtifactID)
+		}
+	})
+
 	t.Run("locked artifact whose directory already matches it is left alone", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockService := mock_client.NewMockService(ctrl)

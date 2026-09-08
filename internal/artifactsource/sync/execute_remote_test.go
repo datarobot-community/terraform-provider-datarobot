@@ -417,3 +417,44 @@ func TestEngine_ExecuteRemote_RemoteDeletesGoOutInBatches(t *testing.T) {
 	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, f.artifacts.patches)
 	assert.NotContains(t, loadBase(t, f.dir), "gone/0000.py")
 }
+
+func TestEngine_ExecuteRemote_KeepsUnknownStateKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "local edit"})
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1", CatalogID: "cat-1", LastSyncedVersionID: "ver-1"}))
+
+	// A newer CLI wrote both files with keys this build has no field for.
+	baseHash, baseSize := hashContent("base body")
+	manifest := fmt.Sprintf(`{"version":1,"syncedAt":null,"syncedVersionId":"ver-1","files":{"agent.py":{"hash":%q,"size":%d}},"checksumAlgorithm":"sha256"}`, baseHash, baseSize)
+	require.NoError(t, os.WriteFile(filepath.Join(wapi.Dir(dir), "manifest.json"), []byte(manifest), 0o600))
+	config := `{"artifactId":"art-1","catalogId":"cat-1","lastSyncedVersionId":"ver-1","lastBuiltVersionId":null,"createdAt":"2026-04-10T09:15:00Z","cliVersion":"9.9.9","deployTarget":{"cluster":"eu-1"}}`
+	require.NoError(t, os.WriteFile(filepath.Join(wapi.Dir(dir), "config.json"), []byte(config), 0o600))
+
+	files := &fakeFilesAPI{allFiles: map[string]filesapi.FileMeta{}, blobs: map[string]string{}}
+	stageResponses(files, "ver-2")
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	require.Len(t, plan.Uploads, 1)
+	require.NoError(t, e.ExecuteLocal(context.Background()))
+	_, err = e.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+
+	// Phase 6 rebuilt BASE from the plan, and still wrote the keys back.
+	saved, err := wapi.LoadManifest(dir)
+	require.NoError(t, err)
+	assert.JSONEq(t, `"sha256"`, string(saved.Extra["checksumAlgorithm"]))
+	assert.Equal(t, "ver-2", *saved.SyncedVersionID)
+
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"cluster":"eu-1"}`, string(cfg.Extra["deployTarget"]))
+	assert.Equal(t, "ver-2", *cfg.LastSyncedVersionID)
+}
