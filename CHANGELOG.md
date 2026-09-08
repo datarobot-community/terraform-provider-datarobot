@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_workload` no longer reports a successful replacement when the platform abandoned it. The Workload API stops a new version that never becomes ready, keeps the old version serving and clears the replacement record, which looked identical to a completed rollout. The provider now checks that the workload serves the requested `artifact_id` once the record clears, and fails the apply with a link to the workload logs when it does not, so the next plan retries the rollout instead of silently keeping the old version.
+
 ## [0.11.2] - 2026-09-08
 
 ### Added

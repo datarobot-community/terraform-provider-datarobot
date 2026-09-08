@@ -629,6 +629,8 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(nil, &client.ReplacementFailedError{
 		Message: "candidate proton failed health checks",
 	})
+	// The failure diagnostic links to the workload logs page, which needs the API base URL.
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
 
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
@@ -643,7 +645,7 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 			},
 			{
 				Config:      workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
-				ExpectError: regexp.MustCompile("Workload replacement failed"),
+				ExpectError: regexp.MustCompile(`(?s)Workload replacement failed.*candidate proton failed health checks.*console-nextgen/workloads/`),
 			},
 		},
 	})
@@ -1067,7 +1069,7 @@ func workloadReplacementFixture(workloadID string) *client.WorkloadReplacement {
 func expectWorkloadArtifactReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
 	replacement := workloadReplacementFixture(workloadID)
 	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, waitForReplacementOptsMatcher{expectedArtifactID: derefArtifactID(updatedWorkload)}).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
 }
@@ -1075,9 +1077,32 @@ func expectWorkloadArtifactReplacement(mockService *mock_client.MockService, wor
 func expectWorkloadRuntimeReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
 	replacement := workloadReplacementFixture(workloadID)
 	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, waitForReplacementOptsMatcher{expectedArtifactID: derefArtifactID(updatedWorkload)}).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
+}
+
+// waitForReplacementOptsMatcher checks that the provider tells the wait which
+// artifact the rollout must land on, so an abandoned rollout cannot pass as
+// success.
+type waitForReplacementOptsMatcher struct {
+	expectedArtifactID string
+}
+
+func (m waitForReplacementOptsMatcher) Matches(x any) bool {
+	opts, ok := x.(*client.WaitForWorkloadReplacementOptions)
+	return ok && opts != nil && opts.ExpectedArtifactID == m.expectedArtifactID
+}
+
+func (m waitForReplacementOptsMatcher) String() string {
+	return "wait options expecting artifact " + m.expectedArtifactID
+}
+
+func derefArtifactID(workload *client.Workload) string {
+	if workload == nil || workload.ArtifactID == nil {
+		return ""
+	}
+	return *workload.ArtifactID
 }
 
 type startReplacementMatcher struct {

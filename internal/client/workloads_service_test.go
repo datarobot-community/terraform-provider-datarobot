@@ -513,3 +513,76 @@ func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// workloadJSONServing is workloadJSON for a running workload, with the artifact it serves.
+func workloadJSONServing(replacement map[string]any, artifactID string) map[string]any {
+	body := workloadJSON(ProtonStatusRunning, replacement)
+	body["artifactId"] = artifactID
+	return body
+}
+
+func TestWaitForWorkloadReplacementFailsWhenWorkloadKeepsOldArtifact(t *testing.T) {
+	// An abandoned rollout: the new version never became ready, the platform
+	// stopped it, kept the old version serving and cleared the record. That is
+	// null-after-active on a running workload, the same shape as success, and
+	// only artifactId tells the two apart.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadJSONServing(replacementJSON(ReplacementStatusPromoting, ""), "art-old"))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadJSONServing(nil, "art-old"))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-new",
+	})
+	if err == nil {
+		t.Fatal("expected error when the workload still serves the old artifact")
+	}
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	for _, want := range []string{"art-new", "art-old"} {
+		if !strings.Contains(failedErr.Message, want) {
+			t.Fatalf("expected the message to name %s, got %q", want, failedErr.Message)
+		}
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsWhenWorkloadServesExpectedArtifact(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadJSONServing(replacementJSON(ReplacementStatusPromoting, ""), "art-old"))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadJSONServing(nil, "art-new"))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	if _, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-new",
+	}); err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+}

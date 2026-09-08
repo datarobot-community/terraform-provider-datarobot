@@ -186,6 +186,13 @@ type WorkloadReplacement struct {
 type WaitForWorkloadReplacementOptions struct {
 	PollInterval time.Duration
 	Timeout      time.Duration
+	// ExpectedArtifactID is the artifact the replacement was asked to promote.
+	// When set, a replacement that clears while the workload still serves a
+	// different artifact is reported as a ReplacementFailedError instead of
+	// success. The Workload API drops the replacement record when the new
+	// version never becomes ready and keeps the old version serving, which is
+	// otherwise indistinguishable from a completed rollout.
+	ExpectedArtifactID string
 }
 
 type ReplacementFailedError struct {
@@ -222,8 +229,13 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 // poll) while an "errored" record persists. That asymmetry makes the workload
 // record unambiguous: errored => failure; nil-while-running => completed (nil
 // can't be a masked failure, and the proton switch lands before nil appears).
-// A nil is only "done" after an active replacement was seen (seenActive) —
+// A nil is only "done" after an active replacement was seen (seenActive);
 // otherwise it's the brief gap before the API creates the record, so keep polling.
+//
+// "Done" is not the same as "promoted". A rollout whose new version never
+// passes readiness is abandoned: the platform stops the new replica, keeps the
+// old one serving and clears the record, so the workload looks exactly like a
+// completed rollout. opts.ExpectedArtifactID tells the two apart.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
@@ -238,6 +250,10 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		if opts.Timeout > 0 {
 			timeout = opts.Timeout
 		}
+	}
+	expectedArtifactID := ""
+	if opts != nil {
+		expectedArtifactID = opts.ExpectedArtifactID
 	}
 
 	deadline := time.Now().Add(timeout)
@@ -267,13 +283,13 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 			lastReplacement = replacement
 			if replacement.Status == ReplacementStatusCompleted {
 				// Rarely observable (cleaned up within ~1s), but accept it when caught.
-				return replacement, nil
+				return replacement, replacementLandedOnArtifact(workload, expectedArtifactID)
 			}
 			seenActive = true
 
 		default: // replacement == nil
 			if seenActive && workload.Status == ProtonStatusRunning {
-				return lastReplacement, nil
+				return lastReplacement, replacementLandedOnArtifact(workload, expectedArtifactID)
 			}
 		}
 
@@ -294,6 +310,24 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		case <-timer.C:
 		}
 	}
+}
+
+// replacementLandedOnArtifact reports a replacement that settled without the
+// workload switching to the artifact it was asked to promote. An empty expected
+// ID skips the check.
+func replacementLandedOnArtifact(workload *Workload, expectedArtifactID string) error {
+	served := ""
+	if workload.ArtifactID != nil {
+		served = *workload.ArtifactID
+	}
+	if expectedArtifactID == "" || served == expectedArtifactID {
+		return nil
+	}
+	return &ReplacementFailedError{Message: fmt.Sprintf(
+		"workload replacement finished without switching to artifact %s: the workload still serves artifact %s. "+
+			"The platform abandons a rollout whose new version never becomes ready; check that version's container logs for the startup failure",
+		expectedArtifactID, served,
+	)}
 }
 
 type ArtifactStatus string
