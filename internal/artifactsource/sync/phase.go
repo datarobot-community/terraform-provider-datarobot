@@ -131,10 +131,19 @@ func (e *Engine) gather(ctx context.Context) error {
 	e.artifactVer = info.CatalogVersionID
 	e.remoteVer = info.CatalogVersionID
 
-	// A freshly cloned draft carries no code_ref yet, so diff against the
-	// version this directory last pushed rather than against nothing:
+	// A freshly cloned draft carries no code_ref yet, so diff against a
+	// version the code is known to be at rather than against nothing:
 	// otherwise every clone re-uploads the whole tree, and the clone of an
-	// unchanged tree would leave the new artifact with no code at all.
+	// unchanged tree would leave the new artifact with no code at all. The
+	// caller's version (BindCatalog: what its record of the previous
+	// artifact points at) wins over the one this directory last synced. A
+	// locked artifact's code_ref cannot move, so the two only differ when
+	// the directory is behind the resource, and then the catalog counts
+	// as drifted and REMOTE is fetched rather than copied from a BASE that
+	// predates it.
+	if e.remoteVer == "" {
+		e.remoteVer = e.seedVersionID
+	}
 	if e.remoteVer == "" {
 		e.remoteVer = ptrOrEmpty(cfg.LastSyncedVersionID)
 	}

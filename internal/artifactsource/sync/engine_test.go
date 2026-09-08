@@ -89,6 +89,7 @@ type fakeFilesAPI struct {
 	newCatalogID    string // CreateCatalog result
 	stageID         string // CreateStage result
 	stageVersionID  string // ApplyStage result
+	stageNoVersion  bool   // ApplyStage succeeds but reports no version
 	zipVersionID    string // UploadFromZipExisting result
 	deleteVersionID string // DeleteFiles result
 	uploadErr       error  // fails every UploadToStage call
@@ -153,6 +154,9 @@ func (f *fakeFilesAPI) UploadToStage(_ context.Context, _, _, name string, _ int
 }
 
 func (f *fakeFilesAPI) ApplyStage(context.Context, string, string, string) (*filesapi.ApplyStageResp, error) {
+	if f.stageNoVersion {
+		return &filesapi.ApplyStageResp{}, nil
+	}
 	if f.stageVersionID == "" {
 		return nil, errors.New("fakeFilesAPI: ApplyStage not expected")
 	}
@@ -1171,4 +1175,51 @@ func TestEngine_BindCatalog_IgnoredOnceWapiExists(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "cat-existing", e.catalogID, ".wapi/config.json wins once it exists")
+}
+
+func TestEngine_BindCatalog_VersionIsTheBaselineForAnArtifactWithoutCodeRef(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	// The directory last synced ver-1 ...
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+	hash, size := hashContent("x")
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"agent.py": {Hash: hash, Size: size}},
+	}))
+
+	// ... but the resource's record of the locked artifact being cloned
+	// says ver-2, which also holds helper.py. The clone itself has no
+	// code_ref yet.
+	pulledHash, pulledSize := hashContent("pulled")
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{
+			"agent.py":  {Hash: hash, Size: size},
+			"helper.py": {Hash: pulledHash, Size: pulledSize},
+		},
+		blobs: map[string]string{"helper.py": "pulled"},
+	}
+	e, err := New(dir, "art-clone", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.BindCatalog("cat-1", "ver-2")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.True(t, files.allFilesCalled, "the directory is behind the resource, so REMOTE is fetched")
+	assert.Equal(t, "ver-2", files.lastVersionID)
+	assert.Empty(t, plan.Uploads)
+	require.Len(t, plan.Downloads, 1)
+	assert.Equal(t, "helper.py", plan.Downloads[0].Path)
 }

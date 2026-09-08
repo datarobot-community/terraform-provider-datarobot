@@ -42,10 +42,13 @@ func TestSystemExcludes_AlwaysApply(t *testing.T) {
 		{"sub/.terraform/providers", true},
 		{"sub/terraform.tfstate.backup", true},
 		{"envs/prod/secrets.tfvars", true},
-		// The state directory is the one root-anchored entry, so CLI tool state
-		// under .datarobot/cli still uploads and a subproject copy is untouched.
+		// The state directory is listed at its full path, so other tool state
+		// under .datarobot/ still uploads, at the root and in a subproject,
+		// while a subproject's own state directory is excluded like the root one.
 		{".datarobot/cli/state.json", false},
-		{"sub/.datarobot/workload/manifest.json", false},
+		{"sub/.datarobot/cli/state.json", false},
+		{"sub/.datarobot/workload/manifest.json", true},
+		{"sub/.datarobot/workload", true},
 		{"agent.py", false},
 		{".drignore", false},
 		{".wapiignore", false},

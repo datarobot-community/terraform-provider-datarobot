@@ -349,3 +349,98 @@ func TestLoadManifest_UnsupportedVersion(t *testing.T) {
 		assert.Equal(t, manifestPath(dir), corrupted.Path)
 	}
 }
+
+func TestSaveConfig_PreservesUnknownKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	// A config.json written by a newer CLI: two keys this build has no
+	// field for. They have to come back out of SaveConfig untouched, next
+	// to the fields the provider does update.
+	cliWritten := `{
+  "artifactId": "art-1",
+  "catalogId": "cat-1",
+  "lastSyncedVersionId": "ver-1",
+  "lastBuiltVersionId": null,
+  "createdAt": "2026-04-10T09:15:00Z",
+  "cliVersion": "9.9.9",
+  "deployTarget": {"cluster": "eu-1", "replicas": [1, 2]},
+  "pinned": true
+}`
+	require.NoError(t, os.WriteFile(configPath(dir), []byte(cliWritten), 0o600))
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Len(t, cfg.Extra, 2)
+	assert.Equal(t, "9.9.9", cfg.CLIVersion)
+
+	ver := "ver-2"
+	cfg.LastSyncedVersionID = &ver
+	require.NoError(t, SaveConfig(dir, cfg))
+
+	raw, err := os.ReadFile(configPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.Equal(t, "ver-2", parsed["lastSyncedVersionId"])
+	assert.Equal(t, map[string]any{"cluster": "eu-1", "replicas": []any{float64(1), float64(2)}}, parsed["deployTarget"])
+	assert.Equal(t, true, parsed["pinned"])
+	assert.Len(t, parsed, 8, "known keys are written once, unknown ones once")
+
+	again, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Len(t, again.Extra, 2)
+	assert.Equal(t, "ver-2", *again.LastSyncedVersionID)
+}
+
+func TestSaveManifest_PreservesUnknownKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1"}))
+
+	cliWritten := `{
+  "version": 1,
+  "syncedAt": null,
+  "syncedVersionId": "ver-1",
+  "files": {"agent.py": {"hash": "abc", "size": 3}},
+  "checksumAlgorithm": "sha256"
+}`
+	require.NoError(t, os.WriteFile(manifestPath(dir), []byte(cliWritten), 0o600))
+
+	m, err := LoadManifest(dir)
+	require.NoError(t, err)
+	assert.Len(t, m.Extra, 1)
+	assert.Equal(t, FileMeta{Hash: "abc", Size: 3}, m.Files["agent.py"])
+
+	m.Files["new.py"] = FileMeta{Hash: "def", Size: 4}
+	require.NoError(t, SaveManifest(dir, m))
+
+	raw, err := os.ReadFile(manifestPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.Equal(t, "sha256", parsed["checksumAlgorithm"])
+	assert.Len(t, parsed, 5)
+	assert.Contains(t, parsed["files"], "new.py")
+}
+
+func TestSave_WithoutUnknownKeysWritesOnlyKnownOnes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1", CatalogID: "cat-1"}))
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.Extra)
+
+	raw, err := os.ReadFile(configPath(dir))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	assert.Len(t, parsed, 6)
+	assert.True(t, json.Valid(raw))
+}

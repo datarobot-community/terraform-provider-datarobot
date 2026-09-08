@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
@@ -5130,5 +5131,194 @@ resource "datarobot_artifact" "test" {
 				ExpectError: regexp.MustCompile("Unsupported a2a_enabled"),
 			},
 		},
+	})
+}
+
+func TestArtifactResourceSourceUpdateLockedProviderOnlyChangeKeepsVersion(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+	lockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-locked-noop-" + uuid.NewString()[:8]
+
+	locked := artifactSourcePatchedArtifact(artifactFixtureDraftWithBuildConfig(lockedArtifactID, &repoIDPtr, name), artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	locked.Status = client.ArtifactStatusLocked
+
+	// No CreateArtifact and no FilesAPI: the only call is the read-back.
+	mockService.EXPECT().GetArtifact(gomock.Any(), lockedArtifactID).Return(locked, nil)
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	dirHash, err := computeFolderHash(types.StringValue(sourceDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	codeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	state := artifactResourceModelWithSource(name, sourceDir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	_ = setImageBuildConfigCodeRef(state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	state.Source.DirHash = dirHash
+	state.Source.WaitForBuild = types.BoolValue(true)
+
+	// The only diff is wait_for_build, which lives in the provider.
+	plan := artifactResourceModelWithSource(name, sourceDir)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	_ = setImageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	plan.Source.DirHash = dirHash
+	plan.Source.WaitForBuild = types.BoolValue(false)
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+	}
+	if updated.ArtifactID.ValueString() != lockedArtifactID {
+		t.Fatalf("artifact_id = %q, want the existing %q: a provider-only change must not mint a version", updated.ArtifactID.ValueString(), lockedArtifactID)
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+	if updated.Source.WaitForBuild.ValueBool() {
+		t.Fatal("wait_for_build = true, want the planned false")
+	}
+}
+
+func TestArtifactModifyPlanCatalogDriftPlansDirHashUnknown(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+	name := "source-drift-" + uuid.NewString()[:8]
+	repoID := uuid.NewString()
+
+	model := func(dir string) ArtifactResourceModel {
+		m := artifactResourceModelWithSource(name, dir)
+		m.Status = types.StringValue("locked")
+		m.ArtifactID = types.StringValue("art-1")
+		m.ArtifactRepositoryID = types.StringValue(repoID)
+		m.Source.GenerateIgnore = types.BoolValue(true)
+		m.Source.WaitForBuild = types.BoolValue(true)
+		_ = setImageBuildConfigCodeRef(m.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, &ArtifactCodeRefModel{
+			CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+			CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+		})
+		return m
+	}
+
+	for _, tc := range []struct {
+		name        string
+		lastSynced  string
+		wantUnknown bool
+	}{
+		{name: "catalog moved past the directory's last sync", lastSynced: "cccccccccccccccccccccccc", wantUnknown: true},
+		{name: "directory in step with the catalog", lastSynced: artifactSourceTestVersionID, wantUnknown: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+			if err := wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1", CatalogID: artifactSourceTestCatalogID, LastSyncedVersionID: tc.lastSynced}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Read refreshed code_ref from the artifact; the tree did not change.
+			state := model(dir)
+			hash, err := computeArtifactSourceDirHash(&state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state.Source.DirHash = hash
+
+			config := artifactResourceModelWithSource(name, dir)
+			config.Status = types.StringValue("locked")
+
+			plan := model(dir)
+			plan.Source.DirHash = hash
+
+			planned, diags := testArtifactApplyModifyPlan(context.Background(), resource, config, plan, state)
+			if diags.HasError() {
+				t.Fatalf("modify plan: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+			}
+			if planned.Source.DirHash.IsUnknown() != tc.wantUnknown {
+				t.Fatalf("dir_hash unknown = %v, want %v (%v)", planned.Source.DirHash.IsUnknown(), tc.wantUnknown, planned.Source.DirHash)
+			}
+			if planned.ArtifactID.IsUnknown() != tc.wantUnknown {
+				t.Fatalf("artifact_id unknown = %v, want %v: a locked artifact takes the catalog's changes through a new version", planned.ArtifactID.IsUnknown(), tc.wantUnknown)
+			}
+			warned := false
+			for _, w := range diags.Warnings() {
+				if w.Summary() == "Catalog changed since the last sync" {
+					warned = true
+				}
+			}
+			if warned != tc.wantUnknown {
+				t.Fatalf("drift warning = %v, want %v: %v", warned, tc.wantUnknown, diags)
+			}
+		})
+	}
+}
+
+func TestPersistPartialArtifactUpdateNullsUnknownDirHash(t *testing.T) {
+	t.Parallel()
+
+	r := &ArtifactResource{}
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
+		t.Fatalf("schema: %s", diagErrorSummary(diags))
+	}
+
+	repoID := uuid.NewString()
+	artifact := artifactFixtureDraftWithBuildConfig(uuid.NewString(), &repoID, "partial")
+
+	t.Run("source added to a locked artifact keeps no hash", func(t *testing.T) {
+		plan := artifactResourceModelWithSource("partial", t.TempDir())
+		plan.Source.DirHash = types.StringUnknown()
+		state := artifactResourceModelWithSource("partial", t.TempDir())
+		state.Source = nil
+
+		resp := &tfresource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+		persistPartialArtifactUpdate(context.Background(), resp, artifact, &plan, &state)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("persist: %s: %s", diagErrorSummary(resp.Diagnostics), diagErrorDetail(resp.Diagnostics))
+		}
+
+		var got ArtifactResourceModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("state: %s", diagErrorSummary(diags))
+		}
+		if got.Source == nil || !got.Source.DirHash.IsNull() {
+			t.Fatalf("dir_hash = %v, want null: an unknown in state is rejected by Terraform and loses the draft clone", got.Source)
+		}
+	})
+
+	t.Run("prior hash is kept so the retry re-syncs", func(t *testing.T) {
+		dir := t.TempDir()
+		plan := artifactResourceModelWithSource("partial", dir)
+		plan.Source.DirHash = types.StringUnknown()
+		state := artifactResourceModelWithSource("partial", dir)
+		state.Source.DirHash = types.StringValue("hash-v1")
+
+		resp := &tfresource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+		persistPartialArtifactUpdate(context.Background(), resp, artifact, &plan, &state)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("persist: %s: %s", diagErrorSummary(resp.Diagnostics), diagErrorDetail(resp.Diagnostics))
+		}
+
+		var got ArtifactResourceModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("state: %s", diagErrorSummary(diags))
+		}
+		if got.Source.DirHash.ValueString() != "hash-v1" {
+			t.Fatalf("dir_hash = %v, want the prior hash-v1", got.Source.DirHash)
+		}
 	})
 }

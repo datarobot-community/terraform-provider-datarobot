@@ -174,7 +174,9 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. " +
 					"**Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` " +
 					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
-					"A file edited both locally and in the catalog since the last sync fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. `.datarobot.yaml` is never uploaded.",
+					"A file edited both locally and in the catalog since the last sync fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
+					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
+					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, and two resources syncing the same directory in one apply contend for its lock. `.datarobot.yaml` is never uploaded.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -184,7 +186,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						Computed: true,
 						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
 							"Used to detect changes and skip the sync when unchanged. Files covered by a system exclude, including the sync state directory, are never part of this hash. " +
-							"When the directory differs from state it plans as known after apply, because the sync may add or remove files under `dir`; the value recorded is the digest of the directory once the sync is done.",
+							"When the directory differs from state, or the catalog moved since the directory last synced, it plans as known after apply, because the sync may add or remove files under `dir`; the value recorded is the digest of the directory once the sync is done.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 						},
@@ -293,7 +295,9 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	if err := refreshArtifactSourceDirHash(&data); err != nil {
+		artifactSourceDirHashWarning(&resp.Diagnostics, err)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -377,6 +381,15 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error creating draft Artifact for source update", err.Error())
 			return
 		}
+	case artifactUpdateKeepsLockedVersion(plan, state):
+		// Nothing about the artifact changed, only provider-side source
+		// settings did. Read the version back rather than mint another.
+		traceAPICall("GetArtifact")
+		artifact, err = r.provider.service.GetArtifact(ctx, priorArtifactID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading Artifact", err.Error())
+			return
+		}
 	default:
 		traceAPICall("CreateUpdatedArtifact")
 		artifact, err = r.provider.service.CreateArtifact(ctx, artifactCreateRequest(plan))
@@ -386,7 +399,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
+	createdNewVersion := artifact.ID != priorArtifactID
 	if artifactSourceConfigured(&plan) {
 		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
 		if syncErr != nil {
@@ -428,7 +441,9 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
-	refreshArtifactSourceDirHash(&plan)
+	if err := refreshArtifactSourceDirHash(&plan); err != nil {
+		artifactSourceDirHashWarning(&resp.Diagnostics, err)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -442,8 +457,16 @@ func persistPartialArtifactUpdate(
 	plan, state *ArtifactResourceModel,
 ) {
 	loadArtifactIntoModel(artifact, plan)
-	if plan.Source != nil && state.Source != nil {
-		plan.Source.DirHash = state.Source.DirHash
+	if plan.Source != nil {
+		// The plan's dir_hash is unknown whenever the tree changed, and an
+		// unknown handed back from apply makes Terraform reject the whole
+		// state, draft clone included. Keep the hash the last successful
+		// apply recorded, so the retry re-syncs, or none when there is no
+		// such apply (source was added to a locked artifact just now).
+		plan.Source.DirHash = types.StringNull()
+		if state.Source != nil && IsKnown(state.Source.DirHash) {
+			plan.Source.DirHash = state.Source.DirHash
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -514,6 +537,10 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 		plan.Source.DirHash = plannedArtifactSourceDirHash(dirHash, statePtr)
+		if IsKnown(plan.Source.DirHash) && artifactSourceRemoteDrifted(&plan, statePtr) {
+			plan.Source.DirHash = types.StringUnknown()
+			artifactSourceDriftWarning(&resp.Diagnostics, &plan, statePtr)
+		}
 		resp.Diagnostics.Append(artifactSourceIgnoreDiagnostics(&plan)...)
 	}
 

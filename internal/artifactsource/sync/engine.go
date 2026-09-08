@@ -146,15 +146,20 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 	}, nil
 }
 
-// BindCatalog seeds the catalog pointers the state directory is created
-// with, for a directory that has code in the catalog but no state yet:
-// the shape a tree is in when it was last uploaded by the push-only
-// uploader this engine replaces. Seeding both makes that first Plan a
-// plain push (BASE empty, REMOTE not drifted) instead of creating a second
-// catalog beside the one Terraform state already points at.
+// BindCatalog tells the engine where the caller knows the directory's code
+// to be: the catalog and the version its record of the artifact points at.
 //
-// Ignored once config.json exists: from then on the file's own pointers
-// win. Must be called before Plan.
+// For a directory that has code in the catalog but no state yet (the shape
+// a tree is in when it was last uploaded by the push-only uploader this
+// engine replaces) both seed the state directory, so that first Plan is a
+// plain push (BASE empty, REMOTE not drifted) instead of creating a second
+// catalog beside the one Terraform state already points at. Once
+// config.json exists the file's own catalog wins. The version has one more
+// use after that: an artifact with no code_ref of its own (a draft just
+// cloned from a locked one) diffs against it rather than against the
+// version the directory last synced, which can be older (see gather).
+//
+// Must be called before Plan.
 //
 // No CLI counterpart: `dr artifact code init` takes the same values from
 // its own flags.

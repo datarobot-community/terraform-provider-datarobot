@@ -19,6 +19,14 @@ package sync
 //     conflict resolution always lands before local bytes are pushed.
 //   - No Result.Duration / history entry: the CLI reports timings through
 //     its own display package, which is not ported.
+//   - Remote deletes go out in RemoteDeleteBatchSize chunks; the CLI's
+//     applyDeletes sends every path in one request.
+//   - An upload that reports no catalog version is an error. The CLI
+//     takes whatever the uploader returns, which would skip the code_ref
+//     patch and still record the sync.
+//   - A phase 6 failure comes back as *StatePersistError, so the caller
+//     can tell "catalog advanced, state directory behind" apart from a
+//     failed upload.
 
 import (
 	"context"
@@ -45,10 +53,29 @@ type Result struct {
 	PreviousVersionID string
 	Uploaded          int
 	Downloaded        int
-	Deleted           int
-	Conflicts         int
-	ConflictCopies    []string
+	// DeletedRemote counts the paths removed from the catalog because the
+	// user deleted them locally; DeletedLocal the paths removed from
+	// source.dir because the catalog dropped them.
+	DeletedRemote  int
+	DeletedLocal   int
+	Conflicts      int
+	ConflictCopies []string
 }
+
+// StatePersistError is what ExecuteRemote returns when the remote half went
+// through but phase 6 could not record it in the state directory. It is
+// its own type because a caller has to treat it unlike a failed upload:
+// the catalog has advanced and the working tree was kept in step with it,
+// so the files ExecuteLocal wrote are still on disk and worth reporting,
+// while nothing under the state directory says so until the next Plan
+// reconciles.
+type StatePersistError struct {
+	Err error
+}
+
+func (e *StatePersistError) Error() string { return e.Err.Error() }
+
+func (e *StatePersistError) Unwrap() error { return e.Err }
 
 // ExecuteRemote applies the remote half of the plan and then persists the
 // new BASE: it deletes the paths the user removed locally, uploads added
@@ -82,7 +109,7 @@ func (e *Engine) ExecuteRemote(ctx context.Context) (*Result, error) {
 	}
 
 	if err := e.persistState(); err != nil {
-		return nil, err
+		return nil, &StatePersistError{Err: err}
 	}
 
 	return e.result(), nil
@@ -129,10 +156,7 @@ func (e *Engine) applyRemoteDeletesAndUploads(ctx context.Context) error {
 		}
 
 		newCatalogID = catalogID
-
-		if versionID != "" {
-			newVersionID = versionID
-		}
+		newVersionID = versionID
 	}
 
 	// Compared against the artifact's own code_ref, not the remote
@@ -152,24 +176,30 @@ func (e *Engine) applyRemoteDeletesAndUploads(ctx context.Context) error {
 }
 
 // applyRemoteDeletes removes the catalog entries for files the user
-// deleted locally, and returns the catalog version the delete produced.
-// Nothing to delete, or no catalog yet (first sync), returns "".
+// deleted locally, RemoteDeleteBatchSize paths per request, and returns
+// the catalog version the last delete produced. Nothing to delete, or no
+// catalog yet (first sync), returns "".
 func (e *Engine) applyRemoteDeletes(ctx context.Context) (string, error) {
 	paths := uploadDeletedPaths(e.plan)
 	if e.catalogID == "" || len(paths) == 0 {
 		return "", nil
 	}
 
-	resp, err := e.files.DeleteFiles(ctx, e.catalogID, paths)
-	if err != nil {
-		return "", fmt.Errorf("delete remote files: %w", err)
+	versionID := ""
+	for start := 0; start < len(paths); start += RemoteDeleteBatchSize {
+		end := min(start+RemoteDeleteBatchSize, len(paths))
+
+		resp, err := e.files.DeleteFiles(ctx, e.catalogID, paths[start:end])
+		if err != nil {
+			return "", fmt.Errorf("delete remote files %d-%d of %d: %w", start+1, end, len(paths), err)
+		}
+
+		if resp != nil && resp.CatalogVersionID != "" {
+			versionID = resp.CatalogVersionID
+		}
 	}
 
-	if resp == nil {
-		return "", nil
-	}
-
-	return resp.CatalogVersionID, nil
+	return versionID, nil
 }
 
 // applyUploads pushes the plan's Uploads rows through the existing
@@ -190,6 +220,15 @@ func (e *Engine) applyUploads(ctx context.Context) (string, string, error) {
 	catalogID, versionID, err := artifactsource.UploadFiles(ctx, e.files, e.catalogID, filesapi.OverwriteReplace, files)
 	if err != nil {
 		return "", "", fmt.Errorf("upload %d file(s): %w", len(files), err)
+	}
+
+	// The one thing an upload has to report is where it landed. Without
+	// a version the code_ref patch would be skipped and phase 6 would
+	// record a BASE that includes these files against the old version:
+	// the artifact keeps building the previous code, and no later Plan
+	// sees anything to repair because BASE already matches the tree.
+	if versionID == "" {
+		return "", "", fmt.Errorf("upload %d file(s): the Files API reported no catalog version for the upload", len(files))
 	}
 
 	return catalogID, versionID, nil
@@ -218,7 +257,8 @@ func (e *Engine) result() *Result {
 		PreviousVersionID: e.remoteVer,
 		Uploaded:          len(e.plan.Uploads),
 		Downloaded:        len(e.plan.Downloads),
-		Deleted:           len(e.plan.Deletes),
+		DeletedRemote:     len(uploadDeletedPaths(e.plan)),
+		DeletedLocal:      len(remoteDeletedPaths(e.plan)),
 		Conflicts:         len(e.plan.Conflicts),
 		ConflictCopies:    e.conflictCopies,
 	}

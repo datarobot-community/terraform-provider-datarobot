@@ -102,6 +102,8 @@ func TestEngine_ExecuteRemote_LocalDeleteRemovesCatalogFile(t *testing.T) {
 
 	assert.Equal(t, [][]string{{"gone.py"}}, f.files.deletedPaths)
 	assert.Equal(t, "ver-3", result.CatalogVersionID)
+	assert.Equal(t, 1, result.DeletedRemote)
+	assert.Zero(t, result.DeletedLocal, "a path removed from the catalog is not one removed from disk")
 	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, f.artifacts.patches)
 
 	assert.NotContains(t, loadBase(t, f.dir), "gone.py", "a deleted path must leave the new BASE")
@@ -264,6 +266,9 @@ func TestEngine_ExecuteRemote_StateSaveFailureKeepsRemoteVersion(t *testing.T) {
 	_, err := f.engine.ExecuteRemote(context.Background())
 	require.ErrorContains(t, err, "save sync state manifest.json")
 
+	var persistErr *StatePersistError
+	require.ErrorAs(t, err, &persistErr, "a phase 6 failure is typed so the caller can tell it from a failed upload")
+
 	// The catalog has already advanced, so phase 6 must not roll it back,
 	// and the rollback tree is gone: the working tree is what the catalog
 	// now holds, so there is nothing a later Plan should restore.
@@ -356,4 +361,59 @@ func TestEngine_ExecuteRemote_WithoutPlanOrLock(t *testing.T) {
 
 	_, err = f.engine.ExecuteRemote(context.Background())
 	assert.ErrorIs(t, err, ErrLockReleased)
+}
+
+func TestEngine_ExecuteRemote_UploadWithoutVersionFailsAndRestores(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "local edit"},
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "base body", "added.py": "pulled"},
+	)
+	f.files.stageID = "stage-1"
+	f.files.stageNoVersion = true
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+	require.Equal(t, "pulled", readProjectFile(t, f.dir, "added.py"))
+
+	_, err := f.engine.ExecuteRemote(context.Background())
+	require.ErrorContains(t, err, "no catalog version")
+
+	// Nothing records a sync that did not land: no code_ref patch, the
+	// download undone, BASE and config as they were.
+	assert.Empty(t, f.artifacts.patches)
+	requireAbsent(t, f.dir, "added.py")
+	assert.NotContains(t, loadBase(t, f.dir), "added.py")
+	cfg, err := wapi.LoadConfig(f.dir)
+	require.NoError(t, err)
+	assert.Equal(t, "ver-1", *cfg.LastSyncedVersionID)
+	assert.False(t, HasRollback(f.dir))
+}
+
+func TestEngine_ExecuteRemote_RemoteDeletesGoOutInBatches(t *testing.T) {
+	t.Parallel()
+
+	const gone = RemoteDeleteBatchSize*2 + 1
+	catalog := map[string]string{"agent.py": "same"}
+	for i := 0; i < gone; i++ {
+		catalog[fmt.Sprintf("gone/%04d.py", i)] = "dropped"
+	}
+
+	f := newSyncFixture(t, map[string]string{"agent.py": "same"}, catalog, catalog)
+	f.files.deleteVersionID = "ver-3"
+
+	require.Len(t, f.plan.Deletes, gone)
+
+	result := runSync(t, f)
+
+	require.Len(t, f.files.deletedPaths, 3)
+	assert.Len(t, f.files.deletedPaths[0], RemoteDeleteBatchSize)
+	assert.Len(t, f.files.deletedPaths[1], RemoteDeleteBatchSize)
+	assert.Len(t, f.files.deletedPaths[2], 1)
+	assert.Equal(t, gone, result.DeletedRemote)
+	assert.Zero(t, result.DeletedLocal)
+	assert.Equal(t, "ver-3", result.CatalogVersionID)
+	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, f.artifacts.patches)
+	assert.NotContains(t, loadBase(t, f.dir), "gone/0000.py")
 }
