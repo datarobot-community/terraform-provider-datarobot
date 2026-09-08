@@ -304,13 +304,19 @@ func validateAndCleanRelPath(rel string) (string, error) {
 	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || strings.HasPrefix(cleaned, "../") {
 		return "", fmt.Errorf("path escapes root directory")
 	}
-	// Guard both state locations: .datarobot/ (current root, which also
-	// holds other CLI tool state) and a legacy .wapi/ the CLI has not
-	// migrated yet. Backing either up would let a rollback rewrite the
-	// very state that describes the rollback.
+	// Guard the sync state itself, at both of its locations: the legacy
+	// .wapi/ root and .datarobot/workload/ under the current root. Backing
+	// either up would let a rollback rewrite the very state that describes
+	// the rollback. The rest of .datarobot/ is other tools' state, which
+	// syncs like any other file (the ignore matcher excludes exactly this
+	// path and no more), so a download or conflict copy there is backed up
+	// like any other.
 	parts := strings.Split(filepath.ToSlash(cleaned), "/")
-	if len(parts) > 0 && (parts[0] == wapi.RootDirName || parts[0] == wapi.LegacyDirName) {
-		return "", fmt.Errorf("path targets the %s state directory", parts[0])
+	switch {
+	case parts[0] == wapi.LegacyDirName:
+		return "", fmt.Errorf("path targets the %s state directory", wapi.LegacyDirName)
+	case parts[0] == wapi.RootDirName && len(parts) > 1 && parts[1] == wapi.StateDirName:
+		return "", fmt.Errorf("path targets the %s/%s state directory", wapi.RootDirName, wapi.StateDirName)
 	}
 	return cleaned, nil
 }

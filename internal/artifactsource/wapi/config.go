@@ -11,9 +11,9 @@ import (
 // CLI source: cli/internal/workload/wapi/config.go
 //
 // JSON field names match the CLI so a mixed CLI/TF tree can share one state
-// directory. Every key the CLI writes has a field here, because SaveConfig
-// re-marshals the whole struct: a key this struct does not carry is a key a
-// provider write silently deletes from a CLI-written config.json.
+// directory. A key the CLI writes that this struct has no field for survives
+// a provider save through Extra (see passthrough.go), so the two tools do not
+// have to release in step for config.json to round-trip.
 //
 // CLIVersion is the JSON key; Initialize writes ProviderWriter.
 // The Go field is still called CLIVersion because the JSON key is cliVersion.
@@ -35,6 +35,34 @@ type Config struct {
 	LastBuiltVersionID *string   `json:"lastBuiltVersionId"`
 	CreatedAt          time.Time `json:"createdAt"`
 	CLIVersion         string    `json:"cliVersion"`
+
+	// Extra holds every config.json key this build has no field for, and
+	// SaveConfig writes it back unchanged. Nil when there are none.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+func (c *Config) UnmarshalJSON(data []byte) error {
+	type plain Config
+	var known plain
+	if err := json.Unmarshal(data, &known); err != nil {
+		return err
+	}
+	extra, err := unknownKeys(data, known)
+	if err != nil {
+		return err
+	}
+	known.Extra = extra
+	*c = Config(known)
+	return nil
+}
+
+func (c Config) MarshalJSON() ([]byte, error) {
+	type plain Config
+	data, err := json.Marshal(plain(c))
+	if err != nil {
+		return nil, err
+	}
+	return withUnknownKeys(data, c.Extra)
 }
 
 // LoadConfig reads config.json.

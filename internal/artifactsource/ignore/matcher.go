@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -31,20 +33,42 @@ const (
 	// one, and ignoring it would upload the .venv, node_modules and .env it was
 	// written to keep out.
 	LegacyFileName = ".wapiignore"
+
+	// BackupInfix separates a path from the timestamp in the *.LOCAL copy the
+	// sync engine writes when the remote wins over a local file. The engine
+	// builds "<path>" + BackupInfix + "<stamp>"; IsBackupCopy matches the same
+	// shape so those copies are never uploaded on the next sync.
+	BackupInfix = ".LOCAL."
 )
+
+// backupCopyPattern matches a *.LOCAL.<stamp> copy's basename, where <stamp>
+// is the engine's ISO-8601 basic UTC format (20060102T150405Z). Kept tight so
+// a real file that merely contains ".LOCAL." is not swept up.
+var backupCopyPattern = regexp.MustCompile(`\.LOCAL\.[0-9]{8}T[0-9]{6}Z$`)
+
+// IsBackupCopy reports whether relPath is one of the sync engine's *.LOCAL
+// copies. CLI source: cli/internal/workload/ignore/matcher.go.
+func IsBackupCopy(relPath string) bool {
+	return backupCopyPattern.MatchString(path.Base(relPath))
+}
 
 // systemPatterns are always-ignored paths, not overridable by the user file.
 // Ordering mirrors the CLI's systemExcludes so the two lists diff cleanly.
 //
-// The CLI state directory is anchored to the root with a leading slash rather
-// than listed bare: an unanchored entry would also exclude tool state under
-// .datarobot/cli/, which the CLI syncs today. The manifest under it is
-// rewritten by every deploy, so uploading it would have the next run find a
-// changed file, rebuild, and roll a workload nobody had touched, for ever.
+// The sync state directory is listed at its full path, .datarobot/workload,
+// rather than as bare .datarobot: the bare name would also exclude tool state
+// under .datarobot/cli/, which the CLI syncs today. Like every other entry it
+// matches at any depth, so a subproject's state directory is excluded along
+// with the root one: source.dir can sit over a monorepo whose subdirectories
+// are workloads the CLI or another resource syncs, and the manifest under
+// each is rewritten by every deploy. Uploading one would have the next run
+// find a changed file, rebuild, and roll a workload nobody had touched, for
+// ever. (The CLI anchors its copy of this entry to the root; matching it at
+// any depth is a deliberate provider difference.)
 //
-// The remaining names are unanchored, so they match at any depth the way a
-// bare gitignore pattern does: a vendored checkout's sub/.git is as unwanted in
-// an upload as the one at the root.
+// The names are unanchored, so they match at any depth the way a bare
+// gitignore pattern does: a vendored checkout's sub/.git is as unwanted in an
+// upload as the one at the root.
 //
 // The Terraform entries are provider-specific. source.dir can be the same
 // directory as the configuration that declares it, and a state file uploaded
@@ -65,7 +89,7 @@ const (
 // a case-sensitive filesystem also excludes a genuine .Git, which is not a
 // directory anyone keeps beside the real one.
 var systemPatterns = []string{
-	"/.datarobot/workload",
+	".datarobot/workload",
 	".wapi",
 	".git",
 	".gitignore",
@@ -276,6 +300,15 @@ func (m *Matcher) Match(relPath string, isDir bool) bool {
 	}
 
 	if system.MatchesPath(strings.ToLower(probe)) {
+		return true
+	}
+
+	// The engine's own *.LOCAL copies are never sync input, whatever the
+	// user's ignore file says: uploading one would push a copy of the file
+	// that was just overwritten, and every later sync would see it as a new
+	// local file. The starter template lists the pattern too, for readers
+	// and for older CLIs; this is what holds when the template is not used.
+	if IsBackupCopy(relPath) {
 		return true
 	}
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -381,4 +382,43 @@ func TestRollback_RestoreReportsUnremovableCreatedFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "remove created file")
 	assert.True(t, HasRollback(dir),
 		"a restore that could not finish must keep the tree for the next attempt")
+}
+
+func TestRollback_GuardsOnlyTheSyncStateDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1"}))
+
+	// Other tool state under .datarobot/ syncs like any file, so the
+	// catalog can change it, so a rollback has to be able to hold it.
+	cliState := filepath.Join(dir, ".datarobot", "cli", "state.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cliState), 0o755))
+	require.NoError(t, os.WriteFile(cliState, []byte("before"), 0o644))
+
+	rt := NewRollbackTree(dir)
+	require.NoError(t, rt.Init())
+
+	require.NoError(t, rt.Backup(".datarobot/cli/state.yaml"))
+	require.NoError(t, os.WriteFile(cliState, []byte("after"), 0o644))
+
+	// The sync state itself, at either location, stays out of the tree:
+	// a rollback must not rewrite the files that describe the rollback.
+	for _, rel := range []string{
+		".datarobot/workload/config.json",
+		".datarobot/workload/.rollback/manifest.json",
+		".datarobot/workload",
+		".wapi/config.json",
+		".wapi",
+	} {
+		err := rt.Backup(rel)
+		require.Error(t, err, rel)
+		assert.Contains(t, err.Error(), "state directory", rel)
+	}
+
+	require.NoError(t, rt.Restore())
+
+	content, err := os.ReadFile(cliState)
+	require.NoError(t, err)
+	assert.Equal(t, "before", string(content))
 }

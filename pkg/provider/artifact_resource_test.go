@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
@@ -2616,9 +2620,15 @@ func artifactSourcePatchedArtifact(base *client.Artifact, catalogID, versionID s
 			containers[ci] = container
 			isPrimary := container.Primary != nil && *container.Primary
 			if isPrimary || (container.Primary == nil && ci == 0) {
-				if containers[ci].ImageBuildConfig == nil {
-					containers[ci].ImageBuildConfig = &client.ArtifactImageBuildConfig{}
+				// Copy the build config rather than writing through the
+				// pointer base shares: the sync engine reads the code_ref
+				// of the artifact it is handed, so aliasing would give the
+				// "before" artifact the "after" catalog.
+				buildConfig := client.ArtifactImageBuildConfig{}
+				if containers[ci].ImageBuildConfig != nil {
+					buildConfig = *containers[ci].ImageBuildConfig
 				}
+				containers[ci].ImageBuildConfig = &buildConfig
 				containers[ci].ImageBuildConfig.CodeRef = &client.ArtifactCodeRef{
 					Type: "datarobot",
 					DataRobot: client.ArtifactDataRobotCodeRef{
@@ -2884,6 +2894,15 @@ func diagErrorSummary(diags diag.Diagnostics) string {
 	return diags.Errors()[0].Summary()
 }
 
+// diagErrorDetail is the first error's detail, for failure messages that
+// would otherwise only name the summary the resource attached.
+func diagErrorDetail(diags diag.Diagnostics) string {
+	if !diags.HasError() {
+		return ""
+	}
+	return diags.Errors()[0].Detail()
+}
+
 func TestArtifactResourceSourceCreateSuccess(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -3052,7 +3071,7 @@ func TestArtifactResourceSourceUpdateLockedSourceChangeCloneLock(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.ArtifactID.ValueString() != newLockedArtifactID {
 		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
@@ -3131,7 +3150,7 @@ func TestArtifactResourceSourceUpdateLockedSpecChangeCloneLock(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.ArtifactID.ValueString() != newLockedArtifactID {
 		t.Fatalf("artifact_id = %q, want %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
@@ -3204,7 +3223,7 @@ func TestArtifactResourceSourceUpdateDraftLockWithSourceChange(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.Status.ValueString() != "locked" {
 		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
@@ -3494,7 +3513,7 @@ func TestArtifactResourceSourceUpdateDraftNameOnlySkipsReupload(t *testing.T) {
 
 	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 	if updated.Name.ValueString() != updatedName {
 		t.Fatalf("name = %q, want %q", updated.Name.ValueString(), updatedName)
@@ -3545,7 +3564,7 @@ func TestArtifactResourceSourceUpdateDraftSourceChangeReuploads(t *testing.T) {
 
 	_, diags = testArtifactApplyUpdate(context.Background(), resource, plan, state)
 	if diags.HasError() {
-		t.Fatalf("update: %s", diagErrorSummary(diags))
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
 	}
 }
 
@@ -5116,4 +5135,453 @@ resource "datarobot_artifact" "test" {
 			},
 		},
 	})
+}
+
+func TestArtifactResourceSourceUpdateLockedProviderOnlyChangeKeepsVersion(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+	lockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-locked-noop-" + uuid.NewString()[:8]
+
+	locked := artifactSourcePatchedArtifact(artifactFixtureDraftWithBuildConfig(lockedArtifactID, &repoIDPtr, name), artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	locked.Status = client.ArtifactStatusLocked
+
+	// No CreateArtifact and no FilesAPI: the only call is the read-back.
+	mockService.EXPECT().GetArtifact(gomock.Any(), lockedArtifactID).Return(locked, nil)
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	dirHash, err := computeFolderHash(types.StringValue(sourceDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	codeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	state := artifactResourceModelWithSource(name, sourceDir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	_ = setImageBuildConfigCodeRef(state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	state.Source.DirHash = dirHash
+	state.Source.WaitForBuild = types.BoolValue(true)
+
+	// The only diff is wait_for_build, which lives in the provider.
+	plan := artifactResourceModelWithSource(name, sourceDir)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	_ = setImageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	plan.Source.DirHash = dirHash
+	plan.Source.WaitForBuild = types.BoolValue(false)
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+	}
+	if updated.ArtifactID.ValueString() != lockedArtifactID {
+		t.Fatalf("artifact_id = %q, want the existing %q: a provider-only change must not mint a version", updated.ArtifactID.ValueString(), lockedArtifactID)
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+	if updated.Source.WaitForBuild.ValueBool() {
+		t.Fatal("wait_for_build = true, want the planned false")
+	}
+}
+
+func TestArtifactModifyPlanCatalogDriftPlansDirHashUnknown(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+
+	name := "source-drift-" + uuid.NewString()[:8]
+	repoID := uuid.NewString()
+
+	model := func(dir string) ArtifactResourceModel {
+		m := artifactResourceModelWithSource(name, dir)
+		m.Status = types.StringValue("locked")
+		m.ArtifactID = types.StringValue("art-1")
+		m.ArtifactRepositoryID = types.StringValue(repoID)
+		m.Source.GenerateIgnore = types.BoolValue(true)
+		m.Source.WaitForBuild = types.BoolValue(true)
+		_ = setImageBuildConfigCodeRef(m.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, &ArtifactCodeRefModel{
+			CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+			CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+		})
+		return m
+	}
+
+	for _, tc := range []struct {
+		name        string
+		lastSynced  string
+		wantUnknown bool
+	}{
+		{name: "catalog moved past the directory's last sync", lastSynced: "cccccccccccccccccccccccc", wantUnknown: true},
+		{name: "directory in step with the catalog", lastSynced: artifactSourceTestVersionID, wantUnknown: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+			if err := wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1", CatalogID: artifactSourceTestCatalogID, LastSyncedVersionID: tc.lastSynced}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Read refreshed code_ref from the artifact; the tree did not change.
+			state := model(dir)
+			hash, err := computeArtifactSourceDirHash(&state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state.Source.DirHash = hash
+
+			config := artifactResourceModelWithSource(name, dir)
+			config.Status = types.StringValue("locked")
+
+			plan := model(dir)
+			plan.Source.DirHash = hash
+
+			planned, diags := testArtifactApplyModifyPlan(context.Background(), resource, config, plan, state)
+			if diags.HasError() {
+				t.Fatalf("modify plan: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+			}
+			if planned.Source.DirHash.IsUnknown() != tc.wantUnknown {
+				t.Fatalf("dir_hash unknown = %v, want %v (%v)", planned.Source.DirHash.IsUnknown(), tc.wantUnknown, planned.Source.DirHash)
+			}
+			if planned.ArtifactID.IsUnknown() != tc.wantUnknown {
+				t.Fatalf("artifact_id unknown = %v, want %v: a locked artifact takes the catalog's changes through a new version", planned.ArtifactID.IsUnknown(), tc.wantUnknown)
+			}
+			warned := false
+			for _, w := range diags.Warnings() {
+				if w.Summary() == "Catalog changed since the last sync" {
+					warned = true
+				}
+			}
+			if warned != tc.wantUnknown {
+				t.Fatalf("drift warning = %v, want %v: %v", warned, tc.wantUnknown, diags)
+			}
+		})
+	}
+}
+
+func TestPersistPartialArtifactUpdateNullsUnknownDirHash(t *testing.T) {
+	t.Parallel()
+
+	r := &ArtifactResource{}
+	schema, diags := testArtifactResourceSchemaFor(r)
+	if diags.HasError() {
+		t.Fatalf("schema: %s", diagErrorSummary(diags))
+	}
+
+	repoID := uuid.NewString()
+	artifact := artifactFixtureDraftWithBuildConfig(uuid.NewString(), &repoID, "partial")
+
+	t.Run("source added to a locked artifact keeps no hash", func(t *testing.T) {
+		plan := artifactResourceModelWithSource("partial", t.TempDir())
+		plan.Source.DirHash = types.StringUnknown()
+		state := artifactResourceModelWithSource("partial", t.TempDir())
+		state.Source = nil
+
+		resp := &tfresource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+		persistPartialArtifactUpdate(context.Background(), resp, artifact, &plan, &state)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("persist: %s: %s", diagErrorSummary(resp.Diagnostics), diagErrorDetail(resp.Diagnostics))
+		}
+
+		var got ArtifactResourceModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("state: %s", diagErrorSummary(diags))
+		}
+		if got.Source == nil || !got.Source.DirHash.IsNull() {
+			t.Fatalf("dir_hash = %v, want null: an unknown in state is rejected by Terraform and loses the draft clone", got.Source)
+		}
+	})
+
+	t.Run("prior hash is kept so the retry re-syncs", func(t *testing.T) {
+		dir := t.TempDir()
+		plan := artifactResourceModelWithSource("partial", dir)
+		plan.Source.DirHash = types.StringUnknown()
+		state := artifactResourceModelWithSource("partial", dir)
+		state.Source.DirHash = types.StringValue("hash-v1")
+
+		resp := &tfresource.UpdateResponse{State: tfsdk.State{Schema: schema}}
+		persistPartialArtifactUpdate(context.Background(), resp, artifact, &plan, &state)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("persist: %s: %s", diagErrorSummary(resp.Diagnostics), diagErrorDetail(resp.Diagnostics))
+		}
+
+		var got ArtifactResourceModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("state: %s", diagErrorSummary(diags))
+		}
+		if got.Source.DirHash.ValueString() != "hash-v1" {
+			t.Fatalf("dir_hash = %v, want the prior hash-v1", got.Source.DirHash)
+		}
+	})
+}
+
+// lockedDriftFixture is a locked artifact whose directory's state last synced
+// ver-1 while the artifact points at ver-2 of the same catalog: what Read
+// leaves behind after the catalog moved. The tree holds main.py only, and
+// generate_ignore is off so no starter ignore file joins it at apply.
+func lockedDriftFixture(t *testing.T, name string) (dir, lockedID, repoID string, locked *client.Artifact, state, plan ArtifactResourceModel) {
+	t.Helper()
+
+	dir = writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+	lockedID = uuid.NewString()
+	repoID = uuid.NewString()
+	repoIDPtr := repoID
+
+	if err := wapi.Initialize(dir, wapi.InitOptions{ArtifactID: lockedID, CatalogID: artifactSourceTestCatalogID, LastSyncedVersionID: "ver-1"}); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("stable"))
+	if err := wapi.SaveManifest(dir, wapi.Manifest{
+		Version: wapi.ManifestVersion,
+		Files:   map[string]wapi.FileMeta{"main.py": {Hash: hex.EncodeToString(sum[:]), Size: int64(len("stable"))}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	locked = artifactSourcePatchedArtifact(artifactFixtureDraftWithBuildConfig(lockedID, &repoIDPtr, name), artifactSourceTestCatalogID, "ver-2")
+	locked.Status = client.ArtifactStatusLocked
+
+	state = artifactResourceModelWithSource(name, dir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	state.Source.GenerateIgnore = types.BoolValue(false)
+	state.Source.WaitForBuild = types.BoolValue(true)
+	_ = setImageBuildConfigCodeRef(state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue("ver-2"),
+	})
+	hash, err := computeArtifactSourceDirHash(&state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Source.DirHash = hash
+
+	// What ModifyPlan produces for the drift: dir_hash, artifact_id and
+	// code_ref unknown, everything else as in state.
+	plan = artifactResourceModelWithSource(name, dir)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = types.StringUnknown()
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Source.GenerateIgnore = types.BoolValue(false)
+	plan.Source.WaitForBuild = types.BoolValue(true)
+	plan.Source.DirHash = types.StringUnknown()
+	plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig.CodeRef = types.ObjectUnknown(artifactCodeRefAttrTypes())
+
+	return dir, lockedID, repoID, locked, state, plan
+}
+
+func TestArtifactResourceSourceUpdateLockedDriftWithoutContentChangeKeepsVersion(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	name := "source-locked-benign-drift-" + uuid.NewString()[:8]
+	dir, lockedID, _, locked, state, plan := lockedDriftFixture(t, name)
+
+	// ver-2 holds exactly what the directory holds: identical bytes were
+	// re-uploaded, so the directory is behind on paper only.
+	filesAPI := newSyncTestFilesAPI()
+	mirrorRemoteTree(t, filesAPI, dir, "main.py")
+	filesAPI.newestVersion("ver-2")
+	filesAPI.oldestVersion("ver-1")
+
+	// The read-back of the locked artifact, then the sync: no clone, no
+	// code_ref patch, no build, no lock.
+	mockService.EXPECT().GetArtifact(gomock.Any(), lockedID).Return(locked, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+	}
+	if updated.ArtifactID.ValueString() != lockedID {
+		t.Fatalf("artifact_id = %q, want the existing %q: benign drift must not mint a version", updated.ArtifactID.ValueString(), lockedID)
+	}
+	if updated.Status.ValueString() != "locked" {
+		t.Fatalf("status = %q, want locked", updated.Status.ValueString())
+	}
+	if got := wapiSyncedVersion(t, dir); got != "ver-2" {
+		t.Fatalf("state dir last synced = %q, want ver-2: the directory's bookkeeping catches up", got)
+	}
+	if !IsKnown(updated.Source.DirHash) {
+		t.Fatal("dir_hash should be recorded after apply")
+	}
+}
+
+func TestArtifactResourceSourceUpdateLockedDriftWithChangesClonesAndLocks(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	name := "source-locked-real-drift-" + uuid.NewString()[:8]
+	dir, lockedID, repoID, locked, state, plan := lockedDriftFixture(t, name)
+	repoIDPtr := repoID
+	draftCloneID := uuid.NewString()
+	newLockedID := uuid.NewString()
+
+	// ver-2 also carries helper.py, which the directory lacks.
+	filesAPI := newSyncTestFilesAPI()
+	mirrorRemoteTree(t, filesAPI, dir, "main.py")
+	filesAPI.remoteFile("helper.py", "from the catalog")
+	filesAPI.newestVersion("ver-2")
+	filesAPI.oldestVersion("ver-1")
+
+	draftClone := artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name)
+	patchedDraft := artifactSourcePatchedArtifact(draftClone, artifactSourceTestCatalogID, "ver-2")
+	lockedResult := *patchedDraft
+	lockedResult.ID = newLockedID
+	lockedResult.Status = client.ArtifactStatusLocked
+
+	// Plan against the locked artifact finds work, so: clone, sync the
+	// clone (download only, then point it at ver-2), build, lock.
+	mockService.EXPECT().GetArtifact(gomock.Any(), lockedID).Return(locked, nil)
+	mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Fatalf("expected draft clone, got %q", req.Status)
+			}
+			return draftClone, nil
+		})
+	mockService.EXPECT().PatchArtifactCodeRef(gomock.Any(), draftCloneID, artifactSourceTestCatalogID, "ver-2").Return(patchedDraft, nil)
+	expectArtifactBuildAfterUpload(mockService, draftCloneID, artifactFixtureWithImageURI(patchedDraft))
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch, got status %v", req.Status)
+			}
+			return &lockedResult, nil
+		})
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+	}
+	if updated.ArtifactID.ValueString() != newLockedID {
+		t.Fatalf("artifact_id = %q, want the new locked version %q", updated.ArtifactID.ValueString(), newLockedID)
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "helper.py")); err != nil || string(got) != "from the catalog" {
+		t.Fatalf("helper.py = %q, %v; want the catalog's file downloaded", got, err)
+	}
+	if got := wapiSyncedVersion(t, dir); got != "ver-2" {
+		t.Fatalf("state dir last synced = %q, want ver-2", got)
+	}
+	if filesAPI.uploadCalls() != 0 {
+		t.Fatalf("uploaded %d file(s), want none: the directory had nothing the catalog lacked", filesAPI.uploadCalls())
+	}
+}
+
+// TestArtifactResourceSourceUpdateLockedSpecChangeCloneWithCodeRefStillBuilds
+// mirrors what the API does for a spec-only change on a locked artifact: the
+// clone is created with the version's code_ref already on it (the plan
+// carries it from state), the directory is in sync, so the sync moves and
+// re-points nothing, and the clone still has to be built before it can be
+// locked.
+func TestArtifactResourceSourceUpdateLockedSpecChangeCloneWithCodeRefStillBuilds(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+
+	sourceDir := writeArtifactSourceTree(t, map[string]string{"main.py": "stable"})
+	lockedArtifactID := uuid.NewString()
+	draftCloneID := uuid.NewString()
+	newLockedArtifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	repoIDPtr := repoID
+	name := "source-locked-spec-coderef-" + uuid.NewString()[:8]
+
+	// The directory was synced by the previous apply: its state names the
+	// locked artifact and the version, and BASE matches the tree (main.py
+	// plus the starter .drignore apply seeds).
+	if err := wapi.Initialize(sourceDir, wapi.InitOptions{ArtifactID: lockedArtifactID, CatalogID: artifactSourceTestCatalogID, LastSyncedVersionID: artifactSourceTestVersionID}); err != nil {
+		t.Fatal(err)
+	}
+	fileMeta := func(content []byte) wapi.FileMeta {
+		sum := sha256.Sum256(content)
+		return wapi.FileMeta{Hash: hex.EncodeToString(sum[:]), Size: int64(len(content))}
+	}
+	if err := wapi.SaveManifest(sourceDir, wapi.Manifest{Version: wapi.ManifestVersion, Files: map[string]wapi.FileMeta{
+		"main.py":       fileMeta([]byte("stable")),
+		ignore.FileName: fileMeta(ignore.DefaultTemplate),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	draftClone := artifactSourcePatchedArtifact(artifactFixtureDraftWithBuildConfig(draftCloneID, &repoIDPtr, name), artifactSourceTestCatalogID, artifactSourceTestVersionID)
+	lockedResult := *draftClone
+	lockedResult.ID = newLockedArtifactID
+	lockedResult.Status = client.ArtifactStatusLocked
+	port9090 := int64(9090)
+	lockedResult.Spec.ContainerGroups[0].Containers[0].Port = &port9090
+
+	filesAPI := newSyncTestFilesAPI()
+
+	// CreateArtifact echoes the code_ref the request carried: no PatchArtifactCodeRef follows.
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateArtifactRequest) (*client.Artifact, error) {
+			if req.Status != client.ArtifactStatusDraft {
+				t.Fatalf("expected draft clone, got %q", req.Status)
+			}
+			return draftClone, nil
+		})
+	mockService.EXPECT().GetArtifact(gomock.Any(), lockedArtifactID).Return(&client.Artifact{ID: lockedArtifactID, Status: client.ArtifactStatusLocked, ArtifactRepositoryID: &repoIDPtr}, nil).AnyTimes()
+	mockService.EXPECT().FilesAPI().Return(filesAPI)
+	expectArtifactBuildAfterUpload(mockService, draftCloneID, artifactFixtureWithImageURI(draftClone))
+	mockService.EXPECT().PatchArtifact(gomock.Any(), draftCloneID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
+			if req.Status == nil || *req.Status != client.ArtifactStatusLocked {
+				t.Fatalf("expected lock patch, got status %v", req.Status)
+			}
+			return &lockedResult, nil
+		})
+
+	resource := &ArtifactResource{provider: &Provider{service: mockService}}
+	codeRef := &ArtifactCodeRefModel{
+		CatalogID:        types.StringValue(artifactSourceTestCatalogID),
+		CatalogVersionID: types.StringValue(artifactSourceTestVersionID),
+	}
+
+	state := artifactResourceModelWithSource(name, sourceDir)
+	state.Status = types.StringValue("locked")
+	state.ArtifactID = types.StringValue(lockedArtifactID)
+	state.ArtifactRepositoryID = types.StringValue(repoID)
+	_ = setImageBuildConfigCodeRef(state.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	dirHash, err := computeArtifactSourceDirHash(&state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Source.DirHash = dirHash
+
+	plan := artifactResourceModelWithSource(name, sourceDir)
+	plan.Status = types.StringValue("locked")
+	plan.ArtifactID = state.ArtifactID
+	plan.ArtifactRepositoryID = state.ArtifactRepositoryID
+	plan.Spec.ContainerGroups[0].Containers[0].Port = types.Int64Value(9090)
+	_ = setImageBuildConfigCodeRef(plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig, codeRef)
+	plan.Source.DirHash = dirHash
+
+	updated, diags := testArtifactApplyUpdate(context.Background(), resource, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %s: %s", diagErrorSummary(diags), diagErrorDetail(diags))
+	}
+	if updated.ArtifactID.ValueString() != newLockedArtifactID {
+		t.Fatalf("artifact_id = %q, want the new locked %q", updated.ArtifactID.ValueString(), newLockedArtifactID)
+	}
+	if filesAPI.uploadCalls() != 0 {
+		t.Fatalf("expected no upload for an in-sync directory, got %d", filesAPI.uploadCalls())
+	}
 }

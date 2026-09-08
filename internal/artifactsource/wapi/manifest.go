@@ -23,6 +23,34 @@ type Manifest struct {
 	SyncedAt        *time.Time          `json:"syncedAt"`
 	SyncedVersionID *string             `json:"syncedVersionId"`
 	Files           map[string]FileMeta `json:"files"`
+
+	// Extra holds every manifest.json key this build has no field for, and
+	// SaveManifest writes it back unchanged. Nil when there are none.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+func (m *Manifest) UnmarshalJSON(data []byte) error {
+	type plain Manifest
+	var known plain
+	if err := json.Unmarshal(data, &known); err != nil {
+		return err
+	}
+	extra, err := unknownKeys(data, known)
+	if err != nil {
+		return err
+	}
+	known.Extra = extra
+	*m = Manifest(known)
+	return nil
+}
+
+func (m Manifest) MarshalJSON() ([]byte, error) {
+	type plain Manifest
+	data, err := json.Marshal(plain(m))
+	if err != nil {
+		return nil, err
+	}
+	return withUnknownKeys(data, m.Extra)
 }
 
 // LoadManifest reads manifest.json. Nil Files becomes an empty map, and a

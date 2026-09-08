@@ -3,6 +3,8 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
+	artifactsync "github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/sync"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
@@ -303,12 +307,45 @@ func TestCatalogVersionIDFromModel(t *testing.T) {
 	}
 }
 
+func TestPlannedArtifactSourceDirHash(t *testing.T) {
+	t.Parallel()
+
+	current := types.StringValue("current")
+	withHash := func(hash types.String) *ArtifactResourceModel {
+		return &ArtifactResourceModel{Source: &ArtifactSourceModel{DirHash: hash}}
+	}
+
+	cases := []struct {
+		name  string
+		state *ArtifactResourceModel
+		want  types.String
+	}{
+		{name: "create plans unknown", state: nil, want: types.StringUnknown()},
+		{name: "state without source plans unknown", state: &ArtifactResourceModel{}, want: types.StringUnknown()},
+		{name: "unknown in state plans unknown", state: withHash(types.StringUnknown()), want: types.StringUnknown()},
+		{name: "changed tree plans unknown", state: withHash(types.StringValue("previous")), want: types.StringUnknown()},
+		{name: "unchanged tree keeps the known value", state: withHash(types.StringValue("current")), want: current},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := plannedArtifactSourceDirHash(current, tc.state); !got.Equal(tc.want) {
+				t.Fatalf("plannedArtifactSourceDirHash() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRefreshArtifactSourceDirHash(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no source block leaves model unchanged", func(t *testing.T) {
 		data := &ArtifactResourceModel{}
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		if data.Source != nil {
 			t.Fatal("expected source to remain nil")
 		}
@@ -320,13 +357,17 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
 
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		if !IsKnown(data.Source.DirHash) {
 			t.Fatal("expected computed dir_hash")
 		}
 
 		first := data.Source.DirHash
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		if !data.Source.DirHash.Equal(first) {
 			t.Fatal("expected stable hash on unchanged tree")
 		}
@@ -337,28 +378,35 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		data := &ArtifactResourceModel{
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		first := data.Source.DirHash
 
 		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("v2"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		if data.Source.DirHash.Equal(first) {
 			t.Fatal("expected dir_hash to change after file edit")
 		}
 	})
 
-	t.Run("missing directory leaves dir_hash unset", func(t *testing.T) {
+	t.Run("missing directory nulls dir_hash and reports why", func(t *testing.T) {
+		// The plan holds an unknown here: it must not survive into state.
 		data := &ArtifactResourceModel{
 			Source: &ArtifactSourceModel{
 				Dir:     types.StringValue(filepath.Join(t.TempDir(), "missing")),
-				DirHash: types.StringNull(),
+				DirHash: types.StringUnknown(),
 			},
 		}
-		refreshArtifactSourceDirHash(data)
-		if IsKnown(data.Source.DirHash) {
-			t.Fatal("expected dir_hash to remain unset when directory is missing")
+		if err := refreshArtifactSourceDirHash(data); err == nil {
+			t.Fatal("expected an error for a missing directory")
+		}
+		if !data.Source.DirHash.IsNull() {
+			t.Fatalf("dir_hash = %v, want null rather than the plan's unknown", data.Source.DirHash)
 		}
 	})
 
@@ -367,7 +415,9 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		data := &ArtifactResourceModel{
 			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
 		}
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		base := data.Source.DirHash
 
 		if err := os.Mkdir(filepath.Join(dir, ".venv"), 0o755); err != nil {
@@ -379,7 +429,9 @@ func TestRefreshArtifactSourceDirHash(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, ".datarobot.yaml"), []byte("spec: x\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		refreshArtifactSourceDirHash(data)
+		if err := refreshArtifactSourceDirHash(data); err != nil {
+			t.Fatal(err)
+		}
 		if !data.Source.DirHash.Equal(base) {
 			t.Fatal("expected dir_hash to ignore .venv and .datarobot.yaml")
 		}
@@ -649,10 +701,11 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 	})
 
-	t.Run("unwritable source dir warns and uploads with the template patterns", func(t *testing.T) {
-		// generate_ignore defaults to true, so a source.dir the process cannot
-		// write -- a checkout mounted read-only in CI -- must not fail an apply
-		// that worked before the attribute existed.
+	t.Run("unwritable source dir fails with the state directory named", func(t *testing.T) {
+		// The three-way sync keeps its last-synced manifest under source.dir,
+		// so a directory the process cannot write -- a checkout mounted
+		// read-only in CI -- cannot be synced. The push-only uploader used to
+		// accept it; the refusal has to say what it needs.
 		if os.Geteuid() == 0 {
 			t.Skip("root writes into a read-only directory")
 		}
@@ -662,9 +715,6 @@ func TestSyncArtifactSource(t *testing.T) {
 		filesAPI := newSyncTestFilesAPI()
 
 		mockService.EXPECT().FilesAPI().Return(filesAPI)
-		mockService.EXPECT().
-			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
-			Return(&client.Artifact{ID: artifactID}, nil)
 
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 		dir := writeArtifactSourceTree(t, map[string]string{
@@ -682,9 +732,52 @@ func TestSyncArtifactSource(t *testing.T) {
 		}
 
 		var diags diag.Diagnostics
+		_, _, err := resource.syncArtifactSource(
+			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags)
+		if err == nil {
+			t.Fatal("expected a read-only source.dir to be refused")
+		}
+		if !strings.Contains(err.Error(), "must be writable") {
+			t.Fatalf("refusal must say the directory has to be writable, got: %v", err)
+		}
+		if filesAPI.uploadCalls() != 0 {
+			t.Fatalf("uploaded %d file(s) before failing", filesAPI.uploadCalls())
+		}
+		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
+			t.Fatal("expected no .drignore on a read-only directory")
+		}
+	})
+
+	t.Run("directory at the drignore name warns and uploads with the template patterns", func(t *testing.T) {
+		// The starter ignore file cannot be written, but the directory itself
+		// can be: the sync must walk with the template's patterns, the set
+		// plan hashed, rather than with no patterns at all.
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			Return(&client.Artifact{ID: artifactID}, nil)
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		dir := writeArtifactSourceTree(t, map[string]string{
+			"main.py":      "print('hi')",
+			".venv/lib.py": "ignored",
+		})
+		if err := os.Mkdir(filepath.Join(dir, ignore.FileName), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+
+		var diags diag.Diagnostics
 		if _, _, err := resource.syncArtifactSource(
 			context.Background(), plan, nil, &client.Artifact{ID: artifactID}, "", &diags); err != nil {
-			t.Fatalf("a read-only source.dir must not fail the apply: %v", err)
+			t.Fatalf("a directory at the ignore file's name must not fail the apply: %v", err)
 		}
 		if diags.HasError() {
 			t.Fatalf("expected a warning, got errors: %v", diags.Errors())
@@ -692,23 +785,20 @@ func TestSyncArtifactSource(t *testing.T) {
 		if len(diags.Warnings()) != 1 {
 			t.Fatalf("warnings = %v, want exactly one", diags.Warnings())
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".drignore")); !os.IsNotExist(err) {
-			t.Fatal("expected no .drignore on a read-only directory")
-		}
 
 		// The fallback matcher is the template, so the upload is no wider than
 		// it would have been had the write succeeded.
 		foundMain := false
 		for _, p := range filesAPI.uploadToStagePaths {
-			if p == ".venv/lib.py" {
-				t.Fatalf("uploaded %q: the template patterns were not applied", p)
-			}
 			if p == "main.py" {
 				foundMain = true
 			}
+			if strings.HasPrefix(p, ".venv/") {
+				t.Fatalf("uploaded %q: the template's patterns were not applied", p)
+			}
 		}
 		if !foundMain {
-			t.Fatalf("uploaded paths = %v, want main.py", filesAPI.uploadToStagePaths)
+			t.Fatalf("main.py was not uploaded: %v", filesAPI.uploadToStagePaths)
 		}
 	})
 
@@ -837,6 +927,845 @@ func TestSyncArtifactSource(t *testing.T) {
 		_, _, err := resource.syncArtifactSource(context.Background(), plan, state, &client.Artifact{ID: artifactID}, artifactID, &diag.Diagnostics{})
 		if err == nil {
 			t.Fatal("expected patch error")
+		}
+	})
+}
+
+// TestSyncArtifactSourceThreeWay covers what wiring the three-way engine
+// into the resource changed: local bookkeeping under source.dir/.wapi/, no
+// network work for an unchanged tree, code_ref repointing across artifact
+// versions, and remote changes landing in source.dir. The classification
+// and diff rules themselves are tested in internal/artifactsource/sync.
+func TestSyncArtifactSourceThreeWay(t *testing.T) {
+	t.Parallel()
+
+	const artifactID = "artifact-1"
+
+	// syncWithPlanHash wires a resource around filesAPI and syncs dir once
+	// with the given planned dir_hash, collecting the diagnostics raised.
+	syncWithPlanHash := func(
+		t *testing.T,
+		mockService *mock_client.MockService,
+		dir string,
+		artifact *client.Artifact,
+		priorArtifactID string,
+		state *ArtifactResourceModel,
+		planHash types.String,
+	) (*client.Artifact, bool, diag.Diagnostics, error) {
+		t.Helper()
+
+		resource := &ArtifactResource{provider: &Provider{service: mockService}}
+		plan := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: planHash,
+			},
+		}
+
+		var diags diag.Diagnostics
+		got, synced, err := resource.syncArtifactSource(context.Background(), plan, state, artifact, priorArtifactID, &diags)
+
+		return got, synced, diags, err
+	}
+
+	// syncOnceWithDiags is syncWithPlanHash for a tree that changed: the
+	// planned hash differs from whatever state holds.
+	syncOnceWithDiags := func(
+		t *testing.T,
+		mockService *mock_client.MockService,
+		dir string,
+		artifact *client.Artifact,
+		priorArtifactID string,
+		state *ArtifactResourceModel,
+	) (*client.Artifact, bool, diag.Diagnostics, error) {
+		t.Helper()
+
+		return syncWithPlanHash(t, mockService, dir, artifact, priorArtifactID, state, types.StringValue("planned-hash"))
+	}
+
+	// unchangedState is the state a previous apply left for a tree that has
+	// not changed since: its dir_hash is the directory's real digest. With
+	// it, the only way a sync runs is the plan holding an unknown dir_hash,
+	// which is what ModifyPlan produces when the catalog moved.
+	unchangedState := func(t *testing.T, dir string) *ArtifactResourceModel {
+		t.Helper()
+
+		state := &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{Dir: types.StringValue(dir)},
+		}
+		hash, err := computeArtifactSourceDirHash(state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state.Source.DirHash = hash
+
+		return state
+	}
+
+	syncOnce := func(
+		t *testing.T,
+		mockService *mock_client.MockService,
+		dir string,
+		artifact *client.Artifact,
+		priorArtifactID string,
+		state *ArtifactResourceModel,
+	) (*client.Artifact, bool, error) {
+		t.Helper()
+
+		got, synced, _, err := syncOnceWithDiags(t, mockService, dir, artifact, priorArtifactID, state)
+
+		return got, synced, err
+	}
+
+	// syncedState is the state a previous apply would have left behind:
+	// a dir_hash that no longer matches the plan, so the next sync runs.
+	syncedState := func(dir string) *ArtifactResourceModel {
+		return &ArtifactResourceModel{
+			Source: &ArtifactSourceModel{
+				Dir:     types.StringValue(dir),
+				DirHash: types.StringValue("state-hash"),
+			},
+		}
+	}
+
+	t.Run("create uploads, patches code ref and records wapi state", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		var patchedVersion string
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, "cat-new", gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				patchedVersion = versionID
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		got, uploaded, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if !uploaded {
+			t.Fatal("expected the sync to report work on create")
+		}
+		if ref := client.ExtractCodeRef(got); ref == nil || ref.CatalogVersionID != patchedVersion {
+			t.Fatalf("returned artifact does not carry the patched code_ref: %+v", ref)
+		}
+
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatalf("load .wapi/config.json: %v", err)
+		}
+		if cfg.ArtifactID != artifactID {
+			t.Fatalf("config artifactId = %q, want %q", cfg.ArtifactID, artifactID)
+		}
+		if cfg.CatalogID == nil || *cfg.CatalogID != "cat-new" {
+			t.Fatalf("config catalogId = %v, want cat-new", cfg.CatalogID)
+		}
+		if cfg.LastSyncedVersionID == nil || *cfg.LastSyncedVersionID != patchedVersion {
+			t.Fatalf("config lastSyncedVersionId = %v, want %q", cfg.LastSyncedVersionID, patchedVersion)
+		}
+
+		manifest, err := wapi.LoadManifest(dir)
+		if err != nil {
+			t.Fatalf("load .wapi/manifest.json: %v", err)
+		}
+		for _, want := range []string{"main.py", ignore.FileName} {
+			if _, ok := manifest.Files[want]; !ok {
+				t.Fatalf("BASE manifest is missing %q: %v", want, manifest.Files)
+			}
+		}
+
+		// The rollback tree is committed, so the next apply cannot revert
+		// this one. (The lock file stays on disk by design; the retry
+		// case below covers that it is released.)
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
+			t.Fatal("expected the rollback tree to be gone after a successful sync")
+		}
+	})
+
+	t.Run("unchanged tree and matching catalog version does not upload", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		synced, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		firstRunUploads := filesAPI.uploadCalls()
+
+		// Same tree, same catalog version: the plan is empty, so the
+		// second apply must not touch the catalog at all.
+		if _, _, err := syncOnce(t, mockService, dir, synced, artifactID, syncedState(dir)); err != nil {
+			t.Fatalf("second syncArtifactSource() error = %v", err)
+		}
+		if got := filesAPI.uploadCalls(); got != firstRunUploads {
+			t.Fatalf("second sync issued %d upload call(s), want none", got-firstRunUploads)
+		}
+		if filesAPI.allFilesCalls != 0 {
+			t.Fatalf("AllFiles called %d time(s) on an undrifted catalog, want 0", filesAPI.allFilesCalls)
+		}
+	})
+
+	t.Run("new artifact version repoints code ref without re-uploading", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		const clonedID = "artifact-2"
+
+		var syncedVersion string
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				syncedVersion = versionID
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		firstRunUploads := filesAPI.uploadCalls()
+
+		// A locked artifact whose source changes is cloned to a fresh
+		// draft: new artifact ID, no code_ref of its own, same directory
+		// and same catalog. The clone has to be pointed at the code the
+		// directory already matches, without pushing it again.
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), clonedID, "cat-new", gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				if versionID != syncedVersion {
+					t.Errorf("clone patched to version %q, want the last synced %q", versionID, syncedVersion)
+				}
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: clonedID}, artifactID, syncedState(dir)); err != nil {
+			t.Fatalf("clone syncArtifactSource() error = %v", err)
+		}
+		if got := filesAPI.uploadCalls(); got != firstRunUploads {
+			t.Fatalf("clone issued %d upload call(s), want none", got-firstRunUploads)
+		}
+
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatalf("load .wapi/config.json: %v", err)
+		}
+		if cfg.ArtifactID != clonedID {
+			t.Fatalf("config artifactId = %q, want the cloned %q", cfg.ArtifactID, clonedID)
+		}
+	})
+
+	t.Run("remote additions are downloaded into source dir", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		firstRunUploads := filesAPI.uploadCalls()
+
+		// Someone else pushed to the catalog: the artifact now points at
+		// a version the state directory has never seen, so the engine
+		// fetches the real remote manifest instead of trusting BASE.
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+		filesAPI.remoteFile("helper.py", "from-remote")
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+		filesAPI.newestVersion("ver-remote")
+
+		// The local tree did not change, so with a known, matching
+		// dir_hash the gate stays shut and nothing is fetched.
+		state := unchangedState(t, dir)
+		if _, synced, _, err := syncWithPlanHash(t, mockService, dir, drifted, artifactID, state, state.Source.DirHash); err != nil || synced {
+			t.Fatalf("unchanged tree with a known hash: synced=%v err=%v, want no sync", synced, err)
+		}
+
+		// What ModifyPlan produces once it notices the catalog moved: an
+		// unknown dir_hash. That is the only shape a real apply has here.
+		_, _, diags, err := syncWithPlanHash(t, mockService, dir, drifted, artifactID, state, types.StringUnknown())
+		if err != nil {
+			t.Fatalf("drifted syncArtifactSource() error = %v", err)
+		}
+
+		// Writing into the user's directory is announced, not left for a
+		// later `git status` to reveal.
+		if diags.WarningsCount() != 1 {
+			t.Fatalf("expected one warning about the written file, got %v", diags)
+		}
+		if detail := diags.Warnings()[0].Detail(); !strings.Contains(detail, "helper.py") {
+			t.Fatalf("warning does not name the written file: %q", detail)
+		}
+
+		got, err := os.ReadFile(filepath.Join(dir, "helper.py"))
+		if err != nil {
+			t.Fatalf("expected the remote-only file to be downloaded: %v", err)
+		}
+		if string(got) != "from-remote" {
+			t.Fatalf("helper.py = %q, want %q", got, "from-remote")
+		}
+		if filesAPI.allFilesCalls != 1 {
+			t.Fatalf("AllFiles called %d time(s) on a drifted catalog, want 1", filesAPI.allFilesCalls)
+		}
+		if got := filesAPI.uploadCalls(); got != firstRunUploads {
+			t.Fatalf("pull-only sync issued %d upload call(s), want none", got-firstRunUploads)
+		}
+
+		manifest, err := wapi.LoadManifest(dir)
+		if err != nil {
+			t.Fatalf("load .wapi/manifest.json: %v", err)
+		}
+		if _, ok := manifest.Files["helper.py"]; !ok {
+			t.Fatalf("BASE manifest is missing the downloaded file: %v", manifest.Files)
+		}
+	})
+
+	t.Run("file edited on both sides refuses before touching anything", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		firstRunUploads := filesAPI.uploadCalls()
+
+		// Both sides moved main.py since the last sync.
+		mirrorRemoteTree(t, filesAPI, dir, ignore.FileName)
+		filesAPI.remoteFile("main.py", "remote edit")
+		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("local edit"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+		filesAPI.newestVersion("ver-remote")
+		_, _, err := syncOnce(t, mockService, dir, drifted, artifactID, syncedState(dir))
+		if err == nil {
+			t.Fatal("expected the conflicting plan to be refused")
+		}
+		if !strings.Contains(err.Error(), "main.py") || !strings.Contains(err.Error(), "dr artifact code sync") {
+			t.Fatalf("refusal must name the file and the way out, got: %v", err)
+		}
+
+		// Nothing moved in either direction.
+		if got := filesAPI.uploadCalls(); got != firstRunUploads {
+			t.Fatalf("refused sync issued %d upload call(s), want none", got-firstRunUploads)
+		}
+		if len(filesAPI.downloadedPaths) != 0 {
+			t.Fatalf("refused sync downloaded %v, want nothing", filesAPI.downloadedPaths)
+		}
+		body, err := os.ReadFile(filepath.Join(dir, "main.py"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "local edit" {
+			t.Fatalf("main.py = %q, want the local edit kept", body)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.Contains(entry.Name(), ".LOCAL.") {
+				t.Fatalf("refused sync must not leave conflict copies, found %s", entry.Name())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
+			t.Fatal("refused sync must not leave a rollback tree")
+		}
+	})
+
+	t.Run("locked artifact is refused instead of synced in place", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		locked := &client.Artifact{ID: artifactID, Status: client.ArtifactStatusLocked}
+
+		_, _, err := syncOnce(t, mockService, dir, locked, artifactID, syncedState(dir))
+		if err == nil {
+			t.Fatal("expected a locked artifact to be refused")
+		}
+		if filesAPI.uploadCalls() != 0 {
+			t.Fatalf("uploaded %d file(s) onto a locked artifact", filesAPI.uploadCalls())
+		}
+	})
+
+	t.Run("failed sync releases the lock so the next apply retries", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		filesAPI.uploadErr = errors.New("files API unavailable")
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err == nil {
+			t.Fatal("expected the upload failure to surface")
+		}
+		if _, err := os.Stat(filepath.Join(wapi.Dir(dir), ".rollback")); err == nil {
+			t.Fatal("expected the rollback tree to be unwound after a failed sync")
+		}
+
+		filesAPI.uploadErr = nil
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("retry after a failed sync error = %v", err)
+		}
+	})
+
+	t.Run("a file deleted locally and edited in the catalog is refused", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared", "util.py": "v1"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		uploadsSoFar := filesAPI.uploadCalls()
+
+		// The catalog edited util.py; the user deleted it here.
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+		filesAPI.remoteFile("util.py", "remote edit")
+		filesAPI.newestVersion("ver-remote")
+		if err := os.Remove(filepath.Join(dir, "util.py")); err != nil {
+			t.Fatal(err)
+		}
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+
+		_, _, err := syncOnce(t, mockService, dir, drifted, artifactID, syncedState(dir))
+		if err == nil || !strings.Contains(err.Error(), "util.py") || !strings.Contains(err.Error(), "both sides") {
+			t.Fatalf("error = %v, want the deleted-and-edited file refused", err)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "util.py")); statErr == nil {
+			t.Fatal("util.py must not be restored by a refused sync")
+		}
+		if filesAPI.uploadCalls() != uploadsSoFar {
+			t.Fatal("refused sync must upload nothing")
+		}
+	})
+
+	t.Run("a second resource over a synced directory is refused", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		repoA, repoB := "repo-a", "repo-b"
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(3)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+		// The directory's state names artifact-1, which is alive. Only the
+		// second resource looks it up; the clone is told it supersedes it.
+		mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).
+			Return(&client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, nil).
+			Times(1)
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		_, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil)
+		if !errors.Is(err, artifactsync.ErrDirectoryOwned) || !strings.Contains(err.Error(), "already backs artifact "+artifactID) {
+			t.Fatalf("error = %v, want the directory refused for a second resource", err)
+		}
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ArtifactID != artifactID {
+			t.Fatalf("config artifactId = %q, want the first resource's %q left alone", cfg.ArtifactID, artifactID)
+		}
+
+		// A new version of the same resource names the artifact it
+		// supersedes: allowed, whatever repository it is in.
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-3", ArtifactRepositoryID: &repoB}, artifactID, syncedState(dir)); err != nil {
+			t.Fatalf("clone superseding the bound artifact: %v", err)
+		}
+	})
+
+	t.Run("a catalog rolled back behind the directory is refused, nothing removed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(3)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+
+		// v1: main.py. v2: main.py + extra.py.
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		v1, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "extra.py"), []byte("added in v2"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		v2, _, err := syncOnce(t, mockService, dir, v1, artifactID, syncedState(dir))
+		if err != nil {
+			t.Fatalf("second syncArtifactSource() error = %v", err)
+		}
+		v2Version := client.ExtractCodeRef(v2).CatalogVersionID
+
+		// Someone re-pointed the artifact at v1. Its listing never had extra.py.
+		rolledBack := artifactWithCodeRef(artifactID, "cat-new", client.ExtractCodeRef(v1).CatalogVersionID)
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+
+		_, _, diags, err := syncWithPlanHash(t, mockService, dir, rolledBack, artifactID, unchangedState(t, dir), types.StringUnknown())
+		if !errors.Is(err, artifactsync.ErrCatalogRolledBack) {
+			t.Fatalf("error = %v, want the rollback refused", err)
+		}
+		if _, statErr := os.Stat(filepath.Join(dir, "extra.py")); statErr != nil {
+			t.Fatalf("extra.py should still be on disk after a refused merge: %v", statErr)
+		}
+		if got := wapiSyncedVersion(t, dir); got != v2Version {
+			t.Fatalf("state dir last synced = %q, want %q untouched", got, v2Version)
+		}
+		if diags.WarningsCount() != 0 {
+			t.Fatalf("a refused sync must not report mutations, got %v", diags)
+		}
+	})
+
+	t.Run("a re-created resource over a synced directory is allowed once the old artifact is gone", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		repoA, repoB := "repo-a", "repo-b"
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+		mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(nil, &client.NotFoundError{Resource: "artifact"})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil); err != nil {
+			t.Fatalf("re-created resource over the directory: %v", err)
+		}
+		cfg, err := wapi.LoadConfig(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ArtifactID != "artifact-2" {
+			t.Fatalf("config artifactId = %q, want the re-created resource's artifact-2", cfg.ArtifactID)
+		}
+	})
+
+	t.Run("locked artifact whose directory already matches it is left alone", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		synced, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+		uploadsSoFar := filesAPI.uploadCalls()
+
+		// The artifact was locked since, and the resource opens the gate
+		// with a new artifact ID the way a fresh version does; the tree
+		// and the catalog still agree.
+		locked := *synced
+		locked.Status = client.ArtifactStatusLocked
+
+		got, ran, diags, err := syncWithPlanHash(t, mockService, dir, &locked, "previous-artifact", unchangedState(t, dir), types.StringUnknown())
+		if err != nil {
+			t.Fatalf("syncArtifactSource() on a locked artifact with nothing to sync: %v", err)
+		}
+		if ran {
+			t.Fatal("expected no sync to be reported")
+		}
+		if got != &locked {
+			t.Fatal("expected the artifact to be handed back untouched")
+		}
+		if filesAPI.uploadCalls() != uploadsSoFar {
+			t.Fatal("expected no upload onto a locked artifact")
+		}
+		if diags.WarningsCount() != 0 {
+			t.Fatalf("expected no diagnostics, got %v", diags)
+		}
+	})
+
+	t.Run("stale rollback from an interrupted apply is reported", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			}).
+			Times(2)
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		synced, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		// A previous apply died between writing main.py and recording the
+		// sync: its rollback tree still holds the bytes it found there.
+		rollbackDir := filepath.Join(wapi.Dir(dir), ".rollback")
+		if err := os.MkdirAll(rollbackDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(rollbackDir, "main.py"), []byte("before the crash"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(rollbackDir, "manifest.json"), []byte(`{"backedUpFiles":["main.py"]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("half-applied"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, diags, err := syncOnceWithDiags(t, mockService, dir, synced, artifactID, syncedState(dir))
+		if err != nil {
+			t.Fatalf("syncArtifactSource() after an interrupted apply: %v", err)
+		}
+
+		got, err := os.ReadFile(filepath.Join(dir, "main.py"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "before the crash" {
+			t.Fatalf("main.py = %q, want the pre-crash bytes restored", got)
+		}
+
+		var found bool
+		for _, w := range diags.Warnings() {
+			if w.Summary() == "Interrupted sync rolled back" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected a warning about the restored rollback, got %v", diags)
+		}
+	})
+
+	t.Run("a directory another sync holds names the likely cause", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		synced, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil)
+		if err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		// A second resource, or a CLI sync, holds the directory's lock.
+		other, err := artifactsync.AcquireLock(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = other.Unlock() }()
+
+		_, _, err = syncOnce(t, mockService, dir, synced, artifactID, syncedState(dir))
+		if err == nil {
+			t.Fatal("expected the held lock to refuse the sync")
+		}
+		if !errors.Is(err, artifactsync.ErrLocked) {
+			t.Fatalf("error = %v, want ErrLocked", err)
+		}
+		if !strings.Contains(err.Error(), "only one resource") {
+			t.Fatalf("error does not explain the shared-directory cause: %v", err)
+		}
+	})
+
+	t.Run("a failed state write still lists the files the sync wrote", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+				return artifactWithCodeRef(id, catalogID, versionID), nil
+			})
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID}, "", nil); err != nil {
+			t.Fatalf("first syncArtifactSource() error = %v", err)
+		}
+
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+		filesAPI.remoteFile("helper.py", "from-remote")
+		drifted := artifactWithCodeRef(artifactID, "cat-new", "ver-remote")
+		filesAPI.newestVersion("ver-remote")
+
+		// The state manifest becomes unwritable part-way through: once the
+		// plan has read it and the download is under way, a directory takes
+		// its path, so the final bookkeeping write fails.
+		manifestPath := filepath.Join(wapi.Dir(dir), "manifest.json")
+		filesAPI.downloadHook = func(string) {
+			if err := os.Remove(manifestPath); err != nil {
+				t.Error(err)
+			}
+			if err := os.Mkdir(manifestPath, 0o755); err != nil {
+				t.Error(err)
+			}
+		}
+
+		_, _, diags, err := syncWithPlanHash(t, mockService, dir, drifted, artifactID, unchangedState(t, dir), types.StringUnknown())
+		if err == nil || !strings.Contains(err.Error(), "save sync state manifest.json") {
+			t.Fatalf("error = %v, want the state write failure", err)
+		}
+
+		// The catalog is what the tree now matches, so the download stays,
+		// and the error is not the only thing that says so.
+		if got, err := os.ReadFile(filepath.Join(dir, "helper.py")); err != nil || string(got) != "from-remote" {
+			t.Fatalf("helper.py = %q, %v; want the downloaded file kept", got, err)
+		}
+		if diags.WarningsCount() != 1 || !strings.Contains(diags.Warnings()[0].Detail(), "helper.py") {
+			t.Fatalf("expected the written file to be listed in a warning, got %v", diags)
+		}
+	})
+}
+
+func TestArtifactSourceRemoteDrifted(t *testing.T) {
+	t.Parallel()
+
+	model := func(dir, catalogID, versionID string) *ArtifactResourceModel {
+		m := &ArtifactResourceModel{Source: &ArtifactSourceModel{Dir: types.StringValue(dir)}}
+		if catalogID != "" || versionID != "" {
+			m.Spec = artifactSpecWithCodeRef(catalogID, versionID)
+		}
+		return m
+	}
+	linked := func(t *testing.T, catalogID, lastSynced string) string {
+		t.Helper()
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "x"})
+		if err := wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1", CatalogID: catalogID, LastSyncedVersionID: lastSynced}); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+
+	t.Run("catalog moved past the directory's last sync", func(t *testing.T) {
+		dir := linked(t, "cat-1", "ver-1")
+		if !artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "cat-1", "ver-2")) {
+			t.Fatal("expected drift")
+		}
+	})
+	t.Run("directory in step with the catalog", func(t *testing.T) {
+		dir := linked(t, "cat-1", "ver-1")
+		if artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "cat-1", "ver-1")) {
+			t.Fatal("expected no drift")
+		}
+	})
+	t.Run("no state directory yet", func(t *testing.T) {
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "x"})
+		if artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "cat-1", "ver-2")) {
+			t.Fatal("nothing to compare against, expected no drift")
+		}
+	})
+	t.Run("directory never synced", func(t *testing.T) {
+		dir := linked(t, "cat-1", "")
+		if artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "cat-1", "ver-2")) {
+			t.Fatal("expected no drift without a last-synced version")
+		}
+	})
+	t.Run("directory bound to another catalog is left to the sync to refuse", func(t *testing.T) {
+		dir := linked(t, "cat-other", "ver-1")
+		if artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "cat-1", "ver-2")) {
+			t.Fatal("expected no drift across catalogs")
+		}
+	})
+	t.Run("no code ref in state", func(t *testing.T) {
+		dir := linked(t, "cat-1", "ver-1")
+		if artifactSourceRemoteDrifted(model(dir, "", ""), model(dir, "", "")) {
+			t.Fatal("expected no drift without a code_ref")
+		}
+	})
+	t.Run("no state at all", func(t *testing.T) {
+		dir := linked(t, "cat-1", "ver-1")
+		if artifactSourceRemoteDrifted(model(dir, "", ""), nil) {
+			t.Fatal("expected no drift on create")
 		}
 	})
 }
@@ -1083,6 +2012,21 @@ func TestSyncArtifactSourceAndBuild(t *testing.T) {
 	})
 }
 
+// wapiSyncedVersion reads the version the directory's state says it last synced.
+func wapiSyncedVersion(t *testing.T, dir string) string {
+	t.Helper()
+
+	cfg, err := wapi.LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LastSyncedVersionID == nil {
+		return ""
+	}
+
+	return *cfg.LastSyncedVersionID
+}
+
 func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 
@@ -1097,6 +2041,21 @@ func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 		}
 	}
 	return dir
+}
+
+// mirrorRemoteTree registers the on-disk content of paths as catalog
+// content, so a drifted AllFiles call reports a remote that agrees with
+// source.dir on everything except what the test adds on top.
+func mirrorRemoteTree(t *testing.T, filesAPI *syncTestFilesAPI, dir string, paths ...string) {
+	t.Helper()
+
+	for _, rel := range paths {
+		content, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		filesAPI.remoteFile(rel, string(content))
+	}
 }
 
 func artifactSpecWithCodeRef(catalogID, versionID string) *ArtifactSpecModel {
@@ -1140,13 +2099,62 @@ type syncTestFilesAPI struct {
 	version   int
 	uploadErr error
 
+	// allFiles is the catalog manifest AllFiles serves once the engine
+	// sees the catalog version drift; blobs is the content DownloadFile
+	// streams for the same paths. Both are populated by remoteFile.
+	allFiles map[string]filesapi.FileMeta
+	blobs    map[string]string
+
 	createCatalogCalls    int
 	uploadFromZipNewCalls int
 	uploadToStagePaths    []string
+	allFilesCalls         int
+	downloadedPaths       []string
+	deletedPaths          []string
+
+	// downloadHook, when set, runs at the start of every DownloadFile
+	// call, so a test can change the state directory mid-sync: after the
+	// plan has read it, before the sync records itself.
+	downloadHook func(path string)
+
+	// newer and older are versions a test declares on top of the ones the
+	// counter minted: ListVersions serves newer (newest first), then the
+	// counter's ver-N..ver-1, then older. A drift test names the version
+	// the artifact moved to here, so the engine can order it.
+	newer []string
+	older []string
 }
+
+// newestVersion declares id as the catalog's newest version.
+func (m *syncTestFilesAPI) newestVersion(id string) { m.newer = append([]string{id}, m.newer...) }
+
+// oldestVersion declares id as older than every version the counter minted.
+func (m *syncTestFilesAPI) oldestVersion(id string) { m.older = append(m.older, id) }
 
 func newSyncTestFilesAPI() *syncTestFilesAPI {
 	return &syncTestFilesAPI{}
+}
+
+// remoteFile makes the catalog hold content at path: AllFiles advertises
+// its hash and size, and DownloadFile serves the bytes.
+func (m *syncTestFilesAPI) remoteFile(path, content string) {
+	if m.allFiles == nil {
+		m.allFiles = map[string]filesapi.FileMeta{}
+		m.blobs = map[string]string{}
+	}
+
+	sum := sha256.Sum256([]byte(content))
+	m.allFiles[path] = filesapi.FileMeta{
+		Hash: hex.EncodeToString(sum[:]),
+		Size: int64(len(content)),
+	}
+	m.blobs[path] = content
+}
+
+// uploadCalls counts every code-bearing request the engine made, so a test
+// can assert that an unchanged tree touched the Files API not at all.
+func (m *syncTestFilesAPI) uploadCalls() int {
+	return len(m.uploadToStagePaths) + m.uploadFromZipNewCalls
 }
 
 func (m *syncTestFilesAPI) CreateCatalog(context.Context) (*filesapi.CatalogResp, error) {
@@ -1221,19 +2229,48 @@ func (m *syncTestFilesAPI) PollStatus(context.Context, string) (*filesapi.Status
 }
 
 func (m *syncTestFilesAPI) AllFiles(context.Context, string, string) (map[string]filesapi.FileMeta, error) {
-	return nil, nil
+	m.allFilesCalls++
+	return m.allFiles, nil
 }
 
-func (m *syncTestFilesAPI) DownloadFile(context.Context, string, string, string, io.Writer) (string, int64, error) {
-	return "", 0, nil
+func (m *syncTestFilesAPI) DownloadFile(_ context.Context, _, _, path string, w io.Writer) (string, int64, error) {
+	if m.downloadHook != nil {
+		m.downloadHook(path)
+	}
+
+	content, ok := m.blobs[path]
+	if !ok {
+		return "", 0, fmt.Errorf("syncTestFilesAPI: no remote content registered for %q", path)
+	}
+
+	m.downloadedPaths = append(m.downloadedPaths, path)
+	n, err := io.WriteString(w, content)
+
+	return "", int64(n), err
 }
 
-func (m *syncTestFilesAPI) DeleteFiles(context.Context, string, []string) (*filesapi.DeleteFilesResp, error) {
-	return &filesapi.DeleteFilesResp{}, nil
+func (m *syncTestFilesAPI) DeleteFiles(_ context.Context, _ string, paths []string) (*filesapi.DeleteFilesResp, error) {
+	m.deletedPaths = append(m.deletedPaths, paths...)
+	m.version++
+
+	return &filesapi.DeleteFilesResp{
+		CatalogID:        m.catalogID,
+		CatalogVersionID: syncTestVersionID(m.version),
+	}, nil
 }
 
 func (m *syncTestFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
-	return nil, nil
+	out := make([]filesapi.CatalogVersion, 0, len(m.newer)+m.version+len(m.older))
+	for _, id := range m.newer {
+		out = append(out, filesapi.CatalogVersion{ID: id})
+	}
+	for n := m.version; n >= 1; n-- {
+		out = append(out, filesapi.CatalogVersion{ID: syncTestVersionID(n)})
+	}
+	for _, id := range m.older {
+		out = append(out, filesapi.CatalogVersion{ID: id})
+	}
+	return out, nil
 }
 
 func syncTestVersionID(n int) string {

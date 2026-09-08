@@ -23,9 +23,18 @@ func (c *httpClient) UploadFromZipNew(ctx context.Context, name string, size int
 
 	// CLI: drapi.EndpointURL("/files/fromFile/", q)
 	requestURL := c.endpointURL("/files/fromFile/", q)
-	return uploadZipMultipart(c, ctx, requestURL, name, size, body)
+	return uploadZipMultipart(c, ctx, requestURL, nil, name, size, body)
 }
 
+// UploadFromZipExisting adds a zip's contents to catalogID as a new version.
+//
+// The overwrite mode goes in the multipart form, which is where the server
+// reads it from: sent only as a query parameter it is accepted and ignored,
+// so every path already in the catalog is renamed ("app (2).py") instead of
+// replaced, and the new bytes land under a name nothing references. The CLI
+// sends it in the query (cli/internal/drapi/filesapi/fromfile.go) and has
+// the rename behavior; the query copy is kept here so the two requests
+// stay comparable, the form field is what takes effect.
 func (c *httpClient) UploadFromZipExisting(ctx context.Context, catalogID, name, overwrite string, size int64, body io.Reader) (*FromFileResp, error) {
 	if overwrite == "" {
 		overwrite = OverwriteReplace
@@ -35,14 +44,17 @@ func (c *httpClient) UploadFromZipExisting(ctx context.Context, catalogID, name,
 	q.Set("useArchiveContents", "true")
 	q.Set("overwrite", overwrite)
 
+	fields := url.Values{}
+	fields.Set("overwrite", overwrite)
+
 	// CLI: drapi.EndpointURL("/files/"+catalogID+"/fromFile/", q)
 	requestURL := c.endpointURL("/files/"+url.PathEscape(catalogID)+"/fromFile/", q)
-	return uploadZipMultipart(c, ctx, requestURL, name, size, body)
+	return uploadZipMultipart(c, ctx, requestURL, fields, name, size, body)
 }
 
-// CLI: uploadZipMultipart(requestURL, name, size, body) — no client/ctx; uses drapi.ErrFromResp.
-func uploadZipMultipart(c *httpClient, ctx context.Context, requestURL, name string, size int64, body io.Reader) (*FromFileResp, error) {
-	req, err := newStreamingMultipartRequest(c.transport, ctx, requestURL, nil, name, size, body)
+// CLI: uploadZipMultipart(requestURL, name, size, body), no client/ctx/fields; uses drapi.ErrFromResp.
+func uploadZipMultipart(c *httpClient, ctx context.Context, requestURL string, fields url.Values, name string, size int64, body io.Reader) (*FromFileResp, error) {
+	req, err := newStreamingMultipartRequest(c.transport, ctx, requestURL, nil, fields, name, size, body)
 	if err != nil {
 		return nil, err
 	}

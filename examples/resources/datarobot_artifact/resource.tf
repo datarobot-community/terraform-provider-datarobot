@@ -47,6 +47,13 @@ resource "datarobot_artifact" "from_source" {
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
+  # apply synchronizes this directory with the catalog in both directions:
+  # local changes are uploaded, catalog-only files are downloaded and files
+  # deleted from the catalog are removed locally (each reported as a warning).
+  # A file edited on both sides since the last sync fails the apply; resolve
+  # it with `dr artifact code sync` and apply again. Sync bookkeeping lives in
+  # app/.datarobot/workload/ (it ships its own .gitignore). .datarobot.yaml is
+  # never uploaded.
   source = {
     dir            = "${path.module}/app"
     wait_for_build = true

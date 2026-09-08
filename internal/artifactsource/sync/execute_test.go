@@ -31,10 +31,11 @@ func fixedNow() time.Time { return time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC) 
 // path -> content maps. Remote content doubles as the bytes the fake
 // Files API serves, so downloads verify against real hashes and sizes.
 type syncFixture struct {
-	dir    string
-	files  *fakeFilesAPI
-	engine *Engine
-	plan   *SyncPlan
+	dir       string
+	files     *fakeFilesAPI
+	artifacts *fakeArtifactStore
+	engine    *Engine
+	plan      *SyncPlan
 }
 
 func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFixture {
@@ -73,9 +74,11 @@ func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFi
 
 	// The artifact reports ver-2 while .wapi/config.json still records
 	// ver-1: drifted, so Plan builds REMOTE from AllFiles.
-	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+	artifacts := &fakeArtifactStore{
 		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
-	})
+	}
+
+	e, err := New(dir, "art-1", files, artifacts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
 
@@ -84,7 +87,7 @@ func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFi
 	plan, err := e.Plan(context.Background())
 	require.NoError(t, err)
 
-	return &syncFixture{dir: dir, files: files, engine: e, plan: plan}
+	return &syncFixture{dir: dir, files: files, artifacts: artifacts, engine: e, plan: plan}
 }
 
 func readProjectFile(t *testing.T, dir, rel string) string {
@@ -398,9 +401,9 @@ func TestEngine_ExecuteLocal_RefusesPlanAboveRollbackCap(t *testing.T) {
 
 	oversized := &SyncPlan{}
 	for i := 0; i <= RollbackMaxFiles; i++ {
-		oversized.Uploads = append(oversized.Uploads, FileAction{
+		oversized.Downloads = append(oversized.Downloads, FileAction{
 			Path:   fmt.Sprintf("gen/f%d.py", i),
-			Action: ActUploadAdd,
+			Action: ActDownloadAdd,
 		})
 	}
 	f.engine.plan = oversized
@@ -409,6 +412,58 @@ func TestEngine_ExecuteLocal_RefusesPlanAboveRollbackCap(t *testing.T) {
 	require.ErrorContains(t, err, "RollbackMaxFiles=1000")
 
 	assert.False(t, HasRollback(f.dir))
+}
+
+func TestEngine_ExecuteLocal_UploadsDoNotCountTowardsRollbackCap(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "same"},
+		map[string]string{"agent.py": "same"},
+		map[string]string{"agent.py": "same"},
+	)
+
+	// Uploads never enter the rollback tree, so a first sync of a large
+	// tree must not be refused for the cap that bounds it.
+	uploadsOnly := &SyncPlan{}
+	for i := 0; i <= RollbackMaxFiles; i++ {
+		uploadsOnly.Uploads = append(uploadsOnly.Uploads, FileAction{
+			Path:   fmt.Sprintf("gen/f%d.py", i),
+			Action: ActUploadAdd,
+		})
+	}
+	f.engine.plan = uploadsOnly
+
+	require.NoError(t, f.engine.ExecuteLocal(context.Background()))
+	assert.Empty(t, f.files.downloadedPaths())
+}
+
+func TestEngine_ExecuteLocal_RefusesLockedArtifact(t *testing.T) {
+	t.Parallel()
+
+	f := newSyncFixture(t,
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "base body"},
+		map[string]string{"agent.py": "remote body", "added.py": "pulled"},
+	)
+	require.NotEmpty(t, f.plan.Downloads)
+
+	// Plan reported the lock instead of failing (CLI phase1 preview
+	// exemption); Execute is where a write into an immutable artifact is
+	// kept out, before the working tree or the catalog is touched.
+	f.engine.locked = true
+
+	err := f.engine.ExecuteLocal(context.Background())
+	require.ErrorIs(t, err, ErrLockedArtifact)
+
+	assert.Empty(t, f.files.downloadedPaths())
+	assert.False(t, HasRollback(f.dir))
+	assert.Equal(t, "base body", readProjectFile(t, f.dir, "agent.py"))
+	requireAbsent(t, f.dir, "added.py")
+
+	// The remote half is gated on the local half having run.
+	_, err = f.engine.ExecuteRemote(context.Background())
+	require.ErrorIs(t, err, ErrLocalNotApplied)
 }
 
 func TestEngine_ExecuteLocal_RolledBackRunReportsNoConflictCopies(t *testing.T) {
