@@ -310,7 +310,7 @@ type Service interface {
 	ListDirectoryEntities(ctx context.Context, req *ListDirectoryEntitiesRequest) (*ListDirectoryEntitiesResponse, error)
 
 	// Sharing
-	ListDeploymentSharedRoles(ctx context.Context, deploymentID string) (*ListSharedRolesResponse, error)
+	ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]SharedRole, error)
 	UpdateDeploymentSharedRoles(ctx context.Context, deploymentID string, req *UpdateSharedRolesRequest) error
 
 	// Files API (catalog upload for artifact source sync)
@@ -1333,9 +1333,12 @@ func (s *ServiceImpl) ListDirectoryEntities(ctx context.Context, req *ListDirect
 	return Get[ListDirectoryEntitiesResponse](s.client, ctx, path)
 }
 
-// ListDeploymentSharedRoles returns the access control list for a deployment.
-func (s *ServiceImpl) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) (*ListSharedRolesResponse, error) {
-	return Get[ListSharedRolesResponse](s.client, ctx, "/deployments/"+url.PathEscape(deploymentID)+"/sharedRoles/")
+// ListDeploymentSharedRoles returns the full access control list for a
+// deployment. The endpoint is paginated, and a deployment can carry more grants
+// than fit on one page, so every page is read: treating an absent grant as
+// revoked when it is only on a later page would drop it from state.
+func (s *ServiceImpl) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]SharedRole, error) {
+	return GetAllPages[SharedRole](s.client, ctx, "/deployments/"+url.PathEscape(deploymentID)+"/sharedRoles/", nil)
 }
 
 // UpdateDeploymentSharedRoles grants or revokes roles on a deployment. The

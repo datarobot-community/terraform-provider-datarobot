@@ -27,16 +27,6 @@ type SharedRole struct {
 	ScimIdpName        *string `json:"scimIdpName,omitempty"`
 }
 
-// ListSharedRolesResponse is the paginated envelope returned by a
-// sharedRoles GET.
-type ListSharedRolesResponse struct {
-	Count      int          `json:"count"`
-	TotalCount int          `json:"totalCount"`
-	Next       *string      `json:"next"`
-	Previous   *string      `json:"previous"`
-	Data       []SharedRole `json:"data"`
-}
-
 const (
 	// ShareRecipientTypeGroup is the recipient type for a directory group.
 	ShareRecipientTypeGroup = "group"

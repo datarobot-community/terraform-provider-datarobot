@@ -35,7 +35,7 @@ resource "datarobot_deployment_shared_role" "finance_consumer" {
 ### Required
 
 - `deployment_id` (String) The ID of the deployment to share.
-- `group_name` (String) The name of the group to grant the role to, matched in full and case sensitively.
+- `group_name` (String) The name of the group to grant the role to, matched in full and case sensitively. Changing this replaces the resource, so the previous group's grant is revoked before the new one is created.
 
 ### Optional
 

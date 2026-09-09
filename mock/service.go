@@ -2260,10 +2260,10 @@ func (mr *MockServiceMockRecorder) ListDeploymentRuntimeParameters(ctx, id inter
 }
 
 // ListDeploymentSharedRoles mocks base method.
-func (m *MockService) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) (*client.ListSharedRolesResponse, error) {
+func (m *MockService) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]client.SharedRole, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListDeploymentSharedRoles", ctx, deploymentID)
-	ret0, _ := ret[0].(*client.ListSharedRolesResponse)
+	ret0, _ := ret[0].([]client.SharedRole)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
