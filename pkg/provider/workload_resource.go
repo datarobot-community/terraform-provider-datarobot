@@ -44,7 +44,10 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.\n\n" +
 			"Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. " +
-			"The workload ID and endpoint remain stable across artifact and runtime updates.",
+			"The workload ID and endpoint remain stable across artifact and runtime updates.\n\n" +
+			"When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous " +
+			"version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a " +
+			"rollout that did not happen is not reported as a successful update.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -352,7 +355,10 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, containerGroupsChanged, replacementPolicyChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
 			if errors.As(err, &failedErr) {
-				resp.Diagnostics.AddError("Workload replacement failed", failedErr.Error())
+				resp.Diagnostics.AddError(
+					"Workload replacement failed",
+					failedErr.Error()+"\nWorkload logs: "+workloadLogsURL(r.provider.service.BaseURL(), id),
+				)
 			} else {
 				resp.Diagnostics.AddError("Error replacing Workload", err.Error())
 			}
@@ -509,6 +515,11 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 }
 
+// workloadLogsURL is the DataRobot UI page that shows the workload's container logs.
+func workloadLogsURL(baseURL, id string) string {
+	return baseURL + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
+}
+
 func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string, baseURL func() string) (*client.Workload, error) {
 	expBackoff := getExponentialBackoff()
 
@@ -520,7 +531,7 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 			return backoff.Permanent(err)
 		}
 		if workload.Status == client.ProtonStatusErrored {
-			logsURL := baseURL() + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
+			logsURL := workloadLogsURL(baseURL(), id)
 			return backoff.Permanent(fmt.Errorf("workload failed to start, review the workload logs for details: %s", logsURL))
 		}
 		if workload.Status != client.ProtonStatusRunning {
@@ -805,7 +816,12 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 	}
 
 	traceAPICall("WaitForWorkloadReplacement")
-	_, err := r.provider.service.WaitForWorkloadReplacement(ctx, workloadID, nil)
+	_, err := r.provider.service.WaitForWorkloadReplacement(ctx, workloadID, &client.WaitForWorkloadReplacementOptions{
+		// The platform abandons a rollout whose new version never becomes ready
+		// and clears the record as if it had completed; checking the served
+		// artifact is what turns that into an apply error.
+		ExpectedArtifactID: plan.ArtifactID.ValueString(),
+	})
 	return err
 }
 

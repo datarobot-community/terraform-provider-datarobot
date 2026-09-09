@@ -5,6 +5,7 @@ subcategory: ""
 description: |-
   A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
   Changes to artifact_id or runtime trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
+  When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
 ---
 
 # datarobot_workload (Resource)
@@ -12,6 +13,8 @@ description: |-
 A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
 
 Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
+
+When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
 
 ## Example Usage
 
