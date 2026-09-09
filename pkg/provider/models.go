@@ -1268,3 +1268,20 @@ type QuotaRuleModel struct {
 	Limit  types.Int64  `tfsdk:"limit"`
 	Window types.String `tfsdk:"window"`
 }
+
+// GroupDataSourceModel describes the directory group data source.
+type GroupDataSourceModel struct {
+	Name               types.String `tfsdk:"name"`
+	ID                 types.String `tfsdk:"id"`
+	Description        types.String `tfsdk:"description"`
+	ProvisioningSource types.String `tfsdk:"provisioning_source"`
+}
+
+// DeploymentSharedRoleResourceModel describes a group's role on a deployment.
+type DeploymentSharedRoleResourceModel struct {
+	ID           types.String `tfsdk:"id"`
+	DeploymentID types.String `tfsdk:"deployment_id"`
+	GroupName    types.String `tfsdk:"group_name"`
+	GroupID      types.String `tfsdk:"group_id"`
+	Role         types.String `tfsdk:"role"`
+}
