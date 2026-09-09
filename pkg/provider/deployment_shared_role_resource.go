@@ -59,11 +59,17 @@ func (r *DeploymentSharedRoleResource) Schema(ctx context.Context, req resource.
 			},
 			"group_name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The name of the group to grant the role to, matched in full and case sensitively.",
+				MarkdownDescription: "The name of the group to grant the role to, matched in full and case sensitively. Changing this replaces the resource, so the previous group's grant is revoked before the new one is created.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"group_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The ID the group name resolved to.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"role": schema.StringAttribute{
 				Optional:            true,
@@ -145,7 +151,7 @@ func (r *DeploymentSharedRoleResource) Read(ctx context.Context, req resource.Re
 	}
 
 	groupID := data.GroupID.ValueString()
-	for _, sharedRole := range sharedRoles.Data {
+	for _, sharedRole := range sharedRoles {
 		if sharedRole.ShareRecipientType == client.ShareRecipientTypeGroup && sharedRole.ID == groupID {
 			data.Role = types.StringValue(sharedRole.Role)
 			if sharedRole.Name != "" {
@@ -173,34 +179,17 @@ func (r *DeploymentSharedRoleResource) Update(ctx context.Context, req resource.
 		return
 	}
 
-	deploymentID := plan.DeploymentID.ValueString()
-
-	traceAPICall("ListDirectoryEntities")
-	group, err := resolveGroupByName(ctx, r.provider.service, plan.GroupName.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to look up group", err.Error())
-		return
-	}
-
-	// Revoke the previous group first when the name now resolves elsewhere.
-	// Without this, repointing group_name would leave the old grant in place.
-	previousGroupID := state.GroupID.ValueString()
-	if previousGroupID != "" && previousGroupID != group.ID {
-		traceAPICall("UpdateDeploymentSharedRoles")
-		if err := r.setRole(ctx, deploymentID, previousGroupID, client.SharedRoleNone); err != nil {
-			resp.Diagnostics.AddError("Error revoking the previous group's role", err.Error())
-			return
-		}
-	}
+	// deployment_id and group_name both force replacement, so the only thing
+	// that can reach this path is a change of role on the same grant. The group
+	// is therefore already resolved in state and does not need looking up again.
+	plan.GroupID = state.GroupID
+	plan.ID = state.ID
 
 	traceAPICall("UpdateDeploymentSharedRoles")
-	if err := r.setRole(ctx, deploymentID, group.ID, plan.Role.ValueString()); err != nil {
+	if err := r.setRole(ctx, plan.DeploymentID.ValueString(), plan.GroupID.ValueString(), plan.Role.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error updating the group's role on the deployment", err.Error())
 		return
 	}
-
-	plan.GroupID = types.StringValue(group.ID)
-	plan.ID = types.StringValue(sharedRoleID(deploymentID, group.ID))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
