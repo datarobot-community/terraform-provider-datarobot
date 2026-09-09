@@ -1,9 +1,11 @@
-## [0.11.3] - 2026-09-09
+## [0.11.4] - 2026-09-09
 
 ### Added
 
 - `datarobot_group` data source, which resolves a directory group name to its ID via `GET /api/v2/directoryEntities/`. Pipelines know a group by the name it carries in the identity provider, but every sharing API takes the internal group ID, so until now that ID had to be hardcoded into the stack and updated by hand whenever a group was rebuilt or re-provisioned. Names are matched in full and case sensitively, and results are scoped to the caller's organization. The endpoint returns every match with a total count rather than erroring when a name is ambiguous, so the data source asserts on that count and fails instead of silently resolving to whichever match sorted first: a name matching nothing fails pointing at capitalisation, which is the usual cause, and a name matching more than one fails naming how many. Any authenticated user with an organization can call it, so no administrator credentials are required.
-- `datarobot_deployment_shared_role` resource, which grants a directory group a role on a deployment by group name. `role` defaults to `CONSUMER`, the read-only tier; note that consumers can make predictions but cannot see the deployment, so `USER` is the right choice when the group needs it visible. Destroying the resource revokes the grant, and changing `group_name` revokes the previous group before granting the new one, so repointing it does not leave the old grant behind. The underlying `updateRoles` operation has set rather than append semantics, so a re-applied unchanged role is a no-op and repeated applies are safe. Changing `deployment_id` replaces the resource. A grant revoked outside Terraform is removed from state on the next read rather than failing the plan, and importing takes an ID of the form `<deployment_id>:<group_id>`.
+- `datarobot_deployment_shared_role` resource, which grants a directory group a role on a deployment by group name. `role` defaults to `CONSUMER`, the read-only tier; note that consumers can make predictions but cannot see the deployment, so `USER` is the right choice when the group needs it visible. Destroying the resource revokes the grant. Changing `group_name` or `deployment_id` replaces the resource, so repointing it revokes the previous grant before creating the new one rather than leaving the old grant behind. The underlying `updateRoles` operation has set rather than append semantics, so a re-applied unchanged role is a no-op and repeated applies are safe. A grant revoked outside Terraform is removed from state on the next read rather than failing the plan, and importing takes an ID of the form `<deployment_id>:<group_id>`.
+
+## [0.11.3] - 2026-09-09
 
 ### Fixed
 
