@@ -1,3 +1,10 @@
+## [0.11.3] - 2026-09-09
+
+### Fixed
+
+- `datarobot_workload` no longer reports a rollout the platform never promoted as a successful update. Two things made a failed replacement look like a finished one. The Workload API's documented terminal failure status, `failed`, was not in the provider's vocabulary, so a record that reached it was read as still in flight; the wait then kept polling until the platform cleared the record and took that as completion. And the platform clears the record the same way when it abandons a rollout whose new version never becomes ready (it stops the new replica and keeps the old one serving), which is indistinguishable from a completed rollout unless you check which artifact the workload ended up on. Apply now fails in both cases, naming the status and the platform's own message, or the requested and the still-served artifact, plus a link to the workload logs. Status matching is case-insensitive, since the platform is not consistent about casing across resources. Before this, `terraform apply` failed with Terraform core's `Provider produced inconsistent result after apply ... .artifact_id`, which reads as a provider bug rather than a failed rollout, and `pulumi up` exited 0 with `~ N updated` while the container kept serving the old artifact.
+- The `Workload replacement failed` diagnostic now carries why. The platform deletes the replacement record when it abandons a rollout, so the reason only survives in the workload's activity log (`GET /workloads/{id}/events/`); the provider reads the newest failure recorded there for the artifact it asked to promote and quotes the platform's own message plus the state of the container that would not start, for example `Container lrs-…-agent is not ready: CrashLoopBackOff (last run exited with code 1, 2 restarts).` Events for other artifacts and successful replacements are never quoted, and a feed that cannot be read leaves the rest of the diagnostic intact.
+
 ## [0.11.2] - 2026-09-08
 
 ### Added

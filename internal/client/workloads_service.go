@@ -123,6 +123,7 @@ const (
 	ReplacementStatusCanceling    ReplacementStatus = "canceling"
 	ReplacementStatusFinalizing   ReplacementStatus = "finalizing"
 	ReplacementStatusCompleted    ReplacementStatus = "completed"
+	ReplacementStatusFailed       ReplacementStatus = "failed"
 	ReplacementStatusErrored      ReplacementStatus = "errored"
 )
 
@@ -186,6 +187,13 @@ type WorkloadReplacement struct {
 type WaitForWorkloadReplacementOptions struct {
 	PollInterval time.Duration
 	Timeout      time.Duration
+	// ExpectedArtifactID is the artifact the replacement was asked to promote.
+	// When set, a replacement that settles while the workload still serves a
+	// different artifact is reported as a ReplacementFailedError instead of
+	// success. The Workload API drops the replacement record when the new
+	// version never becomes ready and keeps the old version serving, which is
+	// otherwise indistinguishable from a completed rollout.
+	ExpectedArtifactID string
 }
 
 type ReplacementFailedError struct {
@@ -196,8 +204,24 @@ func (e *ReplacementFailedError) Error() string {
 	return e.Message
 }
 
+// IsReplacementFailed reports a status the replacement ended on without
+// promoting its candidate. The Workload API's own documentation names only
+// "completed" and "failed"; "errored" is what a candidate that never became
+// healthy produced on staging. Both count, because a status read as still in
+// flight is later seen as a cleared record, which is how a failed rollout gets
+// reported as a success.
+//
+// The comparison folds case: the platform is not consistent about it across
+// resources (artifact build statuses come back upper case where these are
+// lower), and the cost of being wrong is one-sided.
+func IsReplacementFailed(status ReplacementStatus) bool {
+	return strings.EqualFold(string(status), string(ReplacementStatusFailed)) ||
+		strings.EqualFold(string(status), string(ReplacementStatusErrored))
+}
+
 func IsReplacementTerminal(status ReplacementStatus) bool {
-	return status == ReplacementStatusCompleted || status == ReplacementStatusErrored
+	return IsReplacementFailed(status) ||
+		strings.EqualFold(string(status), string(ReplacementStatusCompleted))
 }
 
 func IsReplacementActive(status ReplacementStatus) bool {
@@ -219,11 +243,16 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 // WaitForWorkloadReplacement polls workload.replacement (via GetWorkload) until
 // the in-flight replacement settles. It avoids the /replacement endpoint because
 // a "completed" record is deleted within ~1s (so /replacement 404s and races the
-// poll) while an "errored" record persists. That asymmetry makes the workload
-// record unambiguous: errored => failure; nil-while-running => completed (nil
-// can't be a masked failure, and the proton switch lands before nil appears).
+// poll) while a failed record persists. That asymmetry makes the workload
+// record unambiguous: a failure status => failure; nil-while-running => settled
+// (the proton switch lands before nil appears).
 // A nil is only "done" after an active replacement was seen (seenActive) —
 // otherwise it's the brief gap before the API creates the record, so keep polling.
+//
+// "Settled" is not the same as "promoted". A rollout whose new version never
+// passes readiness is abandoned: the platform stops the new replica, keeps the
+// old one serving and clears the record, so the workload looks exactly like a
+// completed rollout. opts.ExpectedArtifactID tells the two apart.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
@@ -238,6 +267,10 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		if opts.Timeout > 0 {
 			timeout = opts.Timeout
 		}
+	}
+	expectedArtifactID := ""
+	if opts != nil {
+		expectedArtifactID = opts.ExpectedArtifactID
 	}
 
 	deadline := time.Now().Add(timeout)
@@ -256,24 +289,21 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		replacement := workload.Replacement
 
 		switch {
-		case replacement != nil && replacement.Status == ReplacementStatusErrored:
-			message := "workload replacement failed"
-			if replacement.Message != nil && *replacement.Message != "" {
-				message = *replacement.Message
-			}
-			return replacement, &ReplacementFailedError{Message: message}
+		case replacement != nil && IsReplacementFailed(replacement.Status):
+			return replacement, &ReplacementFailedError{Message: replacementFailureMessage(replacement)}
 
 		case replacement != nil:
 			lastReplacement = replacement
-			if replacement.Status == ReplacementStatusCompleted {
-				// Rarely observable (cleaned up within ~1s), but accept it when caught.
-				return replacement, nil
+			if IsReplacementTerminal(replacement.Status) {
+				// "completed" is rarely observable (cleaned up within ~1s), but
+				// accept it when caught.
+				return replacement, s.settledReplacementError(ctx, workloadID, workload, expectedArtifactID)
 			}
 			seenActive = true
 
 		default: // replacement == nil
 			if seenActive && workload.Status == ProtonStatusRunning {
-				return lastReplacement, nil
+				return lastReplacement, s.settledReplacementError(ctx, workloadID, workload, expectedArtifactID)
 			}
 		}
 
@@ -294,6 +324,187 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		case <-timer.C:
 		}
 	}
+}
+
+// WorkloadEvent is one entry of the workload's activity log
+// (GET /workloads/{id}/events/, newest first). Replacements are the only thing
+// recorded there so far, as "Replacement Completed" and "Replacement Errored",
+// and the errored one is the platform's only account of a rollout it abandoned:
+// the replacement record itself is deleted, so by the time apply can ask, this
+// feed is what still remembers why.
+type WorkloadEvent struct {
+	ID        string               `json:"id"`
+	Timestamp time.Time            `json:"timestamp"`
+	EventType string               `json:"eventType"`
+	Details   WorkloadEventDetails `json:"details"`
+}
+
+type WorkloadEventDetails struct {
+	ReplacementID string `json:"replacementId"`
+	ArtifactID    string `json:"artifactId"`
+	Message       string `json:"message"`
+	// ProtonStatuses is keyed by candidate proton ID and mirrors Kubernetes pod
+	// state. Only the fields worth quoting back are decoded; anything missing
+	// leaves the event's own Message to speak for itself.
+	ProtonStatuses map[string]WorkloadEventProtonStatus `json:"protonStatuses"`
+}
+
+type WorkloadEventProtonStatus struct {
+	Replicas []WorkloadEventReplica `json:"replicas"`
+}
+
+type WorkloadEventReplica struct {
+	Containers []WorkloadEventContainer `json:"containers"`
+}
+
+type WorkloadEventContainer struct {
+	Name         string                       `json:"name"`
+	Ready        bool                         `json:"ready"`
+	RestartCount int64                        `json:"restartCount"`
+	Reason       string                       `json:"reason"`
+	LastState    *WorkloadEventContainerState `json:"lastState"`
+}
+
+type WorkloadEventContainerState struct {
+	Reason   string `json:"reason"`
+	ExitCode *int64 `json:"exitCode"`
+}
+
+// workloadEventPageSize is how far back a failure explanation is looked for.
+// The event that matters was written seconds ago and the feed is newest first,
+// so this only has to outrun the replacements a busy workload logged in between.
+const workloadEventPageSize = 20
+
+func (s *ServiceImpl) listWorkloadEvents(ctx context.Context, workloadID string) ([]WorkloadEvent, error) {
+	result, err := Get[PaginatedResponse[WorkloadEvent]](
+		s.client, ctx,
+		fmt.Sprintf("/workloads/%s/events/?limit=%d", workloadID, workloadEventPageSize),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// settledReplacementError is the verdict once a replacement has settled: nil
+// when the workload is on the artifact it was asked to promote, otherwise the
+// failure with whatever the platform's event feed says about it appended. The
+// feed read is best effort — it only adds detail to an error already decided,
+// so its own failure must not replace the diagnosis with a fetch error.
+func (s *ServiceImpl) settledReplacementError(
+	ctx context.Context,
+	workloadID string,
+	workload *Workload,
+	expectedArtifactID string,
+) error {
+	failed := replacementLandedOnArtifact(workload, expectedArtifactID)
+	if failed == nil {
+		return nil
+	}
+
+	if events, err := s.listWorkloadEvents(ctx, workloadID); err == nil {
+		if detail := replacementFailureFromEvents(events, expectedArtifactID); detail != "" {
+			failed.Message += "\n" + detail
+			return failed
+		}
+	}
+
+	// Nothing in the feed to quote, so say where to look instead.
+	failed.Message += "\nCheck that version's container logs for the startup failure."
+	return failed
+}
+
+// replacementFailureFromEvents is the platform's own account of the rollout,
+// taken from the newest event that reports a failure for the artifact apply
+// asked to promote. Only event types that name a failure are quoted, so a
+// "Replacement Completed" message can never be attached to a failure, and an
+// event whose artifact does not match is skipped so an older rollout's reason
+// is not passed off as this one's.
+func replacementFailureFromEvents(events []WorkloadEvent, expectedArtifactID string) string {
+	for _, event := range events {
+		if !isWorkloadFailureEvent(event.EventType) {
+			continue
+		}
+		if event.Details.ArtifactID != "" && expectedArtifactID != "" &&
+			event.Details.ArtifactID != expectedArtifactID {
+			continue
+		}
+
+		parts := make([]string, 0, 2)
+		if event.Details.Message != "" {
+			parts = append(parts, event.Details.Message)
+		}
+		if container := describeUnreadyContainer(event.Details.ProtonStatuses); container != "" {
+			parts = append(parts, container)
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
+}
+
+func isWorkloadFailureEvent(eventType string) bool {
+	lower := strings.ToLower(eventType)
+	return strings.Contains(lower, "error") || strings.Contains(lower, "fail")
+}
+
+// describeUnreadyContainer names the first container that kept the candidate
+// from becoming ready, which is the line that turns "read the logs" into a
+// cause. Kubernetes reports the crash on the previous run, so the exit code
+// comes from lastState rather than the current waiting one.
+func describeUnreadyContainer(protonStatuses map[string]WorkloadEventProtonStatus) string {
+	for _, proton := range protonStatuses {
+		for _, replica := range proton.Replicas {
+			for _, container := range replica.Containers {
+				if container.Ready {
+					continue
+				}
+				detail := fmt.Sprintf("Container %s is not ready", container.Name)
+				if container.Reason != "" {
+					detail += ": " + container.Reason
+				}
+				if container.LastState != nil && container.LastState.ExitCode != nil {
+					detail += fmt.Sprintf(" (last run exited with code %d", *container.LastState.ExitCode)
+					if container.RestartCount == 1 {
+						detail += ", 1 restart"
+					} else if container.RestartCount > 1 {
+						detail += fmt.Sprintf(", %d restarts", container.RestartCount)
+					}
+					detail += ")"
+				}
+				return detail + "."
+			}
+		}
+	}
+	return ""
+}
+
+// replacementFailureMessage names the status the rollout ended on and carries
+// the platform's own account of it when there is one. Without the status the
+// reader of a bare message cannot tell a failed rollout from a failed request.
+func replacementFailureMessage(replacement *WorkloadReplacement) string {
+	message := fmt.Sprintf("workload replacement ended with status %q", replacement.Status)
+	if replacement.Message != nil && *replacement.Message != "" {
+		message += ": " + *replacement.Message
+	}
+	return message + ". The workload keeps serving its previous artifact"
+}
+
+// replacementLandedOnArtifact reports a replacement that settled without the
+// workload switching to the artifact it was asked to promote. An empty expected
+// ID skips the check.
+func replacementLandedOnArtifact(workload *Workload, expectedArtifactID string) *ReplacementFailedError {
+	served := ""
+	if workload.ArtifactID != nil {
+		served = *workload.ArtifactID
+	}
+	if expectedArtifactID == "" || served == expectedArtifactID {
+		return nil
+	}
+	return &ReplacementFailedError{Message: fmt.Sprintf(
+		"workload replacement finished without switching to artifact %s: the workload still serves artifact %s. "+
+			"The platform abandons a rollout whose new version never becomes ready.",
+		expectedArtifactID, served,
+	)}
 }
 
 type ArtifactStatus string
