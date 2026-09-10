@@ -3,6 +3,7 @@
 ### Changed
 
 - The `datarobot_application_source` and `datarobot_application_source_from_template` docs and examples now reference the `[DataRobot] Python 3.12 Applications Base` environment (`66d07fae0513a1edf18595bb`) instead of the deprecated `[Experimental] Python 3.9 Streamlit` environment.
+- The `datarobot_application_source`, `datarobot_application_source_from_template`, and `datarobot_custom_application` examples now ship a `requirements.txt` alongside `app.py`. The Python 3.12 Applications base environment includes no third-party packages, so an application has to declare its own dependencies.
 
 ## [0.11.3] - 2026-09-09
 

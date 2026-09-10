@@ -21,7 +21,8 @@ resource "datarobot_application_source_from_template" "example" {
   base_environment_id = "66d07fae0513a1edf18595bb"
   files = [
     ["start-app.sh"],
-    ["streamlit-app.py"],
+    ["app.py"],
+    ["requirements.txt"],
   ]
   folder_path = "example-app"
   runtime_parameter_values = [

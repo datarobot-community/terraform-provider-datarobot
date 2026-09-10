@@ -20,7 +20,8 @@ resource "datarobot_application_source" "example" {
   # Optional
   files = [
     ["start-app.sh"],
-    ["streamlit-app.py"],
+    ["app.py"],
+    ["requirements.txt"],
   ]
   folder_path = "example-app"
   runtime_parameter_values = [

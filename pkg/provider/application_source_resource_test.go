@@ -48,7 +48,7 @@ func testApplicationSourceResource(t *testing.T, isMock bool) {
 	newName := "new_application_source " + testUniqueID
 
 	baseEnvironmentID := testAppBaseEnvID
-	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID
+	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID(t)
 
 	// Create a unique directory for this test to avoid parallel test interference
 	testDir := fmt.Sprintf("test_app_source_%s", testUniqueID)

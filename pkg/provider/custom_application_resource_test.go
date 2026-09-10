@@ -38,36 +38,7 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-
-echo "Starting App"
-
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-
-def start_streamlit():
-    set_client(Client())
-
-    st.title("Example Custom Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-	`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Example Custom Application")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -729,32 +700,7 @@ func TestAccCustomApplicationWithResourcesFromSource(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-echo "Starting App"
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-def start_streamlit():
-    set_client(Client())
-    st.title("Scope Level Test Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Scope Level Test Application")
 
 	resourceName := "datarobot_custom_application.test"
 	sourceResourceName := "datarobot_application_source.test"
@@ -824,32 +770,7 @@ func TestAccCustomApplicationRequiredKeyScopeLevel(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-echo "Starting App"
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-def start_streamlit():
-    set_client(Client())
-    st.title("Scope Level Test Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Scope Level Test Application")
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
@@ -953,5 +874,38 @@ func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resour
 		}
 
 		return nil
+	}
+}
+
+// writeMinimalAppFixture writes a minimal Flask application into folderPath.
+//
+// The [DataRobot] Python 3.12 Applications base environment ships no
+// third-party packages, so an app fixture has to declare its own dependency in
+// requirements.txt rather than rely on the base image (as the Streamlit
+// environment used to allow).
+func writeMinimalAppFixture(t *testing.T, folderPath, title string) {
+	t.Helper()
+
+	files := map[string]string{
+		"start-app.sh": `#!/usr/bin/env bash
+echo "Starting App"
+flask run --host 0.0.0.0 --port 8080
+`,
+		"app.py": fmt.Sprintf(`from flask import Flask
+
+app = Flask(__name__)
+
+
+@app.get("/")
+def index():
+    return "%s"
+`, title),
+		"requirements.txt": "flask==3.0.3\n",
+	}
+
+	for name, content := range files {
+		if err := os.WriteFile(folderPath+"/"+name, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

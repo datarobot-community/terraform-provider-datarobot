@@ -46,7 +46,7 @@ func testApplicationSourceFromTemplateResource(t *testing.T, isMock bool) {
 	newName := "new_from_template " + nameSalt
 
 	baseEnvironmentID := testAppBaseEnvID
-	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID
+	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID(t)
 
 	appCodeFileName := "flask_app.py"
 	appCode := `import streamlit as st
