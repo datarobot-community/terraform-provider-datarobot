@@ -47,7 +47,7 @@ func testApplicationSourceResource(t *testing.T, isMock bool) {
 	name := "application_source " + testUniqueID
 	newName := "new_application_source " + testUniqueID
 
-	baseEnvironmentID := testStreamlitBaseEnvID
+	baseEnvironmentID := testAppBaseEnvID
 	baseEnvironmentVersionID := testAppSourceBaseEnvVersionID
 
 	// Create a unique directory for this test to avoid parallel test interference
@@ -393,7 +393,7 @@ func TestAccApplicationSourceResourceBatchFiles(t *testing.T) {
 func testApplicationSourceResourceBatchFiles(t *testing.T, isMock bool) {
 	resourceName := "datarobot_application_source.test"
 
-	baseEnvironmentID := testStreamlitBaseEnvID
+	baseEnvironmentID := testAppBaseEnvID
 
 	testUniqueID := nameSalt + "-" + t.Name()
 	testDir := fmt.Sprintf("test_batch_files_%s", testUniqueID)
@@ -715,7 +715,7 @@ func applicationSourceWithScopeLevelConfig(scopeLevel string) string {
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test_scope" {
-	base_environment_id = "`+testStreamlitBaseEnvID+`"
+	base_environment_id = "`+testAppBaseEnvID+`"
 	files = [
 		["start-app.sh"],
 		["streamlit-app.py"]

@@ -1,6 +1,6 @@
 resource "datarobot_application_source" "example" {
   name                = "example application source"
-  base_environment_id = "6542cd582a9d3d51bf4ac71e"
+  base_environment_id = "66d07fae0513a1edf18595bb"
 
   # Optional
   files = [

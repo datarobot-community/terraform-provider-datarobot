@@ -1,3 +1,9 @@
+## [0.11.4] - 2026-09-10
+
+### Changed
+
+- The `datarobot_application_source` and `datarobot_application_source_from_template` docs and examples now reference the `[DataRobot] Python 3.12 Applications Base` environment (`66d07fae0513a1edf18595bb`) instead of the deprecated `[Experimental] Python 3.9 Streamlit` environment.
+
 ## [0.11.3] - 2026-09-09
 
 ### Fixed

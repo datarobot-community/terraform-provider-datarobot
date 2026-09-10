@@ -18,7 +18,7 @@ resource "datarobot_application_source_from_template" "example" {
   template_id = "67126757e7819551baceb22b"
 
   # Optional
-  base_environment_id = "6542cd582a9d3d51bf4ac71e"
+  base_environment_id = "66d07fae0513a1edf18595bb"
   files = [
     ["start-app.sh"],
     ["streamlit-app.py"],

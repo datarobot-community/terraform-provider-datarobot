@@ -11,9 +11,9 @@ import "os"
 // To override a value, add it to the .env file at the project root:
 //
 //	DR_TEST_GENAI_BASE_ENV_ID=67ab469cecdca772287de644
-//	DR_TEST_STREAMLIT_BASE_ENV_ID=6542cd582a9d3d51bf4ac71e
+//	DR_TEST_APP_BASE_ENV_ID=66d07fae0513a1edf18595bb
 //	DR_TEST_CUSTOM_JOB_ENV_ID=66d07fae0513a1edf18595bb
-//	DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID=668548c1b8e086572a96fbf5
+//	DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID=687fc740e1210011d1472bef
 //	DR_TEST_CUSTOM_APP_ENV_ID=67987589391fe8fa0a2275b8
 //	DR_TEST_CUSTOM_APP_ENV_ID_2=67987b1a90dbd55389b699c2
 //	DR_TEST_SLACKBOT_TEMPLATE_ID=67126757e7819551baceb22b
@@ -32,16 +32,16 @@ var (
 	// Used for custom models (Binary, Regression, TextGeneration, MCP, etc.).
 	testGenAIBaseEnvID string
 
-	// testStreamlitBaseEnvID is the [Experimental] Python 3.9 Streamlit base environment.
+	// testAppBaseEnvID is the [DataRobot] Python 3.12 Applications base environment.
 	// Used for application sources and custom applications.
-	testStreamlitBaseEnvID string
+	testAppBaseEnvID string
 
 	// testCustomJobEnvID is the base environment for custom jobs and metric jobs.
 	testCustomJobEnvID string
 
 	// Base environment version IDs.
 
-	// testAppSourceBaseEnvVersionID is a specific version of the Streamlit base environment.
+	// testAppSourceBaseEnvVersionID is a specific version of the Python 3.12 Applications base environment.
 	// Used in application source and application source from template tests.
 	testAppSourceBaseEnvVersionID string
 
@@ -90,11 +90,11 @@ var (
 func init() {
 	// Base environments
 	testGenAIBaseEnvID = getTestEnvOrDefault("DR_TEST_GENAI_BASE_ENV_ID", "67ab469cecdca772287de644")
-	testStreamlitBaseEnvID = getTestEnvOrDefault("DR_TEST_STREAMLIT_BASE_ENV_ID", "6542cd582a9d3d51bf4ac71e")
+	testAppBaseEnvID = getTestEnvOrDefault("DR_TEST_APP_BASE_ENV_ID", "66d07fae0513a1edf18595bb")
 	testCustomJobEnvID = getTestEnvOrDefault("DR_TEST_CUSTOM_JOB_ENV_ID", "66d07fae0513a1edf18595bb")
 
 	// Base environment versions
-	testAppSourceBaseEnvVersionID = getTestEnvOrDefault("DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID", "668548c1b8e086572a96fbf5")
+	testAppSourceBaseEnvVersionID = getTestEnvOrDefault("DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID", "687fc740e1210011d1472bef")
 
 	// Custom application execution environments
 	testCustomAppEnvID = getTestEnvOrDefault("DR_TEST_CUSTOM_APP_ENV_ID", "67987589391fe8fa0a2275b8")
