@@ -1569,9 +1569,13 @@ func (r *CustomModelResource) updateCustomModel(
 		updateRequest.ClassLabels = classLabels
 	}
 
-	traceAPICall("UpdateCustomModel")
-	if customModel, err = r.provider.service.UpdateCustomModel(ctx, customModel.ID, updateRequest); err != nil {
-		return
+	// A PATCH that includes a name makes the server rewrite every
+	// registered model version, which can exceed the gateway timeout.
+	if customModelMetadataChanged(updateRequest, customModel) {
+		traceAPICall("UpdateCustomModel")
+		if customModel, err = r.provider.service.UpdateCustomModel(ctx, customModel.ID, updateRequest); err != nil {
+			return
+		}
 	}
 	state.Name = types.StringValue(customModel.Name)
 	if customModel.Description != "" {
@@ -1588,6 +1592,35 @@ func (r *CustomModelResource) updateCustomModel(
 	state.ClassLabelsFile = plan.ClassLabelsFile
 
 	return
+}
+
+// Empty request fields are never sent to the API, so they do not count as changes.
+func customModelMetadataChanged(req *client.UpdateCustomModelRequest, customModel *client.CustomModel) bool {
+	if req.Name != "" && req.Name != customModel.Name {
+		return true
+	}
+	if req.Description != "" && req.Description != customModel.Description {
+		return true
+	}
+	if req.PredictionThreshold != 0 && req.PredictionThreshold != customModel.PredictionThreshold {
+		return true
+	}
+	if req.Language != "" && req.Language != customModel.Language {
+		return true
+	}
+	if req.TargetName != "" && req.TargetName != customModel.TargetName {
+		return true
+	}
+	if req.PositiveClassLabel != "" && req.PositiveClassLabel != customModel.PositiveClassLabel {
+		return true
+	}
+	if req.NegativeClassLabel != "" && req.NegativeClassLabel != customModel.NegativeClassLabel {
+		return true
+	}
+	if len(req.ClassLabels) > 0 && !reflect.DeepEqual(req.ClassLabels, customModel.ClassLabels) {
+		return true
+	}
+	return false
 }
 
 // createVersionWithRuntimeParams probes the v2 API first and falls back to v1

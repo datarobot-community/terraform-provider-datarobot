@@ -1285,15 +1285,6 @@ resource "datarobot_use_case" "test_custom_model" {
 	name = "test custom model %s"
 	description = "test"
 }
-resource "datarobot_dataset_from_file" "test_custom_model" {
-	file_path = "../../test/datarobot_english_documentation_docsassist.zip"
-	use_case_ids = ["${datarobot_use_case.test_custom_model.id}"]
-}
-resource "datarobot_vector_database" "test_custom_model" {
-	  name = "test custom model %s"
-	  dataset_id = "${datarobot_dataset_from_file.test_custom_model.id}"
-	  use_case_id = "${datarobot_use_case.test_custom_model.id}"
-}
 resource "datarobot_playground" "test_custom_model" {
 	name = "test custom model %s"
 	description = "test"
@@ -1302,7 +1293,6 @@ resource "datarobot_playground" "test_custom_model" {
 resource "datarobot_llm_blueprint" "test_custom_model" {
 	name = "test custom model %s"
 	description = "test"
-	vector_database_id = "${datarobot_vector_database.test_custom_model.id}"
 	playground_id = "${datarobot_playground.test_custom_model.id}"
 	llm_id = "azure-openai-gpt-4-o"
 }
@@ -1329,7 +1319,7 @@ resource "datarobot_custom_model" "test_from_llm_blueprint" {
 	  }
 	]
 }
-`, nameSalt, nameSalt, nameSalt, nameSalt, nameSalt, name, description)
+`, nameSalt, nameSalt, nameSalt, nameSalt, name, description)
 }
 
 func customModelWithoutLlmBlueprintResourceConfig(
