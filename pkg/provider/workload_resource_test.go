@@ -326,7 +326,7 @@ func TestIntegrationWorkloadReplaceWithReplacementPolicyOnArtifactChange(t *test
 		warmupDurationMinutes: 5,
 		keepOldVersionMinutes: 10,
 	}).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsArtifact(artifactID2)).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 
@@ -386,7 +386,7 @@ func TestIntegrationWorkloadReplaceOnReplacementPolicyChange(t *testing.T) {
 		strategy:              client.ReplacementStrategyRolling,
 		warmupDurationMinutes: 15,
 	}).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsArtifact(artifactID)).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload1, nil)
 
@@ -566,7 +566,7 @@ func TestIntegrationWorkloadReplaceOnArtifactAndRuntimeChange(t *testing.T) {
 		artifactID:   artifactID2,
 		replicaCount: replicaCount2,
 	}).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, waitExpectsArtifact(artifactID2)).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload2, nil)
 
@@ -626,9 +626,10 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 
 	replacement := workloadReplacementFixture(id)
 	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(nil, &client.ReplacementFailedError{
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, waitExpectsArtifact(artifactID2)).Return(nil, &client.ReplacementFailedError{
 		Message: "candidate proton failed health checks",
 	})
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
 
 	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
@@ -642,8 +643,11 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
 			},
 			{
-				Config:      workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
-				ExpectError: regexp.MustCompile("Workload replacement failed"),
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				// The diagnostic has to carry the reason and where to read the
+				// rest of it; a bare "replacement failed" sends nobody anywhere.
+				ExpectError: regexp.MustCompile(`(?s)Workload replacement failed.*candidate proton failed health checks.*` +
+					`console-nextgen/workloads/` + id + `/activity-log/otel-logs`),
 			},
 		},
 	})
@@ -681,7 +685,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	// Step 2: In-place replacement via settings endpoint (runtime-only)
 	replacement := workloadReplacementFixture(id1)
 	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id1, updateWorkloadSettingsReplicaMatcher(3)).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsArtifact(artifactID)).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 
@@ -1067,7 +1071,8 @@ func workloadReplacementFixture(workloadID string) *client.WorkloadReplacement {
 func expectWorkloadArtifactReplacement(mockService *mock_client.MockService, workloadID string, updatedWorkload *client.Workload) {
 	replacement := workloadReplacementFixture(workloadID)
 	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID,
+		waitExpectsArtifact(*updatedWorkload.ArtifactID)).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
 }
@@ -1078,6 +1083,20 @@ func expectWorkloadRuntimeReplacement(mockService *mock_client.MockService, work
 	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), workloadID, gomock.Any()).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), workloadID).Return(updatedWorkload, nil) // post-apply refresh Read
+}
+
+// waitExpectsArtifact asserts the wait is told which artifact the rollout was
+// asked to promote. Without it the wait cannot tell a promoted rollout from one
+// the platform abandoned, so the argument being passed is part of the contract.
+type waitExpectsArtifact string
+
+func (m waitExpectsArtifact) Matches(x any) bool {
+	opts, ok := x.(*client.WaitForWorkloadReplacementOptions)
+	return ok && opts != nil && opts.ExpectedArtifactID == string(m)
+}
+
+func (m waitExpectsArtifact) String() string {
+	return fmt.Sprintf("WaitForWorkloadReplacementOptions{expectedArtifactId=%q}", string(m))
 }
 
 type startReplacementMatcher struct {
@@ -2132,6 +2151,12 @@ func TestLoadWorkloadIntoModelType(t *testing.T) {
 
 	if data.Type.ValueString() != string(client.ArtifactTypeAgent) {
 		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeAgent)
+	}
+
+	workload.Type = client.ArtifactTypeMCP
+	loadWorkloadIntoModel(workload, &data)
+	if data.Type.ValueString() != string(client.ArtifactTypeMCP) {
+		t.Fatalf("Type = %q, want %q", data.Type.ValueString(), client.ArtifactTypeMCP)
 	}
 
 	workload.Type = ""

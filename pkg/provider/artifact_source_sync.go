@@ -2,13 +2,29 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
+	artifactsync "github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/sync"
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+// errArtifactSourceNeedsVersion is how runArtifactSourceSync reports a
+// locked artifact whose directory has changes to sync: nothing can be
+// written into it, so the caller has to mint a new version and sync that.
+// Its own error, rather than the engine's, so the caller can tell "clone"
+// from a failure.
+var errArtifactSourceNeedsVersion = errors.New("artifact is locked (immutable) and the directory has changes to sync; a new version has to be created first")
 
 func artifactSourceConfigured(data *ArtifactResourceModel) bool {
 	return data.Source != nil && IsKnown(data.Source.Dir)
@@ -25,6 +41,76 @@ func artifactSourceNeedsUpload(plan, state *ArtifactResourceModel, priorArtifact
 		return true
 	}
 	return !plan.Source.DirHash.Equal(state.Source.DirHash)
+}
+
+// artifactSourceRemoteDrifted reports whether the catalog version the
+// artifact points at differs from the one source.dir last synced. State
+// carries the primary container's code_ref as Read refreshed it (the one
+// the sync patches and reads); the directory's last sync is in its state
+// directory. They differ when the code_ref was re-pointed from somewhere
+// else: the DataRobot CLI syncing this artifact from another checkout,
+// this resource last applied from one, or a rollback to an earlier
+// version. Without this a plan for an unchanged tree shows nothing, and
+// the catalog's changes never come down. Which way the catalog moved is
+// the sync's question, not the plan's: a rollback is refused there.
+//
+// A directory with no state yet has nothing to compare. One bound to a
+// different catalog is left alone: that mismatch is refused, with the way
+// out spelled out, once the tree changes and a sync actually runs.
+func artifactSourceRemoteDrifted(plan, state *ArtifactResourceModel) bool {
+	if state == nil || !artifactSourceConfigured(plan) {
+		return false
+	}
+
+	ref := primaryCodeRefFromState(state)
+	if ref == nil || !IsKnown(ref.CatalogVersionID) {
+		return false
+	}
+	liveVersion := ref.CatalogVersionID.ValueString()
+
+	absDir, err := artifactSourceAbsDir(plan)
+	if err != nil {
+		return false
+	}
+
+	cfg, err := wapi.LoadConfig(absDir)
+	if err != nil {
+		return false
+	}
+
+	if cfg.CatalogID != nil && *cfg.CatalogID != "" && *cfg.CatalogID != ref.CatalogID.ValueString() {
+		return false
+	}
+
+	lastSynced := ""
+	if cfg.LastSyncedVersionID != nil {
+		lastSynced = *cfg.LastSyncedVersionID
+	}
+
+	return lastSynced != "" && lastSynced != liveVersion
+}
+
+// artifactSourceDriftWarning explains a plan whose dir_hash is known after
+// apply while nothing under source.dir changed: the catalog moved.
+func artifactSourceDriftWarning(diags *diag.Diagnostics, plan, state *ArtifactResourceModel) {
+	if diags == nil {
+		return
+	}
+
+	liveVersion := ""
+	if ref := primaryCodeRefFromState(state); ref != nil {
+		liveVersion = ref.CatalogVersionID.ValueString()
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		"Catalog changed since the last sync",
+		fmt.Sprintf(
+			"The artifact's code is at catalog version %s, which %s has not synced. "+
+				"Apply brings the catalog's changes down into the directory (every file it writes or removes is reported) and, on a locked artifact whose directory then differs, builds a new version that includes them. "+
+				"A file changed on both sides fails the apply and is named, and so does a catalog that moved backwards to an older version.",
+			liveVersion, plan.Source.Dir.ValueString()),
+	)
 }
 
 func catalogIDFromModel(data *ArtifactResourceModel) string {
@@ -63,28 +149,355 @@ func catalogVersionIDFromModel(data *ArtifactResourceModel) string {
 	return ""
 }
 
-func (r *ArtifactResource) pushArtifactSource(
+// artifactSourceStore adapts the provider's client service to
+// sync.ArtifactStore. The artifact the resource already holds answers the
+// engine's read (it was just created or patched, so a GET would only
+// re-fetch what we have), and the artifact returned by the code_ref patch
+// is kept so the caller can write the server's fresh view into state
+// instead of the engine discarding it.
+type artifactSourceStore struct {
+	service client.Service
+	current *client.Artifact
+	patched *client.Artifact
+}
+
+func (s *artifactSourceStore) Get(ctx context.Context, artifactID string) (artifactsync.ArtifactInfo, error) {
+	artifact := s.current
+	if artifact == nil || artifact.ID != artifactID {
+		traceAPICall("GetArtifact")
+		fetched, err := s.service.GetArtifact(ctx, artifactID)
+		if err != nil {
+			var notFound *client.NotFoundError
+			if errors.As(err, &notFound) {
+				return artifactsync.ArtifactInfo{}, fmt.Errorf("%w: %v", artifactsync.ErrArtifactNotFound, err)
+			}
+			return artifactsync.ArtifactInfo{}, err
+		}
+		artifact = fetched
+	}
+
+	info := artifactsync.ArtifactInfo{Locked: artifact.Status == client.ArtifactStatusLocked}
+	if artifact.ArtifactRepositoryID != nil {
+		info.RepositoryID = *artifact.ArtifactRepositoryID
+	}
+	if ref := client.ExtractCodeRef(artifact); ref != nil {
+		info.CatalogID = ref.CatalogID
+		info.CatalogVersionID = ref.CatalogVersionID
+	}
+
+	return info, nil
+}
+
+func (s *artifactSourceStore) PatchCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) error {
+	traceAPICall("PatchArtifactCodeRef")
+	artifact, err := s.service.PatchArtifactCodeRef(ctx, artifactID, catalogID, catalogVersionID)
+	if err != nil {
+		return err
+	}
+	s.patched = artifact
+
+	return nil
+}
+
+// artifactSourceCatalogBinding is the catalog the directory already has
+// code in, for a tree that has never been synced by the engine and so has
+// no sync state directory yet. Terraform state is preferred over the
+// artifact's live code_ref: a clone of a locked artifact is a fresh draft
+// with no code_ref, and its new version still belongs in the catalog state
+// points at.
+func artifactSourceCatalogBinding(state *ArtifactResourceModel, artifact *client.Artifact) (catalogID, versionID string) {
+	catalogID = catalogIDFromModel(state)
+	versionID = catalogVersionIDFromModel(state)
+
+	ref := client.ExtractCodeRef(artifact)
+	if ref == nil {
+		return catalogID, versionID
+	}
+
+	if catalogID == "" {
+		catalogID = ref.CatalogID
+	}
+	if versionID == "" {
+		versionID = ref.CatalogVersionID
+	}
+
+	return catalogID, versionID
+}
+
+// runArtifactSourceSync reconciles absDir with the catalog using the CLI
+// three-way sync engine: BASE (the last synced manifest under
+// absDir/.datarobot/workload/) against LOCAL (the directory, minus .drignore
+// and system excludes) against REMOTE (the Files API catalog). It returns
+// the sync result and, when the engine repointed the artifact, the patched
+// artifact.
+//
+// Unlike the push-only uploader it replaces, this can also write to
+// source.dir: remote-only files are downloaded and files the catalog
+// dropped are removed, each announced through diags. A file edited on both
+// sides since the last sync is refused before anything is written, the way
+// the CLI's non-interactive mode refuses it: terraform apply has no TTY to
+// ask on, and picking the catalog's version silently would replace an edit
+// the user has not seen lose.
+//
+// seeded is the matcher to walk with when the starter ignore file could not
+// be written, nil when the directory is the source of truth as usual.
+func (r *ArtifactResource) runArtifactSourceSync(
 	ctx context.Context,
-	data *ArtifactResourceModel,
-	prior *ArtifactResourceModel,
-	existingCatalogID string,
-) (*artifactsource.Result, error) {
+	state *ArtifactResourceModel,
+	artifact *client.Artifact,
+	priorArtifactID string,
+	absDir string,
+	seeded *ignore.Matcher,
+	diags *diag.Diagnostics,
+) (result *artifactsync.Result, patched *client.Artifact, err error) {
+	store := &artifactSourceStore{service: r.provider.service, current: artifact}
+
+	engine, err := artifactsync.New(absDir, artifact.ID, r.provider.service.FilesAPI(), store)
+	if err != nil {
+		return nil, nil, err
+	}
+	engine.BindCatalog(artifactSourceCatalogBinding(state, artifact))
+	engine.PreviousArtifact(priorArtifactID)
+	engine.UseIgnore(seeded)
+
+	// Close releases the sync lock. A failure to release would make the
+	// next apply fail on a lock nobody holds, so it is reported rather
+	// than dropped, unless the sync itself already failed.
+	defer func() {
+		if closeErr := engine.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("release sync lock: %w", closeErr)
+		}
+	}()
+
+	traceAPICall("SyncArtifactSource")
+	plan, err := engine.Plan(ctx)
+	if err != nil {
+		return nil, nil, artifactSourceLockHint(err, absDir)
+	}
+
+	if engine.StaleRollbackRestored() {
+		artifactSourceStaleRollbackWarning(diags, absDir)
+	}
+
+	if plan.HasConflicts() {
+		return nil, nil, artifactSourceConflictError(absDir, plan.ConflictPaths())
+	}
+
+	// A locked artifact cannot take a plan with work: the caller has to
+	// mint a new version and sync that. An empty plan goes through: it
+	// writes nothing into the artifact and only records that the directory
+	// matches the version it already points at, which is what keeps a
+	// benign drift (identical bytes re-uploaded, or a directory behind on
+	// paper only) from minting a version.
+	if engine.ArtifactLocked() && !plan.IsEmpty() {
+		return nil, nil, errArtifactSourceNeedsVersion
+	}
+
+	if err := engine.ExecuteLocal(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	result, err = engine.ExecuteRemote(ctx)
+	if err != nil {
+		// The one failure that keeps the files ExecuteLocal wrote: the
+		// catalog advanced, so the working tree was left matching it and
+		// only the state directory is behind. Say what changed on disk
+		// now, since this error is the last thing the apply prints.
+		var persistErr *artifactsync.StatePersistError
+		if errors.As(err, &persistErr) {
+			artifactSourceMutationWarning(diags, plan)
+		}
+
+		return nil, nil, err
+	}
+
+	artifactSourceMutationWarning(diags, plan)
+
+	return result, store.patched, nil
+}
+
+// artifactSourceLockHint adds the likely cause to the engine's refusal to
+// take the sync lock. The lock is per directory and per open file, so the
+// other holder is usually not another process at all but a second
+// datarobot_artifact resource in this same apply pointing at the same
+// source.dir, which Terraform runs in parallel with this one.
+func artifactSourceLockHint(err error, absDir string) error {
+	if !errors.Is(err, artifactsync.ErrLocked) {
+		return err
+	}
+
+	return fmt.Errorf("%w: %s is being synced by another sync, either a second datarobot_artifact resource with the same source.dir or a DataRobot CLI sync still running; "+
+		"a directory can back only one resource, so give each its own", err, absDir)
+}
+
+// artifactSourceStaleRollbackWarning reports the one write into source.dir
+// that happens before the plan is even built: a previous apply was
+// interrupted between writing files and recording the sync, and preflight
+// put the directory back the way that apply found it, from the copies it
+// had kept.
+func artifactSourceStaleRollbackWarning(diags *diag.Diagnostics, absDir string) {
+	if diags == nil {
+		return
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		"Interrupted sync rolled back",
+		fmt.Sprintf(
+			"A previous apply was interrupted while syncing %s, after it had started writing files there. "+
+				"Those files were put back the way that apply found them before this sync planned, so the directory may differ from what you last saw in it. "+
+				"Review it (a version control diff shows what moved) before committing.",
+			absDir),
+	)
+}
+
+// artifactSourceConflictError is the refusal for a plan in which a file
+// changed both under source.dir and in the catalog since the last sync.
+// The DataRobot CLI reads the same state directory, so it can resolve the
+// conflict in place; the apply itself has touched nothing.
+func artifactSourceConflictError(absDir string, conflicts []string) error {
+	return fmt.Errorf(
+		"%d file(s) changed on both sides since the last sync, edited or deleted in %s and edited or deleted in the catalog:\n%s\n\n"+
+			"terraform apply cannot ask which side wins, so nothing was uploaded or written. "+
+			"Resolve the conflict in that directory with the DataRobot CLI: `dr artifact code sync` shows both versions and asks per file, "+
+			"and `dr artifact code sync --yes --accept-remote` takes the catalog version while keeping your copy as <path>.LOCAL.<timestamp>. "+
+			"Then run terraform apply again",
+		len(conflicts), absDir, artifactSourcePathList(conflicts))
+}
+
+// artifactSourceMutationWarning names the files the sync wrote or removed
+// under source.dir. Terraform only plans the resource's attributes, so a
+// download or a local removal would otherwise first show up in a later
+// `git status`.
+func artifactSourceMutationWarning(diags *diag.Diagnostics, plan *artifactsync.SyncPlan) {
+	if diags == nil || plan == nil {
+		return
+	}
+
+	written := make([]string, 0, len(plan.Downloads))
+	for _, fa := range plan.Downloads {
+		written = append(written, fa.Path)
+	}
+
+	var removed []string
+	for _, fa := range plan.Deletes {
+		if fa.Action == artifactsync.ActDownloadDelete {
+			removed = append(removed, fa.Path)
+		}
+	}
+
+	if len(written)+len(removed) == 0 {
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString("The catalog had changes this directory did not, so the sync brought them down.")
+	if len(written) > 0 {
+		fmt.Fprintf(&b, "\n\nWritten (%d):\n%s", len(written), artifactSourcePathList(written))
+	}
+	if len(removed) > 0 {
+		fmt.Fprintf(&b, "\n\nRemoved (%d):\n%s", len(removed), artifactSourcePathList(removed))
+	}
+	b.WriteString("\n\nThese files now match the catalog. Review the change (a version control diff shows exactly what moved) before committing it.")
+
+	diags.AddAttributeWarning(path.Root("source").AtName("dir"), "Source directory updated from the catalog", b.String())
+}
+
+// artifactSourcePathListMax bounds the paths a diagnostic spells out; the
+// count in the same message says how many there really were.
+const artifactSourcePathListMax = 20
+
+func artifactSourcePathList(paths []string) string {
+	shown := paths
+	if len(shown) > artifactSourcePathListMax {
+		shown = shown[:artifactSourcePathListMax]
+	}
+
+	lines := make([]string, 0, len(shown)+1)
+	for _, p := range shown {
+		lines = append(lines, "  "+p)
+	}
+	if rest := len(paths) - len(shown); rest > 0 {
+		lines = append(lines, fmt.Sprintf("  ... and %d more", rest))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// plannedArtifactSourceDirHash is the dir_hash a plan commits to. A tree
+// that matches state keeps the known value, so the plan shows no diff. A
+// tree that differs plans as unknown rather than as the digest just
+// computed: apply reconciles the directory with the catalog and can add or
+// remove files while doing so, and the value saved afterwards has to be the
+// digest of what is on disk then. A known value here would fail that apply
+// with "inconsistent result" whenever the sync pulled anything.
+func plannedArtifactSourceDirHash(current types.String, state *ArtifactResourceModel) types.String {
+	if state != nil && state.Source != nil && IsKnown(state.Source.DirHash) && current.Equal(state.Source.DirHash) {
+		return current
+	}
+
+	return types.StringUnknown()
+}
+
+// artifactSourceAbsDir resolves source.dir. The ignore file is looked up at that
+// path and the fingerprint walks from it, so everything that touches the source
+// tree resolves it the same way.
+func artifactSourceAbsDir(data *ArtifactResourceModel) (string, error) {
 	dir := data.Source.Dir.ValueString()
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return nil, fmt.Errorf("resolve source directory %q: %w", dir, err)
+		return "", fmt.Errorf("resolve source directory %q: %w", dir, err)
 	}
 
-	opts := artifactsource.Options{
-		Dir:       absDir,
-		CatalogID: existingCatalogID,
-	}
-	if prior != nil {
-		opts.CatalogVersionID = catalogVersionIDFromModel(prior)
+	return absDir, nil
+}
+
+// seedArtifactSourceIgnoreFile writes the starter .drignore at absDir when
+// generate_ignore is on and the project has neither ignore file. It returns the
+// matcher the upload must use in place of reading the directory, nil when the
+// directory can be read as usual.
+//
+// It runs ahead of artifactSourceNeedsUpload rather than inside the upload,
+// because plan has already accounted for the file: with generate_ignore on and
+// no ignore file present, computeArtifactSourceDirHash folds a synthetic
+// .drignore into dir_hash. A tree whose only pending change is that file
+// therefore plans as unchanged, the upload is skipped, and the file plan
+// promised is never written -- so a config that flips generate_ignore to true,
+// or state carried across a provider upgrade, could record generate_ignore =
+// true with nothing on disk. Seeding before the gate makes the promise hold
+// whether or not anything was uploaded.
+//
+// A failed write is a warning rather than an error. generate_ignore defaults to
+// true, so failing here would break applies that worked before the attribute
+// existed: a source.dir mounted read-only in CI, a 0555 tree, or a directory
+// sitting at the .drignore name. The upload falls back to the template's own
+// patterns, which is the set plan hashed, so the failure costs the user the
+// file on disk and nothing else. In particular it does not widen the upload.
+func seedArtifactSourceIgnoreFile(absDir string, generateIgnore bool, diags *diag.Diagnostics) *ignore.Matcher {
+	if !generateIgnore {
+		return nil
 	}
 
-	traceAPICall("PushDirectory")
-	return artifactsource.PushDirectory(ctx, r.provider.service.FilesAPI(), opts)
+	_, err := ignore.WriteDefaultDrignoreIfMissing(absDir)
+	if err == nil {
+		return nil
+	}
+
+	// WriteDefaultDrignoreIfMissing already names the path it failed to write,
+	// so this adds the consequence and the ways out, not the path again.
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		fmt.Sprintf("Could not write %s", ignore.FileName),
+		fmt.Sprintf(
+			"%s\n\n"+
+				"The upload continues with the default patterns, the same set this plan "+
+				"hashed, so nothing extra is uploaded. What is missing is the file on disk, "+
+				"which means this repeats on every apply. Add a %s to the directory yourself, "+
+				"make the directory writable, or set generate_ignore = false.",
+			err, ignore.FileName),
+	)
+
+	return ignore.FromDefaultTemplate()
 }
 
 func (r *ArtifactResource) syncArtifactSource(
@@ -93,52 +506,91 @@ func (r *ArtifactResource) syncArtifactSource(
 	state *ArtifactResourceModel,
 	artifact *client.Artifact,
 	priorArtifactID string,
+	diags *diag.Diagnostics,
 ) (*client.Artifact, bool, error) {
+	// Seeding reads source.dir before artifactSourceNeedsUpload gets to answer
+	// for an unconfigured source, so the check it used to rely on happens here.
+	if !artifactSourceConfigured(plan) {
+		return artifact, false, nil
+	}
+
+	absDir, err := artifactSourceAbsDir(plan)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Deliberately ahead of the sync gate below: see seedArtifactSourceIgnoreFile.
+	seeded := seedArtifactSourceIgnoreFile(absDir, artifactSourceGenerateIgnore(plan), diags)
+
 	if !artifactSourceNeedsUpload(plan, state, priorArtifactID, artifact.ID) {
 		return artifact, false, nil
 	}
 
-	catalogID := catalogIDFromModel(state)
-	if catalogID == "" {
-		if ref := client.ExtractCodeRef(artifact); ref != nil {
-			catalogID = ref.CatalogID
-		}
-	}
+	artifactApplyProgressUploading(artifact.ID)
 
-	pushResult, err := r.pushArtifactSource(ctx, plan, state, catalogID)
+	result, patched, err := r.runArtifactSourceSync(ctx, state, artifact, priorArtifactID, absDir, seeded, diags)
 	if err != nil {
-		return nil, false, fmt.Errorf("upload artifact source: %w", err)
+		return nil, false, fmt.Errorf("sync artifact source: %w", err)
 	}
 
-	traceAPICall("PatchArtifactCodeRef")
-	artifact, err = r.provider.service.PatchArtifactCodeRef(
-		ctx,
-		artifact.ID,
-		pushResult.CatalogID,
-		pushResult.CatalogVersionID,
-	)
-	if err != nil {
-		return nil, true, fmt.Errorf("patch artifact code reference: %w", err)
+	artifactApplyProgressSourceSynced(result)
+
+	// The sync did work when it moved files in either direction or pointed
+	// the artifact at a version. A plan that turned out empty against an
+	// artifact already on that version did neither, and there is nothing
+	// to build for it.
+	worked := patched != nil || result.Uploaded+result.Downloaded+result.DeletedRemote+result.DeletedLocal > 0
+
+	if patched != nil {
+		artifact = patched
 	}
 
-	return artifact, true, nil
+	return artifact, worked, nil
 }
 
-// syncArtifactSourceAndBuild uploads source when needed, then triggers an image build
-// when upload produced new code on a draft artifact with image_build_config.
+// artifactApplyProgressSourceSynced reports the sync's counts on the apply
+// progress stream. Files written or removed under source.dir are also
+// raised as a warning diagnostic (artifactSourceMutationWarning), since the
+// progress stream is only visible with TF_LOG set.
+func artifactApplyProgressSourceSynced(result *artifactsync.Result) {
+	if result == nil {
+		return
+	}
+
+	if result.Uploaded+result.Downloaded+result.DeletedRemote+result.DeletedLocal == 0 {
+		emitArtifactApplyProgress("Source already matches the catalog; nothing to sync.")
+		return
+	}
+
+	emitArtifactApplyProgress(fmt.Sprintf(
+		"Synced source: %d uploaded, %d downloaded, %d removed from the catalog, %d removed locally.",
+		result.Uploaded, result.Downloaded, result.DeletedRemote, result.DeletedLocal,
+	))
+}
+
+// syncArtifactSourceAndBuild syncs source when needed, then triggers an image build
+// when the sync ran against a draft artifact with image_build_config.
 func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	ctx context.Context,
 	plan *ArtifactResourceModel,
 	state *ArtifactResourceModel,
 	artifact *client.Artifact,
 	priorArtifactID string,
+	diags *diag.Diagnostics,
 ) (*client.Artifact, error) {
-	artifact, uploaded, err := r.syncArtifactSource(ctx, plan, state, artifact, priorArtifactID)
+	artifact, uploaded, err := r.syncArtifactSource(ctx, plan, state, artifact, priorArtifactID, diags)
 	if err != nil {
 		return nil, err
 	}
 
-	if !artifactBuildNeededAfterUpload(plan, artifact, uploaded) {
+	// A sync that moved nothing still leaves a new draft to build: a clone
+	// of a locked artifact is created with the version's code_ref already
+	// on it, so its sync finds nothing to move or re-point, and yet it has
+	// never been built. An existing draft that synced empty keeps whatever
+	// image it has; only an artifact minted by this apply is built for
+	// having none.
+	newArtifact := artifact != nil && artifact.ID != priorArtifactID
+	if !artifactBuildNeededAfterUpload(plan, artifact, uploaded || (newArtifact && artifactDraftHasNoImage(artifact))) {
 		return artifact, nil
 	}
 
@@ -153,6 +605,20 @@ func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	}
 
 	return artifact, nil
+}
+
+// artifactDraftHasNoImage reports whether artifact's primary container has
+// neither an image nor a build in flight that will produce one.
+func artifactDraftHasNoImage(artifact *client.Artifact) bool {
+	if artifact == nil || artifactPrimaryContainerImageURI(artifact) != "" {
+		return false
+	}
+
+	if build := primaryContainerBuildInfo(artifact); build != nil && build.Status != "" && !client.IsTerminalArtifactBuildStatus(build.Status) {
+		return false
+	}
+
+	return true
 }
 
 func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
@@ -185,6 +651,46 @@ func artifactLockedSourceCloneNeeded(plan, state ArtifactResourceModel) bool {
 		return true
 	}
 	return artifactNeedsNewVersion(plan, state)
+}
+
+// artifactUpdateKeepsLockedVersion reports whether an update of a locked
+// artifact changes nothing on the server. A locked version is immutable,
+// so an update either mints a new version or leaves the artifact alone. It
+// leaves it alone when the artifact stays locked, the spec is unchanged
+// and the source tree has nothing to sync, which is what is left once the
+// clone case is ruled out: source.wait_for_build, source.generate_ignore,
+// or a source.dir path whose content matches state. Minting a version for
+// those would deploy a copy of the same code for nothing, and then fail
+// the apply on top: the plan promised artifact_id would not change, and
+// the sync would refuse to record itself against a locked artifact.
+func artifactUpdateKeepsLockedVersion(plan, state ArtifactResourceModel) bool {
+	if state.Status.ValueString() != string(client.ArtifactStatusLocked) {
+		return false
+	}
+	if plan.Status.ValueString() != string(client.ArtifactStatusLocked) {
+		return false
+	}
+	if artifactNeedsNewVersion(plan, state) {
+		return false
+	}
+	return !artifactSourcePendingUpload(&plan, &state, state.ArtifactID.ValueString())
+}
+
+// artifactSourceLocallyUnchanged reports whether the tree under source.dir
+// still hashes to what state recorded, so the plan's dir_hash is unknown
+// for another reason: the catalog moved. It hashes the tree again rather
+// than trusting the plan, which carries unknown either way.
+func artifactSourceLocallyUnchanged(plan, state *ArtifactResourceModel) bool {
+	if state == nil || state.Source == nil || !IsKnown(state.Source.DirHash) {
+		return false
+	}
+
+	current, err := computeArtifactSourceDirHash(plan)
+	if err != nil {
+		return false
+	}
+
+	return current.Equal(state.Source.DirHash)
 }
 
 // artifactSourceDeferLock is true when a draft→locked transition must wait until after source upload.
@@ -222,14 +728,137 @@ func (r *ArtifactResource) lockArtifact(ctx context.Context, artifactID string) 
 	})
 }
 
-func refreshArtifactSourceDirHash(data *ArtifactResourceModel) {
+// refreshArtifactSourceDirHash sets source.dir_hash from the current local tree.
+// Call only after a successful Create/Update so state records the hash that was
+// just uploaded. Do not call from Read: terraform refresh runs before plan, and
+// replacing the last-applied hash with the current disk hash hides local edits.
+//
+// A tree that cannot be hashed leaves dir_hash null rather than whatever the
+// plan held. The plan value is unknown whenever the tree changed, and an
+// unknown in the state an apply returns is rejected by Terraform, which then
+// discards the whole result and with it the artifact just created. Null costs
+// one more sync: the next plan sees no recorded hash and syncs the directory
+// again, which uploads nothing if the tree did not change.
+func refreshArtifactSourceDirHash(data *ArtifactResourceModel) error {
 	if !artifactSourceConfigured(data) {
+		return nil
+	}
+	dirHash, err := computeArtifactSourceDirHash(data)
+	if err != nil {
+		data.Source.DirHash = types.StringNull()
+		return err
+	}
+	data.Source.DirHash = dirHash
+	return nil
+}
+
+// artifactSourceDirHashWarning reports a refreshArtifactSourceDirHash
+// failure. The sync itself is done, so this is a warning: what it costs is
+// the next plan re-syncing a directory that may not have changed.
+func artifactSourceDirHashWarning(diags *diag.Diagnostics, err error) {
+	if diags == nil {
 		return
 	}
-	dirHash, err := computeFolderHash(data.Source.Dir)
-	if err == nil {
-		data.Source.DirHash = dirHash
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir_hash"),
+		"Could not fingerprint the source directory after apply",
+		fmt.Sprintf("%s\n\nThe sync itself completed. dir_hash is left unset, so the next plan shows the directory as changed and apply syncs it again, which uploads nothing if the tree did not change.", err),
+	)
+}
+
+func artifactSourceGenerateIgnore(data *ArtifactResourceModel) bool {
+	if data == nil || data.Source == nil {
+		return true
 	}
+	if data.Source.GenerateIgnore.IsNull() || data.Source.GenerateIgnore.IsUnknown() {
+		return true
+	}
+	return data.Source.GenerateIgnore.ValueBool()
+}
+
+// artifactSourceIgnoreDiagnostics reports the two ignore-file conditions the
+// matcher can detect but nothing else in an apply would mention: the deprecated
+// .wapiignore name still being in effect, and a second ignore file whose
+// patterns are silently inert. The first sign of the latter otherwise is a
+// .venv on the remote.
+//
+// These are raised during planning so the user reads them before anything is
+// uploaded, rather than after the catalog already has the file.
+//
+// A matcher that fails to load is not reported here, and which side covers that
+// depends on the branch computeArtifactSourceDirHash takes. Everywhere but the
+// default path -- generate_ignore on with no ignore file present -- compute
+// calls New on this same directory and turns the failure into an attribute
+// error, so repeating it would print the problem twice. On the default path
+// compute hashes from the template and opens nothing, so plan stays silent by
+// design. A directory sitting at the .drignore name, which Locate calls absent,
+// lands there; apply names it in the warning seedArtifactSourceIgnoreFile
+// raises when the write fails.
+func artifactSourceIgnoreDiagnostics(data *ArtifactResourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if data == nil || data.Source == nil || !IsKnown(data.Source.Dir) {
+		return diags
+	}
+
+	absDir, err := artifactSourceAbsDir(data)
+	if err != nil {
+		return diags
+	}
+
+	matcher, err := ignore.New(absDir)
+	if err != nil {
+		return diags
+	}
+
+	dirPath := path.Root("source").AtName("dir")
+	if notice := matcher.Notice(); notice != "" {
+		diags.AddAttributeWarning(dirPath, "Deprecated ignore file name", notice)
+	}
+	if shadow := matcher.ShadowWarning(); shadow != "" {
+		diags.AddAttributeWarning(dirPath, "Ignore file present but not applied", shadow)
+	}
+
+	return diags
+}
+
+func computeArtifactSourceDirHash(data *ArtifactResourceModel) (types.String, error) {
+	hash := types.StringNull()
+	if data == nil || data.Source == nil || !IsKnown(data.Source.Dir) {
+		return hash, nil
+	}
+
+	absDir, err := artifactSourceAbsDir(data)
+	if err != nil {
+		return hash, err
+	}
+
+	generateIgnore := artifactSourceGenerateIgnore(data)
+	var matcher *ignore.Matcher
+	var extra []artifactsource.LocalFile
+
+	if generateIgnore && ignore.Locate(absDir) == "" {
+		matcher = ignore.FromDefaultTemplate()
+		sum := sha256.Sum256(ignore.DefaultTemplate)
+		extra = []artifactsource.LocalFile{{
+			RelPath: ignore.FileName,
+			Hash:    hex.EncodeToString(sum[:]),
+			Size:    int64(len(ignore.DefaultTemplate)),
+		}}
+	} else {
+		matcher, err = ignore.New(absDir)
+		if err != nil {
+			return hash, err
+		}
+	}
+
+	digest, err := artifactsource.FingerprintDirectory(absDir, matcher.Match, extra)
+	if err != nil {
+		return hash, err
+	}
+
+	return types.StringValue(digest), nil
 }
 
 func cloneCodeRefModel(ref *ArtifactCodeRefModel) *ArtifactCodeRefModel {

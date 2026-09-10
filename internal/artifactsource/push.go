@@ -25,7 +25,7 @@ func PushDirectory(ctx context.Context, client filesapi.Client, opts Options) (*
 		overwrite = filesapi.OverwriteReplace
 	}
 
-	files, totalBytes, err := scanLocalFiles(opts.Dir, opts.Ignore)
+	files, totalBytes, err := collectLocalFiles(opts.Dir, opts.Ignore, false)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +75,23 @@ func canIncrementalPush(opts Options) bool {
 	return opts.CatalogID != "" && len(opts.BaseFiles) > 0
 }
 
-func scanLocalFiles(dir string, ignore IgnoreFunc) ([]LocalFile, int64, error) {
+// CollectLocalFiles walks dir, applies ignore, and hashes every included
+// regular file. Exported for internal/artifactsource/sync's Engine, which
+// builds the three-way sync LOCAL manifest from the same walk+hash
+// primitives PushDirectory and FingerprintDirectory use. An empty (or
+// fully ignored) directory returns an empty slice rather than an error, so
+// Plan succeeds on a source.dir with no files yet.
+func CollectLocalFiles(dir string, ignore IgnoreFunc) ([]LocalFile, error) {
+	files, _, err := collectLocalFiles(dir, ignore, true)
+	return files, err
+}
+
+func collectLocalFiles(dir string, ignore IgnoreFunc, allowEmpty bool) ([]LocalFile, int64, error) {
 	entries, err := walkDirectory(dir, ignore)
 	if err != nil {
 		return nil, 0, err
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !allowEmpty {
 		return nil, 0, fmt.Errorf("directory %s contains no uploadable files", dir)
 	}
 

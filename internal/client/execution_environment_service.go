@@ -37,4 +37,12 @@ type ExecutionEnvironmentVersion struct {
 	Description    string `json:"description"`
 	BuildStatus    string `json:"buildStatus"`
 	DockerImageUri string `json:"sourceDockerImageUri"`
+	BuildID        string `json:"buildId,omitempty"`
+}
+
+// ExecutionEnvironmentBuildLog is the response shape of the legacy per-version build
+// log endpoint, kept as a fallback behind the newer OTel logs pipeline.
+type ExecutionEnvironmentBuildLog struct {
+	Log   string `json:"log"`
+	Error string `json:"error,omitempty"`
 }

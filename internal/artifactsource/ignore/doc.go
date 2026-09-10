@@ -10,8 +10,9 @@
 // System excludes are not overridable by negation patterns. They cover the CLI
 // state directory under .datarobot/workload, the legacy .wapi, .git,
 // .gitignore, .datarobot.yaml (never sent to the Files API), and Terraform's
-// own .terraform and terraform.tfstate files. Every name but the state
-// directory matches at any depth, and the comparison folds case.
+// own .terraform directory, terraform.tfstate files and *.tfvars variable
+// files. Every name but the state directory matches at any depth, and the
+// comparison folds case.
 //
 // It also owns the filenames themselves, for the code that seeds a starter file
 // rather than reading one: FileName is what to write, and Locate answers

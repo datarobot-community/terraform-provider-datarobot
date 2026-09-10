@@ -58,6 +58,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 	waitForBuild bool,
 	opts *client.WaitForArtifactBuildOptions,
 ) (*client.Artifact, string, error) {
+	artifactApplyProgressBuilding(artifactID)
 	traceAPICall("TriggerArtifactBuild")
 	trigger, err := r.provider.service.TriggerArtifactBuild(ctx, artifactID)
 	if err != nil {
@@ -78,7 +79,7 @@ func (r *ArtifactResource) syncArtifactBuild(
 	var completedBuild *client.ArtifactBuild
 	if waitForBuild {
 		traceAPICall("WaitForArtifactBuild")
-		waitOpts := artifactBuildWaitOptions(opts)
+		waitOpts := artifactBuildWaitOptions(buildID, opts)
 		var err error
 		completedBuild, err = r.provider.service.WaitForArtifactBuild(ctx, artifactID, buildID, waitOpts)
 		if err != nil {
@@ -122,15 +123,29 @@ func (r *ArtifactResource) syncArtifactBuild(
 	return artifact, buildID, nil
 }
 
-func artifactBuildWaitOptions(opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
+// artifactBuildWaitOptions fills in the default wait hooks. buildID labels every
+// streamed log line, so parallel builds in one apply stay tellable apart on stderr.
+func artifactBuildWaitOptions(buildID string, opts *client.WaitForArtifactBuildOptions) *client.WaitForArtifactBuildOptions {
 	merged := &client.WaitForArtifactBuildOptions{}
 	if opts != nil {
 		*merged = *opts
 	}
 	if merged.OnOtelLogLine == nil {
 		merged.OnOtelLogLine = func(entry client.OtelLogEntry) {
-			line := client.FormatOtelLogEntry(entry)
-			emitArtifactBuildLogLine(line)
+			emitArtifactBuildLogLine(buildID, client.FormatOtelLogEntry(entry))
+		}
+	}
+	if merged.OnPoll == nil {
+		// Status transitions only. WaitForArtifactBuild calls OnPoll every tick, so at the
+		// default 10s interval an unchanged status would repeat one line ~60 times before
+		// the timeout; the OTEL stream is the live heartbeat, this is the state machine.
+		lastStatus := ""
+		merged.OnPoll = func(build *client.ArtifactBuild) {
+			if build == nil || build.Status == lastStatus {
+				return
+			}
+			lastStatus = build.Status
+			artifactApplyProgressBuildStatus(build.ArtifactID, build.ID, build.Status)
 		}
 	}
 	return merged

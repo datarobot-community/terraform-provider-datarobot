@@ -184,6 +184,16 @@ func workloadJSON(status ProtonStatus, replacement map[string]any) map[string]an
 	}
 }
 
+// workloadServingJSON is workloadJSON for a running workload plus the artifact
+// it reports it is serving, which is what tells a promoted rollout from an
+// abandoned one. Running is the only status these cases need: an abandoned
+// rollout leaves the workload running the version it already had.
+func workloadServingJSON(artifactID string, replacement map[string]any) map[string]any {
+	body := workloadJSON(ProtonStatusRunning, replacement)
+	body["artifactId"] = artifactID
+	return body
+}
+
 func TestWaitForWorkloadReplacementSucceedsWhenRecordClearsAfterActive(t *testing.T) {
 	// The real-world completion path: an active record is observed, then it is
 	// cleaned up to null while the workload is running. The transient
@@ -307,6 +317,295 @@ func TestWaitForWorkloadReplacementReturnsReplacementFailedError(t *testing.T) {
 	}
 }
 
+func TestWaitForWorkloadReplacementReturnsFailedStatusAsFailure(t *testing.T) {
+	// "failed" is the status the Workload API's own documentation names, and it
+	// was the one the provider did not know: treated as still in flight, it made
+	// the wait keep polling until the record cleared and then report success.
+	// The casing is deliberately not the platform's usual lower case.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1",
+			replacementJSON("FAILED", "candidate never became ready")))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	if !strings.Contains(failedErr.Message, "FAILED") ||
+		!strings.Contains(failedErr.Message, "candidate never became ready") {
+		t.Fatalf("expected the status and the platform's message, got %q", failedErr.Message)
+	}
+}
+
+func TestWaitForWorkloadReplacementFailsWhenWorkloadKeepsOldArtifact(t *testing.T) {
+	// The abandoned rollout, exactly as observed on staging: the record goes
+	// active and is then cleared while the workload keeps running the artifact
+	// it was already serving. Without the expected artifact this is
+	// indistinguishable from a completed rollout.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1",
+				replacementJSON(ReplacementStatusInitializing, "")))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1", nil))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	if !strings.Contains(failedErr.Message, "art-2") || !strings.Contains(failedErr.Message, "art-1") {
+		t.Fatalf("expected both the requested and the served artifact, got %q", failedErr.Message)
+	}
+}
+
+func TestWaitForWorkloadReplacementSucceedsWhenWorkloadServesExpectedArtifact(t *testing.T) {
+	// The promoted rollout: the workload reports the candidate before the
+	// record clears, so the same check has to pass it.
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1",
+				replacementJSON(ReplacementStatusPromoting, "")))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadServingJSON("art-2", nil))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+	if err != nil {
+		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	}
+}
+
+// workloadEventsJSON is the shape GET /workloads/{id}/events/ returned on
+// staging for the abandoned rollout in QA-14190, trimmed to the fields the
+// provider reads. Newest first, which is the order the API answers in.
+func workloadEventsJSON(events ...map[string]any) map[string]any {
+	return map[string]any{
+		"totalCount": len(events),
+		"count":      len(events),
+		"next":       nil,
+		"previous":   nil,
+		"data":       events,
+	}
+}
+
+func replacementErroredEventJSON(artifactID, message string) map[string]any {
+	return map[string]any{
+		"id":        "evt-1",
+		"timestamp": "2026-09-09T11:39:54.765000+00:00",
+		"eventType": "Replacement Errored",
+		"details": map[string]any{
+			"replacementId": "repl-1",
+			"artifactId":    artifactID,
+			"message":       message,
+			"protonStatuses": map[string]any{
+				"proton-2": map[string]any{
+					"replicas": []any{
+						map[string]any{
+							"containers": []any{
+								map[string]any{
+									"name":         "lrs-proton-2-agent",
+									"ready":        false,
+									"restartCount": 2,
+									"reason":       "CrashLoopBackOff",
+									"lastState": map[string]any{
+										"reason":   "Error",
+										"exitCode": 1,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// abandonedRolloutServer serves the record sequence of a rollout the platform
+// abandoned (active, then cleared while the workload keeps its old artifact),
+// with the given events feed behind /events/.
+func abandonedRolloutServer(t *testing.T, events map[string]any, eventsStatus int) *httptest.Server {
+	t.Helper()
+	calls := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/events/") {
+			if eventsStatus != http.StatusOK {
+				http.Error(w, "no events for you", eventsStatus)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(events)
+			return
+		}
+		calls++
+		if calls == 1 {
+			_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1", replacementJSON(ReplacementStatusInitializing, "")))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(workloadServingJSON("art-1", nil))
+	}))
+}
+
+func TestWaitForWorkloadReplacementReportsWhyThePlatformAbandonedTheRollout(t *testing.T) {
+	// The replacement record is gone by the time apply can ask, so the workload's
+	// event feed is the only place the reason survives. It has to reach the user.
+	const platformMessage = "Replacement failed: candidate proton-2 is stopping: Workload is in state errored based on pod states."
+	server := abandonedRolloutServer(t,
+		workloadEventsJSON(replacementErroredEventJSON("art-2", platformMessage)), http.StatusOK)
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	for _, want := range []string{platformMessage, "lrs-proton-2-agent", "CrashLoopBackOff", "exited with code 1", "2 restarts"} {
+		// The "go look at the logs" fallback is for when the feed says nothing;
+		// with a reason in hand it would only push the reason further down.
+		if !strings.Contains(failedErr.Message, want) {
+			t.Fatalf("expected %q in the diagnostic, got %q", want, failedErr.Message)
+		}
+	}
+	if strings.Contains(failedErr.Message, "Check that version's container logs") {
+		t.Fatalf("the reason is in hand, so the generic pointer should be gone: %q", failedErr.Message)
+	}
+}
+
+func TestWaitForWorkloadReplacementSkipsEventsForOtherArtifactsAndSuccesses(t *testing.T) {
+	// An older rollout's reason must not be passed off as this one's, and a
+	// completion message must never be attached to a failure.
+	server := abandonedRolloutServer(t, workloadEventsJSON(
+		map[string]any{
+			"id": "evt-2", "timestamp": "2026-09-09T11:40:00Z", "eventType": "Replacement Completed",
+			"details": map[string]any{"artifactId": "art-2", "message": "Maintenance of the inference server replacement completed."},
+		},
+		replacementErroredEventJSON("art-9", "an older rollout onto a different artifact failed"),
+	), http.StatusOK)
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	for _, unwanted := range []string{"Maintenance of the inference server", "an older rollout"} {
+		if strings.Contains(failedErr.Message, unwanted) {
+			t.Fatalf("did not expect %q in the diagnostic, got %q", unwanted, failedErr.Message)
+		}
+	}
+}
+
+func TestWaitForWorkloadReplacementStillFailsWhenTheEventFeedCannotBeRead(t *testing.T) {
+	// The feed only decorates a verdict already reached, so losing it must not
+	// turn the failed rollout back into a success or into a fetch error.
+	server := abandonedRolloutServer(t, nil, http.StatusForbidden)
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval:       5 * time.Millisecond,
+		Timeout:            time.Second,
+		ExpectedArtifactID: "art-2",
+	})
+
+	var failedErr *ReplacementFailedError
+	if !errors.As(err, &failedErr) {
+		t.Fatalf("expected ReplacementFailedError, got %T: %v", err, err)
+	}
+	if !strings.Contains(failedErr.Message, "art-2") || !strings.Contains(failedErr.Message, "art-1") {
+		t.Fatalf("expected both artifacts in the diagnostic, got %q", failedErr.Message)
+	}
+	if !strings.Contains(failedErr.Message, "container logs") {
+		t.Fatalf("expected the fallback pointer to the logs, got %q", failedErr.Message)
+	}
+}
+
+func TestWaitForWorkloadReplacementPropagatesNonNotFoundErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "backend unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.WaitForWorkloadReplacement(context.Background(), "wl-1", &WaitForWorkloadReplacementOptions{
+		PollInterval: 5 * time.Millisecond,
+		Timeout:      time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-404 poll failure")
+	}
+	if errors.Is(err, &NotFoundError{}) {
+		t.Fatalf("did not expect NotFoundError, got %v", err)
+	}
+}
+
 func TestWaitForWorkloadReplacementTimesOut(t *testing.T) {
 	// A replacement that never settles (stuck non-terminal) must time out.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -384,11 +683,25 @@ func TestReplacementStatusHelpers(t *testing.T) {
 	if !IsReplacementTerminal(ReplacementStatusErrored) {
 		t.Fatal("errored should be terminal")
 	}
+	if !IsReplacementTerminal(ReplacementStatusFailed) {
+		t.Fatal("failed should be terminal")
+	}
 	if IsReplacementActive(ReplacementStatusCompleted) {
 		t.Fatal("completed should not be active")
 	}
 	if !IsReplacementActive(ReplacementStatusFinalizing) {
 		t.Fatal("finalizing should be active")
+	}
+	if !IsReplacementFailed(ReplacementStatusFailed) || !IsReplacementFailed(ReplacementStatusErrored) {
+		t.Fatal("failed and errored are the failure statuses")
+	}
+	if IsReplacementFailed(ReplacementStatusCompleted) {
+		t.Fatal("completed is not a failure")
+	}
+	for _, status := range []ReplacementStatus{"FAILED", "Errored", "COMPLETED"} {
+		if !IsReplacementTerminal(status) {
+			t.Fatalf("%s should be terminal regardless of case", status)
+		}
 	}
 }
 
@@ -466,24 +779,26 @@ func TestArtifactSpecOmitsUnsetA2AEnabled(t *testing.T) {
 func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	raw := []byte(`{"id":"w1","name":"agent-wl","type":"agent","status":"running","importance":"low","runtime":{}}`)
-	var workload Workload
-	if err := json.Unmarshal(raw, &workload); err != nil {
-		t.Fatalf("unmarshal workload: %v", err)
-	}
-	if workload.Type != ArtifactTypeAgent {
-		t.Fatalf("Type = %q, want %q", workload.Type, ArtifactTypeAgent)
-	}
+	for _, artifactType := range []ArtifactType{ArtifactTypeAgent, ArtifactTypeMCP} {
+		raw := []byte(`{"id":"w1","name":"wl","type":"` + string(artifactType) + `","status":"running","importance":"low","runtime":{}}`)
+		var workload Workload
+		if err := json.Unmarshal(raw, &workload); err != nil {
+			t.Fatalf("unmarshal workload type %q: %v", artifactType, err)
+		}
+		if workload.Type != artifactType {
+			t.Fatalf("Type = %q, want %q", workload.Type, artifactType)
+		}
 
-	encoded, err := json.Marshal(workload)
-	if err != nil {
-		t.Fatalf("marshal workload: %v", err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		t.Fatalf("unmarshal encoded workload: %v", err)
-	}
-	if payload["type"] != "agent" {
-		t.Fatalf("encoded type = %v, want %q", payload["type"], "agent")
+		encoded, err := json.Marshal(workload)
+		if err != nil {
+			t.Fatalf("marshal workload type %q: %v", artifactType, err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(encoded, &payload); err != nil {
+			t.Fatalf("unmarshal encoded workload type %q: %v", artifactType, err)
+		}
+		if payload["type"] != string(artifactType) {
+			t.Fatalf("encoded type = %v, want %q", payload["type"], artifactType)
+		}
 	}
 }

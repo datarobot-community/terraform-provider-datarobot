@@ -5,6 +5,7 @@ subcategory: ""
 description: |-
   A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
   Changes to artifact_id or runtime trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
+  When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
 ---
 
 # datarobot_workload (Resource)
@@ -12,6 +13,8 @@ description: |-
 A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
 
 Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
+
+When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
 
 ## Example Usage
 
@@ -150,7 +153,7 @@ artifact_id = datarobot_artifact.app.artifact_id  # correct
 
 Typical flow: update `datarobot_artifact.spec` (e.g. new `image_uri`) → Terraform produces a new `artifact_id` → `datarobot_workload` detects the change and triggers in-place replacement.
 
-The computed `type` attribute mirrors the deployed artifact type (`service`, `nim`, or `agent`). It is not user-configurable; set `type` (and `spec.a2a_enabled` for agents) on `datarobot_artifact`.
+The computed `type` attribute mirrors the deployed artifact type (`service`, `nim`, `agent`, or `mcp`). It is not user-configurable; set `type` (and `spec.a2a_enabled` for agents) on `datarobot_artifact`.
 
 ## What triggers on update
 
@@ -188,7 +191,7 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 - `endpoint` (String) The inference endpoint URL for the Workload.
 - `id` (String) The ID of the Workload.
 - `status` (String) Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.
-- `type` (String) Artifact type mirrored by this workload: `service`, `nim`, or `agent`. Set from the deployed artifact; not user-configurable.
+- `type` (String) Artifact type mirrored by this workload: `service`, `nim`, `agent`, or `mcp`. Set from the deployed artifact; not user-configurable.
 
 <a id="nestedatt--runtime"></a>
 ### Nested Schema for `runtime`

@@ -40,7 +40,7 @@ artifact_id = datarobot_artifact.app.artifact_id  # correct
 
 Typical flow: update `datarobot_artifact.spec` (e.g. new `image_uri`) → Terraform produces a new `artifact_id` → `datarobot_workload` detects the change and triggers in-place replacement.
 
-The computed `type` attribute mirrors the deployed artifact type (`service`, `nim`, or `agent`). It is not user-configurable; set `type` (and `spec.a2a_enabled` for agents) on `datarobot_artifact`.
+The computed `type` attribute mirrors the deployed artifact type (`service`, `nim`, `agent`, or `mcp`). It is not user-configurable; set `type` (and `spec.a2a_enabled` for agents) on `datarobot_artifact`.
 
 ## What triggers on update
 

@@ -10,12 +10,14 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -23,6 +25,59 @@ var _ resource.Resource = &ExecutionEnvironmentResource{}
 var _ resource.ResourceWithImportState = &ExecutionEnvironmentResource{}
 var _ resource.ResourceWithConfigValidators = &ExecutionEnvironmentResource{}
 var _ resource.ResourceWithModifyPlan = &ExecutionEnvironmentResource{}
+
+const executionEnvironmentLogsSeparator = "----------------------------------------"
+
+// executionEnvironmentBuildLogsURL returns the DataRobot UI link for the given
+// execution environment version's build logs.
+func executionEnvironmentBuildLogsURL(baseURL, environmentId, versionId string) string {
+	return baseURL + "/registry/execution-environments/" + environmentId + "/builds-logs?environmentVersionId=" + versionId
+}
+
+// addExecutionEnvironmentBuildStartedWarning records that a build has started as a
+// diagnostic. It's visible once Create/Update returns, batched with everything else —
+// the Terraform and Pulumi plugin protocols only deliver Create/Update diagnostics as
+// part of the final RPC response, never mid-operation. For a live signal, see the
+// tflog.Warn call in waitForExecutionEnvironmentToBeReady (called from both Create and
+// Update, so it only needs to log once, unlike this diagnostic which both call sites
+// still add individually since each needs its own response's Diagnostics).
+func addExecutionEnvironmentBuildStartedWarning(diagnostics *diag.Diagnostics, baseURL, environmentId, versionId string) {
+	logsURL := executionEnvironmentBuildLogsURL(baseURL, environmentId, versionId)
+	diagnostics.AddWarning(
+		"Execution Environment build started",
+		"You can follow the build's progress and logs live in the DataRobot UI at: "+logsURL,
+	)
+}
+
+// executionEnvironmentBuildFailedMessage is the diagnostic summary used whenever an
+// execution environment version fails to build; it's the only caller of
+// executionEnvironmentErrorMessageWithLogs, so it's a constant rather than a parameter.
+const executionEnvironmentBuildFailedMessage = "execution environment failed to build"
+
+// executionEnvironmentErrorMessageWithLogs builds a diagnostic message for a failed
+// execution environment version build, appending retrieved build logs (or the log
+// retrieval error) and a link to the build logs in the DataRobot UI. Build logs are
+// currently backed by an OTel logs pipeline that may not have anything recorded yet
+// (e.g. no error, but zero log lines), so that case gets its own message rather than
+// printing an empty log section.
+func executionEnvironmentErrorMessageWithLogs(logs string, logErr error, logsURL string) string {
+	if logErr != nil {
+		return fmt.Sprintf(
+			"%s (failed to retrieve build logs: %s)\n%s\nSee full logs at: %s",
+			executionEnvironmentBuildFailedMessage, logErr, executionEnvironmentLogsSeparator, logsURL,
+		)
+	}
+	if logs == "" {
+		return fmt.Sprintf(
+			"%s\nNo build logs are available yet for this execution environment version.\nSee full logs at: %s",
+			executionEnvironmentBuildFailedMessage, logsURL,
+		)
+	}
+	return fmt.Sprintf(
+		"%s\n%s\nExecution Environment Version build logs:\n%s\n%s\nSee full logs at: %s",
+		executionEnvironmentBuildFailedMessage, executionEnvironmentLogsSeparator, logs, executionEnvironmentLogsSeparator, logsURL,
+	)
+}
 
 func NewExecutionEnvironmentResource() resource.Resource {
 	return &ExecutionEnvironmentResource{}
@@ -198,10 +253,13 @@ func (r *ExecutionEnvironmentResource) Create(ctx context.Context, req resource.
 	}
 
 	traceAPICall("CreateExecutionEnvironmentVersion")
-	if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest); err != nil {
+	executionEnvironmentVersion, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, createExecutionEnvironmentVersionRequest)
+	if err != nil {
 		resp.Diagnostics.AddError("Error creating Execution Environment Version", err.Error())
 		return
 	}
+
+	addExecutionEnvironmentBuildStartedWarning(&resp.Diagnostics, r.provider.service.BaseURL(), executionEnvironment.ID, executionEnvironmentVersion.ID)
 
 	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
 	if err != nil {
@@ -368,10 +426,13 @@ func (r *ExecutionEnvironmentResource) Update(ctx context.Context, req resource.
 			updateExecutionEnvironmentRequest.DockerImageUri = plan.DockerImageUri.ValueString()
 		}
 
-		if _, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest); err != nil {
+		executionEnvironmentVersion, err := r.provider.service.CreateExecutionEnvironmentVersion(ctx, executionEnvironment.ID, updateExecutionEnvironmentRequest)
+		if err != nil {
 			resp.Diagnostics.AddError("Error creating new Execution Environment Version", err.Error())
 			return
 		}
+
+		addExecutionEnvironmentBuildStartedWarning(&resp.Diagnostics, r.provider.service.BaseURL(), executionEnvironment.ID, executionEnvironmentVersion.ID)
 	}
 
 	executionEnvironment, err = waitForExecutionEnvironmentToBeReady(ctx, r.provider.service, executionEnvironment.ID)
@@ -504,6 +565,17 @@ func waitForExecutionEnvironmentToBeReady(ctx context.Context, service client.Se
 		return nil, err
 	}
 
+	// Logged once here (Create and Update both funnel through this single wait
+	// function) rather than at each call site, so the live TF_LOG signal isn't
+	// duplicated. See addExecutionEnvironmentBuildStartedWarning for the diagnostic
+	// counterpart, which Create/Update still add individually.
+	logsURL := executionEnvironmentBuildLogsURL(service.BaseURL(), id, executionEnvironment.LatestVersion.ID)
+	tflog.Warn(ctx, "Execution Environment build started", map[string]interface{}{
+		"environment_id": id,
+		"version_id":     executionEnvironment.LatestVersion.ID,
+		"logs_url":       logsURL,
+	})
+
 	expBackoff := getExponentialBackoff()
 
 	operation := func() error {
@@ -513,7 +585,11 @@ func waitForExecutionEnvironmentToBeReady(ctx context.Context, service client.Se
 			return backoff.Permanent(err)
 		}
 		if executionEnvironmentVersion.BuildStatus == "failed" {
-			return backoff.Permanent(errors.New("execution environment failed to create, review the logs for more details"))
+			logsURL := executionEnvironmentBuildLogsURL(service.BaseURL(), id, executionEnvironmentVersion.ID)
+
+			traceAPICall("GetExecutionEnvironmentVersionBuildLog")
+			logs, logErr := service.GetExecutionEnvironmentVersionBuildLog(ctx, id, executionEnvironmentVersion.ID, executionEnvironmentVersion.BuildID)
+			return backoff.Permanent(errors.New(executionEnvironmentErrorMessageWithLogs(logs, logErr, logsURL)))
 		}
 
 		if executionEnvironmentVersion.BuildStatus != "success" {

@@ -138,7 +138,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "The artifact type: `service`, `nim`, or `agent`. Defaults to `service`.",
+				MarkdownDescription: "The artifact type: `service`, `nim`, `agent`, or `mcp`. Defaults to `service`.",
 				Validators:          ArtifactTypeValidators(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -169,19 +169,37 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 			"spec": artifactResourceSpecAttribute(probeAttributes, imageBuildConfigAttributes),
 			"source": schema.SingleNestedAttribute{
 				Optional: true,
-				MarkdownDescription: "Local source directory to upload to the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
-					"When source content changes, the provider uploads, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
-					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version.",
+				MarkdownDescription: "Local source directory to synchronize with the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. " +
+					"When source content changes, the provider syncs, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. " +
+					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. " +
+					"**Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` " +
+					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
+					"A file changed on both sides since the last sync (edited or deleted locally, and edited or deleted in the catalog) fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
+					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
+					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
-						MarkdownDescription: "Path to the local directory containing application source files to upload.",
+						MarkdownDescription: "Path to the local directory containing application source files to synchronize. Apply may add, overwrite, or remove files in this directory, and keeps sync state under `dir/.datarobot/workload/`, so the directory must be writable; see the `source` description.",
 					},
 					"dir_hash": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "SHA-256 fingerprint of `dir` contents, used to detect changes and skip re-upload when unchanged.",
+						Computed: true,
+						MarkdownDescription: "SHA-256 fingerprint of uploadable files under `dir` after `.drignore` / system excludes. " +
+							"Used to detect changes and skip the sync when unchanged. Files covered by a system exclude, including the sync state directory, are never part of this hash. " +
+							"When the directory differs from state, or the catalog moved since the directory last synced, it plans as known after apply, because the sync may add or remove files under `dir`; the value recorded is the digest of the directory once the sync is done.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"generate_ignore": schema.BoolAttribute{
+						Optional: true,
+						Computed: true,
+						MarkdownDescription: "When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. " +
+							"Existing ignore files are never overwritten. Set to `false` to skip autogeneration. " +
+							"System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, the `<path>.LOCAL.<timestamp>` copies the DataRobot CLI's sync keeps, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.",
+						Default: booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
 						},
 					},
 					"wait_for_build": schema.BoolAttribute{
@@ -227,6 +245,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		createReq.Status = client.ArtifactStatusDraft
 	}
 
+	artifactApplyProgressCreating()
 	traceAPICall("CreateArtifact")
 	artifact, err := r.provider.service.CreateArtifact(ctx, createReq)
 	if err != nil {
@@ -237,7 +256,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "")
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "", &resp.Diagnostics)
 		if syncErr != nil {
 			var timeoutErr *client.ArtifactBuildTimeoutError
 			isTimeout := errors.As(syncErr, &timeoutErr)
@@ -276,7 +295,9 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 
 	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	if err := refreshArtifactSourceDirHash(&data); err != nil {
+		artifactSourceDirHashWarning(&resp.Diagnostics, err)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -309,7 +330,10 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	loadArtifactIntoModel(artifact, &data)
-	refreshArtifactSourceDirHash(&data)
+	// Keep the last-applied source.dir_hash. Refresh runs before plan; recomputing
+	// the hash from the current local tree here would hide file edits (for example
+	// uncommenting a tool in user_tools.py) because plan and refreshed state would
+	// already match. ModifyPlan computes the current hash for diffing.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -335,6 +359,7 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 
 	var artifact *client.Artifact
 	var err error
+	sourceSynced := false
 
 	switch {
 	case state.Status.ValueString() == string(client.ArtifactStatusDraft):
@@ -348,6 +373,41 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Error updating Artifact", err.Error())
 			return
 		}
+	case lockedSourceCloneNeeded && !artifactNeedsNewVersion(plan, state) && artifactSourceLocallyUnchanged(&plan, &state):
+		// The catalog moved while the directory did not. Whether that
+		// needs a new version depends on what the sync finds, so plan
+		// against the locked artifact first: a directory behind the
+		// resource on paper only, or a catalog that re-uploaded identical
+		// bytes, plans empty, and an empty plan records itself against the
+		// locked version without minting another (no build, no workload
+		// roll). Only a plan with work clones to a draft, and a conflict
+		// is refused before any clone exists. A directory that changed
+		// locally skips this and clones straight away: its plan has work.
+		traceAPICall("GetArtifact")
+		locked, getErr := r.provider.service.GetArtifact(ctx, priorArtifactID)
+		if getErr != nil {
+			resp.Diagnostics.AddError("Error reading Artifact", getErr.Error())
+			return
+		}
+		synced, _, syncErr := r.syncArtifactSource(ctx, &plan, &state, locked, priorArtifactID, &resp.Diagnostics)
+		switch {
+		case errors.Is(syncErr, errArtifactSourceNeedsVersion):
+			createReq := artifactCreateRequest(plan)
+			createReq.Status = client.ArtifactStatusDraft
+			traceAPICall("CreateUpdatedArtifact")
+			artifact, err = r.provider.service.CreateArtifact(ctx, createReq)
+			if err != nil {
+				resp.Diagnostics.AddError("Error creating draft Artifact for source update", err.Error())
+				return
+			}
+		case syncErr != nil:
+			resp.Diagnostics.AddError("Error uploading artifact source", syncErr.Error())
+			return
+		default:
+			artifact = synced
+			sourceSynced = true
+			lockedSourceCloneNeeded = false
+		}
 	case lockedSourceCloneNeeded:
 		createReq := artifactCreateRequest(plan)
 		createReq.Status = client.ArtifactStatusDraft
@@ -355,6 +415,15 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		artifact, err = r.provider.service.CreateArtifact(ctx, createReq)
 		if err != nil {
 			resp.Diagnostics.AddError("Error creating draft Artifact for source update", err.Error())
+			return
+		}
+	case artifactUpdateKeepsLockedVersion(plan, state):
+		// Nothing about the artifact changed, only provider-side source
+		// settings did. Read the version back rather than mint another.
+		traceAPICall("GetArtifact")
+		artifact, err = r.provider.service.GetArtifact(ctx, priorArtifactID)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading Artifact", err.Error())
 			return
 		}
 	default:
@@ -366,9 +435,9 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	createdNewVersion := state.Status.ValueString() != string(client.ArtifactStatusDraft)
-	if artifactSourceConfigured(&plan) {
-		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID)
+	createdNewVersion := artifact.ID != priorArtifactID
+	if artifactSourceConfigured(&plan) && !sourceSynced {
+		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &plan, &state, artifact, priorArtifactID, &resp.Diagnostics)
 		if syncErr != nil {
 			if createdNewVersion {
 				persistPartialArtifactUpdate(ctx, resp, artifact, &plan, &state)
@@ -408,7 +477,9 @@ func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	loadArtifactIntoModel(artifact, &plan)
-	refreshArtifactSourceDirHash(&plan)
+	if err := refreshArtifactSourceDirHash(&plan); err != nil {
+		artifactSourceDirHashWarning(&resp.Diagnostics, err)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -422,8 +493,16 @@ func persistPartialArtifactUpdate(
 	plan, state *ArtifactResourceModel,
 ) {
 	loadArtifactIntoModel(artifact, plan)
-	if plan.Source != nil && state.Source != nil {
-		plan.Source.DirHash = state.Source.DirHash
+	if plan.Source != nil {
+		// The plan's dir_hash is unknown whenever the tree changed, and an
+		// unknown handed back from apply makes Terraform reject the whole
+		// state, draft clone included. Keep the hash the last successful
+		// apply recorded, so the retry re-syncs, or none when there is no
+		// such apply (source was added to a locked artifact just now).
+		plan.Source.DirHash = types.StringNull()
+		if state.Source != nil && IsKnown(state.Source.DirHash) {
+			plan.Source.DirHash = state.Source.DirHash
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -472,19 +551,6 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		configPtr = &config
 	}
 
-	if plan.Source != nil && IsKnown(plan.Source.Dir) {
-		dirHash, err := computeFolderHash(plan.Source.Dir)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("source").AtName("dir"),
-				"Error calculating source directory hash",
-				err.Error(),
-			)
-			return
-		}
-		plan.Source.DirHash = dirHash
-	}
-
 	var statePtr *ArtifactResourceModel
 	var state ArtifactResourceModel
 	isCreate := req.State.Raw.IsNull()
@@ -494,7 +560,27 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 			return
 		}
 		statePtr = &state
+	}
 
+	if plan.Source != nil && IsKnown(plan.Source.Dir) {
+		dirHash, err := computeArtifactSourceDirHash(&plan)
+		if err != nil {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("source").AtName("dir"),
+				"Error calculating source directory hash",
+				err.Error(),
+			)
+			return
+		}
+		plan.Source.DirHash = plannedArtifactSourceDirHash(dirHash, statePtr)
+		if artifactSourceRemoteDrifted(&plan, statePtr) {
+			plan.Source.DirHash = types.StringUnknown()
+			artifactSourceDriftWarning(&resp.Diagnostics, &plan, statePtr)
+		}
+		resp.Diagnostics.Append(artifactSourceIgnoreDiagnostics(&plan)...)
+	}
+
+	if !isCreate {
 		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
@@ -712,6 +798,14 @@ func containersEqual(a, b ArtifactContainerModel, ignoreManagedCodeRef, ignoreIm
 			return false
 		}
 	}
+	if len(a.Routes) != len(b.Routes) {
+		return false
+	}
+	for i := range a.Routes {
+		if !a.Routes[i].Path.Equal(b.Routes[i].Path) || !a.Routes[i].Auth.Equal(b.Routes[i].Auth) {
+			return false
+		}
+	}
 	if len(a.EnvironmentVars) != len(b.EnvironmentVars) {
 		return false
 	}
@@ -869,9 +963,6 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 				"Missing name",
 				`"name" is required when source is "string".`)
 		}
-		if ev.Value.IsUnknown() {
-			return
-		}
 		if !ev.Value.IsUnknown() && ev.Value.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("value"),
 				"Missing value",
@@ -895,9 +986,6 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 			resp.Diagnostics.AddAttributeError(evPath.AtName("name"),
 				"Missing name",
 				`"name" is required when source is "dr-credential".`)
-		}
-		if ev.DrCredentialID.IsUnknown() || ev.Key.IsUnknown() {
-			return
 		}
 		if !ev.DrCredentialID.IsUnknown() && ev.DrCredentialID.IsNull() {
 			resp.Diagnostics.AddAttributeError(evPath.AtName("dr_credential_id"),
@@ -970,8 +1058,54 @@ func validateArtifactContainer(
 		}
 	}
 
+	validateArtifactContainerRoutes(resp, containerPath, container, containerCount)
+
 	for ei, ev := range container.EnvironmentVars {
 		validateArtifactEnvironmentVar(resp, containerPath.AtName("environment_vars").AtListIndex(ei), ev)
+	}
+}
+
+// validateArtifactContainerRoutes mirrors the Workload API route rules that the
+// schema cannot express: routes belong to the primary container only, and a path
+// may appear once per container (two entries would carry conflicting auth policies).
+func validateArtifactContainerRoutes(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	containerCount int,
+) {
+	if len(container.Routes) == 0 {
+		return
+	}
+
+	routesPath := containerPath.AtName("routes")
+
+	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
+	if !isPrimary && !autoPrimary {
+		resp.Diagnostics.AddAttributeError(
+			routesPath,
+			"Unsupported on non-primary container",
+			"`routes` is only permitted on the primary container.",
+		)
+	}
+
+	seen := make(map[string]int, len(container.Routes))
+	for ri, route := range container.Routes {
+		if route.Path.IsNull() || route.Path.IsUnknown() {
+			continue
+		}
+		routePath := route.Path.ValueString()
+		if first, ok := seen[routePath]; ok {
+			resp.Diagnostics.AddAttributeError(
+				routesPath.AtListIndex(ri).AtName("path"),
+				"Duplicate route path",
+				fmt.Sprintf("Route path %q is already declared at index %d. Each path may appear only once per container.", routePath, first),
+			)
+			continue
+		}
+		seen[routePath] = ri
 	}
 }
 
@@ -1397,6 +1531,16 @@ func artifactContainerToClient(c ArtifactContainerModel) client.ArtifactContaine
 		}
 	}
 
+	if len(c.Routes) > 0 {
+		container.Routes = make([]client.ArtifactContainerRoute, len(c.Routes))
+		for i, r := range c.Routes {
+			container.Routes[i] = client.ArtifactContainerRoute{
+				Path: r.Path.ValueString(),
+				Auth: r.Auth.ValueString(),
+			}
+		}
+	}
+
 	if len(c.EnvironmentVars) > 0 {
 		container.EnvironmentVars = make([]client.ArtifactEnvironmentVariable, len(c.EnvironmentVars))
 		for i, ev := range c.EnvironmentVars {
@@ -1629,6 +1773,20 @@ func loadContainerFromAPI(c client.ArtifactContainer, prior *ArtifactContainerMo
 		for i, e := range c.Entrypoint {
 			model.Entrypoint[i] = types.StringValue(e)
 		}
+	}
+
+	if len(c.Routes) > 0 {
+		model.Routes = make([]ArtifactContainerRouteModel, len(c.Routes))
+		for i, r := range c.Routes {
+			model.Routes[i] = ArtifactContainerRouteModel{
+				Path: types.StringValue(r.Path),
+				Auth: types.StringValue(r.Auth),
+			}
+		}
+	} else if prior != nil && prior.Routes != nil {
+		// `routes = []` is omitted from the request and comes back absent. Keep the
+		// empty list rather than null so the applied state matches the config.
+		model.Routes = []ArtifactContainerRouteModel{}
 	}
 
 	if len(c.EnvironmentVars) > 0 {

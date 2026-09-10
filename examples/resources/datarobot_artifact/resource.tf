@@ -3,6 +3,7 @@
 # - Build from source with local upload: set image_build_config and source { dir }
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
+# - MCP: type = "mcp" (same spec shape as service)
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -15,6 +16,17 @@ resource "datarobot_artifact" "prebuilt" {
         image_uri = "nginx:latest"
         primary   = true
         port      = 8080
+        # Extra paths to expose from the workload's public endpoint, each with
+        # its own auth policy: "required", "optional", or "disabled". Reserve
+        # "disabled" for documents a client must fetch before it holds a token,
+        # such as an MCP server's OAuth discovery document.
+        # Route configuration is disabled by default at the cluster level; on a
+        # cluster without it, this block fails with
+        # "Route configuration is disabled on this cluster".
+        routes = [{
+          path = "/index.html"
+          auth = "required"
+        }]
       }]
     }]
   }
@@ -35,9 +47,17 @@ resource "datarobot_artifact" "from_source" {
   description = "Draft artifact with local source upload (code-to-workload)"
   status      = "draft"
 
+  # apply synchronizes this directory with the catalog in both directions:
+  # local changes are uploaded, catalog-only files are downloaded and files
+  # deleted from the catalog are removed locally (each reported as a warning).
+  # A file edited on both sides since the last sync fails the apply; resolve
+  # it with `dr artifact code sync` and apply again. Sync bookkeeping lives in
+  # app/.datarobot/workload/ (it ships its own .gitignore). .datarobot.yaml is
+  # never uploaded.
   source = {
     dir            = "${path.module}/app"
     wait_for_build = true
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -78,6 +98,7 @@ resource "datarobot_artifact" "from_source_locked" {
 
   source = {
     dir = "${path.module}/app"
+    # generate_ignore = true  # default: write .drignore if missing; never overwrite
   }
 
   spec = {
@@ -123,4 +144,25 @@ resource "datarobot_artifact" "agent" {
 output "agent_artifact_id" {
   value       = datarobot_artifact.agent.artifact_id
   description = "Artifact ID for the agent example"
+}
+
+resource "datarobot_artifact" "mcp" {
+  name        = "example-mcp"
+  description = "MCP server artifact"
+  type        = "mcp"
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        image_uri = "nginx:latest"
+        primary   = true
+        port      = 8080
+      }]
+    }]
+  }
+}
+
+output "mcp_artifact_id" {
+  value       = datarobot_artifact.mcp.artifact_id
+  description = "Artifact ID for the MCP example"
 }
