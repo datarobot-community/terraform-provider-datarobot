@@ -225,41 +225,6 @@ func TestAccDeploymentSharedRoleResource(t *testing.T) {
 	group := testAccRequireDirectoryGroup(t)
 	resourceName := "datarobot_deployment_shared_role.test"
 
-	folderPath, err := prepareTestFolder("deployment_shared_role")
-	if err != nil {
-		t.Fatalf("Failed to create test folder: %v", err)
-	}
-	defer os.RemoveAll(folderPath)
-
-	modelContents := `from typing import Any, Dict
-import pandas as pd
-
-def load_model(code_dir: str) -> Any:
-	return "dummy"
-
-def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
-	positive_label = kwargs["positive_class_label"]
-	negative_label = kwargs["negative_class_label"]
-	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
-	return preds
-`
-	if err := os.WriteFile(folderPath+"/custom.py", []byte(modelContents), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	modelMetadata := `name: deployment-shared-role-test
-
-type: inference
-targetType: binary
-inferenceModel:
-  targetName: target
-  positiveClassLabel: 1
-  negativeClassLabel: 0
-`
-	if err := os.WriteFile(folderPath+"/model-metadata.yaml", []byte(modelMetadata), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -386,19 +351,15 @@ func deploymentSharedRoleAccConfig(groupName, role string) string {
 		roleLine = fmt.Sprintf("\n\trole = \"%s\"", role)
 	}
 
+	// The deployment is built from a global model rather than from a custom
+	// model of our own. All this test needs is a deployment to share, and
+	// building a custom model means an image build, which is the slowest and
+	// least reliable part of the chain: it failed here once with "Dependent jobs
+	// failed" and no logs while every other test in the group passed. A global
+	// model is already registered, so there is nothing to build.
 	return fmt.Sprintf(`
-resource "datarobot_custom_model" "test_shared_role" {
-	name = "test deployment shared role %s"
-	description = "test"
-	target_type = "Binary"
-	target_name = "target"
-	base_environment_id = "`+testGenAIBaseEnvID+`"
-	folder_path = "deployment_shared_role"
-}
-resource "datarobot_registered_model" "test_shared_role" {
-	name = "test deployment shared role %s"
-	description = "test"
-	custom_model_version_id = "${datarobot_custom_model.test_shared_role.version_id}"
+data "datarobot_global_model" "test_shared_role" {
+	name = "[DataRobot] Dummy Binary Classification"
 }
 resource "datarobot_prediction_environment" "test_shared_role" {
 	name = "test deployment shared role %s"
@@ -409,11 +370,11 @@ resource "datarobot_deployment" "test_shared_role" {
 	label = "test deployment shared role %s"
 	importance = "LOW"
 	prediction_environment_id = datarobot_prediction_environment.test_shared_role.id
-	registered_model_version_id = datarobot_registered_model.test_shared_role.version_id
+	registered_model_version_id = data.datarobot_global_model.test_shared_role.version_id
 }
 resource "datarobot_deployment_shared_role" "test" {
 	deployment_id = datarobot_deployment.test_shared_role.id
 	group_name    = "%s"%s
 }
-`, nameSalt, nameSalt, nameSalt, nameSalt, groupName, roleLine)
+`, nameSalt, nameSalt, groupName, roleLine)
 }
