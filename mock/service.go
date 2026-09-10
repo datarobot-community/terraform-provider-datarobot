@@ -2265,6 +2265,36 @@ func (mr *MockServiceMockRecorder) ListDeploymentRuntimeParameters(ctx, id any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeploymentRuntimeParameters", reflect.TypeOf((*MockService)(nil).ListDeploymentRuntimeParameters), ctx, id)
 }
 
+// ListDeploymentSharedRoles mocks base method.
+func (m *MockService) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]client.SharedRole, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDeploymentSharedRoles", ctx, deploymentID)
+	ret0, _ := ret[0].([]client.SharedRole)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDeploymentSharedRoles indicates an expected call of ListDeploymentSharedRoles.
+func (mr *MockServiceMockRecorder) ListDeploymentSharedRoles(ctx, deploymentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeploymentSharedRoles", reflect.TypeOf((*MockService)(nil).ListDeploymentSharedRoles), ctx, deploymentID)
+}
+
+// ListDirectoryEntities mocks base method.
+func (m *MockService) ListDirectoryEntities(ctx context.Context, req *client.ListDirectoryEntitiesRequest) (*client.ListDirectoryEntitiesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDirectoryEntities", ctx, req)
+	ret0, _ := ret[0].(*client.ListDirectoryEntitiesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDirectoryEntities indicates an expected call of ListDirectoryEntities.
+func (mr *MockServiceMockRecorder) ListDirectoryEntities(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDirectoryEntities", reflect.TypeOf((*MockService)(nil).ListDirectoryEntities), ctx, req)
+}
+
 // ListExecutionEnvironments mocks base method.
 func (m *MockService) ListExecutionEnvironments(ctx context.Context) ([]client.ExecutionEnvironment, error) {
 	m.ctrl.T.Helper()
@@ -2788,6 +2818,20 @@ func (m *MockService) UpdateDeploymentRuntimeParameters(ctx context.Context, id 
 func (mr *MockServiceMockRecorder) UpdateDeploymentRuntimeParameters(ctx, id, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentRuntimeParameters", reflect.TypeOf((*MockService)(nil).UpdateDeploymentRuntimeParameters), ctx, id, req)
+}
+
+// UpdateDeploymentSharedRoles mocks base method.
+func (m *MockService) UpdateDeploymentSharedRoles(ctx context.Context, deploymentID string, req *client.UpdateSharedRolesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeploymentSharedRoles", ctx, deploymentID, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDeploymentSharedRoles indicates an expected call of UpdateDeploymentSharedRoles.
+func (mr *MockServiceMockRecorder) UpdateDeploymentSharedRoles(ctx, deploymentID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeploymentSharedRoles", reflect.TypeOf((*MockService)(nil).UpdateDeploymentSharedRoles), ctx, deploymentID, req)
 }
 
 // UpdateDeploymentSettings mocks base method.

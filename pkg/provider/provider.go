@@ -153,6 +153,7 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 func (p *Provider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewUseCaseResource,
+		NewDeploymentSharedRoleResource,
 		NewRemoteRepositoryResource,
 		NewDatasetFromFileResource,
 		NewDatasetFromURLResource,
@@ -206,6 +207,7 @@ func (p *Provider) DataSources(ctx context.Context) []func() datasource.DataSour
 		NewExecutionEnvironmentDataSource,
 		NewArtifactDataSource,
 		NewArtifactsDataSource,
+		NewGroupDataSource,
 	}
 }
 

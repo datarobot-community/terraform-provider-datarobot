@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -304,6 +305,13 @@ type Service interface {
 	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)
 	UpdateQuota(ctx context.Context, id string, req *UpdateQuotaRequest) (*Quota, error)
 	DeleteQuota(ctx context.Context, id string) error
+
+	// Directory
+	ListDirectoryEntities(ctx context.Context, req *ListDirectoryEntitiesRequest) (*ListDirectoryEntitiesResponse, error)
+
+	// Sharing
+	ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]SharedRole, error)
+	UpdateDeploymentSharedRoles(ctx context.Context, deploymentID string, req *UpdateSharedRolesRequest) error
 
 	// Files API (catalog upload for artifact source sync)
 	FilesAPI() filesapi.Client
@@ -1305,4 +1313,37 @@ func (s *ServiceImpl) UpdateAppOAuthProvider(ctx context.Context, id string, req
 
 func (s *ServiceImpl) DeleteAppOAuthProvider(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/externalOAuth/providers/"+id+"/")
+}
+
+// ListDirectoryEntities resolves directory entities by name. Matching is exact
+// and case sensitive. The response carries every match with a total count
+// rather than erroring when a name is ambiguous, so callers should assert on
+// TotalCount rather than reading Data[0].
+func (s *ServiceImpl) ListDirectoryEntities(ctx context.Context, req *ListDirectoryEntitiesRequest) (*ListDirectoryEntitiesResponse, error) {
+	path := "/directoryEntities/"
+	if req != nil {
+		params, err := query.Values(req)
+		if err != nil {
+			return nil, WrapGenericError("failed to encode directory entities query", err)
+		}
+		if encoded := params.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+	}
+	return Get[ListDirectoryEntitiesResponse](s.client, ctx, path)
+}
+
+// ListDeploymentSharedRoles returns the full access control list for a
+// deployment. The endpoint is paginated, and a deployment can carry more grants
+// than fit on one page, so every page is read: treating an absent grant as
+// revoked when it is only on a later page would drop it from state.
+func (s *ServiceImpl) ListDeploymentSharedRoles(ctx context.Context, deploymentID string) ([]SharedRole, error) {
+	return GetAllPages[SharedRole](s.client, ctx, "/deployments/"+url.PathEscape(deploymentID)+"/sharedRoles/", nil)
+}
+
+// UpdateDeploymentSharedRoles grants or revokes roles on a deployment. The
+// endpoint replies 204 with no body.
+func (s *ServiceImpl) UpdateDeploymentSharedRoles(ctx context.Context, deploymentID string, req *UpdateSharedRolesRequest) error {
+	_, err := Patch[CreateVoidResponse](s.client, ctx, "/deployments/"+url.PathEscape(deploymentID)+"/sharedRoles/", req)
+	return err
 }
