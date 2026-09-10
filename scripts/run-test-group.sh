@@ -32,7 +32,7 @@ REPORT_FILE="${REPORT_FILE:-}"
 ###############################################################################
 
 # Group: fast — credentials, datasets, datastores, use cases, infra primitives
-FAST_PREFIXES="api_token_credential app_oauth aws_credential azure_credential basic_credential batch_prediction_job data_source_resource data_store dataset_from google_cloud_service_account prediction_environment quota remote_repository use_case"
+FAST_PREFIXES="api_token_credential app_oauth aws_credential azure_credential basic_credential batch_prediction_job data_source_resource data_store dataset_from google_cloud_service_account group prediction_environment quota remote_repository use_case"
 FAST_TIMEOUT="30m"
 
 # Group: models — custom models, registered models, LLM blueprints, vector DB, playground
