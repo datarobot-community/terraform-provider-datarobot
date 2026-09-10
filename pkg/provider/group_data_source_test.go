@@ -215,8 +215,10 @@ func TestAccGroupDataSource(t *testing.T) {
 			// A name that matches nothing has to say so rather than resolve to
 			// an empty ID.
 			{
-				Config:      groupDataSourceConfig("terraform-acc-no-such-group-" + nameSalt),
-				ExpectError: regexp.MustCompile(`no group named .* was found`),
+				Config: groupDataSourceConfig("terraform-acc-no-such-group-" + nameSalt),
+				// Terraform line wraps the diagnostic, so the pattern has to cross
+				// newlines.
+				ExpectError: regexp.MustCompile(`(?s)no group named.*was found`),
 			},
 		},
 	})
