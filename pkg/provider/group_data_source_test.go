@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -132,4 +133,91 @@ data "datarobot_group" "test" {
 	name = "%s"
 }
 `, name)
+}
+
+// testAccRequireDirectoryGroup returns a group that the test organization
+// already has. The provider has no group resource, so an acceptance test cannot
+// create one, and whether there is anything to look up depends on the DataRobot
+// instance behind the run.
+func testAccRequireDirectoryGroup(t *testing.T) client.DirectoryEntity {
+	t.Helper()
+
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Skipping acceptance test: set TF_ACC=1 to run")
+	}
+	testAccPreCheck(t)
+
+	p, ok := testAccProvider.(*Provider)
+	if !ok {
+		t.Fatal("Provider not found")
+	}
+	p.service = client.NewService(cl)
+
+	traceAPICall("ListDirectoryEntities")
+	resp, err := p.service.ListDirectoryEntities(context.TODO(), &client.ListDirectoryEntitiesRequest{
+		EntityType: "group",
+		Limit:      100,
+	})
+	if err != nil {
+		t.Fatalf("Could not list directory groups: %v", err)
+	}
+
+	for _, group := range resp.Data {
+		// The name is interpolated into HCL and into the ExpectError patterns,
+		// so a name carrying a quote, a backslash or a regex metacharacter is
+		// passed over rather than escaped in three places.
+		if group.Name == "" || strings.ContainsAny(group.Name, `"\`) {
+			continue
+		}
+		if group.Name != regexp.QuoteMeta(group.Name) {
+			continue
+		}
+
+		// A name that is not unique would fail the data source by design, and
+		// that is the ambiguity case rather than the happy path.
+		traceAPICall("ListDirectoryEntities")
+		byName, err := p.service.ListDirectoryEntities(context.TODO(), &client.ListDirectoryEntitiesRequest{
+			EntityType: "group",
+			Name:       group.Name,
+		})
+		if err != nil {
+			t.Fatalf("Could not look up group %q: %v", group.Name, err)
+		}
+		if byName.TotalCount == 1 {
+			return group
+		}
+	}
+
+	t.Skip("Skipping acceptance test: the test organization has no uniquely named directory group to look up")
+
+	return client.DirectoryEntity{}
+}
+
+func TestAccGroupDataSource(t *testing.T) {
+	t.Parallel()
+
+	group := testAccRequireDirectoryGroup(t)
+	dataSourceName := "data.datarobot_group.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Resolve a name that exists.
+			{
+				Config: groupDataSourceConfig(group.Name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(dataSourceName, "id", group.ID),
+					resource.TestCheckResourceAttr(dataSourceName, "name", group.Name),
+					resource.TestCheckResourceAttrSet(dataSourceName, "provisioning_source"),
+				),
+			},
+			// A name that matches nothing has to say so rather than resolve to
+			// an empty ID.
+			{
+				Config:      groupDataSourceConfig("terraform-acc-no-such-group-" + nameSalt),
+				ExpectError: regexp.MustCompile(`no group named .* was found`),
+			},
+		},
+	})
 }

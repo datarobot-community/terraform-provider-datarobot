@@ -218,3 +218,202 @@ resource "datarobot_deployment_shared_role" "test" {
 }
 `, deploymentID, groupName, roleLine)
 }
+
+func TestAccDeploymentSharedRoleResource(t *testing.T) {
+	t.Parallel()
+
+	group := testAccRequireDirectoryGroup(t)
+	resourceName := "datarobot_deployment_shared_role.test"
+
+	folderPath, err := prepareTestFolder("deployment_shared_role")
+	if err != nil {
+		t.Fatalf("Failed to create test folder: %v", err)
+	}
+	defer os.RemoveAll(folderPath)
+
+	modelContents := `from typing import Any, Dict
+import pandas as pd
+
+def load_model(code_dir: str) -> Any:
+	return "dummy"
+
+def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFrame:
+	positive_label = kwargs["positive_class_label"]
+	negative_label = kwargs["negative_class_label"]
+	preds = pd.DataFrame([[0.75, 0.25]] * data.shape[0], columns=[positive_label, negative_label])
+	return preds
+`
+	if err := os.WriteFile(folderPath+"/custom.py", []byte(modelContents), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	modelMetadata := `name: deployment-shared-role-test
+
+type: inference
+targetType: binary
+inferenceModel:
+  targetName: target
+  positiveClassLabel: 1
+  negativeClassLabel: 0
+`
+	if err := os.WriteFile(folderPath+"/model-metadata.yaml", []byte(modelMetadata), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkDeploymentSharedRoleDestroyed(group.ID),
+		Steps: []resource.TestStep{
+			// Create and Read. The role defaults to CONSUMER.
+			{
+				Config: deploymentSharedRoleAccConfig(group.Name, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "group_name", group.Name),
+					resource.TestCheckResourceAttr(resourceName, "group_id", group.ID),
+					resource.TestCheckResourceAttr(resourceName, "role", defaultDeploymentShareRole),
+					resource.TestCheckResourceAttrSet(resourceName, "deployment_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					checkDeploymentSharedRoleGranted(resourceName, group.ID, defaultDeploymentShareRole),
+				),
+			},
+			// A changed role is an in place update on the same grant.
+			{
+				Config: deploymentSharedRoleAccConfig(group.Name, "USER"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "group_id", group.ID),
+					resource.TestCheckResourceAttr(resourceName, "role", "USER"),
+					checkDeploymentSharedRoleGranted(resourceName, group.ID, "USER"),
+				),
+			},
+			// Import by <deployment_id>:<group_id>.
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// Destroy is asserted by CheckDestroy.
+		},
+	})
+}
+
+// checkDeploymentSharedRoleGranted reads the deployment's access control list
+// back from the API, so the test proves the grant landed on the platform rather
+// than only in Terraform state.
+func checkDeploymentSharedRoleGranted(resourceName, groupID, role string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("Not found: %s", resourceName)
+		}
+
+		deploymentID := rs.Primary.Attributes["deployment_id"]
+		if deploymentID == "" {
+			return fmt.Errorf("no deployment_id is set")
+		}
+
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = client.NewService(cl)
+
+		traceAPICall("ListDeploymentSharedRoles")
+		sharedRoles, err := p.service.ListDeploymentSharedRoles(context.TODO(), deploymentID)
+		if err != nil {
+			return err
+		}
+
+		for _, sharedRole := range sharedRoles {
+			if sharedRole.ShareRecipientType == client.ShareRecipientTypeGroup && sharedRole.ID == groupID {
+				if sharedRole.Role != role {
+					return fmt.Errorf("expected group %s to hold %s on deployment %s, got %s",
+						groupID, role, deploymentID, sharedRole.Role)
+				}
+				return nil
+			}
+		}
+
+		return fmt.Errorf("group %s holds no role on deployment %s", groupID, deploymentID)
+	}
+}
+
+// checkDeploymentSharedRoleDestroyed asserts the grant is gone after destroy.
+// Destroy removes the deployment as well, and the sharedRoles route 404s once
+// it has, which counts as revoked rather than as a failure.
+func checkDeploymentSharedRoleDestroyed(groupID string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		p, ok := testAccProvider.(*Provider)
+		if !ok {
+			return fmt.Errorf("Provider not found")
+		}
+		p.service = client.NewService(cl)
+
+		for _, rs := range s.RootModule().Resources {
+			if rs.Type != "datarobot_deployment_shared_role" {
+				continue
+			}
+
+			deploymentID := rs.Primary.Attributes["deployment_id"]
+			if deploymentID == "" {
+				continue
+			}
+
+			traceAPICall("ListDeploymentSharedRoles")
+			sharedRoles, err := p.service.ListDeploymentSharedRoles(context.TODO(), deploymentID)
+			if err != nil {
+				if _, isNotFound := err.(*client.NotFoundError); isNotFound {
+					continue
+				}
+				return err
+			}
+
+			for _, sharedRole := range sharedRoles {
+				if sharedRole.ShareRecipientType == client.ShareRecipientTypeGroup && sharedRole.ID == groupID {
+					return fmt.Errorf("group %s still holds %s on deployment %s after destroy",
+						groupID, sharedRole.Role, deploymentID)
+				}
+			}
+		}
+
+		return nil
+	}
+}
+
+func deploymentSharedRoleAccConfig(groupName, role string) string {
+	roleLine := ""
+	if role != "" {
+		roleLine = fmt.Sprintf("\n\trole = \"%s\"", role)
+	}
+
+	return fmt.Sprintf(`
+resource "datarobot_custom_model" "test_shared_role" {
+	name = "test deployment shared role %s"
+	description = "test"
+	target_type = "Binary"
+	target_name = "target"
+	base_environment_id = "`+testGenAIBaseEnvID+`"
+	folder_path = "deployment_shared_role"
+}
+resource "datarobot_registered_model" "test_shared_role" {
+	name = "test deployment shared role %s"
+	description = "test"
+	custom_model_version_id = "${datarobot_custom_model.test_shared_role.version_id}"
+}
+resource "datarobot_prediction_environment" "test_shared_role" {
+	name = "test deployment shared role %s"
+	description = "test"
+	platform = "datarobotServerless"
+}
+resource "datarobot_deployment" "test_shared_role" {
+	label = "test deployment shared role %s"
+	importance = "LOW"
+	prediction_environment_id = datarobot_prediction_environment.test_shared_role.id
+	registered_model_version_id = datarobot_registered_model.test_shared_role.version_id
+}
+resource "datarobot_deployment_shared_role" "test" {
+	deployment_id = datarobot_deployment.test_shared_role.id
+	group_name    = "%s"%s
+}
+`, nameSalt, nameSalt, nameSalt, nameSalt, groupName, roleLine)
+}
