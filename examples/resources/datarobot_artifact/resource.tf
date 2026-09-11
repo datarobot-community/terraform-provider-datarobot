@@ -4,6 +4,12 @@
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
 # - MCP: type = "mcp" (same spec shape as service)
+#
+# image_uri and a source-driven build are alternatives, not a pair: when source
+# and image_build_config are both set the build produces the image and writes
+# image_uri, so setting it yourself is rejected at plan time. The one exception
+# is status = "locked" with source.wait_for_build = false, below, where the lock
+# cannot wait for the build and needs an image to point at.
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -122,6 +128,51 @@ resource "datarobot_artifact" "from_source_locked" {
 output "from_source_locked_artifact_id" {
   value       = datarobot_artifact.from_source_locked.artifact_id
   description = "Artifact ID for the locked image-build example (new version on source change)"
+}
+
+# The one shape where an explicit image_uri belongs next to a source-driven
+# build. wait_for_build = false returns from apply as soon as the build is
+# submitted, so there is no built image to lock onto yet and the lock request
+# needs one named here. Everywhere else this pairing is rejected at plan time,
+# because a build that does finish would overwrite whatever you wrote.
+#
+# The value is what the artifact is locked with; the build replaces it on the
+# platform once it finishes, so point it at the image the build will produce
+# (or the previous build's) rather than an unrelated one.
+resource "datarobot_artifact" "from_source_locked_no_wait" {
+  name        = "example-c2w-locked-no-wait"
+  description = "Locked artifact that submits the build without waiting for it"
+  status      = "locked"
+
+  source = {
+    dir            = "${path.module}/app"
+    wait_for_build = false
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "primary"
+        primary = true
+        port    = 8080
+
+        # Required here: the lock cannot wait for the build to produce one.
+        image_uri = "nginx:latest"
+
+        image_build_config = {
+          dockerfile = {
+            source = "provided"
+            path   = "./Dockerfile"
+          }
+        }
+      }]
+    }]
+  }
+}
+
+output "from_source_locked_no_wait_artifact_id" {
+  value       = datarobot_artifact.from_source_locked_no_wait.artifact_id
+  description = "Artifact ID for the locked, build-not-awaited example"
 }
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
