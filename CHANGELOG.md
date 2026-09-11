@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_custom_application` no longer fails an apply with Terraform core's `Provider produced inconsistent result after apply ... .resources: was null, but now cty.ObjectVal(...)` when the platform starts reporting resources for an application that had none. `resources` is `Computed`, and the API fills it in on its own — an application moved to a source version that overrides resources comes back with a populated object even though nothing was configured for it. The attribute carried `UseStateForUnknown()`, which planned it as the prior value (`null`) instead of leaving it unknown, so the value the API returned could not be written to state. The plan modifier is gone; an update to an application with no `resources` in its configuration now plans `resources` as known after apply. Plans that change nothing are unaffected — the framework only marks a computed attribute unknown when the resource is already changing — so this adds no diff noise.
+- The attributes inside `resources` on `datarobot_custom_application` and `datarobot_custom_application_from_environment` are now `Computed`, matching `datarobot_application_source`. They were `Optional` only, so a configuration that set some of them (`resources = { replicas = 2 }`) planned the rest as `null` while the API answered with a full object, failing the apply the same way on `resources.resource_label`.
+- `datarobot_custom_application` no longer fails an update with `Provider returned invalid result object after apply ... still indicated an unknown value for .name` when `name` is left out of the configuration. `name` is `Computed`, so it plans as unknown on any update, and the update never read it back from the API response.
+
 ## [0.11.4] - 2026-09-10
 
 ### Changed

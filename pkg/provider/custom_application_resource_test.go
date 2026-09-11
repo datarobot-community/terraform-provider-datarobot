@@ -8,6 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -908,4 +912,119 @@ def index():
 			t.Fatal(err)
 		}
 	}
+}
+
+// TestIntegrationCustomApplicationResourcesAppearAfterUpdate covers the case where
+// the API reports no resources for an application at create time and then starts
+// reporting them after the source version changes (the new version overrides them).
+// `resources` is Computed, so the plan must leave it unknown on update; planning it
+// as the prior null made Terraform reject the apply with "Provider produced
+// inconsistent result after apply".
+func TestIntegrationCustomApplicationResourcesAppearAfterUpdate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	appID := uuid.NewString()
+	replicas := int64(2)
+	resourceLabel := "cpu.xlarge"
+	sessionAffinity := false
+	serviceWebRequestsOnRootPath := true
+
+	// current is what the API reports for the application. It starts out without
+	// resources and gains them once it is moved to the second source version.
+	current := &client.Application{
+		ID:                               appID,
+		Name:                             "resources-after-update",
+		Status:                           "running",
+		CustomApplicationSourceID:        uuid.NewString(),
+		CustomApplicationSourceVersionID: "version-1",
+		ApplicationUrl:                   "https://example.com/custom_applications/" + appID + "/",
+	}
+
+	mockService.EXPECT().
+		CreateCustomApplication(gomock.Any(), gomock.Any()).
+		Return(current, nil)
+
+	mockService.EXPECT().
+		UpdateApplication(gomock.Any(), appID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, req *client.UpdateApplicationRequest) (*client.Application, error) {
+			if req.Name != "" {
+				current.Name = req.Name
+			}
+			if req.CustomApplicationSourceVersionID != "" {
+				current.CustomApplicationSourceVersionID = req.CustomApplicationSourceVersionID
+			}
+			if req.ExternalAccessEnabled != nil {
+				current.ExternalAccessEnabled = *req.ExternalAccessEnabled
+			}
+			if req.ExternalAccessRecipients != nil {
+				current.ExternalAccessRecipients = *req.ExternalAccessRecipients
+			}
+			current.AllowAutoStopping = req.AllowAutoStopping
+			if current.CustomApplicationSourceVersionID == "version-2" {
+				current.Resources = &client.ApplicationResources{
+					Replicas:                     &replicas,
+					ResourceLabel:                &resourceLabel,
+					SessionAffinity:              &sessionAffinity,
+					ServiceWebRequestsOnRootPath: &serviceWebRequestsOnRootPath,
+				}
+			}
+			return current, nil
+		}).
+		AnyTimes()
+
+	mockService.EXPECT().
+		GetApplication(gomock.Any(), appID).
+		DoAndReturn(func(_ context.Context, _ string) (*client.Application, error) {
+			return current, nil
+		}).
+		AnyTimes()
+
+	mockService.EXPECT().
+		DeleteApplication(gomock.Any(), appID).
+		Return(nil)
+
+	config := func(sourceVersionID string) string {
+		return testProviderConfigBlock() + fmt.Sprintf(`
+resource "datarobot_custom_application" "test" {
+	source_version_id = %q
+	external_access_enabled = false
+}
+`, sourceVersionID)
+	}
+
+	resourceName := "datarobot_custom_application.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("version-1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "source_version_id", "version-1"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+				),
+			},
+			{
+				Config: config("version-2"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "source_version_id", "version-2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", "cpu.xlarge"),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
+					resource.TestCheckResourceAttr(resourceName, "resources.service_web_requests_on_root_path", "true"),
+				),
+			},
+		},
+	})
 }
