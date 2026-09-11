@@ -139,6 +139,71 @@ output "from_source_locked_artifact_id" {
   description = "Artifact ID for the locked image-build example (new version on source change)"
 }
 
+# Build from source with a DataRobot-generated Dockerfile. The base image comes
+# from an execution environment, so the two ids are read from a variable or a
+# data source rather than pasted in: every attribute below accepts a variable,
+# data source, or resource reference, and only a null value counts as unset.
+#
+# Set both variables to build this example; left empty it plans and applies as
+# nothing, so the rest of this file works on any instance. Execution environment
+# names differ between instances, which is why this does not look one up by a
+# hardcoded name. To resolve them by name instead, add the data source and point
+# the two attributes at it:
+#
+#   data "datarobot_execution_environment" "python" {
+#     name = "<a name that exists on your instance>"
+#   }
+#
+#   execution_environment_id         = data.datarobot_execution_environment.python.id
+#   execution_environment_version_id = data.datarobot_execution_environment.python.version_id
+variable "execution_environment_id" {
+  type        = string
+  description = "Execution environment supplying the base image for the generated Dockerfile. Empty disables that example."
+  default     = ""
+}
+
+variable "execution_environment_version_id" {
+  type        = string
+  description = "Execution environment version pinning the base image. Empty disables the generated-Dockerfile example."
+  default     = ""
+}
+
+resource "datarobot_artifact" "generated_dockerfile" {
+  count = var.execution_environment_id != "" && var.execution_environment_version_id != "" ? 1 : 0
+
+  name        = "example-generated-dockerfile"
+  description = "Draft artifact whose Dockerfile is generated from an execution environment"
+  status      = "draft"
+
+  source = {
+    dir = "${path.module}/app"
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "primary"
+        primary = true
+        port    = 8080
+
+        image_build_config = {
+          dockerfile = {
+            source                           = "generated"
+            execution_environment_id         = var.execution_environment_id
+            execution_environment_version_id = var.execution_environment_version_id
+            entrypoint                       = ["python", "app.py"]
+          }
+        }
+      }]
+    }]
+  }
+}
+
+output "generated_dockerfile_artifact_id" {
+  value       = one(datarobot_artifact.generated_dockerfile[*].artifact_id)
+  description = "Artifact ID for the generated-Dockerfile example; null unless the execution environment variables are set"
+}
+
 resource "datarobot_artifact" "agent" {
   name        = "example-agent"
   description = "Agent artifact with A2A card management enabled"
@@ -279,8 +344,8 @@ Required:
 Optional:
 
 - `entrypoint` (List of String) Entrypoint baked into the generated Dockerfile CMD. Required when source is `generated`.
-- `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`.
-- `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`.
+- `execution_environment_id` (String) Execution environment ID for the base Docker image. Required when source is `generated`. Read it from the `datarobot_execution_environment` data source rather than hardcoding it.
+- `execution_environment_version_id` (String) Execution environment version ID that pins the base image. Required when source is `generated`. Available as `version_id` on the `datarobot_execution_environment` data source.
 - `path` (String) Relative path to the Dockerfile in the source code. Used when source is `provided`. Defaults to `./Dockerfile`. Null when source is `generated`.
 - `source` (String) How the Dockerfile is obtained: `provided` (from source code) or `generated` (from an execution environment). Defaults to `provided`.
 

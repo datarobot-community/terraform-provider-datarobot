@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_artifact` no longer rejects a value that comes from a variable, a data source, or another resource. Terraform runs its validate walk before any of those resolve, so every non-literal value reaches `ValidateConfig` as *unknown*, and the resource's rules read unknown as "not set". A configuration that was in fact complete failed at plan time with `Missing image source` (`image_uri`), `Missing execution environment ID` / `Missing execution environment version ID` (`image_build_config.dockerfile`), `Missing source directory` (`source.dir`), `Invalid wait_for_build on locked artifact`, `Incomplete build configuration for locked artifact`, or `Unsupported on non-primary container` (`primary`). Unknown now means "set, not resolved yet"; only a null value counts as absent. This unblocks `examples/workflows/workload_replacement` (`image_uri = var.container_image`), which the workload docs link to as a runnable walkthrough, and lets the `datarobot_execution_environment` data source feed `execution_environment_id` and `execution_environment_version_id` instead of them being hardcoded. `pulumi preview` failed the same way, since the bridge validates the configuration with unresolved outputs; only `pulumi up --skip-preview` got through.
+- No check is lost by deferring. Terraform validates the configuration a second time during the plan walk, where variables and data sources have resolved, so `image_uri = var.image` with an empty `var.image` is still refused at plan. A reference to a resource created in the same apply is still unknown then, so `Create` and `Update` re-run the container rules against the resolved configuration and refuse it there, before the artifact is created. Acceptance tests could not catch any of this because their HCL is assembled with `fmt.Sprintf`, which yields a literal for every value; the new cases are written as configurations with real `variable` blocks.
+
 ## [0.11.3] - 2026-09-09
 
 ### Fixed

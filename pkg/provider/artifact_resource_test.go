@@ -2778,13 +2778,16 @@ func testArtifactApplyCreate(ctx context.Context, r *ArtifactResource, data Arti
 		return data, diags
 	}
 
+	// Create validates the resolved config, so send one the way Terraform does.
+	config := tfsdk.Config{Schema: schema, Raw: plan.Raw}
+
 	resp := &tfresource.CreateResponse{
 		State: tfsdk.State{
 			Schema: schema,
 			Raw:    tftypes.NewValue(schema.Type().TerraformType(ctx), nil),
 		},
 	}
-	r.Create(ctx, tfresource.CreateRequest{Plan: plan}, resp)
+	r.Create(ctx, tfresource.CreateRequest{Plan: plan, Config: config}, resp)
 
 	var result ArtifactResourceModel
 	if !resp.State.Raw.IsNull() {
@@ -2839,8 +2842,11 @@ func testArtifactApplyUpdate(ctx context.Context, r *ArtifactResource, planModel
 		return planModel, diags
 	}
 
+	// Update validates the resolved config, so send one the way Terraform does.
+	config := tfsdk.Config{Schema: schema, Raw: plan.Raw}
+
 	resp := &tfresource.UpdateResponse{State: state}
-	r.Update(ctx, tfresource.UpdateRequest{Plan: plan, State: state}, resp)
+	r.Update(ctx, tfresource.UpdateRequest{Plan: plan, State: state, Config: config}, resp)
 
 	var result ArtifactResourceModel
 	if !resp.State.Raw.IsNull() {
