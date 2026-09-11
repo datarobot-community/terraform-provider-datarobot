@@ -19,6 +19,12 @@ Artifact definition for the Workload API. Artifacts define container images and 
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
 # - MCP: type = "mcp" (same spec shape as service)
+#
+# image_uri and a source-driven build are alternatives, not a pair: when source
+# and image_build_config are both set the build produces the image and writes
+# image_uri, so setting it yourself is rejected at plan time. The one exception
+# is status = "locked" with source.wait_for_build = false, below, where the lock
+# cannot wait for the build and needs an image to point at.
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -137,6 +143,51 @@ resource "datarobot_artifact" "from_source_locked" {
 output "from_source_locked_artifact_id" {
   value       = datarobot_artifact.from_source_locked.artifact_id
   description = "Artifact ID for the locked image-build example (new version on source change)"
+}
+
+# The one shape where an explicit image_uri belongs next to a source-driven
+# build. wait_for_build = false returns from apply as soon as the build is
+# submitted, so there is no built image to lock onto yet and the lock request
+# needs one named here. Everywhere else this pairing is rejected at plan time,
+# because a build that does finish would overwrite whatever you wrote.
+#
+# The value is what the artifact is locked with; the build replaces it on the
+# platform once it finishes, so point it at the image the build will produce
+# (or the previous build's) rather than an unrelated one.
+resource "datarobot_artifact" "from_source_locked_no_wait" {
+  name        = "example-c2w-locked-no-wait"
+  description = "Locked artifact that submits the build without waiting for it"
+  status      = "locked"
+
+  source = {
+    dir            = "${path.module}/app"
+    wait_for_build = false
+  }
+
+  spec = {
+    container_groups = [{
+      containers = [{
+        name    = "primary"
+        primary = true
+        port    = 8080
+
+        # Required here: the lock cannot wait for the build to produce one.
+        image_uri = "nginx:latest"
+
+        image_build_config = {
+          dockerfile = {
+            source = "provided"
+            path   = "./Dockerfile"
+          }
+        }
+      }]
+    }]
+  }
+}
+
+output "from_source_locked_no_wait_artifact_id" {
+  value       = datarobot_artifact.from_source_locked_no_wait.artifact_id
+  description = "Artifact ID for the locked, build-not-awaited example"
 }
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
@@ -296,7 +347,7 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
+- `image_uri` (String) Docker image URI. Set this for a prebuilt image. When `source` and `image_build_config` are both set, apply builds the image and populates this attribute, and configuring it is rejected because the build would overwrite it. The exception is a locked artifact with `source.wait_for_build = false`, where the lock cannot wait for the build and `image_uri` is required instead.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
@@ -440,7 +491,7 @@ Required:
 Optional:
 
 - `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, the `<path>.LOCAL.<timestamp>` copies the DataRobot CLI's sync keeps, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.
-- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
+- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated; a locked artifact then requires an explicit `image_uri`, because the lock cannot wait for the build to produce one.
 
 Read-Only:
 
