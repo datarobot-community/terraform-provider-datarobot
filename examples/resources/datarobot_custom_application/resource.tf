@@ -1,7 +1,8 @@
 resource "datarobot_application_source" "example" {
   files = [
     ["start-app.sh"],
-    ["streamlit-app.py"]
+    ["app.py"],
+    ["requirements.txt"]
   ]
 }
 

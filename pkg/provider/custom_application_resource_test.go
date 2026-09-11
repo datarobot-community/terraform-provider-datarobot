@@ -8,6 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -38,36 +42,7 @@ func TestAccCustomApplicationResource(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-
-echo "Starting App"
-
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-
-def start_streamlit():
-    set_client(Client())
-
-    st.title("Example Custom Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-	`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Example Custom Application")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -228,7 +203,7 @@ resource "datarobot_use_case" "test_new_custom_application" {
 }
 
 resource "datarobot_application_source" "test" {
-	base_environment_id = "`+testStreamlitBaseEnvID+`"
+	base_environment_id = "`+testAppBaseEnvID+`"
 	folder_path = "custom_application"
 	resources = {
 		replicas = %d
@@ -372,7 +347,7 @@ numpy
 		}
 	}
 
-	baseEnvironmentID := testStreamlitBaseEnvID
+	baseEnvironmentID := testAppBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -583,7 +558,7 @@ numpy
 		}
 	}
 
-	baseEnvironmentID := testStreamlitBaseEnvID
+	baseEnvironmentID := testAppBaseEnvID
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -729,32 +704,7 @@ func TestAccCustomApplicationWithResourcesFromSource(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-echo "Starting App"
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-def start_streamlit():
-    set_client(Client())
-    st.title("Scope Level Test Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Scope Level Test Application")
 
 	resourceName := "datarobot_custom_application.test"
 	sourceResourceName := "datarobot_application_source.test"
@@ -792,7 +742,7 @@ func customApplicationWithResourcesFromSourceConfig(folderPath string) string {
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test" {
 	name = "Resources Test Source %s"
-	base_environment_id = "`+testStreamlitBaseEnvID+`"
+	base_environment_id = "`+testAppBaseEnvID+`"
 	folder_path = "%s"
 	resources = {
 		replicas = 1
@@ -824,32 +774,7 @@ func TestAccCustomApplicationRequiredKeyScopeLevel(t *testing.T) {
 	}
 	defer os.RemoveAll(folderPath)
 
-	startAppScript := `#!/usr/bin/env bash
-echo "Starting App"
-streamlit run streamlit-app.py
-`
-
-	appCode := `import streamlit as st
-from datarobot import Client
-from datarobot.client import set_client
-
-def start_streamlit():
-    set_client(Client())
-    st.title("Scope Level Test Application")
-
-if __name__ == "__main__":
-    start_streamlit()
-`
-
-	err = os.WriteFile(folderPath+"/start-app.sh", []byte(startAppScript), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(folderPath+"/streamlit-app.py", []byte(appCode), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeMinimalAppFixture(t, folderPath, "Scope Level Test Application")
 
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
@@ -906,7 +831,7 @@ func customApplicationWithScopeLevelConfig(folderPath, scopeLevel, nameSalt stri
 
 	return fmt.Sprintf(`
 resource "datarobot_application_source" "test_scope" {
-	base_environment_id = "`+testStreamlitBaseEnvID+`"
+	base_environment_id = "`+testAppBaseEnvID+`"
 	folder_path = "%s"
 }
 
@@ -954,4 +879,152 @@ func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resour
 
 		return nil
 	}
+}
+
+// writeMinimalAppFixture writes a minimal Flask application into folderPath.
+//
+// The [DataRobot] Python 3.12 Applications base environment ships no
+// third-party packages, so an app fixture has to declare its own dependency in
+// requirements.txt rather than rely on the base image (as the Streamlit
+// environment used to allow).
+func writeMinimalAppFixture(t *testing.T, folderPath, title string) {
+	t.Helper()
+
+	files := map[string]string{
+		"start-app.sh": `#!/usr/bin/env bash
+echo "Starting App"
+flask run --host 0.0.0.0 --port 8080
+`,
+		"app.py": fmt.Sprintf(`from flask import Flask
+
+app = Flask(__name__)
+
+
+@app.get("/")
+def index():
+    return "%s"
+`, title),
+		"requirements.txt": "flask==3.0.3\n",
+	}
+
+	for name, content := range files {
+		if err := os.WriteFile(folderPath+"/"+name, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestIntegrationCustomApplicationResourcesAppearAfterUpdate covers the case where
+// the API reports no resources for an application at create time and then starts
+// reporting them after the source version changes (the new version overrides them).
+// `resources` is Computed, so the plan must leave it unknown on update; planning it
+// as the prior null made Terraform reject the apply with "Provider produced
+// inconsistent result after apply".
+func TestIntegrationCustomApplicationResourcesAppearAfterUpdate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	appID := uuid.NewString()
+	replicas := int64(2)
+	resourceLabel := "cpu.xlarge"
+	sessionAffinity := false
+	serviceWebRequestsOnRootPath := true
+
+	// current is what the API reports for the application. It starts out without
+	// resources and gains them once it is moved to the second source version.
+	current := &client.Application{
+		ID:                               appID,
+		Name:                             "resources-after-update",
+		Status:                           "running",
+		CustomApplicationSourceID:        uuid.NewString(),
+		CustomApplicationSourceVersionID: "version-1",
+		ApplicationUrl:                   "https://example.com/custom_applications/" + appID + "/",
+	}
+
+	mockService.EXPECT().
+		CreateCustomApplication(gomock.Any(), gomock.Any()).
+		Return(current, nil)
+
+	mockService.EXPECT().
+		UpdateApplication(gomock.Any(), appID, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, req *client.UpdateApplicationRequest) (*client.Application, error) {
+			if req.Name != "" {
+				current.Name = req.Name
+			}
+			if req.CustomApplicationSourceVersionID != "" {
+				current.CustomApplicationSourceVersionID = req.CustomApplicationSourceVersionID
+			}
+			if req.ExternalAccessEnabled != nil {
+				current.ExternalAccessEnabled = *req.ExternalAccessEnabled
+			}
+			if req.ExternalAccessRecipients != nil {
+				current.ExternalAccessRecipients = *req.ExternalAccessRecipients
+			}
+			current.AllowAutoStopping = req.AllowAutoStopping
+			if current.CustomApplicationSourceVersionID == "version-2" {
+				current.Resources = &client.ApplicationResources{
+					Replicas:                     &replicas,
+					ResourceLabel:                &resourceLabel,
+					SessionAffinity:              &sessionAffinity,
+					ServiceWebRequestsOnRootPath: &serviceWebRequestsOnRootPath,
+				}
+			}
+			return current, nil
+		}).
+		AnyTimes()
+
+	mockService.EXPECT().
+		GetApplication(gomock.Any(), appID).
+		DoAndReturn(func(_ context.Context, _ string) (*client.Application, error) {
+			return current, nil
+		}).
+		AnyTimes()
+
+	mockService.EXPECT().
+		DeleteApplication(gomock.Any(), appID).
+		Return(nil)
+
+	config := func(sourceVersionID string) string {
+		return testProviderConfigBlock() + fmt.Sprintf(`
+resource "datarobot_custom_application" "test" {
+	source_version_id = %q
+	external_access_enabled = false
+}
+`, sourceVersionID)
+	}
+
+	resourceName := "datarobot_custom_application.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("version-1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "source_version_id", "version-1"),
+					resource.TestCheckNoResourceAttr(resourceName, "resources.replicas"),
+				),
+			},
+			{
+				Config: config("version-2"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "source_version_id", "version-2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.replicas", "2"),
+					resource.TestCheckResourceAttr(resourceName, "resources.resource_label", "cpu.xlarge"),
+					resource.TestCheckResourceAttr(resourceName, "resources.session_affinity", "false"),
+					resource.TestCheckResourceAttr(resourceName, "resources.service_web_requests_on_root_path", "true"),
+				),
+			},
+		},
+	})
 }
