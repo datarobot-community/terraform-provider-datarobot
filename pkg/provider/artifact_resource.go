@@ -205,7 +205,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"wait_for_build": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
-						MarkdownDescription: "When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.",
+						MarkdownDescription: "When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated; a locked artifact then requires an explicit `image_uri`, because the lock cannot wait for the build to produce one.",
 						Default:             booldefault.StaticBool(true),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),
@@ -1070,6 +1070,64 @@ func validateArtifactContainer(
 	}
 }
 
+// validateContainerImageURINotSourceManaged refuses an explicit `image_uri` on a
+// container whose image apply is going to build. `source` plus `image_build_config`
+// means apply uploads the source, triggers a build and then writes whatever the
+// platform reports, so a configured value cannot survive: a finished build replaces
+// it, and an unfinished one leaves the container with no image at all. Terraform
+// rejects either as `Provider produced inconsistent result after apply`, by which
+// point the artifact and its repository exist and every retry orphans another one;
+// the Pulumi bridge runs no such check and silently records the null, which then
+// shows as a diff on every preview. Refusing here fails the plan before anything is
+// created.
+//
+// sourceBuildsImage carries the one exception, see artifactSourceBuildsContainerImage.
+//
+// Only a resolved, non-empty value is refused. `image_uri = var.image` reads as
+// unknown during the validate walk, so this defers to the plan walk, where root
+// variables and data sources have resolved, and to validateArtifactApplyConfig for a
+// reference to a resource created in the same apply.
+func validateContainerImageURINotSourceManaged(
+	resp *resource.ValidateConfigResponse,
+	containerPath path.Path,
+	container ArtifactContainerModel,
+	sourceBuildsImage bool,
+) {
+	if !sourceBuildsImage || container.ImageBuildConfig == nil {
+		return
+	}
+	if !IsKnown(container.ImageURI) || container.ImageURI.ValueString() == "" {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		containerPath.AtName("image_uri"),
+		"Conflicting image source",
+		"`image_uri` must not be set on a container that has `image_build_config` when `source` is configured: "+
+			"apply builds the image and writes the result, so the configured value would be overwritten. Remove "+
+			"`image_uri` and read the built value back from the resource attribute, or remove `source` to keep "+
+			"managing the image URI yourself. Locked artifacts with `source.wait_for_build = false` are the one "+
+			"exception and still require `image_uri`, because the lock cannot wait for the build to produce one.",
+	)
+}
+
+// artifactSourceBuildsContainerImage reports whether apply will build the primary
+// container's image and overwrite whatever `image_uri` holds. That is every
+// source-driven build except one: locking without waiting for the build. There the
+// lock request needs an image the unfinished build has not produced, so
+// validateArtifactSource requires an explicit `image_uri` instead of refusing it.
+// The two rules are exact complements and must stay that way, or the combination
+// becomes unconfigurable.
+func artifactSourceBuildsContainerImage(data ArtifactResourceModel, status string) bool {
+	if !artifactSourceConfigured(&data) {
+		return false
+	}
+	if status == string(client.ArtifactStatusLocked) && !artifactSourceWaitForBuild(&data) {
+		return false
+	}
+	return true
+}
+
 // artifactContainerPrimaryUndecided reports whether `primary` is set to a
 // reference the validate walk cannot resolve. A rule that only applies to the
 // primary container cannot fire either way until it resolves, so it defers to
@@ -1184,6 +1242,7 @@ func validateArtifactContainers(resp *resource.ValidateConfigResponse, data Arti
 		artifactType = data.Type.ValueString()
 	}
 	sourceConfigured := artifactSourceConfigured(&data)
+	sourceBuildsImage := artifactSourceBuildsContainerImage(data, status)
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
@@ -1191,6 +1250,7 @@ func validateArtifactContainers(resp *resource.ValidateConfigResponse, data Arti
 				AtName("container_groups").AtListIndex(gi).
 				AtName("containers").AtListIndex(ci)
 			validateArtifactContainer(resp, containerPath, container, status, artifactType, len(group.Containers), sourceConfigured)
+			validateContainerImageURINotSourceManaged(resp, containerPath, container, sourceBuildsImage)
 		}
 	}
 }
