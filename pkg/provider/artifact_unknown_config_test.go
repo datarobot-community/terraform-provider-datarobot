@@ -547,13 +547,44 @@ resource "datarobot_artifact" "test" {
 }`, nil)
 }
 
-	_, diags := testArtifactApplyCreate(context.Background(), artifactResource, data)
-	if !diags.HasError() {
-		t.Fatal("expected Create to reject a container with no image source")
-	}
-	if got := diags.Errors()[0].Summary(); got != "Missing image source" {
-		t.Fatalf("summary = %q, want %q", got, "Missing image source")
-	}
+// A source block needs a primary container carrying image_build_config. With
+// two containers and `primary = var.p`, which one is primary is undecided, so
+// the rule must wait rather than report the target missing.
+func TestArtifactPlanAcceptsVariablePrimaryWithSource(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactPlanOnlyStep(t, `
+variable "is_primary" {
+  type    = bool
+  default = true
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "variable-primary-with-source"
+  status = "draft"
+  source = {
+    dir = "`+dir+`"
+  }
+  spec = {
+    container_groups = [{
+      containers = [
+        {
+          name    = "main"
+          primary = var.is_primary
+          port    = 8080
+          image_build_config = {
+            dockerfile = { source = "provided" }
+          }
+        },
+        {
+          name      = "sidecar"
+          primary   = false
+          image_uri = "busybox:latest"
+        },
+      ]
+    }]
+  }
+}`, nil)
 }
 
 // The same rule, reached through Update.

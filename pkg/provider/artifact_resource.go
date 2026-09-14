@@ -1070,15 +1070,6 @@ func validateArtifactContainer(
 	}
 }
 
-// artifactContainerPrimaryUndecided reports whether `primary` is set to a
-// reference the validate walk cannot resolve. A rule that only applies to the
-// primary container cannot fire either way until it resolves, so it defers to
-// the apply-time rerun. A sole container is primary regardless, so an unknown
-// value decides nothing only when the group holds more than one container.
-func artifactContainerPrimaryUndecided(container ArtifactContainerModel, containerCount int) bool {
-	return container.Primary.IsUnknown() && containerCount != 1
-}
-
 // validateArtifactContainerRoutes mirrors the Workload API route rules that the
 // schema cannot express: routes belong to the primary container only, and a path
 // may appear once per container (two entries would carry conflicting auth policies).
@@ -1094,10 +1085,7 @@ func validateArtifactContainerRoutes(
 
 	routesPath := containerPath.AtName("routes")
 
-	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-	// Workload API auto-marks the sole container as primary when primary is omitted.
-	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
-	if !isPrimary && !autoPrimary && !artifactContainerPrimaryUndecided(container, containerCount) {
+	if !artifactContainerMayBePrimary(container, containerCount) {
 		resp.Diagnostics.AddAttributeError(
 			routesPath,
 			"Unsupported on non-primary container",
@@ -1347,21 +1335,29 @@ func validateArtifactSourceDir(resp *resource.ValidateConfigResponse, sourcePath
 	return true
 }
 
+// artifactContainerMayBePrimary reports whether a container could be the
+// primary one as far as the configuration shows. `primary = var.is_primary` is
+// unknown while Terraform validates, and a rule that reports something missing
+// from the primary container must not fire while it could still be this one.
+func artifactContainerMayBePrimary(container ArtifactContainerModel, containerCount int) bool {
+	if container.Primary.IsUnknown() {
+		return true
+	}
+	if !container.Primary.IsNull() && container.Primary.ValueBool() {
+		return true
+	}
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	return containerCount == 1 && container.Primary.IsNull()
+}
+
 func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
 	if spec == nil {
 		return false
 	}
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-			if !isPrimary && len(group.Containers) == 1 &&
-				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
-				isPrimary = true
-			}
-			// Unknown means `image_uri` is set to a reference that has not
-			// resolved yet, which still counts as "an image URI is configured".
-			if isPrimary && (container.ImageURI.IsUnknown() ||
-				(!container.ImageURI.IsNull() && container.ImageURI.ValueString() != "")) {
+			if artifactContainerMayBePrimary(container, len(group.Containers)) &&
+				artifactStringConfigured(container.ImageURI) {
 				return true
 			}
 		}
@@ -1372,12 +1368,8 @@ func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
 func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-			if !isPrimary && len(group.Containers) == 1 &&
-				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
-				isPrimary = true
-			}
-			if isPrimary && container.ImageBuildConfig != nil {
+			if artifactContainerMayBePrimary(container, len(group.Containers)) &&
+				container.ImageBuildConfig != nil {
 				return true
 			}
 		}
@@ -1410,14 +1402,7 @@ func validateImageBuildConfigPrimary(
 		return
 	}
 
-	if !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool() {
-		return
-	}
-	if containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown()) {
-		// Workload API auto-marks the sole container as primary when primary is omitted.
-		return
-	}
-	if artifactContainerPrimaryUndecided(container, containerCount) {
+	if artifactContainerMayBePrimary(container, containerCount) {
 		return
 	}
 
