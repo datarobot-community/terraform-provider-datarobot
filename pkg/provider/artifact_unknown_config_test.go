@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -463,8 +462,7 @@ variable "source_dir" {
 }
 
 resource "datarobot_artifact" "test" {
-  name   = "variable-source-dir"
-  status = "draft"
+  name = "variable-source-dir"
   source = {
     dir = var.source_dir
   }
@@ -515,52 +513,159 @@ resource "datarobot_artifact" "test" {
 }`, nil)
 }
 
-// A reference to a resource created in the same apply is unknown even on the
-// plan walk, so Create is the last place the deferred rules can run. It must
-// reject the container before the API is called.
-func TestArtifactCreateEnforcesDeferredImageSource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+// `status` omitted means locked, and a locked artifact with image_build_config
+// needs either an image_uri or a source to build from. An unresolved
+// `source.dir` is still a source, so the rule must not fire on it. Keeping
+// status = "draft" here would skip the rule and prove nothing.
+func TestArtifactPlanAcceptsVariableSourceDirOnLockedArtifact(t *testing.T) {
+	dir := t.TempDir()
 
-	// No EXPECT: reaching the API at all fails the test.
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-	data := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	data.Source = nil
-	data.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig = nil
-
-	_, diags := testArtifactApplyCreate(context.Background(), artifactResource, data)
-	if !diags.HasError() {
-		t.Fatal("expected Create to reject a container with no image source")
-	}
-	if got := diags.Errors()[0].Summary(); got != "Missing image source" {
-		t.Fatalf("summary = %q, want %q", got, "Missing image source")
-	}
+	testArtifactPlanOnlyStep(t, `
+variable "source_dir" {
+  type    = string
+  default = "`+dir+`"
 }
 
-// The same rule, reached through Update.
-func TestArtifactUpdateEnforcesDeferredImageSource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+resource "datarobot_artifact" "test" {
+  name   = "variable-source-dir-locked"
+  status = "locked"
+  source = {
+    dir = var.source_dir
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, nil)
+}
 
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
+// A source block needs a primary container carrying image_build_config. With
+// two containers and `primary = var.p`, which one is primary is undecided, so
+// the rule must wait rather than report the target missing.
+func TestArtifactPlanAcceptsVariablePrimaryWithSource(t *testing.T) {
+	dir := t.TempDir()
 
-	state := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	state.Source = nil
-	state.ArtifactID = types.StringValue("6ffab89d-de30-4fbf-a0f0-b6dfc00ae542")
+	testArtifactPlanOnlyStep(t, `
+variable "is_primary" {
+  type    = bool
+  default = true
+}
 
-	plan := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	plan.Source = nil
-	plan.ArtifactID = state.ArtifactID
-	plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig = nil
+resource "datarobot_artifact" "test" {
+  name   = "variable-primary-with-source"
+  status = "draft"
+  source = {
+    dir = "`+dir+`"
+  }
+  spec = {
+    container_groups = [{
+      containers = [
+        {
+          name    = "main"
+          primary = var.is_primary
+          port    = 8080
+          image_build_config = {
+            dockerfile = { source = "provided" }
+          }
+        },
+        {
+          name      = "sidecar"
+          primary   = false
+          image_uri = "busybox:latest"
+        },
+      ]
+    }]
+  }
+}`, nil)
+}
 
-	_, diags := testArtifactApplyUpdate(context.Background(), artifactResource, plan, state)
-	if !diags.HasError() {
-		t.Fatal("expected Update to reject a container with no image source")
+// Deferring an unknown must not let an empty one through. These reach the API
+// with `omitempty`, so an empty id would become a generated dockerfile carrying
+// no execution environment at all.
+func TestArtifactEmptyStringsAreStillMissing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("execution environment ids", func(t *testing.T) {
+		t.Parallel()
+		resp := &tfresource.ValidateConfigResponse{}
+		validateImageBuildConfig(resp, testArtifactContainerPath(), &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source:                        types.StringValue("generated"),
+				ExecutionEnvironmentID:        types.StringValue(""),
+				ExecutionEnvironmentVersionID: types.StringValue(""),
+				Entrypoint:                    []types.String{types.StringValue("/bin/sh")},
+			},
+		}, string(client.ArtifactTypeService))
+
+		got := artifactDiagSummaries(resp)
+		if !strings.Contains(got, "Missing execution environment ID") ||
+			!strings.Contains(got, "Missing execution environment version ID") {
+			t.Fatalf("empty ids must be rejected, got: %s", got)
+		}
+	})
+
+	t.Run("source dir", func(t *testing.T) {
+		t.Parallel()
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactSource(resp, ArtifactResourceModel{
+			Status: types.StringValue("draft"),
+			Source: &ArtifactSourceModel{Dir: types.StringValue("")},
+			Spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{Primary: types.BoolValue(true)}},
+				}},
+			},
+		})
+		if !strings.Contains(artifactDiagSummaries(resp), "Missing source directory") {
+			t.Fatalf("empty source.dir must be rejected, got: %s", artifactDiagSummaries(resp))
+		}
+	})
+}
+
+// The source helpers key off primary too, so they need the same undecided rule.
+func TestArtifactPrimaryHelpersUnknownPrimary(t *testing.T) {
+	t.Parallel()
+
+	// Two containers, so the sole-container shortcut does not apply.
+	spec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{
+				{
+					Primary:  types.BoolUnknown(),
+					ImageURI: types.StringValue("nginx:latest"),
+					ImageBuildConfig: &ArtifactImageBuildConfigModel{
+						Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+					},
+				},
+				{Primary: types.BoolValue(false), ImageURI: types.StringValue("busybox:latest")},
+			},
+		}},
 	}
-	if got := diags.Errors()[0].Summary(); got != "Missing image source" {
-		t.Fatalf("summary = %q, want %q", got, "Missing image source")
+
+	if !artifactHasPrimaryImageURI(spec) {
+		t.Error("unknown primary must not hide the container's image_uri")
+	}
+	if !artifactHasPrimaryImageBuildConfig(spec) {
+		t.Error("unknown primary must not hide the container's image_build_config")
+	}
+
+	// A container that is definitely not primary still does not count.
+	notPrimary := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{
+				{Primary: types.BoolValue(false), ImageURI: types.StringValue("nginx:latest")},
+				{Primary: types.BoolValue(true)},
+			},
+		}},
+	}
+	if artifactHasPrimaryImageURI(notPrimary) {
+		t.Error("primary = false must not count as the primary container")
 	}
 }
