@@ -234,7 +234,6 @@ func (r *ArtifactResource) Configure(ctx context.Context, req resource.Configure
 func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ArtifactResourceModel
 
-	resp.Diagnostics.Append(validateArtifactApplyConfig(ctx, req.Config)...)
 	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, nil, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -341,7 +340,6 @@ func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, r
 func (r *ArtifactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state ArtifactResourceModel
 
-	resp.Diagnostics.Append(validateArtifactApplyConfig(ctx, req.Config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	resp.Diagnostics.Append(decodePlanArtifactModel(ctx, req.Plan, &state, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -1121,32 +1119,13 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	validateArtifactModel(resp, data)
 }
 
-// validateArtifactApplyConfig re-runs the container rules against the resolved
-// configuration. Those rules test whether an attribute is set, and during
-// Terraform's validate walk anything fed by a variable, data source, or another
-// resource reads as unknown rather than absent, so they treat unknown as set and
-// defer. Terraform re-validates with resolved values during the plan walk, which
-// settles variables and data sources; a reference to a resource created in the
-// same apply is still unknown then and only resolves here.
-func validateArtifactApplyConfig(ctx context.Context, config tfsdk.Config) diag.Diagnostics {
-	var resp resource.ValidateConfigResponse
-
-	// Terraform always sends the configuration with an apply, but a null one
-	// carries no schema to decode against and Config.Get would panic on it.
-	if config.Raw.IsNull() {
-		return resp.Diagnostics
-	}
-
-	var data ArtifactResourceModel
-	resp.Diagnostics.Append(config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return resp.Diagnostics
-	}
-
-	validateArtifactContainers(&resp, data)
-	return resp.Diagnostics
-}
-
+// validateArtifactModel holds the rules ValidateConfig applies. Terraform calls
+// ValidateResourceConfig on every walk: once while validating with variables
+// unknown, again on the plan walk with variables and data sources resolved, and
+// again on the apply walk with same-apply resource references resolved. So a
+// rule that defers an unknown value is not giving up on it, it is waiting for
+// the walk that can decide it; the last of those runs before the resource is
+// created, which is why none of this needs re-checking from Create or Update.
 func validateArtifactModel(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
 	validateArtifactSource(resp, data)
 	validateArtifactA2AEnabled(resp, data)

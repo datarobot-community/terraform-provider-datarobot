@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -587,28 +586,86 @@ resource "datarobot_artifact" "test" {
 }`, nil)
 }
 
-// The same rule, reached through Update.
-func TestArtifactUpdateEnforcesDeferredImageSource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+// Deferring an unknown must not let an empty one through. These reach the API
+// with `omitempty`, so an empty id would become a generated dockerfile carrying
+// no execution environment at all.
+func TestArtifactEmptyStringsAreStillMissing(t *testing.T) {
+	t.Parallel()
 
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
+	t.Run("execution environment ids", func(t *testing.T) {
+		t.Parallel()
+		resp := &tfresource.ValidateConfigResponse{}
+		validateImageBuildConfig(resp, testArtifactContainerPath(), &ArtifactImageBuildConfigModel{
+			Dockerfile: &ArtifactDockerfileModel{
+				Source:                        types.StringValue("generated"),
+				ExecutionEnvironmentID:        types.StringValue(""),
+				ExecutionEnvironmentVersionID: types.StringValue(""),
+				Entrypoint:                    []types.String{types.StringValue("/bin/sh")},
+			},
+		}, string(client.ArtifactTypeService))
 
-	state := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	state.Source = nil
-	state.ArtifactID = types.StringValue("6ffab89d-de30-4fbf-a0f0-b6dfc00ae542")
+		got := artifactDiagSummaries(resp)
+		if !strings.Contains(got, "Missing execution environment ID") ||
+			!strings.Contains(got, "Missing execution environment version ID") {
+			t.Fatalf("empty ids must be rejected, got: %s", got)
+		}
+	})
 
-	plan := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	plan.Source = nil
-	plan.ArtifactID = state.ArtifactID
-	plan.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig = nil
+	t.Run("source dir", func(t *testing.T) {
+		t.Parallel()
+		resp := &tfresource.ValidateConfigResponse{}
+		validateArtifactSource(resp, ArtifactResourceModel{
+			Status: types.StringValue("draft"),
+			Source: &ArtifactSourceModel{Dir: types.StringValue("")},
+			Spec: &ArtifactSpecModel{
+				ContainerGroups: []ArtifactContainerGroupModel{{
+					Containers: []ArtifactContainerModel{{Primary: types.BoolValue(true)}},
+				}},
+			},
+		})
+		if !strings.Contains(artifactDiagSummaries(resp), "Missing source directory") {
+			t.Fatalf("empty source.dir must be rejected, got: %s", artifactDiagSummaries(resp))
+		}
+	})
+}
 
-	_, diags := testArtifactApplyUpdate(context.Background(), artifactResource, plan, state)
-	if !diags.HasError() {
-		t.Fatal("expected Update to reject a container with no image source")
+// The source helpers key off primary too, so they need the same undecided rule.
+func TestArtifactPrimaryHelpersUnknownPrimary(t *testing.T) {
+	t.Parallel()
+
+	// Two containers, so the sole-container shortcut does not apply.
+	spec := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{
+				{
+					Primary:  types.BoolUnknown(),
+					ImageURI: types.StringValue("nginx:latest"),
+					ImageBuildConfig: &ArtifactImageBuildConfigModel{
+						Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+					},
+				},
+				{Primary: types.BoolValue(false), ImageURI: types.StringValue("busybox:latest")},
+			},
+		}},
 	}
-	if got := diags.Errors()[0].Summary(); got != "Missing image source" {
-		t.Fatalf("summary = %q, want %q", got, "Missing image source")
+
+	if !artifactHasPrimaryImageURI(spec) {
+		t.Error("unknown primary must not hide the container's image_uri")
+	}
+	if !artifactHasPrimaryImageBuildConfig(spec) {
+		t.Error("unknown primary must not hide the container's image_build_config")
+	}
+
+	// A container that is definitely not primary still does not count.
+	notPrimary := &ArtifactSpecModel{
+		ContainerGroups: []ArtifactContainerGroupModel{{
+			Containers: []ArtifactContainerModel{
+				{Primary: types.BoolValue(false), ImageURI: types.StringValue("nginx:latest")},
+				{Primary: types.BoolValue(true)},
+			},
+		}},
+	}
+	if artifactHasPrimaryImageURI(notPrimary) {
+		t.Error("primary = false must not count as the primary container")
 	}
 }
