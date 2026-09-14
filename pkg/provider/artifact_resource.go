@@ -1183,7 +1183,11 @@ func validateArtifactContainers(resp *resource.ValidateConfigResponse, data Arti
 	if !data.Type.IsNull() && !data.Type.IsUnknown() {
 		artifactType = data.Type.ValueString()
 	}
-	sourceConfigured := artifactSourceConfigured(&data)
+	// Not artifactSourceConfigured: that one requires a known dir because the
+	// sync needs the literal path to read. The locked-artifact rule below only
+	// needs to know a source was declared, and `dir = var.source_dir` declares
+	// one even while the path is still unresolved.
+	sourceConfigured := data.Source != nil && !data.Source.Dir.IsNull()
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {

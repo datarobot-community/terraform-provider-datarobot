@@ -463,8 +463,7 @@ variable "source_dir" {
 }
 
 resource "datarobot_artifact" "test" {
-  name   = "variable-source-dir"
-  status = "draft"
+  name = "variable-source-dir"
   source = {
     dir = var.source_dir
   }
@@ -515,20 +514,38 @@ resource "datarobot_artifact" "test" {
 }`, nil)
 }
 
-// A reference to a resource created in the same apply is unknown even on the
-// plan walk, so Create is the last place the deferred rules can run. It must
-// reject the container before the API is called.
-func TestArtifactCreateEnforcesDeferredImageSource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+// `status` omitted means locked, and a locked artifact with image_build_config
+// needs either an image_uri or a source to build from. An unresolved
+// `source.dir` is still a source, so the rule must not fire on it. Keeping
+// status = "draft" here would skip the rule and prove nothing.
+func TestArtifactPlanAcceptsVariableSourceDirOnLockedArtifact(t *testing.T) {
+	dir := t.TempDir()
 
-	// No EXPECT: reaching the API at all fails the test.
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
+	testArtifactPlanOnlyStep(t, `
+variable "source_dir" {
+  type    = string
+  default = "`+dir+`"
+}
 
-	data := artifactResourceModelWithSource("apply-missing-image", t.TempDir())
-	data.Source = nil
-	data.Spec.ContainerGroups[0].Containers[0].ImageBuildConfig = nil
+resource "datarobot_artifact" "test" {
+  name   = "variable-source-dir-locked"
+  status = "locked"
+  source = {
+    dir = var.source_dir
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, nil)
+}
 
 	_, diags := testArtifactApplyCreate(context.Background(), artifactResource, data)
 	if !diags.HasError() {
