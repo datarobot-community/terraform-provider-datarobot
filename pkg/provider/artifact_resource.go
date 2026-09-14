@@ -1025,6 +1025,17 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 	}
 }
 
+// artifactStringConfigured reports whether a string attribute carries a value.
+// `image_uri = var.image`, a data source, or a resource reference arrives
+// unknown while Terraform validates, because that walk runs before those
+// references resolve; unknown means "set, not resolved yet", so it counts. A
+// null attribute was never written, and an empty string carries nothing the API
+// can use, so neither does. Terraform validates again once each reference
+// resolves, so an unknown that turns out to be empty is still caught.
+func artifactStringConfigured(v types.String) bool {
+	return v.IsUnknown() || (!v.IsNull() && v.ValueString() != "")
+}
+
 func validateArtifactContainer(
 	resp *resource.ValidateConfigResponse,
 	containerPath path.Path,
@@ -1033,12 +1044,7 @@ func validateArtifactContainer(
 	containerCount int,
 	sourceConfigured bool,
 ) {
-	// `image_uri = var.image` (or a data source / resource reference) arrives
-	// unknown here: the validate walk runs before those references resolve.
-	// Unknown means "set, not resolved yet", not "absent", so it counts as an
-	// image source and the real check happens in validateArtifactApplyConfig.
-	hasImageURI := container.ImageURI.IsUnknown() ||
-		(!container.ImageURI.IsNull() && container.ImageURI.ValueString() != "")
+	hasImageURI := artifactStringConfigured(container.ImageURI)
 	hasBuildConfig := container.ImageBuildConfig != nil
 
 	if !hasImageURI && !hasBuildConfig {
@@ -1201,7 +1207,9 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 
 	sourcePath := path.Root("source")
 
-	if data.Source.Dir.IsNull() {
+	if !artifactStringConfigured(data.Source.Dir) {
+		// An empty dir would otherwise resolve to the working directory and
+		// upload whatever happens to be there.
 		resp.Diagnostics.AddAttributeError(
 			sourcePath.AtName("dir"),
 			"Missing source directory",
@@ -1424,17 +1432,17 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 			)
 			return
 		}
-		// Unknown means the attribute is set to a reference the validate walk
-		// cannot resolve yet, so only a null value is genuinely missing.
-		// validateArtifactApplyConfig re-checks both once they resolve.
-		if cfg.Dockerfile.ExecutionEnvironmentID.IsNull() {
+		// Both ids are sent with `omitempty`, so an empty one would reach the
+		// API as a generated dockerfile carrying no execution environment at
+		// all. Unknown defers; null and empty are refused here.
+		if !artifactStringConfigured(cfg.Dockerfile.ExecutionEnvironmentID) {
 			resp.Diagnostics.AddAttributeError(
 				dockerfilePath.AtName("execution_environment_id"),
 				"Missing execution environment ID",
 				"`execution_environment_id` is required when dockerfile source is `generated`.",
 			)
 		}
-		if cfg.Dockerfile.ExecutionEnvironmentVersionID.IsNull() {
+		if !artifactStringConfigured(cfg.Dockerfile.ExecutionEnvironmentVersionID) {
 			resp.Diagnostics.AddAttributeError(
 				dockerfilePath.AtName("execution_environment_version_id"),
 				"Missing execution environment version ID",
