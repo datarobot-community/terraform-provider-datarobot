@@ -126,8 +126,12 @@ output "from_source_locked_artifact_id" {
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
 # from an execution environment, so the two ids are read from a variable or a
-# data source rather than pasted in: every attribute below accepts a variable,
-# data source, or resource reference, and only a null value counts as unset.
+# data source rather than pasted in: a string attribute such as image_uri,
+# execution_environment_id or source.dir takes a variable, data source, or
+# resource reference, and only a null or empty value counts as unset. List
+# attributes such as entrypoint and routes are the exception - a whole list
+# from a reference (entrypoint = var.entrypoint) still fails; write the list
+# out and reference individual elements instead.
 #
 # Set both variables to build this example; left empty it plans and applies as
 # nothing, so the rest of this file works on any instance. Execution environment
@@ -176,7 +180,7 @@ resource "datarobot_artifact" "generated_dockerfile" {
             source                           = "generated"
             execution_environment_id         = var.execution_environment_id
             execution_environment_version_id = var.execution_environment_version_id
-            entrypoint                       = ["python", "app.py"]
+            entrypoint                       = ["python", "main.py"]
           }
         }
       }]
