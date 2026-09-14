@@ -1089,8 +1089,8 @@ func validateArtifactContainer(
 //
 // Only a resolved, non-empty value is refused. `image_uri = var.image` reads as
 // unknown during the validate walk, so this defers to the plan walk, where root
-// variables and data sources have resolved, and to validateArtifactApplyConfig for a
-// reference to a resource created in the same apply.
+// variables and data sources have resolved, and to the apply walk, where a
+// reference to a resource created in the same apply has resolved too.
 func validateContainerImageURINotSourceManaged(
 	resp *resource.ValidateConfigResponse,
 	containerPath path.Path,
@@ -1122,23 +1122,30 @@ func validateContainerImageURINotSourceManaged(
 // validateArtifactSource requires an explicit `image_uri` instead of refusing it.
 // The two rules are exact complements and must stay that way, or the combination
 // becomes unconfigurable.
+//
+// Which of the two applies to a locked artifact turns on `wait_for_build`, so
+// `wait_for_build = var.wait` decides neither while it is unknown. Report no build
+// then: refusing `image_uri` would reject the very configuration that requires it
+// once the reference resolves to false. validateArtifactSource already defers the
+// complementary rule on the same value, and the plan walk runs the pair again with
+// variables and data sources resolved.
+//
+// Deliberately not artifactSourceWaitForBuild: that one answers what apply should
+// do and defaults an unknown to waiting, which is the safe runtime choice and the
+// wrong validation one.
 func artifactSourceBuildsContainerImage(data ArtifactResourceModel, status string) bool {
 	if !artifactSourceConfigured(&data) {
 		return false
 	}
-	if status == string(client.ArtifactStatusLocked) && !artifactSourceWaitForBuild(&data) {
-		return false
+	if status == string(client.ArtifactStatusLocked) {
+		if data.Source.WaitForBuild.IsUnknown() {
+			return false
+		}
+		if !artifactSourceWaitForBuild(&data) {
+			return false
+		}
 	}
 	return true
-}
-
-// artifactContainerPrimaryUndecided reports whether `primary` is set to a
-// reference the validate walk cannot resolve. A rule that only applies to the
-// primary container cannot fire either way until it resolves, so it defers to
-// the apply-time rerun. A sole container is primary regardless, so an unknown
-// value decides nothing only when the group holds more than one container.
-func artifactContainerPrimaryUndecided(container ArtifactContainerModel, containerCount int) bool {
-	return container.Primary.IsUnknown() && containerCount != 1
 }
 
 // validateArtifactContainerRoutes mirrors the Workload API route rules that the

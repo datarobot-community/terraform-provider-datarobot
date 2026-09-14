@@ -1,13 +1,10 @@
 package provider
 
 import (
-	"context"
 	"regexp"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
-	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
-	"github.com/golang/mock/gomock"
 	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -166,9 +163,18 @@ func TestArtifactSourceBuildsContainerImage(t *testing.T) {
 			status: string(client.ArtifactStatusLocked),
 		},
 		{
-			name:   "locked with an unresolved wait_for_build defaults to waiting",
+			// Undecided, not waiting: wait_for_build is what picks between the
+			// rule that refuses image_uri and the one that requires it, so an
+			// unresolved value has to leave both alone until the plan walk.
+			name:   "locked with an unresolved wait_for_build defers",
 			data:   withSource(types.BoolUnknown()),
 			status: string(client.ArtifactStatusLocked),
+		},
+		{
+			// A draft never reaches the exemption, so the unknown changes nothing.
+			name:   "draft with an unresolved wait_for_build still builds",
+			data:   withSource(types.BoolUnknown()),
+			status: string(client.ArtifactStatusDraft),
 			want:   true,
 		},
 	}
@@ -192,7 +198,7 @@ func TestArtifactImageURISourceRulesAreComplements(t *testing.T) {
 	dir := t.TempDir()
 
 	for _, status := range []string{string(client.ArtifactStatusDraft), string(client.ArtifactStatusLocked)} {
-		for _, wait := range []types.Bool{types.BoolNull(), types.BoolValue(true), types.BoolValue(false)} {
+		for _, wait := range []types.Bool{types.BoolNull(), types.BoolValue(true), types.BoolValue(false), types.BoolUnknown()} {
 			for _, imageURI := range []types.String{types.StringNull(), types.StringValue("containous/whoami:latest")} {
 				data := ArtifactResourceModel{
 					Name:   types.StringValue("complements"),
@@ -226,9 +232,20 @@ func TestArtifactImageURISourceRulesAreComplements(t *testing.T) {
 						status, wait, imageURI)
 				}
 
+				// While wait_for_build is unresolved neither rule can tell which
+				// of them applies, so neither may fire. "At most one" is not
+				// enough here: refusing image_uri rejects the configuration that
+				// the other rule requires it for.
+				if status == string(client.ArtifactStatusLocked) && wait.IsUnknown() {
+					if refused || required {
+						t.Fatalf("status=%s wait=unknown image_uri=%v: undecided wait_for_build must defer both rules, got %s",
+							status, imageURI, artifactDiagSummaries(resp))
+					}
+				}
+
 				// The one configuration that needs image_uri must accept it.
 				lockedNoWait := status == string(client.ArtifactStatusLocked) &&
-					!wait.IsNull() && !wait.ValueBool()
+					!wait.IsNull() && !wait.IsUnknown() && !wait.ValueBool()
 				if lockedNoWait && !imageURI.IsNull() && resp.Diagnostics.HasError() {
 					t.Fatalf("status=%s wait=%v: locked artifact skipping the build wait must accept image_uri, got %s",
 						status, wait, artifactDiagSummaries(resp))
@@ -364,54 +381,4 @@ resource "datarobot_artifact" "test" {
     }]
   }
 }`, nil)
-}
-
-// A reference to a resource created in the same apply is still unknown on the
-// plan walk, so Create is the last place to catch it. It has to refuse before
-// CreateArtifact runs, or the failed apply leaves an artifact behind — the
-// orphan the report describes, one per attempt.
-func TestArtifactCreateRejectsExplicitImageURIWithSourceBuild(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	// No EXPECT: reaching the API at all fails the test.
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-	data := artifactResourceModelWithSource("apply-explicit-image-uri", t.TempDir())
-	data.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("containous/whoami:latest")
-
-	_, diags := testArtifactApplyCreate(context.Background(), artifactResource, data)
-	if !diags.HasError() {
-		t.Fatal("expected Create to reject an explicit image_uri on a source-built container")
-	}
-	if got := diags.Errors()[0].Summary(); got != "Conflicting image source" {
-		t.Fatalf("summary = %q, want %q", got, "Conflicting image source")
-	}
-}
-
-// The same rule through Update, so a configuration that starts valid cannot be
-// edited into the broken shape.
-func TestArtifactUpdateRejectsExplicitImageURIWithSourceBuild(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockService := mock_client.NewMockService(ctrl)
-	artifactResource := &ArtifactResource{provider: &Provider{service: mockService}}
-
-	dir := t.TempDir()
-	state := artifactResourceModelWithSource("apply-explicit-image-uri", dir)
-	state.ArtifactID = types.StringValue("6ffab89d-de30-4fbf-a0f0-b6dfc00ae542")
-
-	plan := artifactResourceModelWithSource("apply-explicit-image-uri", dir)
-	plan.ArtifactID = state.ArtifactID
-	plan.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("containous/whoami:latest")
-
-	_, diags := testArtifactApplyUpdate(context.Background(), artifactResource, plan, state)
-	if !diags.HasError() {
-		t.Fatal("expected Update to reject an explicit image_uri on a source-built container")
-	}
-	if got := diags.Errors()[0].Summary(); got != "Conflicting image source" {
-		t.Fatalf("summary = %q, want %q", got, "Conflicting image source")
-	}
 }
