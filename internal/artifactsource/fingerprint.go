@@ -10,7 +10,7 @@ import (
 // files under dir after applying ignore. extra is merged in (e.g. a pending
 // .drignore that will be written on apply) and the combined list is sorted.
 func FingerprintDirectory(dir string, ignore IgnoreFunc, extra []LocalFile) (string, error) {
-	files, _, err := collectLocalFiles(dir, ignore, true)
+	files, err := CollectLocalFiles(dir, ignore)
 	if err != nil {
 		return "", err
 	}
