@@ -61,8 +61,28 @@ type GroupRuntime struct {
 	ResourceBundles       []string               `json:"resourceBundles,omitempty"`
 }
 
+type EnclaveSelectionPolicy string
+
+const (
+	// EnclaveSelectionPolicyAvailability lets the scheduler pick any Enclave the
+	// workload is eligible for. Requires the Enclave entitlement and a Use Case.
+	EnclaveSelectionPolicyAvailability EnclaveSelectionPolicy = "availability"
+	// EnclaveSelectionPolicyManual pins the workload to the Enclave named in
+	// Enclaves. Requires the CAN_OVERRIDE_WORKLOAD_PLACEMENT permission.
+	EnclaveSelectionPolicyManual EnclaveSelectionPolicy = "manual"
+)
+
 type WorkloadRuntime struct {
 	ContainerGroups []GroupRuntime `json:"containerGroups,omitempty"`
+	// EnclaveSelectionPolicy is nil when the workload runs outside any Enclave.
+	// The Workload API omits this field and Enclaves from responses on clusters
+	// without the Enclave entitlement, so a nil value read back from the API does
+	// not by itself mean the workload is unplaced.
+	EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy,omitempty"`
+	// Enclaves names the Enclave to run on. Exactly one entry is accepted today;
+	// the list shape is forward-compatible with multi-Enclave placement. This is
+	// desired state that the platform never rewrites.
+	Enclaves []string `json:"enclaves,omitempty"`
 }
 
 type Workload struct {
@@ -85,6 +105,12 @@ type CreateWorkloadRequest struct {
 	ArtifactID  *string            `json:"artifactId,omitempty"`
 	Description string             `json:"description,omitempty"`
 	Importance  WorkloadImportance `json:"importance,omitempty"`
+	// UseCaseID links the workload to a Use Case, which is what governs which
+	// Enclaves it may be placed on. Create-only: the link lives in the monolith
+	// association table and is not part of the workload entity, so no response
+	// carries it back. The API requires it when the runtime targets an Enclave
+	// and rejects it when the runtime does not.
+	UseCaseID *string `json:"useCaseId,omitempty"`
 }
 
 type UpdateWorkloadRequest struct {

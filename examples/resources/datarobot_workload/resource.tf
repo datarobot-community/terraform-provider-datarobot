@@ -106,3 +106,31 @@ output "workload_endpoint" {
   value       = datarobot_workload.api.endpoint
   description = "Inference endpoint URL for the deployed workload"
 }
+
+# Enclave placement: confine a workload to an Enclave. Placement is governed by a
+# Use Case, so use_case_id is required whenever an Enclave is targeted (and
+# rejected when none is). Changing any of these replaces the workload, which
+# means a new ID and a new endpoint.
+
+resource "datarobot_use_case" "enclave_example" {
+  name        = "example-enclave-use-case"
+  description = "Use Case whose Enclave grants govern where the workload runs"
+}
+
+resource "datarobot_workload" "enclave_pinned" {
+  name        = "example-enclave-workload"
+  artifact_id = datarobot_artifact.example.artifact_id
+  use_case_id = datarobot_use_case.enclave_example.id
+
+  runtime = {
+    # Pins the workload to this Enclave. Omit `enclaves` to let the scheduler
+    # pick any Enclave granted to the Use Case. Either way the provider derives
+    # `enclave_selection_policy`; set it only to override that.
+    enclaves = ["example-enclave"]
+
+    container_groups = [{
+      replica_count    = 1
+      resource_bundles = ["cpu.small"]
+    }]
+  }
+}

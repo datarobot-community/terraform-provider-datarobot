@@ -1207,12 +1207,15 @@ type WorkloadResourceModel struct {
 	ArtifactID  types.String         `tfsdk:"artifact_id"`
 	Endpoint    types.String         `tfsdk:"endpoint"`
 	Status      types.String         `tfsdk:"status"`
+	UseCaseID   types.String         `tfsdk:"use_case_id"`
 	Runtime     WorkloadRuntimeModel `tfsdk:"runtime"`
 }
 
 type WorkloadRuntimeModel struct {
-	ContainerGroups   []WorkloadGroupRuntimeModel     `tfsdk:"container_groups"`
-	ReplacementPolicy *WorkloadReplacementPolicyModel `tfsdk:"replacement_policy"`
+	ContainerGroups        []WorkloadGroupRuntimeModel     `tfsdk:"container_groups"`
+	EnclaveSelectionPolicy types.String                    `tfsdk:"enclave_selection_policy"`
+	Enclaves               types.List                      `tfsdk:"enclaves"`
+	ReplacementPolicy      *WorkloadReplacementPolicyModel `tfsdk:"replacement_policy"`
 }
 
 type WorkloadReplacementPolicyModel struct {
