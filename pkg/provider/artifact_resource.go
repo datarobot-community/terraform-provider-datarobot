@@ -66,11 +66,11 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 		},
 		"execution_environment_id": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: "Execution environment ID for the base Docker image. Required when source is `generated`.",
+			MarkdownDescription: "Execution environment ID for the base Docker image. Required when source is `generated`. Read it from the `datarobot_execution_environment` data source rather than hardcoding it.",
 		},
 		"execution_environment_version_id": schema.StringAttribute{
 			Optional:            true,
-			MarkdownDescription: "Execution environment version ID that pins the base image. Required when source is `generated`.",
+			MarkdownDescription: "Execution environment version ID that pins the base image. Required when source is `generated`. Available as `version_id` on the `datarobot_execution_environment` data source.",
 		},
 		"entrypoint": schema.ListAttribute{
 			Optional:            true,
@@ -1025,6 +1025,17 @@ func validateArtifactEnvironmentVar(resp *resource.ValidateConfigResponse, evPat
 	}
 }
 
+// artifactStringConfigured reports whether a string attribute carries a value.
+// `image_uri = var.image`, a data source, or a resource reference arrives
+// unknown while Terraform validates, because that walk runs before those
+// references resolve; unknown means "set, not resolved yet", so it counts. A
+// null attribute was never written, and an empty string carries nothing the API
+// can use, so neither does. Terraform validates again once each reference
+// resolves, so an unknown that turns out to be empty is still caught.
+func artifactStringConfigured(v types.String) bool {
+	return v.IsUnknown() || (!v.IsNull() && v.ValueString() != "")
+}
+
 func validateArtifactContainer(
 	resp *resource.ValidateConfigResponse,
 	containerPath path.Path,
@@ -1033,9 +1044,7 @@ func validateArtifactContainer(
 	containerCount int,
 	sourceConfigured bool,
 ) {
-	hasImageURI := !container.ImageURI.IsNull() &&
-		!container.ImageURI.IsUnknown() &&
-		container.ImageURI.ValueString() != ""
+	hasImageURI := artifactStringConfigured(container.ImageURI)
 	hasBuildConfig := container.ImageBuildConfig != nil
 
 	if !hasImageURI && !hasBuildConfig {
@@ -1080,10 +1089,7 @@ func validateArtifactContainerRoutes(
 
 	routesPath := containerPath.AtName("routes")
 
-	isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-	// Workload API auto-marks the sole container as primary when primary is omitted.
-	autoPrimary := containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown())
-	if !isPrimary && !autoPrimary {
+	if !artifactContainerMayBePrimary(container, containerCount) {
 		resp.Diagnostics.AddAttributeError(
 			routesPath,
 			"Unsupported on non-primary container",
@@ -1116,6 +1122,17 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	}
 
+	validateArtifactModel(resp, data)
+}
+
+// validateArtifactModel holds the rules ValidateConfig applies. Terraform calls
+// ValidateResourceConfig on every walk: once while validating with variables
+// unknown, again on the plan walk with variables and data sources resolved, and
+// again on the apply walk with same-apply resource references resolved. So a
+// rule that defers an unknown value is not giving up on it, it is waiting for
+// the walk that can decide it; the last of those runs before the resource is
+// created, which is why none of this needs re-checking from Create or Update.
+func validateArtifactModel(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
 	validateArtifactSource(resp, data)
 	validateArtifactA2AEnabled(resp, data)
 
@@ -1123,6 +1140,13 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 		return
 	}
 	validateArtifactContainerGroupsCount(resp, data.Spec.ContainerGroups)
+	validateArtifactContainers(resp, data)
+}
+
+func validateArtifactContainers(resp *resource.ValidateConfigResponse, data ArtifactResourceModel) {
+	if data.Spec == nil {
+		return
+	}
 
 	status := string(client.ArtifactStatusLocked)
 	if !data.Status.IsNull() && !data.Status.IsUnknown() {
@@ -1132,7 +1156,11 @@ func (r *ArtifactResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if !data.Type.IsNull() && !data.Type.IsUnknown() {
 		artifactType = data.Type.ValueString()
 	}
-	sourceConfigured := artifactSourceConfigured(&data)
+	// Not artifactSourceConfigured: that one requires a known dir because the
+	// sync needs the literal path to read. The locked-artifact rule below only
+	// needs to know a source was declared, and `dir = var.source_dir` declares
+	// one even while the path is still unresolved.
+	sourceConfigured := data.Source != nil && !data.Source.Dir.IsNull()
 
 	for gi, group := range data.Spec.ContainerGroups {
 		for ci, container := range group.Containers {
@@ -1179,7 +1207,9 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 
 	sourcePath := path.Root("source")
 
-	if !IsKnown(data.Source.Dir) {
+	if !artifactStringConfigured(data.Source.Dir) {
+		// An empty dir would otherwise resolve to the working directory and
+		// upload whatever happens to be there.
 		resp.Diagnostics.AddAttributeError(
 			sourcePath.AtName("dir"),
 			"Missing source directory",
@@ -1188,40 +1218,11 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 		return
 	}
 
-	dir := data.Source.Dir.ValueString()
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath.AtName("dir"),
-			"Invalid source directory path",
-			fmt.Sprintf("Could not resolve %q to an absolute path: %s", dir, err),
-		)
-		return
-	}
-
-	info, err := os.Stat(absDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			resp.Diagnostics.AddAttributeError(
-				sourcePath.AtName("dir"),
-				"Source directory not found",
-				fmt.Sprintf("Directory %q does not exist.", absDir),
-			)
-		} else {
-			resp.Diagnostics.AddAttributeError(
-				sourcePath.AtName("dir"),
-				"Source directory not accessible",
-				fmt.Sprintf("Could not access %q: %s", absDir, err),
-			)
-		}
-		return
-	}
-	if !info.IsDir() {
-		resp.Diagnostics.AddAttributeError(
-			sourcePath.AtName("dir"),
-			"Invalid source directory",
-			fmt.Sprintf("%q is not a directory.", absDir),
-		)
+	// `dir = var.source_dir` is unknown during the validate walk. The checks
+	// below need the literal path, so they wait for the second validation
+	// Terraform runs on the plan walk, where the reference has resolved. The
+	// rules after them do not need the path and still run.
+	if !data.Source.Dir.IsUnknown() && !validateArtifactSourceDir(resp, sourcePath, data.Source.Dir.ValueString()) {
 		return
 	}
 
@@ -1279,18 +1280,71 @@ func validateArtifactSource(resp *resource.ValidateConfigResponse, data Artifact
 	}
 }
 
+// validateArtifactSourceDir reports whether dir names an existing directory,
+// recording the reason it does not when it fails.
+func validateArtifactSourceDir(resp *resource.ValidateConfigResponse, sourcePath path.Path, dir string) bool {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory path",
+			fmt.Sprintf("Could not resolve %q to an absolute path: %s", dir, err),
+		)
+		return false
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not found",
+				fmt.Sprintf("Directory %q does not exist.", absDir),
+			)
+		} else {
+			resp.Diagnostics.AddAttributeError(
+				sourcePath.AtName("dir"),
+				"Source directory not accessible",
+				fmt.Sprintf("Could not access %q: %s", absDir, err),
+			)
+		}
+		return false
+	}
+	if !info.IsDir() {
+		resp.Diagnostics.AddAttributeError(
+			sourcePath.AtName("dir"),
+			"Invalid source directory",
+			fmt.Sprintf("%q is not a directory.", absDir),
+		)
+		return false
+	}
+
+	return true
+}
+
+// artifactContainerMayBePrimary reports whether a container could be the
+// primary one as far as the configuration shows. `primary = var.is_primary` is
+// unknown while Terraform validates, and a rule that reports something missing
+// from the primary container must not fire while it could still be this one.
+func artifactContainerMayBePrimary(container ArtifactContainerModel, containerCount int) bool {
+	if container.Primary.IsUnknown() {
+		return true
+	}
+	if !container.Primary.IsNull() && container.Primary.ValueBool() {
+		return true
+	}
+	// Workload API auto-marks the sole container as primary when primary is omitted.
+	return containerCount == 1 && container.Primary.IsNull()
+}
+
 func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
 	if spec == nil {
 		return false
 	}
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-			if !isPrimary && len(group.Containers) == 1 &&
-				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
-				isPrimary = true
-			}
-			if isPrimary && !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
+			if artifactContainerMayBePrimary(container, len(group.Containers)) &&
+				artifactStringConfigured(container.ImageURI) {
 				return true
 			}
 		}
@@ -1301,12 +1355,8 @@ func artifactHasPrimaryImageURI(spec *ArtifactSpecModel) bool {
 func artifactHasPrimaryImageBuildConfig(spec *ArtifactSpecModel) bool {
 	for _, group := range spec.ContainerGroups {
 		for _, container := range group.Containers {
-			isPrimary := !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool()
-			if !isPrimary && len(group.Containers) == 1 &&
-				(container.Primary.IsNull() || container.Primary.IsUnknown()) {
-				isPrimary = true
-			}
-			if isPrimary && container.ImageBuildConfig != nil {
+			if artifactContainerMayBePrimary(container, len(group.Containers)) &&
+				container.ImageBuildConfig != nil {
 				return true
 			}
 		}
@@ -1339,11 +1389,7 @@ func validateImageBuildConfigPrimary(
 		return
 	}
 
-	if !container.Primary.IsNull() && !container.Primary.IsUnknown() && container.Primary.ValueBool() {
-		return
-	}
-	if containerCount == 1 && (container.Primary.IsNull() || container.Primary.IsUnknown()) {
-		// Workload API auto-marks the sole container as primary when primary is omitted.
+	if artifactContainerMayBePrimary(container, containerCount) {
 		return
 	}
 
@@ -1386,14 +1432,17 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 			)
 			return
 		}
-		if cfg.Dockerfile.ExecutionEnvironmentID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentID.IsUnknown() {
+		// Both ids are sent with `omitempty`, so an empty one would reach the
+		// API as a generated dockerfile carrying no execution environment at
+		// all. Unknown defers; null and empty are refused here.
+		if !artifactStringConfigured(cfg.Dockerfile.ExecutionEnvironmentID) {
 			resp.Diagnostics.AddAttributeError(
 				dockerfilePath.AtName("execution_environment_id"),
 				"Missing execution environment ID",
 				"`execution_environment_id` is required when dockerfile source is `generated`.",
 			)
 		}
-		if cfg.Dockerfile.ExecutionEnvironmentVersionID.IsNull() || cfg.Dockerfile.ExecutionEnvironmentVersionID.IsUnknown() {
+		if !artifactStringConfigured(cfg.Dockerfile.ExecutionEnvironmentVersionID) {
 			resp.Diagnostics.AddAttributeError(
 				dockerfilePath.AtName("execution_environment_version_id"),
 				"Missing execution environment version ID",
