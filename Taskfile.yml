@@ -1,0 +1,125 @@
+version: "3"
+
+vars:
+  HOSTNAME: registry.terraform.io
+  NAMESPACE: datarobot-community
+  NAME: datarobot
+  BINARY: terraform-provider-{{.NAME}}
+  VERSION: 0.11.3
+  OS:
+    sh: go env GOOS
+  ARCH:
+    sh: go env GOARCH
+
+tasks:
+  default:
+    cmds:
+      - task: lint
+      - task: install
+
+  build:
+    desc: Build the provider binary.
+    cmds:
+      - go build -o {{.BINARY}}
+
+  generate:
+    desc: Generate Terraform Provider docs.
+    cmds:
+      - go generate
+
+  mocks:
+    desc: Make mocks for the service (must use github.com/golang/mock to match go.mod).
+    cmds:
+      - go run github.com/golang/mock/mockgen@v1.6.0 -source=internal/client/service.go -destination=mock/service.go -package=mock_client
+
+  release:
+    desc: Cross-compile release binaries for all supported platforms.
+    cmds:
+      - GOOS=darwin GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_darwin_amd64
+      - GOOS=freebsd GOARCH=386 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_freebsd_386
+      - GOOS=freebsd GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_freebsd_amd64
+      - GOOS=freebsd GOARCH=arm go build -o ./bin/{{.BINARY}}_{{.VERSION}}_freebsd_arm
+      - GOOS=linux GOARCH=386 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_linux_386
+      - GOOS=linux GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_linux_amd64
+      - GOOS=linux GOARCH=arm go build -o ./bin/{{.BINARY}}_{{.VERSION}}_linux_arm
+      - GOOS=openbsd GOARCH=386 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_openbsd_386
+      - GOOS=openbsd GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_openbsd_amd64
+      - GOOS=solaris GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_solaris_amd64
+      - GOOS=windows GOARCH=386 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_windows_386
+      - GOOS=windows GOARCH=amd64 go build -o ./bin/{{.BINARY}}_{{.VERSION}}_windows_amd64
+
+  install:
+    desc: Build the provider and install it into the local Terraform plugin directory.
+    deps: [build]
+    cmds:
+      - mkdir -p ~/.terraform.d/plugins/{{.HOSTNAME}}/{{.NAMESPACE}}/{{.NAME}}/{{.VERSION}}/{{.OS}}_{{.ARCH}}
+      - mv {{.BINARY}} ~/.terraform.d/plugins/{{.HOSTNAME}}/{{.NAMESPACE}}/{{.NAME}}/{{.VERSION}}/{{.OS}}_{{.ARCH}}
+
+  test:
+    desc: Run unit tests.
+    cmds:
+      - go test ./... -v {{.TESTARGS}} -timeout 5m
+
+  test-coverage:
+    desc: Run unit tests with coverage report.
+    cmds:
+      - go test ./... -v -cover -coverprofile=coverage.out -covermode=atomic -timeout 5m || true
+      - go tool cover -func=coverage.out | tail -1
+
+  testacc:
+    desc: Run acceptance tests (requires TF_ACC=1 and DataRobot credentials).
+    env:
+      TF_ACC: "1"
+    cmds:
+      - go test ./... -v {{.TESTARGS}} -timeout 120m -parallel=6
+
+  test-changed:
+    desc: Run tests affected by changed files.
+    cmds:
+      - bash scripts/run-changed-tests.sh
+
+  # Full-suite test groups for parallel CI execution.
+  # Groups are defined by file name prefixes in scripts/run-test-group.sh — edit there,
+  # not here. Run all four in parallel Harness stages: ~70 min → ~35 min wall-clock.
+
+  testacc-group-fast:
+    desc: "Full-suite group: credentials, datasets, datastores, use cases, infra primitives (~15 min)."
+    cmds:
+      - bash scripts/run-test-group.sh fast
+
+  testacc-group-models:
+    desc: "Full-suite group: custom models, registered models, LLM blueprints, vector DB, playground (~40 min)."
+    cmds:
+      - bash scripts/run-test-group.sh models
+
+  testacc-group-deployments:
+    desc: "Full-suite group: deployments, custom metrics, retraining policies, workloads (~35 min)."
+    cmds:
+      - bash scripts/run-test-group.sh deployments
+
+  testacc-group-apps:
+    desc: "Full-suite group: custom apps, application sources, notebooks, custom jobs, execution envs (~25 min)."
+    cmds:
+      - bash scripts/run-test-group.sh apps
+
+  testacc-check-groups:
+    desc: Verify every TestAcc*/TestIntegration* function in pkg/provider/ is assigned to a group.
+    cmds:
+      - bash scripts/run-test-group.sh --check
+
+  check-resource-tests:
+    desc: Verify every resource/data-source file has a test file with acceptance tests (static check, no API credentials needed).
+    cmds:
+      - bash scripts/check-resource-tests.sh
+
+  lint:
+    desc: Run golangci-lint.
+    cmds:
+      - echo "Running checks for service"
+      - golangci-lint run ./...
+
+  vuln:
+    desc: Run govulncheck against the Go CVE database.
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - govulncheck ./...

@@ -6,7 +6,7 @@ To contribute to the provider, ensure the following dependencies are installed:
 
 - [Go](https://go.dev/doc/install) >= 1.16
 - [Terraform CLI](https://learn.hashicorp.com/tutorials/terraform/install-cli) >= 1.0
-- [Make](https://www.gnu.org/software/make/) >= 4.0
+- [Task](https://taskfile.dev/installation/) >= 3.0
 - [Git](https://git-scm.com/downloads) >= 2.0
 - [Docker](https://docs.docker.com/get-docker/) >= 20.10
 
@@ -72,7 +72,7 @@ Configure GPG for signing commits and tags. This is required for the release pro
 1. Build the binary and copy it to your path.
 
     ~~~ shell
-    make install
+    task install
     ~~~
 
 ## Environment Variables
@@ -121,7 +121,7 @@ Documentation is generated based on the `Description` and `MarkdownDescription` 
 
 1. Run the following command to generate updated documentation:
   ```bash
-  make generate
+  task generate
   ```
 2. Verify that the generated documentation reflects the latest changes.
 
