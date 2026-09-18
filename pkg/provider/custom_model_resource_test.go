@@ -79,7 +79,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 
 	baseEnvironmentID := testGenAIBaseEnvID
-	baseEnvironmentID2 := testStreamlitBaseEnvID
+	baseEnvironmentID2 := testAppBaseEnvID
 
 	fileName := "requirements.txt"
 	folderPath := "custom_model_without_llm_blueprint"

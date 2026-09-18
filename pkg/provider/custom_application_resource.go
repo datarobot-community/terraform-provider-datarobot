@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -100,12 +99,10 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The resources for the Custom Application. If not specified, default values will be computed by the API based on the cluster configuration.",
-				PlanModifiers: []planmodifier.Object{
-					objectplanmodifier.UseStateForUnknown(),
-				},
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The number of replicas for the Custom Application. Computed by API if not specified.",
 						Validators: []validator.Int64{
 							int64validator.AtLeast(1),
@@ -113,6 +110,7 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The resource label for the Custom Application (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
@@ -133,14 +131,17 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Whether session affinity is enabled for the Custom Application. Computed by API if not specified.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application. Computed by API if not specified.",
 					},
 					"health_endpoint_path": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Path used by the Kubernetes liveness and readiness probes. When set, takes precedence over the path derived from `service_web_requests_on_root_path`. Use this to expose a dedicated health endpoint (e.g. `/healthz`) instead of probing the root path.",
 					},
 				},
@@ -418,6 +419,9 @@ func (r *CustomApplicationResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	plan.SourceID = types.StringValue(application.CustomApplicationSourceID)
+	// name is Computed, so it is unknown in the plan whenever it is absent from the
+	// configuration; the API response is authoritative for it after the update.
+	plan.Name = types.StringValue(application.Name)
 	plan.ExternalAccessEnabled = types.BoolValue(application.ExternalAccessEnabled)
 	recipientsList, diags := types.ListValueFrom(ctx, types.StringType, application.ExternalAccessRecipients)
 	resp.Diagnostics.Append(diags...)

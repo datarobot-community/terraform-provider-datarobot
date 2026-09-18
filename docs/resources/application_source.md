@@ -15,12 +15,13 @@ Application Source
 ```terraform
 resource "datarobot_application_source" "example" {
   name                = "example application source"
-  base_environment_id = "6542cd582a9d3d51bf4ac71e"
+  base_environment_id = "66d07fae0513a1edf18595bb"
 
   # Optional
   files = [
     ["start-app.sh"],
-    ["streamlit-app.py"],
+    ["app.py"],
+    ["requirements.txt"],
   ]
   folder_path = "example-app"
   runtime_parameter_values = [

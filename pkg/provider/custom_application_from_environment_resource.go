@@ -101,6 +101,7 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 				Attributes: map[string]schema.Attribute{
 					"replicas": schema.Int64Attribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The number of replicas for the Custom Application. Computed by API if not specified.",
 						Validators: []validator.Int64{
 							int64validator.AtLeast(1),
@@ -108,6 +109,7 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 					},
 					"resource_label": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "The resource label for the Custom Application (e.g., 'cpu.small', 'cpu.medium'). Computed by API if not specified.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
@@ -128,14 +130,17 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 					},
 					"session_affinity": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Whether session affinity is enabled for the Custom Application. Computed by API if not specified.",
 					},
 					"service_web_requests_on_root_path": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Whether to service web requests on the root path for the Custom Application. Computed by API if not specified.",
 					},
 					"health_endpoint_path": schema.StringAttribute{
 						Optional:            true,
+						Computed:            true,
 						MarkdownDescription: "Path used by the Kubernetes liveness and readiness probes. When set, takes precedence over the path derived from `service_web_requests_on_root_path`. Use this to expose a dedicated health endpoint (e.g. `/healthz`) instead of probing the root path.",
 					},
 				},

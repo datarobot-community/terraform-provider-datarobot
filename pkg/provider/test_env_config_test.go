@@ -1,6 +1,13 @@
 package provider
 
-import "os"
+import (
+	"context"
+	"os"
+	"sync"
+	"testing"
+
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+)
 
 // Centralized test environment configuration.
 //
@@ -11,9 +18,9 @@ import "os"
 // To override a value, add it to the .env file at the project root:
 //
 //	DR_TEST_GENAI_BASE_ENV_ID=67ab469cecdca772287de644
-//	DR_TEST_STREAMLIT_BASE_ENV_ID=6542cd582a9d3d51bf4ac71e
+//	DR_TEST_APP_BASE_ENV_ID=66d07fae0513a1edf18595bb
 //	DR_TEST_CUSTOM_JOB_ENV_ID=66d07fae0513a1edf18595bb
-//	DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID=668548c1b8e086572a96fbf5
+//	DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID=<version of DR_TEST_APP_BASE_ENV_ID>
 //	DR_TEST_CUSTOM_APP_ENV_ID=67987589391fe8fa0a2275b8
 //	DR_TEST_CUSTOM_APP_ENV_ID_2=67987b1a90dbd55389b699c2
 //	DR_TEST_SLACKBOT_TEMPLATE_ID=67126757e7819551baceb22b
@@ -32,18 +39,12 @@ var (
 	// Used for custom models (Binary, Regression, TextGeneration, MCP, etc.).
 	testGenAIBaseEnvID string
 
-	// testStreamlitBaseEnvID is the [Experimental] Python 3.9 Streamlit base environment.
+	// testAppBaseEnvID is the [DataRobot] Python 3.12 Applications base environment.
 	// Used for application sources and custom applications.
-	testStreamlitBaseEnvID string
+	testAppBaseEnvID string
 
 	// testCustomJobEnvID is the base environment for custom jobs and metric jobs.
 	testCustomJobEnvID string
-
-	// Base environment version IDs.
-
-	// testAppSourceBaseEnvVersionID is a specific version of the Streamlit base environment.
-	// Used in application source and application source from template tests.
-	testAppSourceBaseEnvVersionID string
 
 	// Custom application execution environment IDs.
 
@@ -90,11 +91,8 @@ var (
 func init() {
 	// Base environments
 	testGenAIBaseEnvID = getTestEnvOrDefault("DR_TEST_GENAI_BASE_ENV_ID", "67ab469cecdca772287de644")
-	testStreamlitBaseEnvID = getTestEnvOrDefault("DR_TEST_STREAMLIT_BASE_ENV_ID", "6542cd582a9d3d51bf4ac71e")
+	testAppBaseEnvID = getTestEnvOrDefault("DR_TEST_APP_BASE_ENV_ID", "66d07fae0513a1edf18595bb")
 	testCustomJobEnvID = getTestEnvOrDefault("DR_TEST_CUSTOM_JOB_ENV_ID", "66d07fae0513a1edf18595bb")
-
-	// Base environment versions
-	testAppSourceBaseEnvVersionID = getTestEnvOrDefault("DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID", "668548c1b8e086572a96fbf5")
 
 	// Custom application execution environments
 	testCustomAppEnvID = getTestEnvOrDefault("DR_TEST_CUSTOM_APP_ENV_ID", "67987589391fe8fa0a2275b8")
@@ -121,4 +119,49 @@ func getTestEnvOrDefault(envVar, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+var (
+	appSourceBaseEnvVersionOnce sync.Once
+	appSourceBaseEnvVersion     string
+	appSourceBaseEnvVersionErr  error
+)
+
+// testAppSourceBaseEnvVersionID returns the base environment version that the
+// platform assigns to an application source when only base_environment_id is
+// set, i.e. the latest version of testAppBaseEnvID.
+//
+// This is looked up rather than hardcoded: the Python 3.12 Applications base
+// environment is still actively rebuilt, and its version IDs differ between
+// clusters, so any literal goes stale. Set
+// DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID to pin a specific version instead.
+func testAppSourceBaseEnvVersionID(t *testing.T) string {
+	t.Helper()
+
+	if v := os.Getenv("DR_TEST_APP_SOURCE_BASE_ENV_VERSION_ID"); v != "" {
+		return v
+	}
+
+	// Callers reach this before resource.Test decides whether to skip, so do
+	// not hit the API when acceptance tests are not going to run.
+	if os.Getenv("TF_ACC") == "" {
+		return ""
+	}
+
+	appSourceBaseEnvVersionOnce.Do(func() {
+		var env *client.ExecutionEnvironment
+		env, appSourceBaseEnvVersionErr = client.NewService(cl).GetExecutionEnvironment(context.Background(), testAppBaseEnvID)
+		if appSourceBaseEnvVersionErr == nil {
+			appSourceBaseEnvVersion = env.LatestVersion.ID
+		}
+	})
+
+	if appSourceBaseEnvVersionErr != nil {
+		t.Fatalf("could not resolve the latest version of base environment %s: %v", testAppBaseEnvID, appSourceBaseEnvVersionErr)
+	}
+	if appSourceBaseEnvVersion == "" {
+		t.Fatalf("base environment %s reported no latest version", testAppBaseEnvID)
+	}
+
+	return appSourceBaseEnvVersion
 }
