@@ -1,13 +1,6 @@
 ## [Unreleased]
 
-## [0.12.1] - 2026-09-17
-
-### Fixed
-
-- Changelog correction for goreleaser
-
-
-## [0.12.0] - 2026-09-17
+## [0.12.2] - 2026-09-17
 
 ### Fixed
 
