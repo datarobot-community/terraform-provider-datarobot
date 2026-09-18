@@ -127,6 +127,34 @@ output "workload_endpoint" {
   value       = datarobot_workload.api.endpoint
   description = "Inference endpoint URL for the deployed workload"
 }
+
+# Enclave placement: confine a workload to an Enclave. Placement is governed by a
+# Use Case, so use_case_id is required whenever an Enclave is targeted (and
+# rejected when none is). Changing any of these replaces the workload, which
+# means a new ID and a new endpoint.
+
+resource "datarobot_use_case" "enclave_example" {
+  name        = "example-enclave-use-case"
+  description = "Use Case whose Enclave grants govern where the workload runs"
+}
+
+resource "datarobot_workload" "enclave_pinned" {
+  name        = "example-enclave-workload"
+  artifact_id = datarobot_artifact.example.artifact_id
+  use_case_id = datarobot_use_case.enclave_example.id
+
+  runtime = {
+    # Pins the workload to this Enclave. Omit `enclaves` to let the scheduler
+    # pick any Enclave granted to the Use Case. Either way the provider derives
+    # `enclave_selection_policy`; set it only to override that.
+    enclaves = ["example-enclave"]
+
+    container_groups = [{
+      replica_count    = 1
+      resource_bundles = ["cpu.small"]
+    }]
+  }
+}
 ```
 
 ## In-place replacement
@@ -166,6 +194,42 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
+## Enclave placement
+
+On clusters with Enclaves enabled, a workload can be confined to an Enclave. Placement is governed by a Use Case: the platform restricts a workload to the Enclaves an administrator has granted to its Use Case, which is why `use_case_id` is required for any placed workload and rejected for an unplaced one.
+
+| Configuration | Where the workload runs |
+|---------------|-------------------------|
+| neither `use_case_id` nor any `runtime.enclave_*` attribute | Outside any Enclave |
+| `use_case_id` only | Any Enclave granted to that Use Case, chosen by the scheduler (`enclave_selection_policy` is sent as `availability`) |
+| `use_case_id` + `runtime.enclaves` | Pinned to the named Enclave (`enclave_selection_policy` is sent as `manual`) |
+
+```hcl
+resource "datarobot_workload" "agent" {
+  name        = "finance-agent"
+  artifact_id = datarobot_artifact.agent.artifact_id
+  use_case_id = datarobot_use_case.finance.id
+
+  runtime = {
+    enclaves         = ["finance-enclave"] # omit to let the scheduler choose
+    container_groups = [{ replica_count = 1, resource_bundles = ["cpu.small"] }]
+  }
+}
+```
+
+The provider fills in `enclave_selection_policy` from the rest of the configuration, so you only need to set it to say something the rest does not — and the derived value stays out of state, so your configuration and your state agree. Setting it explicitly is still accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
+
+Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
+
+### What placement does not do
+
+`use_case_id`, `enclave_selection_policy` and `enclaves` all **replace** the workload when changed — a destroy and create, which means a **new workload ID and a new endpoint**. This is not the in-place replacement the rest of this page describes: the Use Case link is fixed at creation and cannot be moved.
+
+None of the three is read back from the platform:
+
+- `use_case_id` is write-only. The link lives outside the workload entity and no API response carries it, so it cannot be refreshed or imported — an imported workload has it empty no matter which Use Case it is linked to, and a link changed outside Terraform is invisible to the plan.
+- `enclave_selection_policy` and `enclaves` are stripped from API responses on clusters without the Enclave entitlement, so the provider keeps your configured values in state rather than reading them back. A placement changed outside Terraform is not detected; `enclaves` is desired state the platform never rewrites, so that only happens if someone edits the workload by hand.
+
 ## Apply duration
 
 Replacement is asynchronous. The provider polls `GET /workloads/{id}/replacement` until the rollout completes or errors. A single replacement can block `terraform apply` for **several minutes** while the platform performs rolling cutover.
@@ -185,6 +249,9 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 
 - `description` (String) A human-readable description of the Workload.
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
+- `use_case_id` (String) The Use Case that governs where this Workload may run. Required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, and rejected by the platform when neither is: placement is restricted to the Enclaves an administrator has granted to this Use Case. Setting it implies `runtime.enclave_selection_policy = "availability"` unless a policy or a named Enclave says otherwise.
+
+Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. Changing it replaces the Workload, which means a new ID and a new endpoint.
 
 ### Read-Only
 
@@ -199,6 +266,12 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 Optional:
 
 - `container_groups` (Attributes List) Per-group runtime configuration. (see [below for nested schema](#nestedatt--runtime--container_groups))
+- `enclave_selection_policy` (String) How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the Enclave named in `enclaves`. Omit it to run outside any Enclave. Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission. Defaults to `availability` when `use_case_id` is set, or to `manual` when `enclaves` names one.
+
+Changing this replaces the Workload, which means a new ID and a new endpoint. Not read back from the platform: the API omits it on clusters without the Enclave entitlement, so the configured value is what stays in state.
+- `enclaves` (List of String) Name of the Enclave to pin this Workload to. Exactly one entry is accepted today; the list shape is forward-compatible with running on several Enclaves. Requires `use_case_id`, and only applies with `enclave_selection_policy = "manual"`, which is assumed when this is set and no policy is given. The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.
+
+This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. Changing it replaces the Workload, which means a new ID and a new endpoint.
 - `replacement_policy` (Attributes) Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults). (see [below for nested schema](#nestedatt--runtime--replacement_policy))
 
 <a id="nestedatt--runtime--container_groups"></a>

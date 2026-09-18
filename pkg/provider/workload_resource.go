@@ -11,12 +11,16 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -91,6 +95,18 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"use_case_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "The Use Case that governs where this Workload may run. Required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, " +
+					"and rejected by the platform when neither is: placement is restricted to the Enclaves an administrator has granted to this Use Case. " +
+					"Setting it implies `runtime.enclave_selection_policy = \"availability\"` unless a policy or a named Enclave says otherwise.\n\n" +
+					"Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: " +
+					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. " +
+					"Changing it replaces the Workload, which means a new ID and a new endpoint.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"runtime": schema.SingleNestedAttribute{
@@ -222,6 +238,38 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 						},
 					},
+					"enclave_selection_policy": schema.StringAttribute{
+						Optional: true,
+						MarkdownDescription: "How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the " +
+							"Enclave named in `enclaves`. Omit it to run outside any Enclave. Both values require `use_case_id`; `manual` additionally requires the " +
+							"`CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission. Defaults to `availability` when `use_case_id` is set, or to `manual` when `enclaves` names one.\n\n" +
+							"Changing this replaces the Workload, which means a new ID and a new endpoint. Not read back from the platform: the API omits it on clusters without the " +
+							"Enclave entitlement, so the configured value is what stays in state.",
+						Validators: []validator.String{
+							stringvalidator.OneOf(
+								string(client.EnclaveSelectionPolicyAvailability),
+								string(client.EnclaveSelectionPolicyManual),
+							),
+						},
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+					"enclaves": schema.ListAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+						MarkdownDescription: "Name of the Enclave to pin this Workload to. Exactly one entry is accepted today; the list shape is forward-compatible with running on several Enclaves. " +
+							"Requires `use_case_id`, and only applies with `enclave_selection_policy = \"manual\"`, which is assumed when this is set and no policy is given. " +
+							"The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.\n\n" +
+							"This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. " +
+							"Changing it replaces the Workload, which means a new ID and a new endpoint.",
+						Validators: []validator.List{
+							listvalidator.SizeAtMost(1),
+						},
+						PlanModifiers: []planmodifier.List{
+							listplanmodifier.RequiresReplace(),
+						},
+					},
 					"replacement_policy": schema.SingleNestedAttribute{
 						Optional:            true,
 						MarkdownDescription: "Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults).",
@@ -286,6 +334,7 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 	planned := data
 	loadWorkloadIntoModel(workload, &data)
 	preserveWorkloadReplacementPolicy(planned, &data)
+	preserveWorkloadEnclavePlacement(planned, &data)
 	applySentinels(planned, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -321,6 +370,7 @@ func (r *WorkloadResource) Read(ctx context.Context, req resource.ReadRequest, r
 	prior := data
 	loadWorkloadIntoModel(workload, &data)
 	preserveWorkloadReplacementPolicy(prior, &data)
+	preserveWorkloadEnclavePlacement(prior, &data)
 	applySentinels(prior, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -375,6 +425,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	preserveWorkloadReplacementPolicy(planned, &plan)
+	preserveWorkloadEnclavePlacement(planned, &plan)
 	applySentinels(planned, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -429,6 +480,8 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	validateWorkloadEnclavePlacement(data, resp)
 
 	if len(data.Runtime.ContainerGroups) > 1 {
 		resp.Diagnostics.AddAttributeError(
@@ -566,16 +619,78 @@ func waitForWorkloadToBeDeleted(ctx context.Context, s client.Service, id string
 	return backoff.Retry(operation, expBackoff)
 }
 
+// validateWorkloadEnclavePlacement refuses at plan time the placement combinations the
+// Workload API refuses at create time, so a configuration that cannot work fails before
+// anything is built rather than as a 422 partway through an apply.
+//
+// A value that is unknown during the validate walk counts as set, not as absent: only a
+// null value means the user omitted the attribute. Terraform validates the configuration
+// again during the plan walk, where variables and data sources have resolved, so nothing
+// deferred here is lost.
+func validateWorkloadEnclavePlacement(data WorkloadResourceModel, resp *resource.ValidateConfigResponse) {
+	policyPath := path.Root("runtime").AtName("enclave_selection_policy")
+	enclavesPath := path.Root("runtime").AtName("enclaves")
+
+	policy := data.Runtime.EnclaveSelectionPolicy
+	policySet := !policy.IsNull()
+	policyKnown := policySet && !policy.IsUnknown()
+
+	// A list that is present but empty is not a placement; a list that is unknown is.
+	enclaves := data.Runtime.Enclaves
+	enclavesSet := !enclaves.IsNull()
+	if enclavesSet && !enclaves.IsUnknown() && len(enclaves.Elements()) == 0 {
+		enclavesSet = false
+	}
+
+	useCaseSet := !data.UseCaseID.IsNull()
+
+	if !useCaseSet {
+		const detail = "Enclave placement is governed by a Use Case: the platform restricts a Workload to the Enclaves an administrator has granted to " +
+			"its Use Case, and refuses to create one that targets an Enclave without it. Set `use_case_id` on the Workload."
+		if enclavesSet {
+			resp.Diagnostics.AddAttributeError(enclavesPath, "Missing use_case_id for Enclave placement", detail)
+		}
+		if policySet {
+			resp.Diagnostics.AddAttributeError(policyPath, "Missing use_case_id for Enclave placement", detail)
+		}
+	}
+
+	if enclavesSet && policyKnown && policy.ValueString() != string(client.EnclaveSelectionPolicyManual) {
+		resp.Diagnostics.AddAttributeError(
+			enclavesPath,
+			"Conflicting Enclave placement",
+			fmt.Sprintf("Naming an Enclave in `enclaves` pins the Workload to it, which the platform only accepts with "+
+				"`enclave_selection_policy = %q`, but the policy is set to %q. Remove `enclaves` to let the scheduler choose, or set the policy to %q.",
+				client.EnclaveSelectionPolicyManual, policy.ValueString(), client.EnclaveSelectionPolicyManual),
+		)
+	}
+
+	if policyKnown && policy.ValueString() == string(client.EnclaveSelectionPolicyManual) && !enclavesSet {
+		resp.Diagnostics.AddAttributeError(
+			policyPath,
+			"Missing Enclave for manual placement",
+			fmt.Sprintf("`enclave_selection_policy = %q` pins the Workload to one named Enclave, so `enclaves` must name it. "+
+				"Use %q instead to let the scheduler pick any Enclave the Workload is eligible for.",
+				client.EnclaveSelectionPolicyManual, client.EnclaveSelectionPolicyAvailability),
+		)
+	}
+}
+
 func workloadCreateRequest(data WorkloadResourceModel) *client.CreateWorkloadRequest {
 	req := &client.CreateWorkloadRequest{
 		Name:        data.Name.ValueString(),
 		Description: data.Description.ValueString(),
 		Importance:  client.WorkloadImportance(data.Importance.ValueString()),
-		Runtime:     workloadRuntimeToClient(data.Runtime),
+		Runtime:     workloadRuntimeToClient(resolveWorkloadRuntime(data)),
 	}
 
 	artifactID := data.ArtifactID.ValueString()
 	req.ArtifactID = &artifactID
+
+	if !data.UseCaseID.IsNull() && !data.UseCaseID.IsUnknown() {
+		useCaseID := data.UseCaseID.ValueString()
+		req.UseCaseID = &useCaseID
+	}
 
 	return req
 }
@@ -607,7 +722,77 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.WorkloadRuntim
 		}
 	}
 
+	if !runtime.EnclaveSelectionPolicy.IsNull() && !runtime.EnclaveSelectionPolicy.IsUnknown() {
+		policy := client.EnclaveSelectionPolicy(runtime.EnclaveSelectionPolicy.ValueString())
+		r.EnclaveSelectionPolicy = &policy
+	}
+	r.Enclaves = enclaveNames(runtime.Enclaves)
+
 	return r
+}
+
+// resolveWorkloadRuntime returns the runtime to send to the Workload API, filling in
+// the Enclave selection policy the rest of the configuration implies. Naming an
+// Enclave means pinning to it, and referencing a Use Case without naming one means
+// letting the scheduler choose; the API rejects `enclaves` without `manual` and
+// rejects `use_case_id` on a workload that targets no Enclave, so leaving the policy
+// to the user would turn both of those into a 422 on an otherwise complete
+// configuration. An explicit policy is always honoured.
+//
+// Every request that carries a runtime goes through this: PATCH /workloads/{id}/settings
+// replaces the runtime wholesale, so a request that omitted these fields would read as
+// "move this workload out of its Enclave".
+func resolveWorkloadRuntime(data WorkloadResourceModel) WorkloadRuntimeModel {
+	runtime := data.Runtime
+
+	if !runtime.EnclaveSelectionPolicy.IsNull() && !runtime.EnclaveSelectionPolicy.IsUnknown() {
+		return runtime
+	}
+
+	if len(enclaveNames(runtime.Enclaves)) > 0 {
+		runtime.EnclaveSelectionPolicy = types.StringValue(string(client.EnclaveSelectionPolicyManual))
+		return runtime
+	}
+
+	if !data.UseCaseID.IsNull() && !data.UseCaseID.IsUnknown() {
+		runtime.EnclaveSelectionPolicy = types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	}
+
+	return runtime
+}
+
+// enclaveNames flattens the configured Enclave list. A null or unknown list, and any
+// unknown element within it, yields no names: an unresolved value is not a placement.
+func enclaveNames(list types.List) []string {
+	if list.IsNull() || list.IsUnknown() {
+		return nil
+	}
+	names := make([]string, 0, len(list.Elements()))
+	for _, el := range list.Elements() {
+		name, ok := el.(types.String)
+		if !ok || name.IsNull() || name.IsUnknown() {
+			continue
+		}
+		names = append(names, name.ValueString())
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return names
+}
+
+// enclaveListValue converts Enclave names from the API back into a list value. The
+// element type has to be set even when there are no names, or writing the model to
+// state fails on a list with no element type.
+func enclaveListValue(names []string) types.List {
+	if len(names) == 0 {
+		return types.ListNull(types.StringType)
+	}
+	elements := make([]attr.Value, len(names))
+	for i, name := range names {
+		elements[i] = types.StringValue(name)
+	}
+	return types.ListValueMust(types.StringType, elements)
 }
 
 func groupRuntimeToClient(g WorkloadGroupRuntimeModel) client.GroupRuntime {
@@ -770,6 +955,22 @@ func preserveWorkloadReplacementPolicy(prior WorkloadResourceModel, data *Worklo
 	data.Runtime.ReplacementPolicy = prior.Runtime.ReplacementPolicy
 }
 
+// preserveWorkloadEnclavePlacement keeps the configured Enclave placement in state
+// rather than whatever the API reported. Two things make the API's answer the wrong
+// one to store: the provider derives enclave_selection_policy from the rest of the
+// configuration, so reading it back would write a value into state that the user never
+// wrote and show a diff against their configuration forever; and the API omits both
+// fields entirely from responses on clusters without the Enclave entitlement, so
+// reading them back there would blank a placement the user did write.
+//
+// The cost is that a placement changed outside Terraform is not detected. `enclaves`
+// is desired state the platform never rewrites, so that only happens if someone edits
+// the workload by hand.
+func preserveWorkloadEnclavePlacement(prior WorkloadResourceModel, data *WorkloadResourceModel) {
+	data.Runtime.EnclaveSelectionPolicy = prior.Runtime.EnclaveSelectionPolicy
+	data.Runtime.Enclaves = prior.Runtime.Enclaves
+}
+
 func replacementConfigFromPlan(policy *WorkloadReplacementPolicyModel) client.ReplacementConfig {
 	cfg := client.ReplacementConfig{}
 	if policy == nil {
@@ -800,7 +1001,7 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 			Config:     replacementConfigFromPlan(plan.Runtime.ReplacementPolicy),
 		}
 		if containerGroupsChanged {
-			runtime := workloadRuntimeToClient(plan.Runtime)
+			runtime := workloadRuntimeToClient(resolveWorkloadRuntime(plan))
 			req.Runtime = &runtime
 		}
 		if _, err := r.provider.service.StartWorkloadReplacement(ctx, workloadID, req); err != nil {
@@ -809,7 +1010,7 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 	} else if containerGroupsChanged {
 		traceAPICall("UpdateWorkloadSettings")
 		if _, err := r.provider.service.UpdateWorkloadSettings(ctx, workloadID, &client.UpdateWorkloadSettingsRequest{
-			Runtime: workloadRuntimeToClient(plan.Runtime),
+			Runtime: workloadRuntimeToClient(resolveWorkloadRuntime(plan)),
 		}); err != nil {
 			return err
 		}
@@ -853,7 +1054,14 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 }
 
 func loadWorkloadRuntimeFromAPI(runtime client.WorkloadRuntime) WorkloadRuntimeModel {
-	model := WorkloadRuntimeModel{}
+	model := WorkloadRuntimeModel{
+		EnclaveSelectionPolicy: types.StringNull(),
+		Enclaves:               enclaveListValue(runtime.Enclaves),
+	}
+
+	if runtime.EnclaveSelectionPolicy != nil {
+		model.EnclaveSelectionPolicy = types.StringValue(string(*runtime.EnclaveSelectionPolicy))
+	}
 
 	if len(runtime.ContainerGroups) > 0 {
 		model.ContainerGroups = make([]WorkloadGroupRuntimeModel, len(runtime.ContainerGroups))

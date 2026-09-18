@@ -80,3 +80,6 @@ terraform.rc
 
 # Root-level Harness pipeline copies (local reference only; tracked versions are in .harness/)
 /*_pipeline.yml
+
+# Drop claude directories until someone wants to add skills
+.claude

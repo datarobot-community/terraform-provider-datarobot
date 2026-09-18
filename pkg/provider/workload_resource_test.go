@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -2164,4 +2168,595 @@ func TestLoadWorkloadIntoModelType(t *testing.T) {
 	if !data.Type.IsNull() {
 		t.Fatalf("empty Type = %v, want null", data.Type)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Enclave placement (use_case_id, runtime.enclave_selection_policy, runtime.enclaves)
+// ---------------------------------------------------------------------------
+
+func enclaveListForTest(names ...string) types.List {
+	elements := make([]attr.Value, len(names))
+	for i, n := range names {
+		elements[i] = types.StringValue(n)
+	}
+	return types.ListValueMust(types.StringType, elements)
+}
+
+func workloadPlacementModel(useCaseID types.String, policy types.String, enclaves types.List) WorkloadResourceModel {
+	return WorkloadResourceModel{
+		Name:        types.StringValue("placement-test"),
+		ArtifactID:  types.StringValue("artifact-1"),
+		Importance:  types.StringValue("low"),
+		Description: types.StringNull(),
+		UseCaseID:   useCaseID,
+		Runtime: WorkloadRuntimeModel{
+			EnclaveSelectionPolicy: policy,
+			Enclaves:               enclaves,
+		},
+	}
+}
+
+func TestValidateWorkloadEnclavePlacement(t *testing.T) {
+	t.Parallel()
+
+	nullList := types.ListNull(types.StringType)
+
+	testCases := map[string]struct {
+		useCaseID types.String
+		policy    types.String
+		enclaves  types.List
+		wantErr   string
+	}{
+		"no placement at all": {
+			useCaseID: types.StringNull(),
+			policy:    types.StringNull(),
+			enclaves:  nullList,
+		},
+		"use case alone is a placement": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringNull(),
+			enclaves:  nullList,
+		},
+		"named enclave with a use case": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("manual"),
+			enclaves:  enclaveListForTest("finance"),
+		},
+		"availability with a use case": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("availability"),
+			enclaves:  nullList,
+		},
+		"named enclave without a use case": {
+			useCaseID: types.StringNull(),
+			policy:    types.StringNull(),
+			enclaves:  enclaveListForTest("finance"),
+			wantErr:   "Missing use_case_id for Enclave placement",
+		},
+		"policy without a use case": {
+			useCaseID: types.StringNull(),
+			policy:    types.StringValue("availability"),
+			enclaves:  nullList,
+			wantErr:   "Missing use_case_id for Enclave placement",
+		},
+		"named enclave with availability policy": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("availability"),
+			enclaves:  enclaveListForTest("finance"),
+			wantErr:   "Conflicting Enclave placement",
+		},
+		"manual policy without a named enclave": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("manual"),
+			enclaves:  nullList,
+			wantErr:   "Missing Enclave for manual placement",
+		},
+		"manual policy with an empty enclave list": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("manual"),
+			enclaves:  types.ListValueMust(types.StringType, []attr.Value{}),
+			wantErr:   "Missing Enclave for manual placement",
+		},
+		// An unresolved value is "set, not resolved yet". Terraform validates the
+		// configuration again during the plan walk, where these have resolved.
+		"unresolved use case is not a missing use case": {
+			useCaseID: types.StringUnknown(),
+			policy:    types.StringNull(),
+			enclaves:  enclaveListForTest("finance"),
+		},
+		"unresolved policy is not judged against the enclave list": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringUnknown(),
+			enclaves:  enclaveListForTest("finance"),
+		},
+		"unresolved enclave list satisfies a manual policy": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringValue("manual"),
+			enclaves:  types.ListUnknown(types.StringType),
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			resp := &fwresource.ValidateConfigResponse{}
+			validateWorkloadEnclavePlacement(workloadPlacementModel(tc.useCaseID, tc.policy, tc.enclaves), resp)
+
+			if tc.wantErr == "" {
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("unexpected error: %v", resp.Diagnostics.Errors())
+				}
+				return
+			}
+
+			if !resp.Diagnostics.HasError() {
+				t.Fatalf("expected error %q, got none", tc.wantErr)
+			}
+			found := false
+			for _, d := range resp.Diagnostics.Errors() {
+				if d.Summary() == tc.wantErr {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("expected error %q, got %v", tc.wantErr, resp.Diagnostics.Errors())
+			}
+		})
+	}
+}
+
+func TestWorkloadCreateRequestEnclavePlacement(t *testing.T) {
+	t.Parallel()
+
+	nullList := types.ListNull(types.StringType)
+
+	testCases := map[string]struct {
+		useCaseID  types.String
+		policy     types.String
+		enclaves   types.List
+		wantUC     *string
+		wantPolicy *client.EnclaveSelectionPolicy
+		wantEncl   []string
+	}{
+		"no placement sends no placement": {
+			useCaseID: types.StringNull(),
+			policy:    types.StringNull(),
+			enclaves:  nullList,
+		},
+		// The API rejects a use case on a workload that targets no Enclave, so a
+		// bare use_case_id has to imply the scheduler picking one.
+		"use case alone implies availability": {
+			useCaseID:  types.StringValue("uc-1"),
+			policy:     types.StringNull(),
+			enclaves:   nullList,
+			wantUC:     strPtr("uc-1"),
+			wantPolicy: enclavePolicyPtr(client.EnclaveSelectionPolicyAvailability),
+		},
+		// And the API rejects `enclaves` under any policy but manual, so naming
+		// one has to imply the pin.
+		"named enclave implies manual": {
+			useCaseID:  types.StringValue("uc-1"),
+			policy:     types.StringNull(),
+			enclaves:   enclaveListForTest("finance"),
+			wantUC:     strPtr("uc-1"),
+			wantPolicy: enclavePolicyPtr(client.EnclaveSelectionPolicyManual),
+			wantEncl:   []string{"finance"},
+		},
+		"an explicit policy is honoured": {
+			useCaseID:  types.StringValue("uc-1"),
+			policy:     types.StringValue("availability"),
+			enclaves:   nullList,
+			wantUC:     strPtr("uc-1"),
+			wantPolicy: enclavePolicyPtr(client.EnclaveSelectionPolicyAvailability),
+		},
+		"an unresolved use case is not sent and implies nothing": {
+			useCaseID: types.StringUnknown(),
+			policy:    types.StringNull(),
+			enclaves:  nullList,
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			req := workloadCreateRequest(workloadPlacementModel(tc.useCaseID, tc.policy, tc.enclaves))
+
+			switch {
+			case tc.wantUC == nil && req.UseCaseID != nil:
+				t.Fatalf("UseCaseID = %q, want unset", *req.UseCaseID)
+			case tc.wantUC != nil && req.UseCaseID == nil:
+				t.Fatalf("UseCaseID unset, want %q", *tc.wantUC)
+			case tc.wantUC != nil && *req.UseCaseID != *tc.wantUC:
+				t.Fatalf("UseCaseID = %q, want %q", *req.UseCaseID, *tc.wantUC)
+			}
+
+			got := req.Runtime.EnclaveSelectionPolicy
+			switch {
+			case tc.wantPolicy == nil && got != nil:
+				t.Fatalf("EnclaveSelectionPolicy = %q, want unset", *got)
+			case tc.wantPolicy != nil && got == nil:
+				t.Fatalf("EnclaveSelectionPolicy unset, want %q", *tc.wantPolicy)
+			case tc.wantPolicy != nil && *got != *tc.wantPolicy:
+				t.Fatalf("EnclaveSelectionPolicy = %q, want %q", *got, *tc.wantPolicy)
+			}
+
+			if len(req.Runtime.Enclaves) != len(tc.wantEncl) {
+				t.Fatalf("Enclaves = %v, want %v", req.Runtime.Enclaves, tc.wantEncl)
+			}
+			for i, want := range tc.wantEncl {
+				if req.Runtime.Enclaves[i] != want {
+					t.Fatalf("Enclaves[%d] = %q, want %q", i, req.Runtime.Enclaves[i], want)
+				}
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func enclavePolicyPtr(p client.EnclaveSelectionPolicy) *client.EnclaveSelectionPolicy { return &p }
+
+func TestLoadWorkloadRuntimeEnclaves(t *testing.T) {
+	t.Parallel()
+
+	policy := client.EnclaveSelectionPolicyManual
+	model := loadWorkloadRuntimeFromAPI(client.WorkloadRuntime{
+		EnclaveSelectionPolicy: &policy,
+		Enclaves:               []string{"finance"},
+	})
+
+	if model.EnclaveSelectionPolicy.ValueString() != "manual" {
+		t.Fatalf("EnclaveSelectionPolicy = %v, want manual", model.EnclaveSelectionPolicy)
+	}
+	got := model.Enclaves.Elements()
+	if len(got) != 1 {
+		t.Fatalf("Enclaves = %v, want [finance]", model.Enclaves)
+	}
+	enclave, ok := got[0].(types.String)
+	if !ok || enclave.ValueString() != "finance" {
+		t.Fatalf("Enclaves = %v, want [finance]", model.Enclaves)
+	}
+
+	// A cluster without the Enclave entitlement omits both fields. The list still
+	// needs its element type, or writing the model to state fails.
+	absent := loadWorkloadRuntimeFromAPI(client.WorkloadRuntime{})
+	if !absent.EnclaveSelectionPolicy.IsNull() {
+		t.Fatalf("EnclaveSelectionPolicy = %v, want null", absent.EnclaveSelectionPolicy)
+	}
+	if !absent.Enclaves.IsNull() {
+		t.Fatalf("Enclaves = %v, want null", absent.Enclaves)
+	}
+	if absent.Enclaves.ElementType(context.Background()) != types.StringType {
+		t.Fatalf("Enclaves element type = %v, want string", absent.Enclaves.ElementType(context.Background()))
+	}
+}
+
+func TestPreserveWorkloadEnclavePlacementOverAPIOmission(t *testing.T) {
+	t.Parallel()
+
+	configured := workloadPlacementModel(
+		types.StringValue("uc-1"),
+		types.StringValue("manual"),
+		enclaveListForTest("finance"),
+	)
+
+	// What a cluster without the Enclave entitlement reports back.
+	fromAPI := configured
+	fromAPI.Runtime = loadWorkloadRuntimeFromAPI(client.WorkloadRuntime{})
+
+	preserveWorkloadEnclavePlacement(configured, &fromAPI)
+
+	if fromAPI.Runtime.EnclaveSelectionPolicy.ValueString() != "manual" {
+		t.Fatalf("EnclaveSelectionPolicy = %v, want the configured manual", fromAPI.Runtime.EnclaveSelectionPolicy)
+	}
+	if got := fromAPI.Runtime.Enclaves.Elements(); len(got) != 1 {
+		t.Fatalf("Enclaves = %v, want the configured [finance]", fromAPI.Runtime.Enclaves)
+	}
+}
+
+func TestWorkloadEnclavesRequireUseCase(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithPlacement("enclave-no-use-case", artifactID, "", "", "finance"),
+				ExpectError: regexp.MustCompile("Missing use_case_id for Enclave placement"),
+			},
+		},
+	})
+}
+
+func TestWorkloadManualPolicyRequiresEnclave(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithPlacement("manual-no-enclave", artifactID, uuid.NewString(), "manual", ""),
+				ExpectError: regexp.MustCompile("Missing Enclave for manual placement"),
+			},
+		},
+	})
+}
+
+func TestWorkloadRejectsUnsupportedEnclaveSelectionPolicy(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithPlacement("bad-policy", artifactID, uuid.NewString(), "whatever", ""),
+				ExpectError: regexp.MustCompile("Invalid Attribute Value Match"),
+			},
+		},
+	})
+}
+
+func TestWorkloadRejectsMultipleEnclaves(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	artifactID := uuid.NewString()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithPlacement("two-enclaves", artifactID, uuid.NewString(), "manual", `"finance", "research"`),
+				ExpectError: regexp.MustCompile("Invalid Attribute Value"),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadEnclavePlacement(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+
+	// The fixture deliberately carries no Enclave fields: that is what a cluster
+	// without the Enclave entitlement returns, and state must still hold what the
+	// configuration asked for.
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	var created *client.CreateWorkloadRequest
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.CreateWorkloadRequest) (*client.Workload, error) {
+			created = req
+			return workload, nil
+		})
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // waitForRunning
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-create Read
+
+	// Destroy
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).Return(nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(nil, client.NewNotFoundError("workload"))
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "", "finance"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", useCaseID),
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclaves.0", "finance"),
+					// Derived, not configured: it stays out of state so the
+					// configuration and the state agree.
+					resource.TestCheckNoResourceAttr(resourceName, "runtime.enclave_selection_policy"),
+					func(*terraform.State) error {
+						if created == nil {
+							return fmt.Errorf("CreateWorkload was never called")
+						}
+						if created.UseCaseID == nil || *created.UseCaseID != useCaseID {
+							return fmt.Errorf("useCaseId sent = %v, want %q", created.UseCaseID, useCaseID)
+						}
+						policy := created.Runtime.EnclaveSelectionPolicy
+						if policy == nil || *policy != client.EnclaveSelectionPolicyManual {
+							return fmt.Errorf("enclaveSelectionPolicy sent = %v, want manual", policy)
+						}
+						if len(created.Runtime.Enclaves) != 1 || created.Runtime.Enclaves[0] != "finance" {
+							return fmt.Errorf("enclaves sent = %v, want [finance]", created.Runtime.Enclaves)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadReplaceOnEnclaveChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id1 := uuid.NewString()
+	id2 := uuid.NewString()
+	artifactID := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint1 := "https://workloads.example.com/" + id1
+	endpoint2 := "https://workloads.example.com/" + id2
+
+	workload1 := workloadFixture(id1, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint1)
+	workload2 := workloadFixture(id2, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint2)
+
+	// Repinning to another Enclave destroys and recreates rather than replacing in
+	// place, so the reads and deletes interleave across two workload IDs; dispatch
+	// on the ID instead of counting calls.
+	deleted := map[string]bool{}
+	mockService.EXPECT().GetWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (*client.Workload, error) {
+			if deleted[id] {
+				return nil, client.NewNotFoundError("workload")
+			}
+			if id == id1 {
+				return workload1, nil
+			}
+			return workload2, nil
+		}).AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) error {
+			deleted[id] = true
+			return nil
+		}).AnyTimes()
+
+	gomock.InOrder(
+		mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil),
+		mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil),
+	)
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "finance"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclaves.0", "finance"),
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "research"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclaves.0", "research"),
+					checkWorkloadIDChanged(&initialID),
+				),
+			},
+		},
+	})
+}
+
+func checkWorkloadIDChanged(initialID *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		const rn = "datarobot_workload.test"
+		rs, ok := s.RootModule().Resources[rn]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", rn)
+		}
+		if rs.Primary.ID == *initialID {
+			return fmt.Errorf("workload ID %q survived a change that should have replaced the resource", *initialID)
+		}
+		return nil
+	}
+}
+
+// workloadConfigWithPlacement renders a workload with any combination of the Enclave
+// placement attributes, leaving out the ones given as "".
+func workloadConfigWithPlacement(name, artifactID, useCaseID, policy, enclaves string) string {
+	useCase := ""
+	if useCaseID != "" {
+		useCase = fmt.Sprintf("use_case_id = %q", useCaseID)
+	}
+	policyLine := ""
+	if policy != "" {
+		policyLine = fmt.Sprintf("enclave_selection_policy = %q", policy)
+	}
+	enclavesLine := ""
+	if enclaves != "" {
+		if !strings.Contains(enclaves, `"`) {
+			enclaves = fmt.Sprintf("%q", enclaves)
+		}
+		enclavesLine = fmt.Sprintf("enclaves = [%s]", enclaves)
+	}
+	return workloadMockConfig(fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  %s
+  runtime = {
+    %s
+    %s
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, name, artifactID, useCase, policyLine, enclavesLine))
 }

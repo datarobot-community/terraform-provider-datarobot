@@ -61,8 +61,17 @@ type GroupRuntime struct {
 	ResourceBundles       []string               `json:"resourceBundles,omitempty"`
 }
 
+type EnclaveSelectionPolicy string
+
+const (
+	EnclaveSelectionPolicyAvailability EnclaveSelectionPolicy = "availability"
+	EnclaveSelectionPolicyManual       EnclaveSelectionPolicy = "manual"
+)
+
 type WorkloadRuntime struct {
-	ContainerGroups []GroupRuntime `json:"containerGroups,omitempty"`
+	ContainerGroups        []GroupRuntime          `json:"containerGroups,omitempty"`
+	EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy,omitempty"`
+	Enclaves               []string                `json:"enclaves,omitempty"`
 }
 
 type Workload struct {
@@ -85,6 +94,7 @@ type CreateWorkloadRequest struct {
 	ArtifactID  *string            `json:"artifactId,omitempty"`
 	Description string             `json:"description,omitempty"`
 	Importance  WorkloadImportance `json:"importance,omitempty"`
+	UseCaseID   *string            `json:"useCaseId,omitempty"`
 }
 
 type UpdateWorkloadRequest struct {
