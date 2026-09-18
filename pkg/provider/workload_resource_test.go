@@ -2411,7 +2411,12 @@ func TestLoadWorkloadRuntimeEnclaves(t *testing.T) {
 	if model.EnclaveSelectionPolicy.ValueString() != "manual" {
 		t.Fatalf("EnclaveSelectionPolicy = %v, want manual", model.EnclaveSelectionPolicy)
 	}
-	if got := model.Enclaves.Elements(); len(got) != 1 || got[0].(types.String).ValueString() != "finance" {
+	got := model.Enclaves.Elements()
+	if len(got) != 1 {
+		t.Fatalf("Enclaves = %v, want [finance]", model.Enclaves)
+	}
+	enclave, ok := got[0].(types.String)
+	if !ok || enclave.ValueString() != "finance" {
 		t.Fatalf("Enclaves = %v, want [finance]", model.Enclaves)
 	}
 
