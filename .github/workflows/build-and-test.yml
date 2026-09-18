@@ -30,6 +30,8 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
+      - name: Install Task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
       - run: go mod download
       - run: go build -v .
       - name: Run linters
@@ -61,40 +63,40 @@ jobs:
           # Check that documented commands work
           echo "Validating documented commands..." >> $GITHUB_STEP_SUMMARY
           
-          # Test 'make build'
-          if make build > /dev/null 2>&1; then
-            echo "- [x] \`make build\` works" >> $GITHUB_STEP_SUMMARY
+          # Test 'task build'
+          if task build > /dev/null 2>&1; then
+            echo "- [x] \`task build\` works" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- [ ] \`make build\` failed" >> $GITHUB_STEP_SUMMARY
-            echo "::error::AGENTS.md documents 'make build' but it fails"
+            echo "- [ ] \`task build\` failed" >> $GITHUB_STEP_SUMMARY
+            echo "::error::AGENTS.md documents 'task build' but it fails"
           fi
-          
-          # Test 'make lint'
-          if make lint > /dev/null 2>&1; then
-            echo "- [x] \`make lint\` works" >> $GITHUB_STEP_SUMMARY
+
+          # Test 'task lint'
+          if task lint > /dev/null 2>&1; then
+            echo "- [x] \`task lint\` works" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- [ ] \`make lint\` failed" >> $GITHUB_STEP_SUMMARY
-            echo "::warning::AGENTS.md documents 'make lint' but it fails"
+            echo "- [ ] \`task lint\` failed" >> $GITHUB_STEP_SUMMARY
+            echo "::warning::AGENTS.md documents 'task lint' but it fails"
           fi
-          
-          # Test 'make generate'
-          if make generate > /dev/null 2>&1; then
-            echo "- [x] \`make generate\` works" >> $GITHUB_STEP_SUMMARY
+
+          # Test 'task generate'
+          if task generate > /dev/null 2>&1; then
+            echo "- [x] \`task generate\` works" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- [ ] \`make generate\` failed" >> $GITHUB_STEP_SUMMARY
-            echo "::warning::AGENTS.md documents 'make generate' but it fails"
+            echo "- [ ] \`task generate\` failed" >> $GITHUB_STEP_SUMMARY
+            echo "::warning::AGENTS.md documents 'task generate' but it fails"
           fi
-          
-          # Verify AGENTS.md references valid Makefile targets
+
+          # Verify AGENTS.md references valid Taskfile targets
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Makefile targets referenced in AGENTS.md" >> $GITHUB_STEP_SUMMARY
+          echo "### Taskfile targets referenced in AGENTS.md" >> $GITHUB_STEP_SUMMARY
           for target in build install lint test test-coverage testacc generate mocks; do
-            if grep -q "make $target" AGENTS.md; then
-              if grep -q "^$target:" Makefile; then
-                echo "- [x] \`make $target\` exists in Makefile" >> $GITHUB_STEP_SUMMARY
+            if grep -q "task $target" AGENTS.md; then
+              if grep -q "^  $target:" Taskfile.yml; then
+                echo "- [x] \`task $target\` exists in Taskfile.yml" >> $GITHUB_STEP_SUMMARY
               else
-                echo "- [ ] \`make $target\` referenced but not in Makefile" >> $GITHUB_STEP_SUMMARY
-                echo "::error::AGENTS.md references 'make $target' but target doesn't exist"
+                echo "- [ ] \`task $target\` referenced but not in Taskfile.yml" >> $GITHUB_STEP_SUMMARY
+                echo "::error::AGENTS.md references 'task $target' but target doesn't exist"
               fi
             fi
           done

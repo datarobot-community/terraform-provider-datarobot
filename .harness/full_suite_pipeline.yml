@@ -55,8 +55,9 @@ pipeline:
                           unzip terraform.zip && mv terraform /usr/local/bin
                           export PATH=$(go env GOPATH)/bin:$PATH
                           go install github.com/jstemmer/go-junit-report/v2@latest
+                          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
                           go mod download
-                          make testacc-group-fast
+                          task testacc-group-fast
                         reports:
                           type: JUnit
                           spec:
@@ -127,8 +128,9 @@ pipeline:
                           unzip terraform.zip && mv terraform /usr/local/bin
                           export PATH=$(go env GOPATH)/bin:$PATH
                           go install github.com/jstemmer/go-junit-report/v2@latest
+                          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
                           go mod download
-                          make testacc-group-models
+                          task testacc-group-models
                         reports:
                           type: JUnit
                           spec:
@@ -199,8 +201,9 @@ pipeline:
                           unzip terraform.zip && mv terraform /usr/local/bin
                           export PATH=$(go env GOPATH)/bin:$PATH
                           go install github.com/jstemmer/go-junit-report/v2@latest
+                          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
                           go mod download
-                          make testacc-group-deployments
+                          task testacc-group-deployments
                         reports:
                           type: JUnit
                           spec:
@@ -271,8 +274,9 @@ pipeline:
                           unzip terraform.zip && mv terraform /usr/local/bin
                           export PATH=$(go env GOPATH)/bin:$PATH
                           go install github.com/jstemmer/go-junit-report/v2@latest
+                          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
                           go mod download
-                          make testacc-group-apps
+                          task testacc-group-apps
                         reports:
                           type: JUnit
                           spec:

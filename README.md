@@ -33,7 +33,7 @@ Before using `terraform-provider-datarobot`, ensure the following tools are inst
   - Run:
     ```bash
     go mod tidy
-    make install
+    task install
     ```
 
 3. **Set up the example**:

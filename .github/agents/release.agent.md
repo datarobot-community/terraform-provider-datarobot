@@ -30,9 +30,9 @@ git status                  # Must be clean working tree
 git log --oneline -1 origin/main..HEAD  # Must be empty (up to date)
 ```
 
-- Run `make lint` — all linting must pass
-- Run `make test` — all unit tests must pass
-- Run `make generate` — regenerate docs, then check `git diff` for uncommitted doc changes
+- Run `task lint` — all linting must pass
+- Run `task test` — all unit tests must pass
+- Run `task generate` — regenerate docs, then check `git diff` for uncommitted doc changes
 
 If any check fails, stop and help the user fix it before continuing.
 
@@ -60,16 +60,16 @@ otherwise. Preview exactly what will be published with:
 bash scripts/changelog-section.sh vX.Y.Z
 ```
 
-### 4. Update Makefile VERSION
+### 4. Update Taskfile VERSION
 
-- Update the `VERSION=` line in `Makefile` to the new version number (without `v` prefix)
+- Update the `VERSION:` line in `Taskfile.yml` to the new version number (without `v` prefix)
 
 ### 5. Commit Release Prep
 
 After user confirms the changes:
 
 ```bash
-git add CHANGELOG.md Makefile
+git add CHANGELOG.md Taskfile.yml
 git commit -S -m "chore: prepare release vX.Y.Z"
 ```
 
