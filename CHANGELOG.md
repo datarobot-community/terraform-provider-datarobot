@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-17
+
+### Fixed
+
+- Changelog correction for goreleaser
+
+
+## [0.12.0] - 2026-09-17
+
 ### Fixed
 
 - `datarobot_artifact` no longer rejects a value that comes from a variable, a data source, or another resource. Terraform runs its validate walk before any of those resolve, so every non-literal value reaches `ValidateConfig` as *unknown*, and the resource's rules read unknown as "not set". A configuration that was in fact complete failed at plan time with `Missing image source` (`image_uri`), `Missing execution environment ID` / `Missing execution environment version ID` (`image_build_config.dockerfile`), `Missing source directory` (`source.dir`), `Invalid wait_for_build on locked artifact`, `Incomplete build configuration for locked artifact`, or `Unsupported on non-primary container` (`primary`). Unknown now means "set, not resolved yet"; only a null value counts as absent. This unblocks `examples/workflows/workload_replacement` (`image_uri = var.container_image`), which the workload docs link to as a runnable walkthrough, and lets the `datarobot_execution_environment` data source feed `execution_environment_id` and `execution_environment_version_id` instead of them being hardcoded. `pulumi preview` failed the same way, since the bridge validates the configuration with unresolved outputs; only `pulumi up --skip-preview` got through.
