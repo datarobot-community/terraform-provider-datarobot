@@ -55,12 +55,15 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 
 ## Enclave placement
 
-On clusters with Enclaves enabled, a workload can be confined to an Enclave. Placement is governed by a Use Case: the platform restricts a workload to the Enclaves an administrator has granted to its Use Case, which is why `use_case_id` is required for any placed workload and rejected for an unplaced one.
+On clusters with Enclaves enabled, a workload can be confined to an Enclave. Placement is governed by a Use Case: the platform restricts a workload to the Enclaves an administrator has granted to its Use Case, which is why `use_case_id` is required for any placed workload.
+
+Asking for an Enclave is opt-in. `use_case_id` on its own links the workload to the Use Case and nothing more, so it is safe to set on clusters and organizations without Enclaves.
 
 | Configuration | Where the workload runs |
 |---------------|-------------------------|
 | neither `use_case_id` nor any `runtime.enclave_*` attribute | Outside any Enclave |
-| `use_case_id` only | Any Enclave granted to that Use Case, chosen by the scheduler (`enclave_selection_policy` is sent as `availability`) |
+| `use_case_id` only | Outside any Enclave; the workload is linked to the Use Case |
+| `use_case_id` + `runtime.enclave_selection_policy = "availability"` | Any Enclave granted to that Use Case, chosen by the scheduler |
 | `use_case_id` + `runtime.enclaves` | Pinned to the named Enclave (`enclave_selection_policy` is sent as `manual`) |
 
 ```hcl
@@ -70,13 +73,13 @@ resource "datarobot_workload" "agent" {
   use_case_id = datarobot_use_case.finance.id
 
   runtime = {
-    enclaves         = ["finance-enclave"] # omit to let the scheduler choose
+    enclaves         = ["finance-enclave"] # or enclave_selection_policy = "availability"
     container_groups = [{ replica_count = 1, resource_bundles = ["cpu.small"] }]
   }
 }
 ```
 
-The provider fills in `enclave_selection_policy` from the rest of the configuration, so you only need to set it to say something the rest does not — and the derived value stays out of state, so your configuration and your state agree. Setting it explicitly is still accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
+Naming an `enclaves` entry fills in `enclave_selection_policy = "manual"` for you, since the platform accepts a pin only with that policy; the derived value stays out of state, so your configuration and your state agree. Setting the policy explicitly is always accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
 
 Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
 

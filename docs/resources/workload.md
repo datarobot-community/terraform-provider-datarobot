@@ -129,9 +129,10 @@ output "workload_endpoint" {
 }
 
 # Enclave placement: confine a workload to an Enclave. Placement is governed by a
-# Use Case, so use_case_id is required whenever an Enclave is targeted (and
-# rejected when none is). Changing any of these replaces the workload, which
-# means a new ID and a new endpoint.
+# Use Case, so use_case_id is required whenever an Enclave is targeted. Setting
+# use_case_id on its own only links the workload to the Use Case and leaves it
+# outside any Enclave. Changing any of these replaces the workload, which means a
+# new ID and a new endpoint.
 
 resource "datarobot_use_case" "enclave_example" {
   name        = "example-enclave-use-case"
@@ -144,9 +145,10 @@ resource "datarobot_workload" "enclave_pinned" {
   use_case_id = datarobot_use_case.enclave_example.id
 
   runtime = {
-    # Pins the workload to this Enclave. Omit `enclaves` to let the scheduler
-    # pick any Enclave granted to the Use Case. Either way the provider derives
-    # `enclave_selection_policy`; set it only to override that.
+    # Pins the workload to this Enclave, which fills in
+    # `enclave_selection_policy = "manual"`. To let the scheduler pick any
+    # Enclave granted to the Use Case, drop `enclaves` and set
+    # `enclave_selection_policy = "availability"` instead.
     enclaves = ["example-enclave"]
 
     container_groups = [{
@@ -196,12 +198,15 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 
 ## Enclave placement
 
-On clusters with Enclaves enabled, a workload can be confined to an Enclave. Placement is governed by a Use Case: the platform restricts a workload to the Enclaves an administrator has granted to its Use Case, which is why `use_case_id` is required for any placed workload and rejected for an unplaced one.
+On clusters with Enclaves enabled, a workload can be confined to an Enclave. Placement is governed by a Use Case: the platform restricts a workload to the Enclaves an administrator has granted to its Use Case, which is why `use_case_id` is required for any placed workload.
+
+Asking for an Enclave is opt-in. `use_case_id` on its own links the workload to the Use Case and nothing more, so it is safe to set on clusters and organizations without Enclaves.
 
 | Configuration | Where the workload runs |
 |---------------|-------------------------|
 | neither `use_case_id` nor any `runtime.enclave_*` attribute | Outside any Enclave |
-| `use_case_id` only | Any Enclave granted to that Use Case, chosen by the scheduler (`enclave_selection_policy` is sent as `availability`) |
+| `use_case_id` only | Outside any Enclave; the workload is linked to the Use Case |
+| `use_case_id` + `runtime.enclave_selection_policy = "availability"` | Any Enclave granted to that Use Case, chosen by the scheduler |
 | `use_case_id` + `runtime.enclaves` | Pinned to the named Enclave (`enclave_selection_policy` is sent as `manual`) |
 
 ```hcl
@@ -211,13 +216,13 @@ resource "datarobot_workload" "agent" {
   use_case_id = datarobot_use_case.finance.id
 
   runtime = {
-    enclaves         = ["finance-enclave"] # omit to let the scheduler choose
+    enclaves         = ["finance-enclave"] # or enclave_selection_policy = "availability"
     container_groups = [{ replica_count = 1, resource_bundles = ["cpu.small"] }]
   }
 }
 ```
 
-The provider fills in `enclave_selection_policy` from the rest of the configuration, so you only need to set it to say something the rest does not — and the derived value stays out of state, so your configuration and your state agree. Setting it explicitly is still accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
+Naming an `enclaves` entry fills in `enclave_selection_policy = "manual"` for you, since the platform accepts a pin only with that policy; the derived value stays out of state, so your configuration and your state agree. Setting the policy explicitly is always accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
 
 Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
 
@@ -249,7 +254,7 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 
 - `description` (String) A human-readable description of the Workload.
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
-- `use_case_id` (String) The Use Case that governs where this Workload may run. Required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, and rejected by the platform when neither is: placement is restricted to the Enclaves an administrator has granted to this Use Case. Setting it implies `runtime.enclave_selection_policy = "availability"` unless a policy or a named Enclave says otherwise.
+- `use_case_id` (String) The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the Enclaves an administrator has granted to this Use Case.
 
 Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. Changing it replaces the Workload, which means a new ID and a new endpoint.
 
@@ -266,7 +271,7 @@ Write-only. The link is recorded outside the Workload entity and no API response
 Optional:
 
 - `container_groups` (Attributes List) Per-group runtime configuration. (see [below for nested schema](#nestedatt--runtime--container_groups))
-- `enclave_selection_policy` (String) How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the Enclave named in `enclaves`. Omit it to run outside any Enclave. Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission. Defaults to `availability` when `use_case_id` is set, or to `manual` when `enclaves` names one.
+- `enclave_selection_policy` (String) How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the Enclave named in `enclaves`. Omit it to run outside any Enclave, which is the default: setting `use_case_id` on its own does not request one. Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when `enclaves` names one.
 
 Changing this replaces the Workload, which means a new ID and a new endpoint. Not read back from the platform: the API omits it on clusters without the Enclave entitlement, so the configured value is what stays in state.
 - `enclaves` (List of String) Name of the Enclave to pin this Workload to. Exactly one entry is accepted today; the list shape is forward-compatible with running on several Enclaves. Requires `use_case_id`, and only applies with `enclave_selection_policy = "manual"`, which is assumed when this is set and no policy is given. The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.

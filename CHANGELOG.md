@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### Fixed
+
+- `datarobot_workload` no longer derives `runtime.enclave_selection_policy = "availability"` from `use_case_id`. That inference, added in 0.12.2, made every Use Case link a request for Enclave placement, which a cluster or organization without Enclaves answers with `422 ENCLAVES_UNAVAILABLE` — so a Workload could not be linked to a Use Case at all outside the Enclave feature, US/EU/JP Prod on MTS included. It existed only because the Workload API rejected `useCaseId` on a Workload that targeted no Enclave; that rule has been removed, and a Use Case is now an organizational link like it is on every other DataRobot asset. `use_case_id` on its own links the Workload and leaves placement to the platform. Naming an Enclave in `runtime.enclaves` still derives `manual`, which the API does require, and an explicit `enclave_selection_policy` is still honoured.
+- Requires a Workload API that accepts `useCaseId` without an Enclave selection policy. Against an older one, a Use Case link now fails with `422 USE_CASE_NOT_APPLICABLE` where the derived policy previously satisfied it — on clusters with Enclaves enabled, where that combination was the one that worked.
+- Existing Enclave-placed Workloads keep their placement across the upgrade: `enclaveSelectionPolicy` and `enclaves` are both omitted when unset, and the API carries the stored placement forward rather than reading an omission as a move. A configuration that relied on the derived `availability` and is recreated — changing `use_case_id` replaces the Workload — lands outside an Enclave unless it now sets the policy explicitly.
+
 ## [0.12.2] - 2026-09-17
 
 ### Fixed
