@@ -108,9 +108,10 @@ output "workload_endpoint" {
 }
 
 # Enclave placement: confine a workload to an Enclave. Placement is governed by a
-# Use Case, so use_case_id is required whenever an Enclave is targeted (and
-# rejected when none is). Changing any of these replaces the workload, which
-# means a new ID and a new endpoint.
+# Use Case, so use_case_id is required whenever an Enclave is targeted. Setting
+# use_case_id on its own only links the workload to the Use Case and leaves it
+# outside any Enclave. Changing any of these replaces the workload, which means a
+# new ID and a new endpoint.
 
 resource "datarobot_use_case" "enclave_example" {
   name        = "example-enclave-use-case"
@@ -123,9 +124,10 @@ resource "datarobot_workload" "enclave_pinned" {
   use_case_id = datarobot_use_case.enclave_example.id
 
   runtime = {
-    # Pins the workload to this Enclave. Omit `enclaves` to let the scheduler
-    # pick any Enclave granted to the Use Case. Either way the provider derives
-    # `enclave_selection_policy`; set it only to override that.
+    # Pins the workload to this Enclave, which fills in
+    # `enclave_selection_policy = "manual"`. To let the scheduler pick any
+    # Enclave granted to the Use Case, drop `enclaves` and set
+    # `enclave_selection_policy = "availability"` instead.
     enclaves = ["example-enclave"]
 
     container_groups = [{

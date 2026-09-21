@@ -99,9 +99,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"use_case_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The Use Case that governs where this Workload may run. Required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, " +
-					"and rejected by the platform when neither is: placement is restricted to the Enclaves an administrator has granted to this Use Case. " +
-					"Setting it implies `runtime.enclave_selection_policy = \"availability\"` unless a policy or a named Enclave says otherwise.\n\n" +
+				MarkdownDescription: "The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. " +
+					"It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the " +
+					"Enclaves an administrator has granted to this Use Case.\n\n" +
 					"Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: " +
 					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. " +
 					"Changing it replaces the Workload, which means a new ID and a new endpoint.",
@@ -241,8 +241,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 					"enclave_selection_policy": schema.StringAttribute{
 						Optional: true,
 						MarkdownDescription: "How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the " +
-							"Enclave named in `enclaves`. Omit it to run outside any Enclave. Both values require `use_case_id`; `manual` additionally requires the " +
-							"`CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission. Defaults to `availability` when `use_case_id` is set, or to `manual` when `enclaves` names one.\n\n" +
+							"Enclave named in `enclaves`. Omit it to run outside any Enclave, which is the default: setting `use_case_id` on its own does not request one. " +
+							"Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when " +
+							"`enclaves` names one.\n\n" +
 							"Changing this replaces the Workload, which means a new ID and a new endpoint. Not read back from the platform: the API omits it on clusters without the " +
 							"Enclave entitlement, so the configured value is what stays in state.",
 						Validators: []validator.String{
@@ -733,11 +734,13 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.WorkloadRuntim
 
 // resolveWorkloadRuntime returns the runtime to send to the Workload API, filling in
 // the Enclave selection policy the rest of the configuration implies. Naming an
-// Enclave means pinning to it, and referencing a Use Case without naming one means
-// letting the scheduler choose; the API rejects `enclaves` without `manual` and
-// rejects `use_case_id` on a workload that targets no Enclave, so leaving the policy
-// to the user would turn both of those into a 422 on an otherwise complete
-// configuration. An explicit policy is always honoured.
+// Enclave means pinning to it, and the API rejects `enclaves` without `manual`, so
+// leaving that policy to the user would turn a complete configuration into a 422.
+// An explicit policy is always honoured.
+//
+// A `use_case_id` implies nothing about placement. Enclave placement is governed by a
+// Use Case, but a Use Case is an organizational grouping in its own right, so asking
+// for an Enclave is the user's choice to make via `enclave_selection_policy`.
 //
 // Every request that carries a runtime goes through this: PATCH /workloads/{id}/settings
 // replaces the runtime wholesale, so a request that omitted these fields would read as
@@ -751,11 +754,6 @@ func resolveWorkloadRuntime(data WorkloadResourceModel) WorkloadRuntimeModel {
 
 	if len(enclaveNames(runtime.Enclaves)) > 0 {
 		runtime.EnclaveSelectionPolicy = types.StringValue(string(client.EnclaveSelectionPolicyManual))
-		return runtime
-	}
-
-	if !data.UseCaseID.IsNull() && !data.UseCaseID.IsUnknown() {
-		runtime.EnclaveSelectionPolicy = types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
 	}
 
 	return runtime

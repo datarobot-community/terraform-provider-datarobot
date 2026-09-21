@@ -2325,14 +2325,14 @@ func TestWorkloadCreateRequestEnclavePlacement(t *testing.T) {
 			policy:    types.StringNull(),
 			enclaves:  nullList,
 		},
-		// The API rejects a use case on a workload that targets no Enclave, so a
-		// bare use_case_id has to imply the scheduler picking one.
-		"use case alone implies availability": {
-			useCaseID:  types.StringValue("uc-1"),
-			policy:     types.StringNull(),
-			enclaves:   nullList,
-			wantUC:     strPtr("uc-1"),
-			wantPolicy: enclavePolicyPtr(client.EnclaveSelectionPolicyAvailability),
+		// A use case is an organizational link and says nothing about placement, so
+		// it is sent on its own and the workload stays off the Enclave path. Implying
+		// a policy here is what made use_case_id unusable without the Enclave feature.
+		"use case alone requests no Enclave": {
+			useCaseID: types.StringValue("uc-1"),
+			policy:    types.StringNull(),
+			enclaves:  nullList,
+			wantUC:    strPtr("uc-1"),
 		},
 		// And the API rejects `enclaves` under any policy but manual, so naming
 		// one has to imply the pin.
