@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 
 	"github.com/cenkalti/backoff/v4"
@@ -20,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -31,6 +31,7 @@ import (
 var _ resource.Resource = &WorkloadResource{}
 var _ resource.ResourceWithImportState = &WorkloadResource{}
 var _ resource.ResourceWithValidateConfig = &WorkloadResource{}
+var _ resource.ResourceWithModifyPlan = &WorkloadResource{}
 
 func NewWorkloadResource() resource.Resource {
 	return &WorkloadResource{}
@@ -244,16 +245,14 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Enclave named in `enclaves`. Omit it to run outside any Enclave, which is the default: setting `use_case_id` on its own does not request one. " +
 							"Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when " +
 							"`enclaves` names one.\n\n" +
-							"Changing this replaces the Workload, which means a new ID and a new endpoint. Not read back from the platform: the API omits it on clusters without the " +
-							"Enclave entitlement, so the configured value is what stays in state.",
+							"Changing it moves the running Workload in place through a rolling replacement, keeping its ID; removing it takes the Workload off the Enclave path. " +
+							"The endpoint is re-read afterwards, since it is served from the Enclave the Workload runs on. Not read back from the platform: the API omits it on " +
+							"clusters without the Enclave entitlement, so the configured value is what stays in state.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
 								string(client.EnclaveSelectionPolicyAvailability),
 								string(client.EnclaveSelectionPolicyManual),
 							),
-						},
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.RequiresReplace(),
 						},
 					},
 					"enclaves": schema.ListAttribute{
@@ -263,12 +262,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Requires `use_case_id`, and only applies with `enclave_selection_policy = \"manual\"`, which is assumed when this is set and no policy is given. " +
 							"The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.\n\n" +
 							"This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. " +
-							"Changing it replaces the Workload, which means a new ID and a new endpoint.",
+							"Changing it moves the running Workload in place through a rolling replacement, keeping its ID; the endpoint is re-read afterwards.",
 						Validators: []validator.List{
 							listvalidator.SizeAtMost(1),
-						},
-						PlanModifiers: []planmodifier.List{
-							listplanmodifier.RequiresReplace(),
 						},
 					},
 					"replacement_policy": schema.SingleNestedAttribute{
@@ -390,6 +386,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 
 	artifactChanged := !planned.ArtifactID.Equal(state.ArtifactID)
 	containerGroupsChanged := workloadContainerGroupsChanged(planned.Runtime, state.Runtime)
+	placementChanged := workloadPlacementChanged(planned.Runtime, state.Runtime)
 	replacementPolicyChanged := workloadReplacementPolicyChanged(planned.Runtime, state.Runtime)
 
 	if workloadMetadataChanged(planned, state) {
@@ -402,8 +399,13 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	if artifactChanged || containerGroupsChanged || replacementPolicyChanged {
-		if err := r.triggerWorkloadReplacement(ctx, id, planned, artifactChanged, containerGroupsChanged, replacementPolicyChanged); err != nil {
+	if artifactChanged || containerGroupsChanged || placementChanged || replacementPolicyChanged {
+		var runtime *client.WorkloadRuntime
+		if containerGroupsChanged || placementChanged {
+			updated := workloadRuntimeUpdate(planned.Runtime, state.Runtime)
+			runtime = &updated
+		}
+		if err := r.triggerWorkloadReplacement(ctx, id, planned, runtime, artifactChanged, replacementPolicyChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
 			if errors.As(err, &failedErr) {
 				resp.Diagnostics.AddError(
@@ -473,6 +475,28 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 		data.Description = types.StringNull()
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// ModifyPlan marks the endpoint unknown when the Enclave placement changes: the endpoint
+// host is the Enclave the Workload runs on, so UseStateForUnknown would carry a stale value.
+func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		return // destroy or create: nothing to compare against
+	}
+
+	policyPath := path.Root("runtime").AtName("enclave_selection_policy")
+	enclavesPath := path.Root("runtime").AtName("enclaves")
+
+	var plan, state WorkloadRuntimeModel
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, policyPath, &plan.EnclaveSelectionPolicy)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, enclavesPath, &plan.Enclaves)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, policyPath, &state.EnclaveSelectionPolicy)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, enclavesPath, &state.Enclaves)...)
+	if resp.Diagnostics.HasError() || !workloadPlacementChanged(plan, state) {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("endpoint"), types.StringUnknown())...)
 }
 
 func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
@@ -682,7 +706,7 @@ func workloadCreateRequest(data WorkloadResourceModel) *client.CreateWorkloadReq
 		Name:        data.Name.ValueString(),
 		Description: data.Description.ValueString(),
 		Importance:  client.WorkloadImportance(data.Importance.ValueString()),
-		Runtime:     workloadRuntimeToClient(resolveWorkloadRuntime(data)),
+		Runtime:     workloadRuntimeToClient(resolveWorkloadRuntime(data.Runtime)),
 	}
 
 	artifactID := data.ArtifactID.ValueString()
@@ -741,13 +765,7 @@ func workloadRuntimeToClient(runtime WorkloadRuntimeModel) client.WorkloadRuntim
 // A `use_case_id` implies nothing about placement. Enclave placement is governed by a
 // Use Case, but a Use Case is an organizational grouping in its own right, so asking
 // for an Enclave is the user's choice to make via `enclave_selection_policy`.
-//
-// Every request that carries a runtime goes through this: PATCH /workloads/{id}/settings
-// replaces the runtime wholesale, so a request that omitted these fields would read as
-// "move this workload out of its Enclave".
-func resolveWorkloadRuntime(data WorkloadResourceModel) WorkloadRuntimeModel {
-	runtime := data.Runtime
-
+func resolveWorkloadRuntime(runtime WorkloadRuntimeModel) WorkloadRuntimeModel {
 	if !runtime.EnclaveSelectionPolicy.IsNull() && !runtime.EnclaveSelectionPolicy.IsUnknown() {
 		return runtime
 	}
@@ -756,6 +774,24 @@ func resolveWorkloadRuntime(data WorkloadResourceModel) WorkloadRuntimeModel {
 		runtime.EnclaveSelectionPolicy = types.StringValue(string(client.EnclaveSelectionPolicyManual))
 	}
 
+	return runtime
+}
+
+// workloadPlacementChanged compares the derived placement, so an explicit `manual` and the
+// `manual` implied by naming an Enclave are the same thing.
+func workloadPlacementChanged(plan, state WorkloadRuntimeModel) bool {
+	p, s := resolveWorkloadRuntime(plan), resolveWorkloadRuntime(state)
+	return !p.EnclaveSelectionPolicy.Equal(s.EnclaveSelectionPolicy) ||
+		!slices.Equal(enclaveNames(p.Enclaves), enclaveNames(s.Enclaves))
+}
+
+// workloadRuntimeUpdate sends a dropped placement as an explicit clear; the API keeps the
+// stored placement when the fields are merely omitted.
+func workloadRuntimeUpdate(plan, state WorkloadRuntimeModel) client.WorkloadRuntime {
+	runtime := workloadRuntimeToClient(resolveWorkloadRuntime(plan))
+	if runtime.EnclaveSelectionPolicy == nil && workloadPlacementChanged(plan, state) {
+		runtime.ClearEnclavePlacement = true
+	}
 	return runtime
 }
 
@@ -983,11 +1019,13 @@ func replacementConfigFromPlan(policy *WorkloadReplacementPolicyModel) client.Re
 	return cfg
 }
 
+// runtime is nil when neither the container groups nor the placement changed.
 func (r *WorkloadResource) triggerWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
 	plan WorkloadResourceModel,
-	artifactChanged, containerGroupsChanged, replacementPolicyChanged bool,
+	runtime *client.WorkloadRuntime,
+	artifactChanged, replacementPolicyChanged bool,
 ) error {
 	useReplacementAPI := artifactChanged || replacementPolicyChanged
 
@@ -997,18 +1035,15 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 			ArtifactID: plan.ArtifactID.ValueString(),
 			Strategy:   client.ReplacementStrategyRolling,
 			Config:     replacementConfigFromPlan(plan.Runtime.ReplacementPolicy),
-		}
-		if containerGroupsChanged {
-			runtime := workloadRuntimeToClient(resolveWorkloadRuntime(plan))
-			req.Runtime = &runtime
+			Runtime:    runtime,
 		}
 		if _, err := r.provider.service.StartWorkloadReplacement(ctx, workloadID, req); err != nil {
 			return err
 		}
-	} else if containerGroupsChanged {
+	} else if runtime != nil {
 		traceAPICall("UpdateWorkloadSettings")
 		if _, err := r.provider.service.UpdateWorkloadSettings(ctx, workloadID, &client.UpdateWorkloadSettingsRequest{
-			Runtime: workloadRuntimeToClient(resolveWorkloadRuntime(plan)),
+			Runtime: *runtime,
 		}); err != nil {
 			return err
 		}

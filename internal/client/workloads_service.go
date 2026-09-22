@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -72,6 +73,23 @@ type WorkloadRuntime struct {
 	ContainerGroups        []GroupRuntime          `json:"containerGroups,omitempty"`
 	EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy,omitempty"`
 	Enclaves               []string                `json:"enclaves,omitempty"`
+
+	// ClearEnclavePlacement sends an explicit null policy and empty Enclave list. The
+	// mutation endpoints treat omitted placement fields as "keep the stored placement",
+	// so leaving the Enclave path has to be stated. Request-only.
+	ClearEnclavePlacement bool `json:"-"`
+}
+
+func (r WorkloadRuntime) MarshalJSON() ([]byte, error) {
+	type tagged WorkloadRuntime
+	if !r.ClearEnclavePlacement {
+		return json.Marshal(tagged(r))
+	}
+	return json.Marshal(struct {
+		ContainerGroups        []GroupRuntime          `json:"containerGroups,omitempty"`
+		EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy"`
+		Enclaves               []string                `json:"enclaves"`
+	}{ContainerGroups: r.ContainerGroups, Enclaves: []string{}})
 }
 
 type Workload struct {

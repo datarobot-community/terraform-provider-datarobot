@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,7 +16,9 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func TestAccWorkloadArtifactReplacement(t *testing.T) {
@@ -2635,7 +2638,7 @@ func TestIntegrationWorkloadEnclavePlacement(t *testing.T) {
 	})
 }
 
-func TestIntegrationWorkloadReplaceOnEnclaveChange(t *testing.T) {
+func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -2646,42 +2649,16 @@ func TestIntegrationWorkloadReplaceOnEnclaveChange(t *testing.T) {
 
 	mockAPIKey(t)
 
-	id1 := uuid.NewString()
-	id2 := uuid.NewString()
+	id := uuid.NewString()
 	artifactID := uuid.NewString()
 	useCaseID := uuid.NewString()
 	name := "workload-" + uuid.NewString()[:8]
 	replicaCount := int64(1)
-	endpoint1 := "https://workloads.example.com/" + id1
-	endpoint2 := "https://workloads.example.com/" + id2
+	endpoint := "https://workloads.example.com/" + id
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 
-	workload1 := workloadFixture(id1, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint1)
-	workload2 := workloadFixture(id2, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint2)
-
-	// Repinning to another Enclave destroys and recreates rather than replacing in
-	// place, so the reads and deletes interleave across two workload IDs; dispatch
-	// on the ID instead of counting calls.
-	deleted := map[string]bool{}
-	mockService.EXPECT().GetWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) (*client.Workload, error) {
-			if deleted[id] {
-				return nil, client.NewNotFoundError("workload")
-			}
-			if id == id1 {
-				return workload1, nil
-			}
-			return workload2, nil
-		}).AnyTimes()
-	mockService.EXPECT().DeleteWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) error {
-			deleted[id] = true
-			return nil
-		}).AnyTimes()
-
-	gomock.InOrder(
-		mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil),
-		mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload2, nil),
-	)
+	manual := client.EnclaveSelectionPolicyManual
+	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{policy: &manual, enclaves: []string{"research"}})
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -2699,27 +2676,283 @@ func TestIntegrationWorkloadReplaceOnEnclaveChange(t *testing.T) {
 				),
 			},
 			{
-				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "research"),
+				Config:           workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "research"),
+				ConfigPlanChecks: expectInPlacePlacementChange(resourceName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "runtime.enclaves.0", "research"),
-					checkWorkloadIDChanged(&initialID),
+					resource.TestCheckResourceAttr(resourceName, "endpoint", endpoint),
+					checkWorkloadIDPreserved(&initialID),
 				),
 			},
 		},
 	})
 }
 
-func checkWorkloadIDChanged(initialID *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		const rn = "datarobot_workload.test"
-		rs, ok := s.RootModule().Resources[rn]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", rn)
-		}
-		if rs.Primary.ID == *initialID {
-			return fmt.Errorf("workload ID %q survived a change that should have replaced the resource", *initialID)
-		}
-		return nil
+func TestIntegrationWorkloadLeavesEnclaveInPlace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{clear: true})
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "availability", ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclave_selection_policy", "availability"),
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, useCaseID, "", ""),
+				ConfigPlanChecks: expectInPlacePlacementChange(resourceName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr(resourceName, "runtime.enclave_selection_policy"),
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", useCaseID),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifact1 := uuid.NewString()
+	artifact2 := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload1 := workloadFixture(id, artifact1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifact2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	current := workload1
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return current, nil
+		}).AnyTimes()
+
+	manual := client.EnclaveSelectionPolicyManual
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id,
+		replacementPlacementMatcher{artifactID: artifact2, placement: placementMatcher{policy: &manual, enclaves: []string{"finance"}}}).
+		DoAndReturn(func(context.Context, string, *client.StartReplacementRequest) (*client.WorkloadReplacement, error) {
+			current = workload2
+			return replacement, nil
+		})
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, waitExpectsArtifact(artifact2)).Return(replacement, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) error {
+			deleted = true
+			return nil
+		})
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifact1, useCaseID, "availability", ""),
+				Check:  captureAttr(resourceName, "id", &initialID),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifact2, useCaseID, "", "finance"),
+				ConfigPlanChecks: expectInPlacePlacementChange(resourceName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "artifact_id", artifact2),
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclaves.0", "finance"),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+// expectInPlacePlacementChange: an update, not a replacement, with the endpoint unknown.
+func expectInPlacePlacementChange(resourceName string) resource.ConfigPlanChecks {
+	return resource.ConfigPlanChecks{
+		PreApply: []plancheck.PlanCheck{
+			plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+			plancheck.ExpectUnknownValue(resourceName, tfjsonpath.New("endpoint")),
+		},
+	}
+}
+
+func expectWorkloadPlacementUpdate(mockService *mock_client.MockService, workload *client.Workload, want placementMatcher) {
+	id := workload.ID
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return workload, nil
+		}).AnyTimes()
+
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id, settingsPlacementMatcher{want}).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, waitExpectsArtifact(*workload.ArtifactID)).Return(replacement, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) error {
+			deleted = true
+			return nil
+		})
+}
+
+type placementMatcher struct {
+	policy   *client.EnclaveSelectionPolicy
+	enclaves []string
+	clear    bool
+}
+
+func (m placementMatcher) matches(runtime client.WorkloadRuntime) bool {
+	if runtime.ClearEnclavePlacement != m.clear {
+		return false
+	}
+	if (runtime.EnclaveSelectionPolicy == nil) != (m.policy == nil) {
+		return false
+	}
+	if m.policy != nil && *runtime.EnclaveSelectionPolicy != *m.policy {
+		return false
+	}
+	return slices.Equal(runtime.Enclaves, m.enclaves)
+}
+
+func (m placementMatcher) String() string {
+	policy := "<none>"
+	if m.policy != nil {
+		policy = string(*m.policy)
+	}
+	return fmt.Sprintf("placement policy=%s enclaves=%v clear=%v", policy, m.enclaves, m.clear)
+}
+
+type settingsPlacementMatcher struct{ placementMatcher }
+
+func (m settingsPlacementMatcher) Matches(x any) bool {
+	req, ok := x.(*client.UpdateWorkloadSettingsRequest)
+	return ok && req != nil && m.matches(req.Runtime)
+}
+
+func (m settingsPlacementMatcher) String() string {
+	return "settings request with " + m.placementMatcher.String()
+}
+
+type replacementPlacementMatcher struct {
+	artifactID string
+	placement  placementMatcher
+}
+
+func (m replacementPlacementMatcher) Matches(x any) bool {
+	req, ok := x.(*client.StartReplacementRequest)
+	if !ok || req == nil || req.Runtime == nil {
+		return false
+	}
+	return req.ArtifactID == m.artifactID && req.Strategy == client.ReplacementStrategyRolling && m.placement.matches(*req.Runtime)
+}
+
+func (m replacementPlacementMatcher) String() string {
+	return fmt.Sprintf("replacement to artifact %s carrying %s", m.artifactID, m.placement.String())
+}
+
+func TestWorkloadPlacementChanged(t *testing.T) {
+	nullList := types.ListNull(types.StringType)
+	emptyList := types.ListValueMust(types.StringType, []attr.Value{})
+	none := types.StringNull()
+	availability := types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	manual := types.StringValue(string(client.EnclaveSelectionPolicyManual))
+	runtime := func(policy types.String, enclaves types.List) WorkloadRuntimeModel {
+		return workloadPlacementModel(types.StringNull(), policy, enclaves).Runtime
+	}
+
+	cases := map[string]struct {
+		plan, state WorkloadRuntimeModel
+		want        bool
+	}{
+		"no placement on either side":     {runtime(none, nullList), runtime(none, nullList), false},
+		"same explicit policy":            {runtime(availability, nullList), runtime(availability, nullList), false},
+		"policy removed":                  {runtime(none, nullList), runtime(availability, nullList), true},
+		"policy added":                    {runtime(availability, nullList), runtime(none, nullList), true},
+		"scheduler choice to a pin":       {runtime(none, enclaveListForTest("finance")), runtime(availability, nullList), true},
+		"pin moved to another Enclave":    {runtime(none, enclaveListForTest("research")), runtime(none, enclaveListForTest("finance")), true},
+		"pin removed":                     {runtime(none, nullList), runtime(none, enclaveListForTest("finance")), true},
+		"explicit manual equals derived":  {runtime(manual, enclaveListForTest("finance")), runtime(none, enclaveListForTest("finance")), false},
+		"empty list equals omitted list":  {runtime(none, emptyList), runtime(none, nullList), false},
+		"unresolved policy counts as set": {runtime(types.StringUnknown(), nullList), runtime(none, nullList), true},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := workloadPlacementChanged(tc.plan, tc.state); got != tc.want {
+				t.Fatalf("workloadPlacementChanged = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWorkloadRuntimeUpdateClearsOnlyADroppedPlacement(t *testing.T) {
+	nullList := types.ListNull(types.StringType)
+	none := types.StringNull()
+	availability := types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	runtime := func(policy types.String, enclaves types.List) WorkloadRuntimeModel {
+		return workloadPlacementModel(types.StringNull(), policy, enclaves).Runtime
+	}
+
+	dropped := workloadRuntimeUpdate(runtime(none, nullList), runtime(availability, nullList))
+	if !dropped.ClearEnclavePlacement || dropped.EnclaveSelectionPolicy != nil || len(dropped.Enclaves) != 0 {
+		t.Fatalf("dropped placement should clear: %+v", dropped)
+	}
+
+	unchanged := workloadRuntimeUpdate(runtime(none, nullList), runtime(none, nullList))
+	if unchanged.ClearEnclavePlacement {
+		t.Fatalf("a runtime that never had a placement must not clear one: %+v", unchanged)
+	}
+
+	pinned := workloadRuntimeUpdate(runtime(none, enclaveListForTest("finance")), runtime(availability, nullList))
+	if pinned.ClearEnclavePlacement || pinned.EnclaveSelectionPolicy == nil ||
+		*pinned.EnclaveSelectionPolicy != client.EnclaveSelectionPolicyManual || !slices.Equal(pinned.Enclaves, []string{"finance"}) {
+		t.Fatalf("a new pin is sent as manual with the Enclave, not as a clear: %+v", pinned)
 	}
 }
 

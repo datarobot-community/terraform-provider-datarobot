@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -800,5 +801,72 @@ func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 		if payload["type"] != string(artifactType) {
 			t.Fatalf("encoded type = %v, want %q", payload["type"], artifactType)
 		}
+	}
+}
+
+func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrCleared(t *testing.T) {
+	policy := EnclaveSelectionPolicyManual
+	replicaCount := int64(1)
+	groups := []GroupRuntime{{Name: "default", ReplicaCount: &replicaCount}}
+
+	cases := map[string]struct {
+		runtime      WorkloadRuntime
+		wantKeys     bool
+		wantPolicy   string
+		wantEnclaves string
+	}{
+		"omitted when unset": {
+			runtime: WorkloadRuntime{ContainerGroups: groups},
+		},
+		"written when set": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy, Enclaves: []string{"finance"}},
+			wantKeys:     true,
+			wantPolicy:   "manual",
+			wantEnclaves: "[finance]",
+		},
+		"explicit null and empty list when cleared": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, ClearEnclavePlacement: true},
+			wantKeys:     true,
+			wantPolicy:   "<nil>",
+			wantEnclaves: "[]",
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			bodies := map[string]any{
+				"settings":    UpdateWorkloadSettingsRequest{Runtime: tc.runtime},
+				"replacement": StartReplacementRequest{ArtifactID: "a", Strategy: ReplacementStrategyRolling, Runtime: &tc.runtime},
+			}
+			for shape, body := range bodies {
+				raw, err := json.Marshal(body)
+				if err != nil {
+					t.Fatalf("%s: marshal: %v", shape, err)
+				}
+				var decoded struct {
+					Runtime map[string]any `json:"runtime"`
+				}
+				if err := json.Unmarshal(raw, &decoded); err != nil {
+					t.Fatalf("%s: unmarshal %s: %v", shape, raw, err)
+				}
+				if _, ok := decoded.Runtime["containerGroups"]; !ok {
+					t.Fatalf("%s: containerGroups missing from %s", shape, raw)
+				}
+				gotPolicy, hasPolicy := decoded.Runtime["enclaveSelectionPolicy"]
+				gotEnclaves, hasEnclaves := decoded.Runtime["enclaves"]
+				if hasPolicy != tc.wantKeys || hasEnclaves != tc.wantKeys {
+					t.Fatalf("%s: placement keys present = (%v, %v), want %v: %s", shape, hasPolicy, hasEnclaves, tc.wantKeys, raw)
+				}
+				if !tc.wantKeys {
+					continue
+				}
+				if fmt.Sprint(gotPolicy) != tc.wantPolicy {
+					t.Fatalf("%s: enclaveSelectionPolicy = %v, want %s", shape, gotPolicy, tc.wantPolicy)
+				}
+				if fmt.Sprint(gotEnclaves) != tc.wantEnclaves {
+					t.Fatalf("%s: enclaves = %v, want %s", shape, gotEnclaves, tc.wantEnclaves)
+				}
+			}
+		})
 	}
 }
