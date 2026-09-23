@@ -804,30 +804,36 @@ func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrCleared(t *testing.T) {
+func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrExplicit(t *testing.T) {
 	policy := EnclaveSelectionPolicyManual
 	replicaCount := int64(1)
 	groups := []GroupRuntime{{Name: "default", ReplicaCount: &replicaCount}}
 
 	cases := map[string]struct {
 		runtime      WorkloadRuntime
-		wantKeys     bool
-		wantPolicy   string
-		wantEnclaves string
+		wantPolicy   string // "" means the key must be absent
+		wantEnclaves string // "" means the key must be absent
 	}{
 		"omitted when unset": {
 			runtime: WorkloadRuntime{ContainerGroups: groups},
 		},
 		"written when set": {
 			runtime:      WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy, Enclaves: []string{"finance"}},
-			wantKeys:     true,
 			wantPolicy:   "manual",
 			wantEnclaves: "[finance]",
 		},
-		"explicit null and empty list when cleared": {
-			runtime:      WorkloadRuntime{ContainerGroups: groups, ClearEnclavePlacement: true},
-			wantKeys:     true,
+		"policy alone without the flag omits the list": {
+			runtime:    WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy},
+			wantPolicy: "manual",
+		},
+		"explicit: null policy and empty list when cleared": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, ExplicitEnclavePlacement: true},
 			wantPolicy:   "<nil>",
+			wantEnclaves: "[]",
+		},
+		"explicit: policy kept, pin removed": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy, ExplicitEnclavePlacement: true},
+			wantPolicy:   "manual",
 			wantEnclaves: "[]",
 		},
 	}
@@ -852,20 +858,17 @@ func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrCleared(t *testing.T) {
 				if _, ok := decoded.Runtime["containerGroups"]; !ok {
 					t.Fatalf("%s: containerGroups missing from %s", shape, raw)
 				}
-				gotPolicy, hasPolicy := decoded.Runtime["enclaveSelectionPolicy"]
-				gotEnclaves, hasEnclaves := decoded.Runtime["enclaves"]
-				if hasPolicy != tc.wantKeys || hasEnclaves != tc.wantKeys {
-					t.Fatalf("%s: placement keys present = (%v, %v), want %v: %s", shape, hasPolicy, hasEnclaves, tc.wantKeys, raw)
+				check := func(key, want string) {
+					got, present := decoded.Runtime[key]
+					if present != (want != "") {
+						t.Fatalf("%s: %s present = %v, want %v: %s", shape, key, present, want != "", raw)
+					}
+					if present && fmt.Sprint(got) != want {
+						t.Fatalf("%s: %s = %v, want %s", shape, key, got, want)
+					}
 				}
-				if !tc.wantKeys {
-					continue
-				}
-				if fmt.Sprint(gotPolicy) != tc.wantPolicy {
-					t.Fatalf("%s: enclaveSelectionPolicy = %v, want %s", shape, gotPolicy, tc.wantPolicy)
-				}
-				if fmt.Sprint(gotEnclaves) != tc.wantEnclaves {
-					t.Fatalf("%s: enclaves = %v, want %s", shape, gotEnclaves, tc.wantEnclaves)
-				}
+				check("enclaveSelectionPolicy", tc.wantPolicy)
+				check("enclaves", tc.wantEnclaves)
 			}
 		})
 	}

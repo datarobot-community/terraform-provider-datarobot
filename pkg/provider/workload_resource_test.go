@@ -2658,7 +2658,7 @@ func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 
 	manual := client.EnclaveSelectionPolicyManual
-	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{policy: &manual, enclaves: []string{"research"}})
+	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{policy: &manual, enclaves: []string{"research"}, explicit: true})
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -2707,7 +2707,7 @@ func TestIntegrationWorkloadLeavesEnclaveInPlace(t *testing.T) {
 	endpoint := "https://workloads.example.com/" + id
 	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
 
-	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{clear: true})
+	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{explicit: true})
 
 	var initialID string
 	resourceName := "datarobot_workload.test"
@@ -2772,7 +2772,7 @@ func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T
 	manual := client.EnclaveSelectionPolicyManual
 	replacement := workloadReplacementFixture(id)
 	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id,
-		replacementPlacementMatcher{artifactID: artifact2, placement: placementMatcher{policy: &manual, enclaves: []string{"finance"}}}).
+		replacementPlacementMatcher{artifactID: artifact2, placement: placementMatcher{policy: &manual, enclaves: []string{"finance"}, explicit: true}}).
 		DoAndReturn(func(context.Context, string, *client.StartReplacementRequest) (*client.WorkloadReplacement, error) {
 			current = workload2
 			return replacement, nil
@@ -2844,11 +2844,11 @@ func expectWorkloadPlacementUpdate(mockService *mock_client.MockService, workloa
 type placementMatcher struct {
 	policy   *client.EnclaveSelectionPolicy
 	enclaves []string
-	clear    bool
+	explicit bool
 }
 
 func (m placementMatcher) matches(runtime client.WorkloadRuntime) bool {
-	if runtime.ClearEnclavePlacement != m.clear {
+	if runtime.ExplicitEnclavePlacement != m.explicit {
 		return false
 	}
 	if (runtime.EnclaveSelectionPolicy == nil) != (m.policy == nil) {
@@ -2865,7 +2865,7 @@ func (m placementMatcher) String() string {
 	if m.policy != nil {
 		policy = string(*m.policy)
 	}
-	return fmt.Sprintf("placement policy=%s enclaves=%v clear=%v", policy, m.enclaves, m.clear)
+	return fmt.Sprintf("placement policy=%s enclaves=%v explicit=%v", policy, m.enclaves, m.explicit)
 }
 
 type settingsPlacementMatcher struct{ placementMatcher }
@@ -2931,28 +2931,50 @@ func TestWorkloadPlacementChanged(t *testing.T) {
 	}
 }
 
-func TestWorkloadRuntimeUpdateClearsOnlyADroppedPlacement(t *testing.T) {
+func TestWorkloadRuntimeUpdateWritesPlacementOnlyWhenChanged(t *testing.T) {
 	nullList := types.ListNull(types.StringType)
 	none := types.StringNull()
 	availability := types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	manual := types.StringValue(string(client.EnclaveSelectionPolicyManual))
 	runtime := func(policy types.String, enclaves types.List) WorkloadRuntimeModel {
 		return workloadPlacementModel(types.StringNull(), policy, enclaves).Runtime
 	}
-
-	dropped := workloadRuntimeUpdate(runtime(none, nullList), runtime(availability, nullList))
-	if !dropped.ClearEnclavePlacement || dropped.EnclaveSelectionPolicy != nil || len(dropped.Enclaves) != 0 {
-		t.Fatalf("dropped placement should clear: %+v", dropped)
+	policyOf := func(r client.WorkloadRuntime) string {
+		if r.EnclaveSelectionPolicy == nil {
+			return "<nil>"
+		}
+		return string(*r.EnclaveSelectionPolicy)
 	}
 
-	unchanged := workloadRuntimeUpdate(runtime(none, nullList), runtime(none, nullList))
-	if unchanged.ClearEnclavePlacement {
-		t.Fatalf("a runtime that never had a placement must not clear one: %+v", unchanged)
+	cases := map[string]struct {
+		plan, state  WorkloadRuntimeModel
+		wantExplicit bool
+		wantPolicy   string
+		wantEnclaves []string
+	}{
+		"policy dropped":                {runtime(none, nullList), runtime(availability, nullList), true, "<nil>", nil},
+		"never had a placement":         {runtime(none, nullList), runtime(none, nullList), false, "<nil>", nil},
+		"unchanged placement":           {runtime(availability, nullList), runtime(availability, nullList), false, "availability", nil},
+		"scheduler choice to a pin":     {runtime(none, enclaveListForTest("finance")), runtime(availability, nullList), true, "manual", []string{"finance"}},
+		"pin removed, policy kept":      {runtime(availability, nullList), runtime(none, enclaveListForTest("finance")), true, "availability", nil},
+		"pin removed, manual kept":      {runtime(manual, nullList), runtime(none, enclaveListForTest("finance")), true, "manual", nil},
+		"pin moved to another Enclave":  {runtime(none, enclaveListForTest("research")), runtime(none, enclaveListForTest("finance")), true, "manual", []string{"research"}},
+		"replica-only style, pin stays": {runtime(none, enclaveListForTest("finance")), runtime(none, enclaveListForTest("finance")), false, "manual", []string{"finance"}},
 	}
 
-	pinned := workloadRuntimeUpdate(runtime(none, enclaveListForTest("finance")), runtime(availability, nullList))
-	if pinned.ClearEnclavePlacement || pinned.EnclaveSelectionPolicy == nil ||
-		*pinned.EnclaveSelectionPolicy != client.EnclaveSelectionPolicyManual || !slices.Equal(pinned.Enclaves, []string{"finance"}) {
-		t.Fatalf("a new pin is sent as manual with the Enclave, not as a clear: %+v", pinned)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := workloadRuntimeUpdate(tc.plan, tc.state)
+			if got.ExplicitEnclavePlacement != tc.wantExplicit {
+				t.Fatalf("ExplicitEnclavePlacement = %v, want %v", got.ExplicitEnclavePlacement, tc.wantExplicit)
+			}
+			if policyOf(got) != tc.wantPolicy {
+				t.Fatalf("policy = %s, want %s", policyOf(got), tc.wantPolicy)
+			}
+			if !slices.Equal(got.Enclaves, tc.wantEnclaves) {
+				t.Fatalf("enclaves = %v, want %v", got.Enclaves, tc.wantEnclaves)
+			}
+		})
 	}
 }
 

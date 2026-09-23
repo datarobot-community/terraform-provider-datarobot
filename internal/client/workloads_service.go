@@ -74,22 +74,28 @@ type WorkloadRuntime struct {
 	EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy,omitempty"`
 	Enclaves               []string                `json:"enclaves,omitempty"`
 
-	// ClearEnclavePlacement sends an explicit null policy and empty Enclave list. The
-	// mutation endpoints treat omitted placement fields as "keep the stored placement",
-	// so leaving the Enclave path has to be stated. Request-only.
-	ClearEnclavePlacement bool `json:"-"`
+	// ExplicitEnclavePlacement writes both placement fields even when unset (null policy,
+	// empty list). The mutation endpoints keep the stored placement when both are omitted,
+	// so a placement change has to state the full new placement. Request-only.
+	ExplicitEnclavePlacement bool `json:"-"`
 }
 
 func (r WorkloadRuntime) MarshalJSON() ([]byte, error) {
 	type tagged WorkloadRuntime
-	if !r.ClearEnclavePlacement {
+	if !r.ExplicitEnclavePlacement {
 		return json.Marshal(tagged(r))
 	}
+	enclaves := r.Enclaves
+	if enclaves == nil {
+		enclaves = []string{}
+	}
+	// Shallower JSON names win over the embedded ones, so only the two placement fields
+	// lose omitempty here.
 	return json.Marshal(struct {
-		ContainerGroups        []GroupRuntime          `json:"containerGroups,omitempty"`
+		tagged
 		EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy"`
 		Enclaves               []string                `json:"enclaves"`
-	}{ContainerGroups: r.ContainerGroups, Enclaves: []string{}})
+	}{tagged: tagged(r), EnclaveSelectionPolicy: r.EnclaveSelectionPolicy, Enclaves: enclaves})
 }
 
 type Workload struct {

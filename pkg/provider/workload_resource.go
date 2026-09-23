@@ -785,13 +785,11 @@ func workloadPlacementChanged(plan, state WorkloadRuntimeModel) bool {
 		!slices.Equal(enclaveNames(p.Enclaves), enclaveNames(s.Enclaves))
 }
 
-// workloadRuntimeUpdate sends a dropped placement as an explicit clear; the API keeps the
-// stored placement when the fields are merely omitted.
+// workloadRuntimeUpdate writes both placement fields whenever the placement changed, so a
+// removed pin or policy reaches the platform instead of being read as "keep the stored one".
 func workloadRuntimeUpdate(plan, state WorkloadRuntimeModel) client.WorkloadRuntime {
 	runtime := workloadRuntimeToClient(resolveWorkloadRuntime(plan))
-	if runtime.EnclaveSelectionPolicy == nil && workloadPlacementChanged(plan, state) {
-		runtime.ClearEnclavePlacement = true
-	}
+	runtime.ExplicitEnclavePlacement = workloadPlacementChanged(plan, state)
 	return runtime
 }
 
