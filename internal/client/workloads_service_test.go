@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -800,5 +801,75 @@ func TestWorkloadTypeJSONRoundTrip(t *testing.T) {
 		if payload["type"] != string(artifactType) {
 			t.Fatalf("encoded type = %v, want %q", payload["type"], artifactType)
 		}
+	}
+}
+
+func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrExplicit(t *testing.T) {
+	policy := EnclaveSelectionPolicyManual
+	replicaCount := int64(1)
+	groups := []GroupRuntime{{Name: "default", ReplicaCount: &replicaCount}}
+
+	cases := map[string]struct {
+		runtime      WorkloadRuntime
+		wantPolicy   string // "" means the key must be absent
+		wantEnclaves string // "" means the key must be absent
+	}{
+		"omitted when unset": {
+			runtime: WorkloadRuntime{ContainerGroups: groups},
+		},
+		"written when set": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy, Enclaves: []string{"finance"}},
+			wantPolicy:   "manual",
+			wantEnclaves: "[finance]",
+		},
+		"policy alone without the flag omits the list": {
+			runtime:    WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy},
+			wantPolicy: "manual",
+		},
+		"explicit: null policy and empty list when cleared": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, ExplicitEnclavePlacement: true},
+			wantPolicy:   "<nil>",
+			wantEnclaves: "[]",
+		},
+		"explicit: policy kept, pin removed": {
+			runtime:      WorkloadRuntime{ContainerGroups: groups, EnclaveSelectionPolicy: &policy, ExplicitEnclavePlacement: true},
+			wantPolicy:   "manual",
+			wantEnclaves: "[]",
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			bodies := map[string]any{
+				"settings":    UpdateWorkloadSettingsRequest{Runtime: tc.runtime},
+				"replacement": StartReplacementRequest{ArtifactID: "a", Strategy: ReplacementStrategyRolling, Runtime: &tc.runtime},
+			}
+			for shape, body := range bodies {
+				raw, err := json.Marshal(body)
+				if err != nil {
+					t.Fatalf("%s: marshal: %v", shape, err)
+				}
+				var decoded struct {
+					Runtime map[string]any `json:"runtime"`
+				}
+				if err := json.Unmarshal(raw, &decoded); err != nil {
+					t.Fatalf("%s: unmarshal %s: %v", shape, raw, err)
+				}
+				if _, ok := decoded.Runtime["containerGroups"]; !ok {
+					t.Fatalf("%s: containerGroups missing from %s", shape, raw)
+				}
+				check := func(key, want string) {
+					got, present := decoded.Runtime[key]
+					if present != (want != "") {
+						t.Fatalf("%s: %s present = %v, want %v: %s", shape, key, present, want != "", raw)
+					}
+					if present && fmt.Sprint(got) != want {
+						t.Fatalf("%s: %s = %v, want %s", shape, key, got, want)
+					}
+				}
+				check("enclaveSelectionPolicy", tc.wantPolicy)
+				check("enclaves", tc.wantEnclaves)
+			}
+		})
 	}
 }

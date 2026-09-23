@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -72,6 +73,29 @@ type WorkloadRuntime struct {
 	ContainerGroups        []GroupRuntime          `json:"containerGroups,omitempty"`
 	EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy,omitempty"`
 	Enclaves               []string                `json:"enclaves,omitempty"`
+
+	// ExplicitEnclavePlacement writes both placement fields even when unset (null policy,
+	// empty list). The mutation endpoints keep the stored placement when both are omitted,
+	// so a placement change has to state the full new placement. Request-only.
+	ExplicitEnclavePlacement bool `json:"-"`
+}
+
+func (r WorkloadRuntime) MarshalJSON() ([]byte, error) {
+	type tagged WorkloadRuntime
+	if !r.ExplicitEnclavePlacement {
+		return json.Marshal(tagged(r))
+	}
+	enclaves := r.Enclaves
+	if enclaves == nil {
+		enclaves = []string{}
+	}
+	// Shallower JSON names win over the embedded ones, so only the two placement fields
+	// lose omitempty here.
+	return json.Marshal(struct {
+		tagged
+		EnclaveSelectionPolicy *EnclaveSelectionPolicy `json:"enclaveSelectionPolicy"`
+		Enclaves               []string                `json:"enclaves"`
+	}{tagged: tagged(r), EnclaveSelectionPolicy: r.EnclaveSelectionPolicy, Enclaves: enclaves})
 }
 
 type Workload struct {
