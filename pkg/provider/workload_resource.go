@@ -245,8 +245,10 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Enclave named in `enclaves`. Omit it to run outside any Enclave, which is the default: setting `use_case_id` on its own does not request one. " +
 							"Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when " +
 							"`enclaves` names one.\n\n" +
-							"Changing it moves the running Workload in place through a rolling replacement, keeping its ID; removing it takes the Workload off the Enclave path. " +
-							"The endpoint is re-read afterwards, since it is served from the Enclave the Workload runs on. Not read back from the platform: the API omits it on " +
+							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID: the new placement intent is recorded on the platform, " +
+							"which applies it when it schedules the new version. Removing the policy records no placement, but the platform does not yet move an already placed " +
+							"Workload off its Enclave for that; it keeps serving from where it runs. The endpoint is re-read afterwards, since it is served from the Enclave the " +
+							"Workload runs on. Not read back from the platform: the API omits it on " +
 							"clusters without the Enclave entitlement, so the configured value is what stays in state.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
@@ -262,7 +264,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Requires `use_case_id`, and only applies with `enclave_selection_policy = \"manual\"`, which is assumed when this is set and no policy is given. " +
 							"The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.\n\n" +
 							"This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. " +
-							"Changing it moves the running Workload in place through a rolling replacement, keeping its ID; the endpoint is re-read afterwards.",
+							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards.",
 						Validators: []validator.List{
 							listvalidator.SizeAtMost(1),
 						},
@@ -477,8 +479,9 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// ModifyPlan marks the endpoint unknown when the Enclave placement changes: the endpoint
-// host is the Enclave the Workload runs on, so UseStateForUnknown would carry a stale value.
+// ModifyPlan marks endpoint and status unknown when the Enclave placement changes: the
+// endpoint host is the Enclave the Workload runs on and the change rolls a new version, so
+// UseStateForUnknown would carry stale values.
 func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
 		return // destroy or create: nothing to compare against
@@ -497,6 +500,7 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("endpoint"), types.StringUnknown())...)
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("status"), types.StringUnknown())...)
 }
 
 func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {

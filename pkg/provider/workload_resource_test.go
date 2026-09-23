@@ -2809,12 +2809,13 @@ func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T
 	})
 }
 
-// expectInPlacePlacementChange: an update, not a replacement, with the endpoint unknown.
+// expectInPlacePlacementChange: an update, not a replacement, with endpoint and status unknown.
 func expectInPlacePlacementChange(resourceName string) resource.ConfigPlanChecks {
 	return resource.ConfigPlanChecks{
 		PreApply: []plancheck.PlanCheck{
 			plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
 			plancheck.ExpectUnknownValue(resourceName, tfjsonpath.New("endpoint")),
+			plancheck.ExpectUnknownValue(resourceName, tfjsonpath.New("status")),
 		},
 	}
 }
