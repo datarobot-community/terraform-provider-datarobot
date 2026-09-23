@@ -3016,3 +3016,103 @@ resource "datarobot_workload" "test" {
 }
 `, name, artifactID, useCase, policyLine, enclavesLine))
 }
+
+// A policy that is unknown at plan time (here: the output of a terraform_data that is
+// being replaced) makes ModifyPlan mark endpoint and status unknown. When it resolves to
+// the value already in state, no rollout runs, and Update has to fill both from the API
+// or the apply fails with an inconsistent result.
+func TestIntegrationWorkloadUnknownPlacementResolvingToSameValue(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return workload, nil
+		}).AnyTimes()
+	// No UpdateWorkloadSettings or StartWorkloadReplacement expectation: the placement
+	// did not really change, so no rollout may be triggered.
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) error {
+			deleted = true
+			return nil
+		})
+
+	config := func(trigger string) string {
+		return workloadMockConfig(fmt.Sprintf(`
+resource "terraform_data" "policy" {
+  input            = "availability"
+  triggers_replace = [%q]
+}
+
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  use_case_id = %q
+  runtime = {
+    enclave_selection_policy = terraform_data.policy.output
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, trigger, name, artifactID, useCaseID))
+	}
+
+	resourceName := "datarobot_workload.test"
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("one"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclave_selection_policy", "availability"),
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				// Replacing terraform_data makes its output unknown at plan time.
+				Config: config("two"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+						plancheck.ExpectUnknownValue(resourceName, tfjsonpath.New("endpoint")),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "endpoint", endpoint),
+					resource.TestCheckResourceAttr(resourceName, "status", "running"),
+					resource.TestCheckResourceAttr(resourceName, "runtime.enclave_selection_policy", "availability"),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}

@@ -429,6 +429,19 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
+	// ModifyPlan marks endpoint and status unknown when the placement looks changed, but a
+	// value unknown at plan time may resolve to what state already holds, in which case no
+	// rollout ran above and nothing else writes them.
+	if plan.Endpoint.IsUnknown() || plan.Status.IsUnknown() {
+		traceAPICall("GetWorkload")
+		workload, err := r.provider.service.GetWorkload(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading Workload", err.Error())
+			return
+		}
+		loadWorkloadIntoModel(workload, &plan)
+	}
+
 	preserveWorkloadReplacementPolicy(planned, &plan)
 	preserveWorkloadEnclavePlacement(planned, &plan)
 	applySentinels(planned, &plan)
