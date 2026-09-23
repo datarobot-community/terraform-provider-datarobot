@@ -20,7 +20,7 @@ description: |-
 
 Changes to `artifact_id` or `runtime` call the Workload API **replacement** endpoints during `Update`. Terraform does **not** destroy and recreate the workload. The workload `id` and `endpoint` stay stable across artifact and runtime updates.
 
-This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs.
+This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes, which still replaces the workload; see [Changing placement](#changing-placement).
 
 For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
