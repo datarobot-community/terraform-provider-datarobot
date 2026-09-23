@@ -3018,9 +3018,9 @@ resource "datarobot_workload" "test" {
 }
 
 // A policy that is unknown at plan time (here: the output of a terraform_data that is
-// being replaced) makes ModifyPlan mark endpoint and status unknown. When it resolves to
-// the value already in state, no rollout runs, and Update has to fill both from the API
-// or the apply fails with an inconsistent result.
+// being replaced) plans as an update with endpoint unknown. When it resolves to the value
+// already in state, Terraform's apply-time re-plan finds no diff: no rollout is triggered,
+// the workload keeps its ID, and state stays consistent.
 func TestIntegrationWorkloadUnknownPlacementResolvingToSameValue(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

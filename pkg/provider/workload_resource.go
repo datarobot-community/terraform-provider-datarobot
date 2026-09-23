@@ -429,9 +429,10 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	// ModifyPlan marks endpoint and status unknown when the placement looks changed, but a
-	// value unknown at plan time may resolve to what state already holds, in which case no
-	// rollout ran above and nothing else writes them.
+	// Guard, not a fix for an observed failure: Terraform re-plans at apply time with resolved
+	// values, so a placement that was unknown at plan and resolves unchanged never reaches
+	// Update with endpoint or status unknown. This only matters if either attribute ever loses
+	// UseStateForUnknown, since a computed attribute without a plan modifier plans as unknown.
 	if plan.Endpoint.IsUnknown() || plan.Status.IsUnknown() {
 		traceAPICall("GetWorkload")
 		workload, err := r.provider.service.GetWorkload(ctx, id)
