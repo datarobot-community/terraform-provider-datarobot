@@ -12,15 +12,21 @@ name: Review Router
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, opened, closed, ready_for_review]
   pull_request_review:
     types: [submitted]
+  pull_request_review_comment:
+    types: [created]
   issue_comment:
     types: [created]
+  schedule:
+    - cron: "0 3,9,15,21 * * 1-5"
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   route:
-    if: >-
-      github.event_name != 'issue_comment' || contains(github.event.comment.body, '/review')
     uses: datarobot-community/.github/.github/workflows/review-router.yml@main
     secrets: inherit
