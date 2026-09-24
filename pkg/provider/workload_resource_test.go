@@ -2688,53 +2688,93 @@ func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 	})
 }
 
-func TestIntegrationWorkloadLeavesEnclaveInPlace(t *testing.T) {
+// Removing the placement while use_case_id stays fails the plan; nothing reaches the API.
+func TestIntegrationWorkloadRefusesLeavingEnclaveInPlace(t *testing.T) {
+	for name, tc := range map[string]struct{ policy, enclaves string }{
+		"policy removed": {policy: "availability"},
+		"pin removed":    {enclaves: "finance"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockService := mock_client.NewMockService(ctrl)
+			defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+			mockAPIKey(t)
+
+			artifactID, useCaseID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+			replicaCount := int64(1)
+			expectWorkloadsCreatedAndDeleted(mockService,
+				workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{Config: workloadConfigWithPlacement(name, artifactID, useCaseID, tc.policy, tc.enclaves)},
+					{
+						Config:      workloadConfigWithPlacement(name, artifactID, useCaseID, "", ""),
+						ExpectError: regexp.MustCompile("Cannot move a Workload off its Enclave in place"),
+					},
+				},
+			})
+		})
+	}
+}
+
+// Removing use_case_id along with the placement replaces the Workload instead.
+func TestIntegrationWorkloadLeavesEnclaveByReplacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
 	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
-	id := uuid.NewString()
-	artifactID := uuid.NewString()
-	useCaseID := uuid.NewString()
-	name := "workload-" + uuid.NewString()[:8]
+	artifactID, name := uuid.NewString(), "workload-"+uuid.NewString()[:8]
 	replicaCount := int64(1)
-	endpoint := "https://workloads.example.com/" + id
-	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
-
-	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{explicit: true})
-
-	var initialID string
-	resourceName := "datarobot_workload.test"
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil),
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "availability", "")},
 			{
-				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "availability", ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.enclave_selection_policy", "availability"),
-					captureAttr(resourceName, "id", &initialID),
-				),
-			},
-			{
-				Config:           workloadConfigWithPlacement(name, artifactID, useCaseID, "", ""),
-				ConfigPlanChecks: expectInPlacePlacementChange(resourceName),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr(resourceName, "runtime.enclave_selection_policy"),
-					resource.TestCheckResourceAttr(resourceName, "use_case_id", useCaseID),
-					checkWorkloadIDPreserved(&initialID),
-				),
+				Config: workloadConfigWithPlacement(name, artifactID, "", "", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("datarobot_workload.test", plancheck.ResourceActionReplace),
+				}},
 			},
 		},
 	})
+}
+
+// expectWorkloadsCreatedAndDeleted serves each Workload, in create order, until it is deleted.
+func expectWorkloadsCreatedAndDeleted(mockService *mock_client.MockService, workloads ...*client.Workload) {
+	live := map[string]*client.Workload{}
+	created := 0
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *client.CreateWorkloadRequest) (*client.Workload, error) {
+			w := workloads[created]
+			created++
+			live[w.ID] = w
+			return w, nil
+		}).Times(len(workloads))
+	mockService.EXPECT().GetWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (*client.Workload, error) {
+			if w, ok := live[id]; ok {
+				return w, nil
+			}
+			return nil, client.NewNotFoundError("workload")
+		}).AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) error {
+			delete(live, id)
+			return nil
+		}).Times(len(workloads))
 }
 
 func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T) {
@@ -2927,6 +2967,38 @@ func TestWorkloadPlacementChanged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got := workloadPlacementChanged(tc.plan, tc.state); got != tc.want {
 				t.Fatalf("workloadPlacementChanged = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWorkloadPlacementCleared(t *testing.T) {
+	nullList := types.ListNull(types.StringType)
+	none := types.StringNull()
+	availability := types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	pin := enclaveListForTest("finance")
+	runtime := func(policy types.String, enclaves types.List) WorkloadRuntimeModel {
+		return workloadPlacementModel(types.StringNull(), policy, enclaves).Runtime
+	}
+
+	cases := map[string]struct {
+		plan, state WorkloadRuntimeModel
+		want        bool
+	}{
+		"policy removed":                 {runtime(none, nullList), runtime(availability, nullList), true},
+		"pin removed":                    {runtime(none, nullList), runtime(none, pin), true},
+		"pin emptied":                    {runtime(none, types.ListValueMust(types.StringType, nil)), runtime(none, pin), true},
+		"pin dropped for availability":   {runtime(availability, nullList), runtime(none, pin), false},
+		"never placed":                   {runtime(none, nullList), runtime(none, nullList), false},
+		"unresolved policy":              {runtime(types.StringUnknown(), nullList), runtime(availability, nullList), false},
+		"unresolved Enclave list":        {runtime(none, types.ListUnknown(types.StringType)), runtime(availability, nullList), false},
+		"unresolved Enclave in the list": {runtime(none, types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()})), runtime(none, pin), false},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := workloadPlacementCleared(tc.plan, tc.state); got != tc.want {
+				t.Fatalf("workloadPlacementCleared = %v, want %v", got, tc.want)
 			}
 		})
 	}

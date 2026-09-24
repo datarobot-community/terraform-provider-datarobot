@@ -1,3 +1,10 @@
+## [0.12.5] - 2026-09-24
+
+### Fixed
+
+- `datarobot_workload` refuses at plan time to remove the Enclave placement (`runtime.enclave_selection_policy`, or `runtime.enclaves` without a policy) while `use_case_id` stays the same. 0.12.4 applied that in place as `enclaveSelectionPolicy: null`, which the platform ignores because a Workload stays on the Enclave it runs on ([RAPTOR-20492](https://datarobot.atlassian.net/browse/RAPTOR-20492)), and which newer Workload API versions refuse with `422 ENCLAVE_POLICY_REQUIRED`. Set `enclave_selection_policy = "availability"` to drop a pin, name another Enclave to move, or also remove `use_case_id` to run outside any Enclave, which replaces the Workload.
+- A Workload whose policy 0.12.4 already removed plans no change and stays on its Enclave. Set the policy again so the configuration matches where it runs.
+
 ## [0.12.4] - 2026-09-23
 
 ### Fixed

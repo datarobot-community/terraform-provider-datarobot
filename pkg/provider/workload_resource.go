@@ -246,9 +246,11 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when " +
 							"`enclaves` names one.\n\n" +
 							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID: the new placement intent is recorded on the platform, " +
-							"which applies it when it schedules the new version. Removing the policy records no placement, but the platform does not yet move an already placed " +
-							"Workload off its Enclave for that; it keeps serving from where it runs. The endpoint is re-read afterwards, since it is served from the Enclave the " +
-							"Workload runs on. Not read back from the platform: the API omits it on " +
+							"which applies it when it schedules the new version. The endpoint is re-read afterwards, since it is served from the Enclave the " +
+							"Workload runs on.\n\n" +
+							"Removing it while `use_case_id` stays the same is refused at plan time, because the platform does not move a Workload off the Enclave it runs on. " +
+							"Set `availability` instead to let the scheduler choose, or remove `use_case_id` as well to run outside any Enclave, which replaces the Workload. " +
+							"Not read back from the platform: the API omits it on " +
 							"clusters without the Enclave entitlement, so the configured value is what stays in state.",
 						Validators: []validator.String{
 							stringvalidator.OneOf(
@@ -264,7 +266,8 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Requires `use_case_id`, and only applies with `enclave_selection_policy = \"manual\"`, which is assumed when this is set and no policy is given. " +
 							"The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.\n\n" +
 							"This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. " +
-							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards.",
+							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards. " +
+							"Removing it without setting `enclave_selection_policy` is refused at plan time, like removing the policy.",
 						Validators: []validator.List{
 							listvalidator.SizeAtMost(1),
 						},
@@ -496,6 +499,10 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 // ModifyPlan marks endpoint and status unknown when the Enclave placement changes: the
 // endpoint host is the Enclave the Workload runs on and the change rolls a new version, so
 // UseStateForUnknown would carry stale values.
+//
+// It also refuses removing the placement in place: the platform keeps a Workload on the
+// Enclave it runs on and refuses to clear its policy. A changed `use_case_id` replaces the
+// Workload instead, so the check only runs while it stays the same.
 func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
 		return // destroy or create: nothing to compare against
@@ -503,13 +510,29 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 
 	policyPath := path.Root("runtime").AtName("enclave_selection_policy")
 	enclavesPath := path.Root("runtime").AtName("enclaves")
+	useCasePath := path.Root("use_case_id")
 
 	var plan, state WorkloadRuntimeModel
+	var planUseCase, stateUseCase types.String
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, policyPath, &plan.EnclaveSelectionPolicy)...)
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, enclavesPath, &plan.Enclaves)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, useCasePath, &planUseCase)...)
 	resp.Diagnostics.Append(req.State.GetAttribute(ctx, policyPath, &state.EnclaveSelectionPolicy)...)
 	resp.Diagnostics.Append(req.State.GetAttribute(ctx, enclavesPath, &state.Enclaves)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, useCasePath, &stateUseCase)...)
 	if resp.Diagnostics.HasError() || !workloadPlacementChanged(plan, state) {
+		return
+	}
+
+	if planUseCase.Equal(stateUseCase) && workloadPlacementCleared(plan, state) {
+		resp.Diagnostics.AddAttributeError(policyPath, "Cannot move a Workload off its Enclave in place",
+			"This change would update the Workload in place with no Enclave placement, because `use_case_id` is unchanged. "+
+				"The platform does not move a Workload off the Enclave it runs on, so that restarts and rollouts keep its endpoint: "+
+				"the Workload API refuses to clear the placement (422 ENCLAVE_POLICY_REQUIRED), and older versions accept it without acting on it.\n\n"+
+				"To stay on the Use Case's Enclaves, keep a policy: `enclave_selection_policy = \"availability\"` lets the scheduler choose and "+
+				"drops a pin without moving the Workload, and `enclaves` pins it to another Enclave the Use Case grants. "+
+				"To run outside any Enclave, remove `use_case_id` as well. That replaces the Workload with a new ID and endpoint; "+
+				"set `lifecycle { create_before_destroy = true }` to keep the current one serving until the new one runs.")
 		return
 	}
 
@@ -803,8 +826,19 @@ func workloadPlacementChanged(plan, state WorkloadRuntimeModel) bool {
 		!slices.Equal(enclaveNames(p.Enclaves), enclaveNames(s.Enclaves))
 }
 
+// workloadPlacementCleared reports a plan that drops the placement in state. Unknown values
+// may still resolve to a placement, so they do not count.
+func workloadPlacementCleared(plan, state WorkloadRuntimeModel) bool {
+	if resolveWorkloadRuntime(state).EnclaveSelectionPolicy.IsNull() {
+		return false
+	}
+	enclaves := plan.Enclaves
+	pinned := !enclaves.IsNull() && (enclaves.IsUnknown() || len(enclaves.Elements()) > 0)
+	return plan.EnclaveSelectionPolicy.IsNull() && !pinned
+}
+
 // workloadRuntimeUpdate writes both placement fields whenever the placement changed, so a
-// removed pin or policy reaches the platform instead of being read as "keep the stored one".
+// removed pin reaches the platform instead of being read as "keep the stored one".
 func workloadRuntimeUpdate(plan, state WorkloadRuntimeModel) client.WorkloadRuntime {
 	runtime := workloadRuntimeToClient(resolveWorkloadRuntime(plan))
 	runtime.ExplicitEnclavePlacement = workloadPlacementChanged(plan, state)
