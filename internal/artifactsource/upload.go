@@ -8,15 +8,17 @@ import (
 )
 
 // UploadFiles pushes an explicit set of already-walked files into
-// catalogID, creating a new catalog when catalogID is empty. Routing is the
-// same one PushDirectory uses: stage while the change set is at or below
+// catalogID, creating a new catalog when catalogID is empty. It routes on
+// the size of the change set: stage while it is at or below
 // StageVsZipFileThreshold files and StageVsZipBytesThreshold bytes, zip
 // above it.
 //
-// Exported for internal/artifactsource/sync's Engine, which uploads the
-// Uploads rows of a three-way SyncPlan rather than a whole directory walk
-// and must not re-port the stage/zip split. An empty file set is a no-op
-// that reports no new catalog version.
+// This is the package's only upload entry point, and it uploads exactly
+// what it is handed. Which files those are is decided by
+// internal/artifactsource/sync's Engine, from the Uploads rows of a
+// three-way SyncPlan; paths that plan removes go out separately as Files
+// API deletes. An empty file set is a no-op that reports no new catalog
+// version.
 func UploadFiles(ctx context.Context, client filesapi.Client, catalogID, overwrite string, files []LocalFile) (catalogIDOut, versionID string, err error) {
 	if client == nil {
 		return "", "", errors.New("files API client is required")

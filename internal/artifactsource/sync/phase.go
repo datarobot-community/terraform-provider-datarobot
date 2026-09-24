@@ -108,6 +108,11 @@ func (e *Engine) gather(ctx context.Context) error {
 	}
 	e.base = baseFromManifest(manifest)
 	e.baseExtra = manifest.Extra
+	// Phase 6 stamps every manifest it writes with the version it recorded
+	// (see newBaseManifest); the empty manifest preflight seeds a new state
+	// directory with carries none. So a missing stamp means no sync has
+	// ever recorded a BASE here, which is what adoptPinnedBase repairs.
+	e.baseRecorded = manifest.SyncedVersionID != nil
 
 	// A locked artifact is immutable, so nothing can be pushed into it.
 	// That refuses a sync, but it must not refuse a plan: the caller asks
@@ -283,6 +288,11 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 		return errors.New(formatCaseCollisions(collisions))
 	}
 
+	baseVer, err := e.adoptPinnedBase(ctx)
+	if err != nil {
+		return err
+	}
+
 	if !e.drifted {
 		e.remote = copyManifest(e.base)
 		return nil
@@ -297,6 +307,13 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 		return nil
 	}
 
+	// BASE was just adopted from the very version REMOTE would be fetched
+	// at, so the second listing would page through the same rows again.
+	if baseVer != "" && baseVer == e.remoteVer {
+		e.remote = copyManifest(e.base)
+		return nil
+	}
+
 	remote, err := e.files.AllFiles(ctx, e.catalogID, e.remoteVer)
 	if err != nil {
 		return fmt.Errorf("fetch remote manifest: %w", err)
@@ -304,6 +321,59 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 	e.remote = fromFilesAPI(remote)
 
 	return nil
+}
+
+// adoptPinnedBase (phase 2) gives a directory that has never recorded a
+// sync the catalog version it is already pinned at for a BASE, and returns
+// the version it read. It returns "" when it left BASE alone.
+//
+// An empty BASE cannot express a deletion. A file the user removed from
+// source.dir is then in neither BASE nor LOCAL, so the three-way diff never
+// produces a row for it: the whole tree classifies LOCAL_ADDED and
+// re-uploads, the removed file is never deleted from the catalog, and it
+// keeps reaching the image build. On a drifted directory it is worse — the
+// file is REMOTE_ADDED instead, and execute downloads it back into
+// source.dir, undoing the deletion on disk as well.
+//
+// That empty BASE is not a rare state. preflight seeds a new state
+// directory with an empty manifest.json while config.json is seeded with
+// the catalog version the resource already points at (BindCatalog), and the
+// state directory is git-ignored, so it is missing on every fresh checkout,
+// every CI runner, and every artifact that predates this engine. The first
+// sync in each of those is the one that loses deletions.
+//
+// The repair is the version the directory is pinned at: whatever the
+// catalog held there is what this tree was last pushed from, which is
+// exactly what a common ancestor means. With it, a path the catalog holds
+// and the tree does not classifies LOCAL_DELETED and is removed, an edited
+// path is LOCAL_MODIFIED, an untouched path is UNCHANGED and is no longer
+// re-uploaded. A directory with no pinned version has no ancestor to adopt
+// and keeps the empty BASE: nothing is in the catalog to delete anyway.
+func (e *Engine) adoptPinnedBase(ctx context.Context) (string, error) {
+	if e.baseRecorded || len(e.base) > 0 {
+		return "", nil
+	}
+
+	// The version config.json pins, falling back to the artifact's own:
+	// a state directory the CLI's `dr artifact code init` left without one
+	// still has the live code_ref to stand in as the ancestor.
+	pinned := ptrOrEmpty(e.config.LastSyncedVersionID)
+	if pinned == "" {
+		pinned = e.remoteVer
+	}
+
+	if e.catalogID == "" || pinned == "" {
+		return "", nil
+	}
+
+	files, err := e.files.AllFiles(ctx, e.catalogID, pinned)
+	if err != nil {
+		return "", fmt.Errorf("fetch base manifest for catalog version %s: %w", ShortVer(pinned), err)
+	}
+
+	e.base = fromFilesAPI(files)
+
+	return pinned, nil
 }
 
 func baseFromManifest(m wapi.Manifest) BaseManifest {

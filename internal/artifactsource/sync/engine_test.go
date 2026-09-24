@@ -66,11 +66,17 @@ func (f *fakeArtifactStore) Get(ctx context.Context, artifactID string) (Artifac
 // execute tests. Unexpected methods error loudly so off-happy-path drift
 // fails tests instead of silently returning zero values.
 type fakeFilesAPI struct {
-	allFiles       map[string]filesapi.FileMeta
-	allFilesErr    error
-	allFilesCalled bool
-	lastCatalogID  string
-	lastVersionID  string
+	allFiles    map[string]filesapi.FileMeta
+	allFilesErr error
+	// allFilesByVersion serves a different listing per catalog version, for
+	// the tests that read two versions in one Plan: BASE from the version
+	// the directory is pinned at, REMOTE from the one the artifact moved
+	// to. A version with no entry falls back to allFiles.
+	allFilesByVersion map[string]map[string]filesapi.FileMeta
+	allFilesCalled    bool
+	allFilesVersions  []string
+	lastCatalogID     string
+	lastVersionID     string
 
 	// blobs is the remote file content DownloadFile serves, keyed by
 	// path; a path with no entry (and no downloadErr) is a test bug and
@@ -198,8 +204,12 @@ func (f *fakeFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) 
 	f.allFilesCalled = true
 	f.lastCatalogID = catalogID
 	f.lastVersionID = versionID
+	f.allFilesVersions = append(f.allFilesVersions, versionID)
 	if f.allFilesErr != nil {
 		return nil, f.allFilesErr
+	}
+	if byVersion, ok := f.allFilesByVersion[versionID]; ok {
+		return byVersion, nil
 	}
 	return f.allFiles, nil
 }
@@ -1171,8 +1181,9 @@ func TestEngine_BindCatalog_SeedsWapiForATreeWithoutIt(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "cat-state", e.catalogID)
-	assert.False(t, files.allFilesCalled, "a seeded version matches, so the catalog is not drifted")
-	assert.Len(t, plan.Uploads, 1, "BASE is empty, so the whole tree is pushed once")
+	assert.True(t, files.allFilesCalled, "a seeded directory has no recorded BASE, so the pinned version is read for one")
+	assert.Equal(t, "ver-state", files.lastVersionID)
+	assert.Len(t, plan.Uploads, 1, "the pinned version holds nothing, so the whole tree is pushed once")
 
 	cfg, err := wapi.LoadConfig(dir)
 	require.NoError(t, err)
@@ -1504,4 +1515,197 @@ func TestEngine_Plan_OwnerLookupFailureIsReported(t *testing.T) {
 	_, err = e.Plan(context.Background())
 	require.ErrorContains(t, err, "check which artifact")
 	require.ErrorContains(t, err, "503 from the API")
+}
+
+// planPaths renders one plan group as "path/CLASSIFICATION" strings, so a
+// failing assertion says which cell of the three-way table was reached.
+func planPaths(rows []FileAction) []string {
+	out := make([]string, 0, len(rows))
+	for _, fa := range rows {
+		out = append(out, fa.Path+"/"+fa.Classification.String())
+	}
+	sort.Strings(out)
+
+	return out
+}
+
+// A directory with no state at all is the shape every fresh checkout, CI
+// runner, and pre-engine artifact is in: preflight seeds it from the
+// resource's catalog pointers and writes an empty manifest.json. The
+// version those pointers name is the tree's real common ancestor, and
+// without it a file deleted from source.dir has no row in the diff at all.
+func TestEngine_Plan_SeededDirectoryAdoptsPinnedVersionAsBase(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "same", "edited.py": "new body"})
+
+	sameHash, sameSize := hashContent("same")
+	oldHash, oldSize := hashContent("old body")
+	goneHash, goneSize := hashContent("dead code")
+
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{
+			"agent.py":  {Hash: sameHash, Size: sameSize},
+			"edited.py": {Hash: oldHash, Size: oldSize},
+			"gone.py":   {Hash: goneHash, Size: goneSize},
+		},
+	}
+
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.BindCatalog("cat-1", "ver-2")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"gone.py/LOCAL_DELETED"}, planPaths(plan.Deletes),
+		"a path the catalog holds and the tree does not is a deletion to push")
+	assert.Equal(t, []string{"edited.py/LOCAL_MODIFIED"}, planPaths(plan.Uploads),
+		"an untouched file must not be re-uploaded just because BASE was missing")
+	assert.Empty(t, plan.Downloads)
+	assert.Empty(t, plan.Conflicts)
+
+	assert.Equal(t, []string{"ver-2"}, files.allFilesVersions,
+		"BASE and REMOTE are the same version here, so one listing serves both")
+}
+
+// The drifted half of the same gap: with an empty BASE the deleted file
+// classifies REMOTE_ADDED and execute downloads it back into source.dir,
+// so the deletion is undone on disk as well as in the catalog.
+func TestEngine_Plan_SeededDirectoryAdoptsPinnedVersionWhenDrifted(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "same"})
+
+	sameHash, sameSize := hashContent("same")
+	goneHash, goneSize := hashContent("dead code")
+	addedHash, addedSize := hashContent("added by a colleague")
+
+	files := &fakeFilesAPI{
+		allFilesByVersion: map[string]map[string]filesapi.FileMeta{
+			// What the directory was last pushed from.
+			"ver-2": {
+				"agent.py": {Hash: sameHash, Size: sameSize},
+				"gone.py":  {Hash: goneHash, Size: goneSize},
+			},
+			// Where the artifact has moved since: same files, plus one
+			// pushed by someone else.
+			"ver-3": {
+				"agent.py": {Hash: sameHash, Size: sameSize},
+				"gone.py":  {Hash: goneHash, Size: goneSize},
+				"added.py": {Hash: addedHash, Size: addedSize},
+			},
+		},
+		versions: []string{"ver-3", "ver-2", "ver-1"},
+	}
+
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-3"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	// Terraform state still records ver-2; the artifact has moved to ver-3.
+	e.BindCatalog("cat-1", "ver-2")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"gone.py/LOCAL_DELETED"}, planPaths(plan.Deletes),
+		"a deleted file must stay deleted, not come back as a remote addition")
+	assert.Equal(t, []string{"added.py/REMOTE_ADDED"}, planPaths(plan.Downloads),
+		"a file only the catalog has really is a remote addition")
+	assert.Empty(t, plan.Uploads)
+	assert.Empty(t, plan.Conflicts)
+
+	assert.Equal(t, []string{"ver-2", "ver-3"}, files.allFilesVersions,
+		"BASE comes from the pinned version, REMOTE from the one the artifact moved to")
+}
+
+// A sync that removed the last file leaves a recorded BASE with no files in
+// it. That is a real empty BASE, not a missing one, and re-reading the
+// catalog for it would resurrect every path the sync just deleted.
+func TestEngine_Plan_RecordedEmptyBaseIsNotReplaced(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{
+		ArtifactID:          "art-1",
+		CatalogID:           "cat-1",
+		LastSyncedVersionID: "ver-1",
+	}))
+
+	syncedVer := "ver-1"
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
+		Version:         wapi.ManifestVersion,
+		SyncedVersionID: &syncedVer,
+		Files:           map[string]wapi.FileMeta{},
+	}))
+
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.False(t, files.allFilesCalled, "a BASE a sync recorded is taken as it stands")
+	assert.Equal(t, []string{"agent.py/LOCAL_ADDED"}, planPaths(plan.Uploads))
+	assert.Empty(t, plan.Deletes)
+}
+
+// A tree whose artifact has no code anywhere yet has no ancestor to adopt,
+// and nothing in a catalog to delete. It must not call the Files API.
+func TestEngine_Plan_NoPinnedVersionKeepsEmptyBase(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("", ""), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.False(t, files.allFilesCalled, "there is no pinned version to read a BASE from")
+	assert.Equal(t, []string{"agent.py/LOCAL_ADDED"}, planPaths(plan.Uploads))
+}
+
+// Reading the ancestor is not optional: a BASE the engine could not fetch
+// is the empty BASE that loses deletions, so Plan fails instead of
+// silently planning an additive push.
+func TestEngine_Plan_BaseAdoptionFailureIsReported(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
+
+	files := &fakeFilesAPI{allFilesErr: errors.New("boom")}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.BindCatalog("cat-1", "ver-2")
+
+	_, err = e.Plan(context.Background())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "fetch base manifest for catalog version ver-2")
 }

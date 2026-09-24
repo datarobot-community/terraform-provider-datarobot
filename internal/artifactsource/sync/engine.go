@@ -126,10 +126,15 @@ type Engine struct {
 	// baseExtra is what the loaded manifest.json held beyond the fields
 	// this build knows (a newer CLI's keys); phase 6 writes it back.
 	baseExtra map[string]json.RawMessage
-	local     LocalManifest
-	remote    RemoteManifest
-	catalogID string
-	remoteVer string
+	// baseRecorded is true when manifest.json was written by a sync that
+	// actually ran, rather than being the empty one preflight seeds a new
+	// state directory with. It tells a BASE that is genuinely empty from
+	// one that was never recorded (see adoptPinnedBase).
+	baseRecorded bool
+	local        LocalManifest
+	remote       RemoteManifest
+	catalogID    string
+	remoteVer    string
 	// artifactVer is the version the artifact's own code_ref pointed at
 	// during gather, which is not always remoteVer: a draft cloned from a
 	// locked artifact starts with no code_ref at all, while the state
