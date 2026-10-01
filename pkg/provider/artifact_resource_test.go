@@ -207,7 +207,7 @@ func testArtifactResource(t *testing.T, name string, isMock bool) {
 				},
 				ImportStateVerify:                    true,
 				ImportStateVerifyIdentifierAttribute: "artifact_id",
-				ImportStateVerifyIgnore:              []string{"id"},
+				ImportStateVerifyIgnore:              []string{"id", "created_artifact_repository_id"},
 			},
 		},
 	})

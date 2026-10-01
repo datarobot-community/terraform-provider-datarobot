@@ -284,6 +284,7 @@ type Service interface {
 	PatchArtifactCodeRef(ctx context.Context, artifactID, catalogID, catalogVersionID string) (*Artifact, error)
 	GetArtifact(ctx context.Context, id string) (*Artifact, error)
 	ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error)
+	DeleteArtifact(ctx context.Context, id string) error
 	DeleteArtifactRepository(ctx context.Context, id string) error
 	TriggerArtifactBuild(ctx context.Context, artifactID string) (*ArtifactBuildTriggerResponse, error)
 	GetArtifactBuild(ctx context.Context, artifactID, buildID string) (*ArtifactBuild, error)
