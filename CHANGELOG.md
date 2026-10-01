@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_workload` no longer destroys and recreates the Workload when only `use_case_id` changes ([RAPTOR-20494](https://datarobot.atlassian.net/browse/RAPTOR-20494)). Terraform destroys first, so when the create was then refused, for example with `422 NO_ELIGIBLE_ENCLAVE` because the new Use Case has no Enclave granted, the running Workload was gone and nothing replaced it. The provider now links the Workload to the new Use Case and unlinks it from the old one, and the Workload keeps its ID and endpoint. A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. Changing `use_case_id` together with the Enclave placement still replaces the Workload; the docs now state that Terraform destroys first there and Pulumi creates first, and recommend `lifecycle { create_before_destroy = true }`.
+
 ## [0.12.5] - 2026-09-24
 
 ### Fixed

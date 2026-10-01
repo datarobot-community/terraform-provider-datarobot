@@ -2777,6 +2777,184 @@ func expectWorkloadsCreatedAndDeleted(mockService *mock_client.MockService, work
 		}).Times(len(workloads))
 }
 
+// A use_case_id change on its own moves the link in place, new link first, and keeps the
+// Workload. A link that already exists, as after an import, is accepted.
+func TestIntegrationWorkloadChangesUseCaseInPlace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), firstUseCase, "workload", id).
+			Return(fmt.Errorf("409 Conflict: This workload is already linked to this Use Case.")),
+	)
+
+	resourceName := "datarobot_workload.test"
+	inPlace := resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+		plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+	}}
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				Check:  captureAttr(resourceName, "id", &initialID),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				ConfigPlanChecks: inPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					resource.TestCheckResourceAttr(resourceName, "endpoint", endpoint),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, "", "", ""),
+				ConfigPlanChecks: inPlace,
+				Check:            resource.TestCheckNoResourceAttr(resourceName, "use_case_id"),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				ConfigPlanChecks: inPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", firstUseCase),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+// The QA repro: a Workload on an Enclave repointed at another Use Case with its placement
+// kept. It used to be destroyed first; now only the link moves and nothing is rolled out.
+func TestIntegrationWorkloadChangesUseCaseInPlaceOnItsEnclave(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+	)
+
+	resourceName := "datarobot_workload.test"
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "availability", ""),
+				Check:  captureAttr(resourceName, "id", &initialID),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, secondUseCase, "availability", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+				}},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+// Changed together with the placement, use_case_id still replaces the Workload.
+func TestIntegrationWorkloadReplacesWhenUseCaseAndPlacementChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	artifactID, name := uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil),
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "", "")},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "availability", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("datarobot_workload.test", plancheck.ResourceActionReplace),
+				}},
+			},
+		},
+	})
+}
+
+// The new use_case_id reaches state as soon as the link moves, so a rollout that fails
+// afterwards leaves state matching the links and the next plan does not relink.
+func TestIntegrationWorkloadRecordsUseCaseWhenRolloutFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifact1, artifact2, name := uuid.NewString(), uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifact1, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).
+			Return(nil, fmt.Errorf("422 ENCLAVE_NOT_IN_USE_CASE")),
+	)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifact1, firstUseCase, "", "")},
+			{
+				Config:      workloadConfigWithPlacement(name, artifact2, secondUseCase, "", ""),
+				ExpectError: regexp.MustCompile("ENCLAVE_NOT_IN_USE_CASE"),
+			},
+			{
+				Config:   workloadConfigWithPlacement(name, artifact1, secondUseCase, "", ""),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -104,11 +104,10 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 					"It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the " +
 					"Enclaves an administrator has granted to this Use Case.\n\n" +
 					"Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: " +
-					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. " +
-					"Changing it replaces the Workload, which means a new ID and a new endpoint.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to.\n\n" +
+					"Changing it on its own moves the link in place: the Workload is linked to the new Use Case and unlinked from the old one, and keeps its ID and endpoint. " +
+					"A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. " +
+					"Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint.",
 			},
 			"runtime": schema.SingleNestedAttribute{
 				Required:            true,
@@ -404,6 +403,18 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
+	// Relinked before any rollout below, which the platform checks against the Workload's
+	// Use Case links.
+	if !planned.UseCaseID.Equal(state.UseCaseID) {
+		if err := updateUseCasesForEntity(ctx, r.provider.service, "workload", id,
+			useCaseIDList(state.UseCaseID), useCaseIDList(planned.UseCaseID)); err != nil {
+			resp.Diagnostics.AddError("Error changing the Use Case of the Workload", err.Error())
+			return
+		}
+		// Recorded now, so that state matches the links even if the rollout fails.
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("use_case_id"), planned.UseCaseID)...)
+	}
+
 	if artifactChanged || containerGroupsChanged || placementChanged || replacementPolicyChanged {
 		var runtime *client.WorkloadRuntime
 		if containerGroupsChanged || placementChanged {
@@ -432,11 +443,11 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		loadWorkloadIntoModel(workload, &plan)
 	}
 
-	// Guard, not a fix for an observed failure: Terraform re-plans at apply time with resolved
-	// values, so a placement that was unknown at plan and resolves unchanged never reaches
-	// Update with endpoint or status unknown. This only matters if either attribute ever loses
-	// UseStateForUnknown, since a computed attribute without a plan modifier plans as unknown.
-	if plan.Endpoint.IsUnknown() || plan.Status.IsUnknown() {
+	// A Use Case change alone reads nothing back, and `type` has no plan modifier, so it is
+	// still unknown here. Endpoint and status only are if they ever lose UseStateForUnknown:
+	// Terraform re-plans at apply time with resolved values, so a placement that was unknown
+	// at plan and resolves unchanged never reaches Update with either unknown.
+	if plan.Type.IsUnknown() || plan.Endpoint.IsUnknown() || plan.Status.IsUnknown() {
 		traceAPICall("GetWorkload")
 		workload, err := r.provider.service.GetWorkload(ctx, id)
 		if err != nil {
@@ -500,9 +511,10 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 // endpoint host is the Enclave the Workload runs on and the change rolls a new version, so
 // UseStateForUnknown would carry stale values.
 //
-// It also refuses removing the placement in place: the platform keeps a Workload on the
-// Enclave it runs on and refuses to clear its policy. A changed `use_case_id` replaces the
-// Workload instead, so the check only runs while it stays the same.
+// A `use_case_id` that changes together with the placement replaces the Workload, as it did
+// before it could change in place on its own; that is how a Workload leaves an Enclave. With
+// `use_case_id` unchanged, removing the placement is refused: the platform keeps a Workload
+// on the Enclave it runs on and refuses to clear its policy.
 func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
 		return // destroy or create: nothing to compare against
@@ -524,7 +536,12 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	if planUseCase.Equal(stateUseCase) && workloadPlacementCleared(plan, state) {
+	if !planUseCase.Equal(stateUseCase) {
+		resp.RequiresReplace = append(resp.RequiresReplace, useCasePath)
+		return
+	}
+
+	if workloadPlacementCleared(plan, state) {
 		resp.Diagnostics.AddAttributeError(policyPath, "Cannot move a Workload off its Enclave in place",
 			"This change would update the Workload in place with no Enclave placement, because `use_case_id` is unchanged. "+
 				"The platform does not move a Workload off the Enclave it runs on, so that restarts and rollouts keep its endpoint: "+
@@ -1025,6 +1042,15 @@ func workloadMetadataChanged(plan, state WorkloadResourceModel) bool {
 	return !plan.Name.Equal(state.Name) ||
 		!plan.Description.Equal(state.Description) ||
 		!plan.Importance.Equal(state.Importance)
+}
+
+// useCaseIDList adapts `use_case_id` to the list updateUseCasesForEntity takes. A null ID must
+// become an empty list, or the helper would link or unlink an empty Use Case ID.
+func useCaseIDList(id types.String) []types.String {
+	if id.IsNull() {
+		return nil
+	}
+	return []types.String{id}
 }
 
 func workloadContainerGroupsChanged(plan, state WorkloadRuntimeModel) bool {
