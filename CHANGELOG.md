@@ -1,3 +1,12 @@
+## [0.12.5] - 2026-10-02
+
+### Fixed
+
+- `datarobot_workload` refuses at plan time to remove the Enclave placement while `use_case_id` stays the same, instead of sending a change the platform ignores or refuses (`422 ENCLAVE_POLICY_REQUIRED`). Set `enclave_selection_policy = "availability"`, name another Enclave, or also remove `use_case_id`, which replaces the Workload. A Workload whose policy 0.12.4 already removed keeps running on its Enclave; set the policy again.
+- `datarobot_workload` changes `use_case_id` in place instead of destroying the Workload first: it is linked to the new Use Case and unlinked from the old one, keeping its ID and endpoint. A Workload on an Enclave stays there, and its next rollout is refused until the new Use Case grants that Enclave. Changing `use_case_id` together with the placement still replaces the Workload.
+- Changing `use_case_ids` on deployments, datasets, custom applications and registered models no longer unlinks Use Cases that stay in the list.
+- Docs: adding a policy or a pin to a Workload that runs outside any Enclave does not reliably move it onto one in place; replace the Workload instead.
+
 ## [0.12.4] - 2026-09-23
 
 ### Fixed
