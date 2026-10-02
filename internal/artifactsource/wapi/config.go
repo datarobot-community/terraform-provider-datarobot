@@ -95,6 +95,30 @@ func SaveConfig(projectDir string, c Config) error {
 	return nil
 }
 
+// ReleaseArtifact unbinds projectDir from artifactID, for an artifact that outlives
+// the resource it was synced for: a destroy cannot delete a locked version. The
+// catalog pointers stay, so a resource re-created over the directory syncs into the
+// same catalog, as it does after its artifact was deleted. A directory that was
+// never synced, or is bound to another artifact, is left alone. Reports whether
+// config.json changed.
+func ReleaseArtifact(projectDir, artifactID string) (bool, error) {
+	cfg, err := LoadConfig(projectDir)
+	if errors.Is(err, ErrNotInitialized) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if cfg.ArtifactID != artifactID {
+		return false, nil
+	}
+	cfg.ArtifactID = ""
+	if err := SaveConfig(projectDir, cfg); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func writeConfig(projectDir string, c Config) error {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {

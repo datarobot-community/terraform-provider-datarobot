@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -159,9 +161,23 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 				},
 			},
 			"artifact_repository_id": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository.",
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository. " +
+					"What destroy deletes depends on whether this resource created the repository; see `created_artifact_repository_id`.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"created_artifact_repository_id": schema.StringAttribute{
+				Computed: true,
+				MarkdownDescription: "ID of the artifact repository this resource created, or empty when it created none: `artifact_repository_id` names a repository created elsewhere, or the artifact was imported. " +
+					"Recorded at create, and kept when `artifact_repository_id` later changes; setting `artifact_repository_id` to this same ID does not change it. " +
+					"Destroy deletes this repository with every version in it, locked versions and versions created outside Terraform included. " +
+					"In any other repository destroy deletes only the current version, and only if it is a draft: the Workload API does not delete a locked artifact, so a locked version stays, and destroy warns and lists the versions left there. " +
+					"The Workload API removes a repository together with its last artifact, so deleting a draft that was its only version removes that repository too. " +
+					"State written before this attribute existed gets it on the next plan, inferred from the configuration: a repository named in `artifact_repository_id` counts as created elsewhere, any other as created by this resource. " +
+					"Until that plan is applied, destroy treats the repository as created elsewhere, so it keeps a repository the resource did create, and says so in its warning.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -253,15 +269,19 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	userSuppliedRepository := IsKnown(data.ArtifactRepositoryID)
+	data.ID = types.StringValue(uuid.NewString())
+	createdRepository := createdArtifactRepository(createReq, artifact)
+	data.CreatedArtifactRepositoryID = types.StringValue(createdRepository)
 	createdArtifact := artifact
 	if artifactSourceConfigured(&data) {
 		syncedArtifact, syncErr := r.syncArtifactSourceAndBuild(ctx, &data, nil, createdArtifact, "", &resp.Diagnostics)
 		if syncErr != nil {
 			var timeoutErr *client.ArtifactBuildTimeoutError
 			isTimeout := errors.As(syncErr, &timeoutErr)
-			if !isTimeout {
-				r.rollbackArtifactCreate(ctx, createdArtifact, !userSuppliedRepository)
+			if isTimeout {
+				persistPartialArtifactCreate(ctx, resp, createdArtifact, &data)
+			} else {
+				r.rollbackArtifactCreate(ctx, createdArtifact, createdRepository != "")
 			}
 			summary := "Error uploading artifact source"
 			var buildErr *artifactBuildSyncError
@@ -285,7 +305,7 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		pinnedBuild := primaryContainerBuildInfo(preLockArtifact)
 		lockedArtifact, lockErr := r.lockArtifact(ctx, preLockArtifact.ID)
 		if lockErr != nil {
-			r.rollbackArtifactCreate(ctx, preLockArtifact, !userSuppliedRepository)
+			r.rollbackArtifactCreate(ctx, preLockArtifact, createdRepository != "")
 			resp.Diagnostics.AddError("Error locking Artifact after source upload", lockErr.Error())
 			return
 		}
@@ -293,12 +313,36 @@ func (r *ArtifactResource) Create(ctx context.Context, req resource.CreateReques
 		applyBuildInfoToPrimaryContainer(artifact, pinnedBuild)
 	}
 
-	data.ID = types.StringValue(uuid.NewString())
 	loadArtifactIntoModel(artifact, &data)
 	if err := refreshArtifactSourceDirHash(&data); err != nil {
 		artifactSourceDirHashWarning(&resp.Diagnostics, err)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// createdArtifactRepository returns the repository a create put the artifact in when
+// that repository is new, and "" when the request named an existing one and the API
+// used it. Only a repository this resource created is deleted on destroy.
+func createdArtifactRepository(req *client.CreateArtifactRequest, artifact *client.Artifact) string {
+	if artifact.ArtifactRepositoryID == nil {
+		return ""
+	}
+	if req.ArtifactRepositoryID != nil && *req.ArtifactRepositoryID == *artifact.ArtifactRepositoryID {
+		return ""
+	}
+	return *artifact.ArtifactRepositoryID
+}
+
+// persistPartialArtifactCreate records an artifact whose image build outlived the wait,
+// so Terraform keeps track of it instead of losing it along with the repository the
+// create may have made. A create that fails with state is tainted, so the next apply
+// replaces it unless it is untainted. No source.dir_hash is recorded, so a retry syncs.
+func persistPartialArtifactCreate(ctx context.Context, resp *resource.CreateResponse, artifact *client.Artifact, data *ArtifactResourceModel) {
+	loadArtifactIntoModel(artifact, data)
+	if data.Source != nil {
+		data.Source.DirHash = types.StringNull()
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 func (r *ArtifactResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -518,16 +562,193 @@ func (r *ArtifactResource) Delete(ctx context.Context, req resource.DeleteReques
 	if data.ArtifactRepositoryID.IsNull() || data.ArtifactRepositoryID.IsUnknown() {
 		return
 	}
+	repositoryID := data.ArtifactRepositoryID.ValueString()
 
-	traceAPICall("DeleteArtifactRepository")
-	if err := r.provider.service.DeleteArtifactRepository(ctx, data.ArtifactRepositoryID.ValueString()); err != nil {
-		if _, ok := err.(*client.NotFoundError); !ok {
-			resp.Diagnostics.AddError(
-				fmt.Sprintf("Error deleting Artifact Repository with ID %s", data.ArtifactRepositoryID.ValueString()),
-				err.Error(),
-			)
-		}
+	// State written before the record existed has none until its next plan. Its
+	// repository counts as created elsewhere: keeping a repository the resource did
+	// create can be undone, deleting other clients' locked versions cannot.
+	createdRepository := data.CreatedArtifactRepositoryID.ValueString()
+
+	if createdRepository != repositoryID {
+		r.deleteArtifactVersion(ctx, data, &resp.Diagnostics)
 	}
+	if createdRepository != "" {
+		r.deleteArtifactRepository(ctx, createdRepository, &resp.Diagnostics)
+	}
+}
+
+func (r *ArtifactResource) deleteArtifactRepository(ctx context.Context, repositoryID string, diags *diag.Diagnostics) {
+	traceAPICall("DeleteArtifactRepository")
+	err := r.provider.service.DeleteArtifactRepository(ctx, repositoryID)
+	if err == nil {
+		return
+	}
+	summary := fmt.Sprintf("Error deleting Artifact Repository with ID %s", repositoryID)
+	if _, ok := err.(*client.NotFoundError); !ok {
+		diags.AddError(summary, err.Error())
+		return
+	}
+	traceAPICall("GetArtifactRepository")
+	_, getErr := r.provider.service.GetArtifactRepository(ctx, repositoryID)
+	if detail := artifactNotFoundOnDeleteDetail("artifact repository", repositoryID, getErr); detail != "" {
+		diags.AddError(summary, detail)
+	}
+}
+
+// artifactNotFoundOnDeleteDetail explains a 404 to a delete, given the read made after
+// it. The Workload API answers 404 both for something already gone and for a principal
+// without the owner role, so only a 404 on the read too means gone; then it returns "".
+func artifactNotFoundOnDeleteDetail(kind, repositoryID string, getErr error) string {
+	if _, gone := getErr.(*client.NotFoundError); gone {
+		return ""
+	}
+	if getErr != nil {
+		return fmt.Sprintf("The Workload API answered 404 Not Found to the delete, and reading the %s back failed, so it may still exist: %s", kind, getErr)
+	}
+	return fmt.Sprintf("The Workload API answered 404 Not Found, but the %s still exists. "+
+		"Deleting it requires the owner role on artifact repository %s, which this principal lacks; "+
+		"ask the repository owner to delete it, or remove the resource from state with `terraform state rm`.", kind, repositoryID)
+}
+
+// deleteArtifactVersion destroys an artifact in a repository this resource did not
+// create, by deleting only its current version. The Workload API refuses to delete a
+// locked artifact, so a locked version stays in the repository, and so does every
+// earlier version this resource created there; the warning lists what is left.
+func (r *ArtifactResource) deleteArtifactVersion(ctx context.Context, data ArtifactResourceModel, diags *diag.Diagnostics) {
+	if !IsKnown(data.ArtifactID) {
+		return
+	}
+	artifactID := data.ArtifactID.ValueString()
+	repositoryID := data.ArtifactRepositoryID.ValueString()
+
+	if data.Status.ValueString() == string(client.ArtifactStatusLocked) {
+		r.keepLockedArtifact(ctx, data, diags)
+		return
+	}
+
+	traceAPICall("DeleteArtifact")
+	err := r.provider.service.DeleteArtifact(ctx, artifactID)
+	if err != nil {
+		traceAPICall("GetArtifact")
+		current, getErr := r.provider.service.GetArtifact(ctx, artifactID)
+		summary := fmt.Sprintf("Error deleting Artifact with ID %s", artifactID)
+		_, deleteNotFound := err.(*client.NotFoundError)
+		switch {
+		case getErr == nil && current.Status == client.ArtifactStatusLocked:
+			// Locked since the state was last refreshed (-refresh=false, a saved
+			// destroy plan); the 409 is the locked refusal, not a workload using it.
+			r.keepLockedArtifact(ctx, data, diags)
+		case deleteNotFound:
+			if detail := artifactNotFoundOnDeleteDetail("artifact", repositoryID, getErr); detail != "" {
+				diags.AddError(summary, detail)
+			}
+		default:
+			diags.AddError(summary, err.Error())
+		}
+		return
+	}
+
+	remaining, ok := r.artifactRepositoryVersions(ctx, repositoryID)
+	switch {
+	case !ok:
+	case len(remaining) == 0:
+		diags.AddWarning(
+			"Artifact repository removed with its last version",
+			fmt.Sprintf("Deleting draft Artifact %s also removed artifact repository %s: the Workload API deletes a repository together with its last artifact. "+
+				"A configuration whose artifact_repository_id names %s fails to apply until it names another repository or none.",
+				artifactID, repositoryID, repositoryID),
+		)
+	default:
+		diags.AddWarning(
+			"Artifact versions left in their repository",
+			fmt.Sprintf("Deleted draft Artifact %s. %s %s",
+				artifactID, artifactRepositoryNotCreatedNote(data), artifactRepositoryRemainingNote(repositoryID, remaining)),
+		)
+	}
+}
+
+// keepLockedArtifact is the destroy of a locked version in a repository this resource
+// did not create: nothing on the platform can delete it, so it is left in place, and the
+// source directory, if any, is released so a resource re-created over it is not refused
+// as a second owner of the directory while this version lives on.
+func (r *ArtifactResource) keepLockedArtifact(ctx context.Context, data ArtifactResourceModel, diags *diag.Diagnostics) {
+	artifactID := data.ArtifactID.ValueString()
+	repositoryID := data.ArtifactRepositoryID.ValueString()
+
+	detail := fmt.Sprintf("Artifact %s is locked, and the Workload API does not delete a locked artifact, so it stays in artifact repository %s. %s",
+		artifactID, repositoryID, artifactRepositoryNotCreatedNote(data))
+	if remaining, ok := r.artifactRepositoryVersions(ctx, repositoryID); ok {
+		detail += " " + artifactRepositoryRemainingNote(repositoryID, remaining)
+	}
+	diags.AddWarning("Locked Artifact left in its repository", detail+" The Artifact is removed from Terraform state.")
+
+	if data.Source == nil || !IsKnown(data.Source.Dir) {
+		return
+	}
+	absDir, err := artifactSourceAbsDir(&data)
+	if err == nil {
+		_, err = wapi.ReleaseArtifact(absDir, artifactID)
+	}
+	if err != nil {
+		diags.AddWarning(
+			"Source directory still bound to the locked Artifact",
+			fmt.Sprintf("Could not release %s from Artifact %s: %s. A resource re-created over this directory in another repository is refused until %s is removed.",
+				data.Source.Dir.ValueString(), artifactID, err, wapi.Dir(data.Source.Dir.ValueString())),
+		)
+	}
+}
+
+// artifactRepositoryVersions lists the live versions in a repository. ok is false when
+// the list cannot be read, and callers then say nothing about what is left.
+func (r *ArtifactResource) artifactRepositoryVersions(ctx context.Context, repositoryID string) ([]client.Artifact, bool) {
+	traceAPICall("ListArtifacts")
+	versions, err := r.provider.service.ListArtifacts(ctx, &client.ListArtifactsRequest{RepositoryID: repositoryID})
+	return versions, err == nil
+}
+
+func artifactRepositoryNotCreatedNote(data ArtifactResourceModel) string {
+	repositoryID := data.ArtifactRepositoryID.ValueString()
+	if data.CreatedArtifactRepositoryID.IsNull() {
+		return fmt.Sprintf("This resource's state predates created_artifact_repository_id, so it has no record of creating repository %s, "+
+			"and destroy does not delete the repository: that would delete every version in it, including any created outside Terraform. "+
+			"If this resource did create %s, delete it in DataRobot once nothing in it is needed.", repositoryID, repositoryID)
+	}
+	return fmt.Sprintf("This resource has no record of creating repository %s (artifact_repository_id names an existing repository, or the artifact was imported), "+
+		"so destroy does not delete the repository: that would delete every version in it, including any created outside Terraform.", repositoryID)
+}
+
+// artifactRepositoryRemainingNoteLimit caps how many versions a destroy warning names.
+const artifactRepositoryRemainingNoteLimit = 10
+
+func artifactRepositoryRemainingNote(repositoryID string, remaining []client.Artifact) string {
+	names := make([]string, 0, artifactRepositoryRemainingNoteLimit)
+	for i, a := range remaining {
+		if i == artifactRepositoryRemainingNoteLimit {
+			names = append(names, fmt.Sprintf("and %d more", len(remaining)-i))
+			break
+		}
+		names = append(names, fmt.Sprintf("%s (%s)", a.ID, a.Status))
+	}
+	versions := "versions"
+	if len(remaining) == 1 {
+		versions = "version"
+	}
+	return fmt.Sprintf("Repository %s still holds %d %s: %s. Any earlier versions this resource created there are among them; a locked version cannot be deleted on its own.",
+		repositoryID, len(remaining), versions, strings.Join(names, ", "))
+}
+
+// inferCreatedArtifactRepository fills in created_artifact_repository_id for state written
+// before it existed. A repository the configuration names counts as created elsewhere;
+// any other counts as created by this resource, which is how destroy treated every
+// repository before the record existed.
+func inferCreatedArtifactRepository(config *ArtifactResourceModel, state ArtifactResourceModel) types.String {
+	if config != nil && !config.ArtifactRepositoryID.IsNull() {
+		return types.StringValue("")
+	}
+	if IsKnown(state.ArtifactRepositoryID) {
+		return state.ArtifactRepositoryID
+	}
+	return types.StringValue("")
 }
 
 func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
@@ -581,6 +802,10 @@ func (r *ArtifactResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	if !isCreate {
+		if state.CreatedArtifactRepositoryID.IsNull() {
+			plan.CreatedArtifactRepositoryID = inferCreatedArtifactRepository(configPtr, state)
+		}
+
 		if plan.ArtifactRepositoryID.IsNull() && !state.ArtifactRepositoryID.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("artifact_repository_id"), state.ArtifactRepositoryID)...)
 			plan.ArtifactRepositoryID = state.ArtifactRepositoryID
@@ -1477,6 +1702,7 @@ func validateImageBuildConfig(resp *resource.ValidateConfigResponse, containerPa
 func (r *ArtifactResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(uuid.NewString()))...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("artifact_id"), types.StringValue(req.ID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("created_artifact_repository_id"), types.StringValue(""))...)
 }
 
 func artifactCreateRequest(data ArtifactResourceModel) *client.CreateArtifactRequest {

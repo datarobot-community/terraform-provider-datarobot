@@ -745,8 +745,9 @@ func (s *ServiceImpl) GetArtifact(ctx context.Context, id string) (*Artifact, er
 }
 
 type ListArtifactsRequest struct {
-	Status string `url:"status,omitempty"`
-	Limit  int    `url:"limit,omitempty"`
+	Status       string `url:"status,omitempty"`
+	RepositoryID string `url:"repositoryId,omitempty"`
+	Limit        int    `url:"limit,omitempty"`
 }
 
 func (s *ServiceImpl) ListArtifacts(ctx context.Context, req *ListArtifactsRequest) ([]Artifact, error) {
@@ -755,9 +756,11 @@ func (s *ServiceImpl) ListArtifacts(ctx context.Context, req *ListArtifactsReque
 	maxResults := 0
 	pageSize := defaultPageSize
 	status := ""
+	repositoryID := ""
 
 	if req != nil {
 		status = req.Status
+		repositoryID = req.RepositoryID
 		if req.Limit > 0 {
 			maxResults = req.Limit
 			pageSize = req.Limit
@@ -765,8 +768,9 @@ func (s *ServiceImpl) ListArtifacts(ctx context.Context, req *ListArtifactsReque
 	}
 
 	queryReq := &ListArtifactsRequest{
-		Status: status,
-		Limit:  pageSize,
+		Status:       status,
+		RepositoryID: repositoryID,
+		Limit:        pageSize,
 	}
 	pathValues, _ := query.Values(queryReq)
 	nextURL := "/artifacts/?" + pathValues.Encode()
@@ -796,6 +800,23 @@ func (s *ServiceImpl) ListArtifacts(ctx context.Context, req *ListArtifactsReque
 	}
 
 	return results, nil
+}
+
+// DeleteArtifact deletes one artifact version. The Workload API refuses a locked
+// artifact (409) and removes the repository with its last artifact.
+func (s *ServiceImpl) DeleteArtifact(ctx context.Context, id string) error {
+	return Delete(s.client, ctx, "/artifacts/"+id+"/")
+}
+
+// ArtifactRepository is the part of GET /artifactRepositories/{id}/ the provider reads.
+type ArtifactRepository struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	NumArtifacts int    `json:"numArtifacts"`
+}
+
+func (s *ServiceImpl) GetArtifactRepository(ctx context.Context, id string) (*ArtifactRepository, error) {
+	return Get[ArtifactRepository](s.client, ctx, "/artifactRepositories/"+id+"/")
 }
 
 func (s *ServiceImpl) DeleteArtifactRepository(ctx context.Context, id string) error {

@@ -621,8 +621,19 @@ func artifactDraftHasNoImage(artifact *client.Artifact) bool {
 	return true
 }
 
+// rollbackArtifactCreate removes what a failed create made: the repository when the
+// create made one, otherwise only the new version, which is still a draft at every
+// rollback point. Both are best effort; the create's own error is what gets reported.
 func (r *ArtifactResource) rollbackArtifactCreate(ctx context.Context, artifact *client.Artifact, deleteRepository bool) {
-	if artifact == nil || !deleteRepository || artifact.ArtifactRepositoryID == nil {
+	if artifact == nil {
+		return
+	}
+	if !deleteRepository {
+		traceAPICall("DeleteArtifact")
+		_ = r.provider.service.DeleteArtifact(ctx, artifact.ID)
+		return
+	}
+	if artifact.ArtifactRepositoryID == nil {
 		return
 	}
 	traceAPICall("DeleteArtifactRepository")
