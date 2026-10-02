@@ -107,7 +107,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to.\n\n" +
 					"Changing it on its own moves the link in place: the Workload is linked to the new Use Case and unlinked from the old one, and keeps its ID and endpoint. " +
 					"A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. " +
-					"Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint.",
+					"Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint. " +
+					"Terraform destroys the current Workload first, so if the platform refuses the create nothing is left: " +
+					"set `lifecycle { create_before_destroy = true }` on a Workload that serves traffic.",
 			},
 			"runtime": schema.SingleNestedAttribute{
 				Required:            true,
@@ -247,6 +249,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID: the new placement intent is recorded on the platform, " +
 							"which applies it when it schedules the new version. The endpoint is re-read afterwards, since it is served from the Enclave the " +
 							"Workload runs on.\n\n" +
+							"Adding it to a Workload that runs outside any Enclave does not reliably move the Workload onto one: the platform accepts the update, " +
+							"but where it cannot place the new version next to the running one it fails the rollout (`no recorded placement; cannot co-locate candidate proton`), " +
+							"so the apply fails and the Workload keeps serving outside the Enclave. Replace the Workload instead, for example with `terraform apply -replace`.\n\n" +
 							"Removing it while `use_case_id` stays the same is refused at plan time, because the platform does not move a Workload off the Enclave it runs on. " +
 							"Set `availability` instead to let the scheduler choose, or remove `use_case_id` as well to run outside any Enclave, which replaces the Workload. " +
 							"Not read back from the platform: the API omits it on " +
@@ -266,6 +271,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							"The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.\n\n" +
 							"This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. " +
 							"Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards. " +
+							"Adding it to a Workload that runs outside any Enclave has the same limitation as adding a policy. " +
 							"Removing it without setting `enclave_selection_policy` is refused at plan time, like removing the policy.",
 						Validators: []validator.List{
 							listvalidator.SizeAtMost(1),
