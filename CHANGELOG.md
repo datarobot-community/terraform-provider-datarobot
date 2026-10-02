@@ -1,3 +1,10 @@
+## [0.12.6] - 2026-10-02
+
+### Fixed
+
+- `datarobot_workload` import now reads `use_case_id` from the Workload's Use Case link when it is linked to exactly one Use Case, so its real `use_case_id` no longer plans a change after import. A configuration that leaves `use_case_id` out now plans removing the link, which for a Workload on an Enclave is a replacement; `use_case_id` is still not refreshed.
+- A Workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, like any Workload imported by an earlier version. Setting it to one of them records the existing link without linking the Workload again, in place even together with a placement change, and removing such a Workload's placement is refused until it is set.
+
 ## [0.12.5] - 2026-10-02
 
 ### Fixed
