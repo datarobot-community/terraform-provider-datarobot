@@ -131,10 +131,10 @@ output "workload_endpoint" {
 # Enclave placement: confine a workload to an Enclave. Placement is governed by a
 # Use Case, so use_case_id is required whenever an Enclave is targeted. Setting
 # use_case_id on its own only links the workload to the Use Case and leaves it
-# outside any Enclave. Changing the policy or the Enclave moves the workload in
-# place and keeps its ID; changing use_case_id replaces the workload, which means
-# a new ID and a new endpoint. A placed workload cannot leave its Enclave in
-# place: removing the placement while use_case_id stays is refused at plan time.
+# outside any Enclave. Changing the policy, the Enclave or use_case_id updates
+# the workload in place and keeps its ID; changing use_case_id together with the
+# placement replaces it. A placed workload cannot leave its Enclave in place:
+# removing the placement while use_case_id stays is refused at plan time.
 
 resource "datarobot_use_case" "enclave_example" {
   name        = "example-enclave-use-case"
@@ -165,7 +165,7 @@ resource "datarobot_workload" "enclave_pinned" {
 
 Changes to `artifact_id` or `runtime` call the Workload API **replacement** endpoints during `Update`. Terraform does **not** destroy and recreate the workload. The workload `id` and `endpoint` stay stable across artifact and runtime updates.
 
-This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes, which still replaces the workload; see [Changing placement](#changing-placement).
+This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes together with the Enclave placement, which still replaces the workload; see [Changing placement](#changing-placement).
 
 For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
@@ -196,6 +196,7 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 | `runtime.container_groups` only | `PATCH /workloads/{id}/settings` + poll | No — platform defaults |
 | `runtime.enclave_selection_policy` or `runtime.enclaves` only | `PATCH /workloads/{id}/settings` + poll | No (platform defaults) |
 | `name`, `description`, `importance` | `PATCH /workloads/{id}/` | N/A |
+| `use_case_id` only | `POST /useCases/{new}/workloads/{id}/`, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
@@ -242,11 +243,13 @@ A workload that runs on an Enclave cannot leave it in place. The platform keeps 
 | Let the scheduler choose among the Use Case's Enclaves | `enclave_selection_policy = "availability"`, no `enclaves` | In place. A pin is dropped and the workload stays where it runs |
 | Move to another Enclave the Use Case grants | `enclaves = ["<other-enclave>"]` | In place. The rollout schedules the new version onto that Enclave |
 | Run outside any Enclave | Remove `use_case_id` together with the policy and `enclaves` | Replaced: new ID and endpoint |
-| Run under another Use Case | Change `use_case_id` and keep a policy | Replaced: new ID and endpoint |
+| Run under another Use Case | Change `use_case_id` and keep the placement | In place. The link moves and the workload stays where it runs |
 
 Replacing the workload while keeping `use_case_id` is not an alternative: on an organization with Enclaves the create refuses a Use Case link without a policy (`ENCLAVE_TARGETING_REQUIRED`), and Terraform destroys first, so nothing would be left.
 
-`use_case_id` is the exception. It still **replaces** the workload, a destroy and create with a **new workload ID and a new endpoint**, because the platform fixes the Use Case link at creation and offers no way to move it. Terraform destroys first, so if the create is then refused (the new Use Case has no Enclave granted, or the organization places Use Case-linked workloads on Enclaves and the configuration names no policy) the old workload is already gone. Set `lifecycle { create_before_destroy = true }` on a workload whose Use Case may change, or avoid changing it on a running workload. That works because workload names are not unique: two workloads briefly share the name while the new one comes up.
+Changing `use_case_id` on its own is also an **in-place** update: the provider links the workload to the new Use Case, then unlinks it from the old one, and the workload keeps its ID and endpoint. A workload on an Enclave stays there, since the platform does not move a placed workload when its Use Case changes, and it checks that Enclave against the workload's Use Cases on every restart and rollout. If the new Use Case does not grant the Enclave, the change applies, but the platform refuses the workload's next rollout until the Enclave is granted to that Use Case or `use_case_id` changes back. The workload keeps serving meanwhile.
+
+Changed together with the placement, `use_case_id` still **replaces** the workload, a destroy and create with a **new workload ID and a new endpoint**. That includes removing it together with the placement to run outside any Enclave. Terraform destroys before it creates, so if the create is then refused (the new Use Case has no Enclave granted, or the organization places Use Case-linked workloads on Enclaves and the configuration names no policy) the old workload is already gone. Set `lifecycle { create_before_destroy = true }` on a workload that serves traffic. That works because workload names are not unique: two workloads briefly share the name while the new one comes up. Pulumi creates the replacement before it deletes the original by default, so a failed create there leaves the original running.
 
 A workload whose policy was removed with provider 0.12.4, before this check existed, has no policy in state and keeps running on its Enclave. Its configuration plans no change, but on an organization with Enclaves it cannot be created from scratch, since the create refuses a Use Case link without a policy. Set `enclave_selection_policy = "availability"` again to make the configuration describe where it runs; that is an in-place update.
 
@@ -276,7 +279,9 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
 - `use_case_id` (String) The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the Enclaves an administrator has granted to this Use Case.
 
-Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. Changing it replaces the Workload, which means a new ID and a new endpoint.
+Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to.
+
+Changing it on its own moves the link in place: the Workload is linked to the new Use Case and unlinked from the old one, and keeps its ID and endpoint. A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint.
 
 ### Read-Only
 
