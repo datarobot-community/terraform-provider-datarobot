@@ -883,6 +883,35 @@ func (mr *MockServiceMockRecorder) DeleteApplicationSource(ctx, id any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApplicationSource", reflect.TypeOf((*MockService)(nil).DeleteApplicationSource), ctx, id)
 }
 
+// DeleteArtifact mocks base method.
+func (m *MockService) DeleteArtifact(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteArtifact", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteArtifact indicates an expected call of DeleteArtifact.
+func (mr *MockServiceMockRecorder) DeleteArtifact(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteArtifact", reflect.TypeOf((*MockService)(nil).DeleteArtifact), ctx, id)
+}
+
+// GetArtifactRepository mocks base method.
+func (m *MockService) GetArtifactRepository(ctx context.Context, id string) (*client.ArtifactRepository, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArtifactRepository", ctx, id)
+	ret0, _ := ret[0].(*client.ArtifactRepository)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetArtifactRepository indicates an expected call of GetArtifactRepository.
+func (mr *MockServiceMockRecorder) GetArtifactRepository(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifactRepository", reflect.TypeOf((*MockService)(nil).GetArtifactRepository), ctx, id)
+}
+
 // DeleteArtifactRepository mocks base method.
 func (m *MockService) DeleteArtifactRepository(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -777,5 +780,54 @@ func TestDebugEnabled(t *testing.T) {
 		if got := debugEnabled(tc.value); got != tc.want {
 			t.Errorf("debugEnabled(%q) = %v, want %v", tc.value, got, tc.want)
 		}
+	}
+}
+
+// updateUseCasesForEntity links the Use Cases only the plan names, then unlinks the ones only
+// the state names; a Use Case on both sides is left alone.
+func TestUpdateUseCasesForEntity(t *testing.T) {
+	ids := func(values ...string) []types.String {
+		var list []types.String
+		for _, v := range values {
+			list = append(list, types.StringValue(v))
+		}
+		return list
+	}
+
+	cases := map[string]struct {
+		state, plan []types.String
+		want        []string
+	}{
+		"Use Case added":        {ids("A"), ids("A", "B"), []string{"add B"}},
+		"Use Case removed":      {ids("A", "B"), ids("A"), []string{"remove B"}},
+		"Use Case replaced":     {ids("A"), ids("B"), []string{"add B", "remove A"}},
+		"order changed":         {ids("A", "B"), ids("B", "A"), nil},
+		"first Use Case":        {nil, ids("A"), []string{"add A"}},
+		"last Use Case removed": {ids("A"), nil, []string{"remove A"}},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			service := mock_client.NewMockService(ctrl)
+			var calls []string
+			service.EXPECT().AddEntityToUseCase(gomock.Any(), gomock.Any(), "deployment", "entity").DoAndReturn(
+				func(_ context.Context, useCaseID, _, _ string) error {
+					calls = append(calls, "add "+useCaseID)
+					return nil
+				}).AnyTimes()
+			service.EXPECT().RemoveEntityFromUseCase(gomock.Any(), gomock.Any(), "deployment", "entity").DoAndReturn(
+				func(_ context.Context, useCaseID, _, _ string) error {
+					calls = append(calls, "remove "+useCaseID)
+					return nil
+				}).AnyTimes()
+
+			if err := updateUseCasesForEntity(context.Background(), service, "deployment", "entity", tc.state, tc.plan); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(calls, tc.want) {
+				t.Fatalf("calls = %v, want %v", calls, tc.want)
+			}
+		})
 	}
 }

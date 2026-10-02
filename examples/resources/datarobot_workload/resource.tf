@@ -110,9 +110,10 @@ output "workload_endpoint" {
 # Enclave placement: confine a workload to an Enclave. Placement is governed by a
 # Use Case, so use_case_id is required whenever an Enclave is targeted. Setting
 # use_case_id on its own only links the workload to the Use Case and leaves it
-# outside any Enclave. Changing the policy or the Enclave moves the workload in
-# place and keeps its ID; changing use_case_id replaces the workload, which means
-# a new ID and a new endpoint.
+# outside any Enclave. Changing the policy, the Enclave or use_case_id updates
+# the workload in place and keeps its ID; changing use_case_id together with the
+# placement replaces it. A placed workload cannot leave its Enclave in place:
+# removing the placement while use_case_id stays is refused at plan time.
 
 resource "datarobot_use_case" "enclave_example" {
   name        = "example-enclave-use-case"

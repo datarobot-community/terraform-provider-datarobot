@@ -444,3 +444,30 @@ func TestSave_WithoutUnknownKeysWritesOnlyKnownOnes(t *testing.T) {
 	assert.Len(t, parsed, 6)
 	assert.True(t, json.Valid(raw))
 }
+
+func TestReleaseArtifact(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	released, err := ReleaseArtifact(dir, "art-1")
+	require.NoError(t, err)
+	assert.False(t, released, "a directory that was never synced has nothing to release")
+
+	require.NoError(t, Initialize(dir, InitOptions{ArtifactID: "art-1", CatalogID: "cat-1", LastSyncedVersionID: "ver-1"}))
+
+	released, err = ReleaseArtifact(dir, "art-2")
+	require.NoError(t, err)
+	assert.False(t, released, "a directory bound to another artifact stays bound")
+
+	released, err = ReleaseArtifact(dir, "art-1")
+	require.NoError(t, err)
+	assert.True(t, released)
+
+	cfg, err := LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.ArtifactID)
+	require.NotNil(t, cfg.CatalogID)
+	assert.Equal(t, "cat-1", *cfg.CatalogID)
+	require.NotNil(t, cfg.LastSyncedVersionID)
+	assert.Equal(t, "ver-1", *cfg.LastSyncedVersionID)
+}

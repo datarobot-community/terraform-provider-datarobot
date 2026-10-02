@@ -496,9 +496,10 @@ func TestRollbackArtifactCreate(t *testing.T) {
 		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{ID: "artifact-1"}, true)
 	})
 
-	t.Run("skips delete when repository was user supplied", func(t *testing.T) {
+	t.Run("deletes only the draft when repository was user supplied", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockService := mock_client.NewMockService(ctrl)
+		mockService.EXPECT().DeleteArtifact(gomock.Any(), "artifact-1").Return(nil)
 		resource := &ArtifactResource{provider: &Provider{service: mockService}}
 
 		resource.rollbackArtifactCreate(context.Background(), &client.Artifact{

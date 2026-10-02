@@ -873,3 +873,61 @@ func TestWorkloadRuntimeEncodesPlacementOnlyWhenSetOrExplicit(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteArtifactUsesArtifactPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/artifacts/art-1/" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	if err := NewService(NewClient(cfg)).DeleteArtifact(context.Background(), "art-1"); err != nil {
+		t.Fatalf("DeleteArtifact returned error: %v", err)
+	}
+}
+
+func TestListArtifactsFiltersByRepository(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("repositoryId"); got != "repo-1" {
+			t.Fatalf("repositoryId = %q, want repo-1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "art-1"}, {"id": "art-2"}}})
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	artifacts, err := NewService(NewClient(cfg)).ListArtifacts(context.Background(), &ListArtifactsRequest{RepositoryID: "repo-1"})
+	if err != nil {
+		t.Fatalf("ListArtifacts returned error: %v", err)
+	}
+	if len(artifacts) != 2 {
+		t.Fatalf("got %d artifacts, want 2", len(artifacts))
+	}
+}
+
+func TestGetArtifactRepositoryUsesRepositoryPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifactRepositories/repo-1/" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "repo-1", "name": "repo", "numArtifacts": 2})
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	repo, err := NewService(NewClient(cfg)).GetArtifactRepository(context.Background(), "repo-1")
+	if err != nil {
+		t.Fatalf("GetArtifactRepository returned error: %v", err)
+	}
+	if repo.ID != "repo-1" || repo.NumArtifacts != 2 {
+		t.Fatalf("got %+v", repo)
+	}
+}
