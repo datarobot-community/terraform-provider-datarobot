@@ -30,6 +30,7 @@ type Service interface {
 	DeleteUseCase(ctx context.Context, id string) error
 	AddEntityToUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
 	RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error
+	ListUseCasesForEntity(ctx context.Context, entityType, entityID string) ([]UseCaseResponse, error)
 
 	// Memory Space
 	CreateMemorySpace(ctx context.Context, req *MemorySpaceRequest) (*MemorySpaceResponse, error)
@@ -454,6 +455,18 @@ func (s *ServiceImpl) AddEntityToUseCase(ctx context.Context, useCaseID, entityT
 
 func (s *ServiceImpl) RemoveEntityFromUseCase(ctx context.Context, useCaseID, entityType, entityID string) error {
 	return Delete(s.client, ctx, "/useCases/"+useCaseID+"/"+entityType+"s/"+entityID+"/")
+}
+
+// ListUseCasesForEntity returns the Use Cases an entity is linked to, at most 100 (the API's
+// page limit). It reads one page only: the `next` link of this listing drops the entityId and
+// entityType filters, so following it would page through every Use Case instead.
+func (s *ServiceImpl) ListUseCasesForEntity(ctx context.Context, entityType, entityID string) ([]UseCaseResponse, error) {
+	resp, err := Get[PaginatedResponse[UseCaseResponse]](s.client, ctx,
+		"/useCases/?entityId="+url.QueryEscape(entityID)+"&entityType="+url.QueryEscape(entityType)+"&limit=100")
+	if err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
 }
 
 func (s *ServiceImpl) CreateUseCase(ctx context.Context, req *UseCaseRequest) (resp *CreateUseCaseResponse, err error) {

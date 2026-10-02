@@ -2414,6 +2414,21 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegisteredModels", reflect.TypeOf((*MockService)(nil).ListRegisteredModels), ctx, req)
 }
 
+// ListUseCasesForEntity mocks base method.
+func (m *MockService) ListUseCasesForEntity(ctx context.Context, entityType, entityID string) ([]client.UseCaseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListUseCasesForEntity", ctx, entityType, entityID)
+	ret0, _ := ret[0].([]client.UseCaseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListUseCasesForEntity indicates an expected call of ListUseCasesForEntity.
+func (mr *MockServiceMockRecorder) ListUseCasesForEntity(ctx, entityType, entityID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUseCasesForEntity", reflect.TypeOf((*MockService)(nil).ListUseCasesForEntity), ctx, entityType, entityID)
+}
+
 // PatchArtifact mocks base method.
 func (m *MockService) PatchArtifact(ctx context.Context, id string, req *client.PatchArtifactRequest) (*client.Artifact, error) {
 	m.ctrl.T.Helper()
