@@ -311,18 +311,49 @@ func diagWarningSummaries(diags diag.Diagnostics) []string {
 	return out
 }
 
-// State written before created_artifact_repository_id existed has it null, and destroy
-// keeps deleting the repository as earlier provider versions did.
-func TestArtifactRepositoryOwnershipLegacyStateDeletesRepository(t *testing.T) {
+// State written before created_artifact_repository_id existed has it null until its next
+// plan. Destroy then counts the repository as created elsewhere and keeps it, saying why.
+func TestArtifactRepositoryOwnershipLegacyStateKeepsRepository(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockService := mock_client.NewMockService(ctrl)
 	repoID := uuid.NewString()
-	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+	locked := artifactFixture(uuid.NewString(), &repoID, "legacy")
+	mockService.EXPECT().ListArtifacts(gomock.Any(), gomock.Any()).Return([]client.Artifact{*locked}, nil)
 
 	r := &ArtifactResource{provider: &Provider{service: mockService}}
-	diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(artifactFixture(uuid.NewString(), &repoID, "legacy"), types.StringNull()))
+	diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringNull()))
 	if diags.HasError() {
 		t.Fatalf("delete: %v", diags)
+	}
+	warnings := diags.Warnings()
+	if len(warnings) != 1 || !strings.Contains(warnings[0].Detail(), "predates created_artifact_repository_id") {
+		t.Fatalf("expected the legacy-state warning, got %v", diags)
+	}
+}
+
+// The backfill plan differs from state only in created_artifact_repository_id. On a
+// locked artifact its apply reads the version back; it must not mint a new one.
+func TestArtifactRepositoryOwnershipBackfillKeepsLockedVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+	repoID := uuid.NewString()
+	locked := artifactFixture(uuid.NewString(), &repoID, "backfill")
+	mockService.EXPECT().GetArtifact(gomock.Any(), locked.ID).Return(locked, nil)
+
+	state := artifactDeleteTestModel(locked, types.StringNull())
+	plan := state
+	plan.CreatedArtifactRepositoryID = types.StringValue("")
+
+	r := &ArtifactResource{provider: &Provider{service: mockService}}
+	result, diags := testArtifactApplyUpdate(context.Background(), r, plan, state)
+	if diags.HasError() {
+		t.Fatalf("update: %v", diags)
+	}
+	if result.ArtifactID.ValueString() != locked.ID {
+		t.Fatalf("artifact_id = %s, want the same version %s", result.ArtifactID, locked.ID)
+	}
+	if !result.CreatedArtifactRepositoryID.Equal(types.StringValue("")) {
+		t.Fatalf("created_artifact_repository_id = %s, want empty", result.CreatedArtifactRepositoryID)
 	}
 }
 
@@ -379,20 +410,79 @@ func TestArtifactRepositoryOwnershipStaleDraftLockedSinceRefresh(t *testing.T) {
 }
 
 // The Workload API answers 404 to a delete the principal may not make (it lacks the
-// owner role on the repository). The artifact is still there, so that is an error.
-func TestArtifactRepositoryOwnershipDeleteRefusedAsNotFound(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockService := mock_client.NewMockService(ctrl)
-	repoID := uuid.NewString()
-	draft := artifactFixtureWithStatus(uuid.NewString(), &repoID, "shared", client.ArtifactStatusDraft)
+// owner role on the repository). Only a 404 on the read after it means already gone.
+func TestArtifactRepositoryOwnershipVersionDeleteNotFound(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		getErr    error
+		wantError string
+	}{
+		{"artifact still exists", nil, "owner role"},
+		{"read back fails", client.NewGenericError("503 Service Unavailable"), "may still exist"},
+		{"already gone", &client.NotFoundError{Resource: "artifact"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			repoID := uuid.NewString()
+			draft := artifactFixtureWithStatus(uuid.NewString(), &repoID, "shared", client.ArtifactStatusDraft)
 
-	mockService.EXPECT().DeleteArtifact(gomock.Any(), draft.ID).Return(&client.NotFoundError{Resource: draft.ID})
-	mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(draft, nil)
+			mockService.EXPECT().DeleteArtifact(gomock.Any(), draft.ID).Return(&client.NotFoundError{Resource: draft.ID})
+			if tc.getErr == nil {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(draft, nil)
+			} else {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(nil, tc.getErr)
+			}
 
-	r := &ArtifactResource{provider: &Provider{service: mockService}}
-	diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(draft, types.StringValue("")))
-	if !diags.HasError() || !strings.Contains(diags.Errors()[0].Detail(), "owner role") {
-		t.Fatalf("expected an owner role error, got %v", diags)
+			r := &ArtifactResource{provider: &Provider{service: mockService}}
+			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(draft, types.StringValue("")))
+			assertArtifactDeleteError(t, diags, tc.wantError)
+		})
+	}
+}
+
+// The same holds for the repository a resource created: a different principal may
+// destroy it and lack the owner role on it.
+func TestArtifactRepositoryOwnershipRepositoryDeleteNotFound(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		getErr    error
+		wantError string
+	}{
+		{"repository still exists", nil, "owner role"},
+		{"read back fails", client.NewGenericError("503 Service Unavailable"), "may still exist"},
+		{"already gone", &client.NotFoundError{Resource: "artifact repository"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			repoID := uuid.NewString()
+			locked := artifactFixture(uuid.NewString(), &repoID, "owned")
+
+			mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(&client.NotFoundError{Resource: repoID})
+			if tc.getErr == nil {
+				mockService.EXPECT().GetArtifactRepository(gomock.Any(), repoID).Return(&client.ArtifactRepository{ID: repoID}, nil)
+			} else {
+				mockService.EXPECT().GetArtifactRepository(gomock.Any(), repoID).Return(nil, tc.getErr)
+			}
+
+			r := &ArtifactResource{provider: &Provider{service: mockService}}
+			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringValue(repoID)))
+			assertArtifactDeleteError(t, diags, tc.wantError)
+		})
+	}
+}
+
+func assertArtifactDeleteError(t *testing.T, diags diag.Diagnostics, want string) {
+	t.Helper()
+	if want == "" {
+		if diags.HasError() {
+			t.Fatalf("expected success, got %v", diags)
+		}
+		return
+	}
+	if !diags.HasError() || !strings.Contains(diags.Errors()[0].Detail(), want) {
+		t.Fatalf("expected an error mentioning %q, got %v", want, diags)
 	}
 }
 

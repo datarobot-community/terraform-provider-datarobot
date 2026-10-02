@@ -910,3 +910,24 @@ func TestListArtifactsFiltersByRepository(t *testing.T) {
 		t.Fatalf("got %d artifacts, want 2", len(artifacts))
 	}
 }
+
+func TestGetArtifactRepositoryUsesRepositoryPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifactRepositories/repo-1/" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "repo-1", "name": "repo", "numArtifacts": 2})
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	repo, err := NewService(NewClient(cfg)).GetArtifactRepository(context.Background(), "repo-1")
+	if err != nil {
+		t.Fatalf("GetArtifactRepository returned error: %v", err)
+	}
+	if repo.ID != "repo-1" || repo.NumArtifacts != 2 {
+		t.Fatalf("got %+v", repo)
+	}
+}

@@ -808,6 +808,17 @@ func (s *ServiceImpl) DeleteArtifact(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/artifacts/"+id+"/")
 }
 
+// ArtifactRepository is the part of GET /artifactRepositories/{id}/ the provider reads.
+type ArtifactRepository struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	NumArtifacts int    `json:"numArtifacts"`
+}
+
+func (s *ServiceImpl) GetArtifactRepository(ctx context.Context, id string) (*ArtifactRepository, error) {
+	return Get[ArtifactRepository](s.client, ctx, "/artifactRepositories/"+id+"/")
+}
+
 func (s *ServiceImpl) DeleteArtifactRepository(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/artifactRepositories/"+id+"/")
 }
