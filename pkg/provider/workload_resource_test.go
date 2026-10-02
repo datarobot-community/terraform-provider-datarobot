@@ -2916,6 +2916,73 @@ func TestIntegrationWorkloadReplacesWhenUseCaseAndPlacementChange(t *testing.T) 
 	})
 }
 
+// A failed link call leaves the old link and the old use_case_id in state, and the next apply
+// retries the move.
+func TestIntegrationWorkloadKeepsUseCaseWhenLinkFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	// Counted rather than strictly ordered: an unexpected call inside resource.Test hangs
+	// instead of failing, so ordering is checked with t.Errorf.
+	var links, unlinks int
+	mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).DoAndReturn(
+		func(context.Context, string, string, string) error {
+			links++
+			if links == 1 {
+				return fmt.Errorf("403 Forbidden: cannot link to this Use Case")
+			}
+			return nil
+		}).AnyTimes()
+	mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).DoAndReturn(
+		func(context.Context, string, string, string) error {
+			unlinks++
+			if links < 2 {
+				t.Errorf("old Use Case unlinked before the new link succeeded")
+			}
+			return nil
+		}).AnyTimes()
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "", "")},
+			{
+				Config:      workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				ExpectError: regexp.MustCompile("Error changing the Use Case of the Workload"),
+			},
+			{
+				// The old value stayed in state.
+				Config:   workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				PlanOnly: true,
+			},
+			{
+				// The next apply retries the move.
+				Config: workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					func(*terraform.State) error {
+						if links != 2 || unlinks != 1 {
+							return fmt.Errorf("link calls = %d, unlink calls = %d, want 2 and 1", links, unlinks)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 // The new use_case_id reaches state as soon as the link moves, so a rollout that fails
 // afterwards leaves state matching the links and the next plan does not relink.
 func TestIntegrationWorkloadRecordsUseCaseWhenRolloutFails(t *testing.T) {

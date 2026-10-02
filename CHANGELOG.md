@@ -1,8 +1,9 @@
-## [Unreleased]
+## [0.12.6] - 2026-10-02
 
 ### Fixed
 
 - `datarobot_workload` no longer destroys and recreates the Workload when only `use_case_id` changes ([RAPTOR-20494](https://datarobot.atlassian.net/browse/RAPTOR-20494)). Terraform destroys first, so when the create was then refused, for example with `422 NO_ELIGIBLE_ENCLAVE` because the new Use Case has no Enclave granted, the running Workload was gone and nothing replaced it. The provider now links the Workload to the new Use Case and unlinks it from the old one, and the Workload keeps its ID and endpoint. A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. Changing `use_case_id` together with the Enclave placement still replaces the Workload; the docs now state that Terraform destroys first there and Pulumi creates first, and recommend `lifecycle { create_before_destroy = true }`.
+- Changing `use_case_ids` on `datarobot_deployment`, `datarobot_dataset_from_file`, `datarobot_dataset_from_url`, `datarobot_dataset_from_datasource`, `datarobot_custom_application`, `datarobot_custom_application_from_environment`, `datarobot_registered_model` and `datarobot_registered_model_from_leaderboard` no longer unlinks Use Cases that stay in the list. The shared link update never recorded a Use Case as present on both sides, so it linked every planned Use Case and then unlinked every previous one: going from `[A]` to `[A, B]` left only B linked.
 
 ## [0.12.5] - 2026-09-24
 
