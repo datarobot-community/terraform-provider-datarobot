@@ -110,10 +110,13 @@ Changed together with the placement, `use_case_id` still **replaces** the worklo
 
 A workload whose policy was removed with provider 0.12.4, before this check existed, has no policy in state and keeps running on its Enclave. Its configuration plans no change, but it cannot be created from scratch while its Use Case has Enclaves, since the create then refuses a Use Case link without a policy. Set `enclave_selection_policy = "availability"` again to make the configuration describe where it runs; that is an in-place update.
 
-None of the three is read back from the platform:
+None of the three is refreshed from the platform:
 
-- `use_case_id` is write-only. The link lives outside the workload entity and no API response carries it, so it cannot be refreshed or imported — an imported workload has it empty no matter which Use Case it is linked to, and a link changed outside Terraform is invisible to the plan.
+- `use_case_id` is not refreshed. The link lives outside the workload entity, so a link changed outside Terraform is invisible to the plan. Import does read it from the workload's Use Case links: a workload linked to exactly one Use Case is imported with that ID, so its real `use_case_id` plans no change, and a configuration that leaves it out plans removing the link, which for a workload on an Enclave is a replacement.
+- A workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, and so is one imported by a provider version that did not read the link. Set it to the one Terraform should manage: the provider records that existing link without linking the workload again, the others stay linked, and it is an in-place update even together with a placement change. Until it is set, removing the placement of such a workload is refused at plan.
 - `enclave_selection_policy` and `enclaves` are stripped from API responses on clusters without the Enclave entitlement, so the provider keeps your configured values in state rather than reading them back. A placement changed outside Terraform is not detected; `enclaves` is desired state the platform never rewrites, so that only happens if someone edits the workload by hand.
+
+After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, and a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies. All but the last roll the workload out again.
 
 ## Apply duration
 
