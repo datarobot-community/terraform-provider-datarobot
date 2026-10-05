@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -290,7 +291,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 							"keep_old_version_minutes": schema.Int64Attribute{
 								Optional:            true,
-								MarkdownDescription: "Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`.",
+								MarkdownDescription: "Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`, which current platform versions accept but do not apply: how long the old version is kept is a cluster setting (300 seconds by default).",
 								Validators: []validator.Int64{
 									int64validator.AtLeast(0),
 								},
@@ -421,6 +422,12 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("use_case_id"), planned.UseCaseID)...)
 	}
 
+	// Reads after a rollout that landed use readCtx, so that an interrupt during
+	// the wait that follows it cannot keep its result out of state.
+	readCtx := ctx
+	// A rollout that landed and then failed is recorded first and reported after.
+	var promotedVersionFailure string
+
 	if artifactChanged || containerGroupsChanged || placementChanged || replacementPolicyChanged {
 		var runtime *client.WorkloadRuntime
 		if containerGroupsChanged || placementChanged {
@@ -429,24 +436,39 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 		if err := r.triggerWorkloadReplacement(ctx, id, planned, runtime, artifactChanged, replacementPolicyChanged); err != nil {
 			var failedErr *client.ReplacementFailedError
-			if errors.As(err, &failedErr) {
+			var unconfirmedErr *client.ServingUnconfirmedError
+			switch {
+			case errors.As(err, &unconfirmedErr):
+				resp.Diagnostics.AddWarning("Previous Workload version may still be serving", unconfirmedErr.Error())
+				readCtx = context.WithoutCancel(ctx)
+			case errors.As(err, &failedErr):
 				resp.Diagnostics.AddError(
 					"Workload replacement failed",
 					failedErr.Error()+"\nWorkload logs: "+workloadLogsURL(r.provider.service.BaseURL(), id),
 				)
-			} else {
+				return
+			default:
 				resp.Diagnostics.AddError("Error replacing Workload", err.Error())
+				return
 			}
-			return
 		}
 
 		traceAPICall("GetWorkload")
-		workload, err := r.provider.service.GetWorkload(ctx, id)
+		workload, err := r.provider.service.GetWorkload(readCtx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading Workload after replacement", err.Error())
 			return
 		}
 		loadWorkloadIntoModel(workload, &plan)
+		// The new version can stop after it was promoted, while the wait went on.
+		// The workload runs the new artifact by then, so state has to say so, or the
+		// next apply asks for a rollout to the artifact it already runs.
+		if workloadStoppedServing(workload.Status) {
+			promotedVersionFailure = fmt.Sprintf(
+				"The new version was promoted, but the Workload now reports status %q.\nWorkload logs: %s",
+				workload.Status, workloadLogsURL(r.provider.service.BaseURL(), id),
+			)
+		}
 	}
 
 	// A Use Case change alone reads nothing back, and `type` has no plan modifier, so it is
@@ -455,7 +477,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	// at plan and resolves unchanged never reaches Update with either unknown.
 	if plan.Type.IsUnknown() || plan.Endpoint.IsUnknown() || plan.Status.IsUnknown() {
 		traceAPICall("GetWorkload")
-		workload, err := r.provider.service.GetWorkload(ctx, id)
+		workload, err := r.provider.service.GetWorkload(readCtx, id)
 		if err != nil {
 			resp.Diagnostics.AddError("Error reading Workload", err.Error())
 			return
@@ -467,6 +489,21 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	preserveWorkloadEnclavePlacement(planned, &plan)
 	applySentinels(planned, &plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if promotedVersionFailure != "" {
+		resp.Diagnostics.AddError("Workload replacement failed", promotedVersionFailure)
+	}
+}
+
+// workloadStoppedServing reports a Workload status from which it does not
+// answer requests. The Workload API also has terminated, which the client's
+// constants do not name.
+func workloadStoppedServing(status client.ProtonStatus) bool {
+	for _, stopped := range []client.ProtonStatus{client.ProtonStatusErrored, client.ProtonStatusStopped, "terminated"} {
+		if strings.EqualFold(string(status), string(stopped)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *WorkloadResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -1137,6 +1174,7 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 		// and clears the record as if it had completed; checking the served
 		// artifact is what turns that into an apply error.
 		ExpectedArtifactID: plan.ArtifactID.ValueString(),
+		WaitUntilServing:   artifactChanged,
 	})
 	return err
 }

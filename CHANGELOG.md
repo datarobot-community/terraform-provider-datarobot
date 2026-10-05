@@ -1,3 +1,10 @@
+## [0.12.6] - 2026-10-05
+
+### Fixed
+
+- `datarobot_workload` now waits, after a rollout to a new `artifact_id` is promoted, until requests through the prediction gateway reach the new version. The gateway kept sending requests to the previous version for up to five minutes after `Apply complete!`, so a smoke test run right after `terraform apply` or `pulumi up` reached the old version. Such an apply takes up to five minutes longer; Enclave-placed workloads and changes that keep the artifact are not affected.
+- A new version that stops after it was promoted now fails the apply and is still recorded in state, and an apply interrupted during that wait records the rollout with a warning. Neither leaves a later apply asking for a rollout to the artifact the workload already runs.
+
 ## [0.12.5] - 2026-10-02
 
 ### Fixed
