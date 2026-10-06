@@ -641,17 +641,14 @@ func setRouteCacheTTL(t *testing.T, ttl time.Duration) {
 }
 
 // promotedRollout serves a rollout of wl-1 from proton p-1 (art-1) to p-2
-// (art-2). The second poll finds the workload switched to p-2, and the record
-// stays in promoting for promotingFor after that before it clears.
+// (art-2), switched and settled by the second poll.
 type promotedRollout struct {
-	placements   []map[string]any
-	promotingFor time.Duration
+	placements []map[string]any
 }
 
 func (p *promotedRollout) serve(t *testing.T) *httptest.Server {
 	t.Helper()
 	reads := 0
-	var switchedAt time.Time
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/workloads/wl-1/" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -660,26 +657,17 @@ func (p *promotedRollout) serve(t *testing.T) *httptest.Server {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		reads++
-		var body map[string]any
-		switch {
-		case reads == 1:
+		if reads == 1 {
 			replacement := replacementJSON(ReplacementStatusInitializing, "")
 			replacement["candidateProtonIds"] = []string{"p-2"}
-			body = workloadServingJSON("art-1", replacement)
+			body := workloadServingJSON("art-1", replacement)
 			body["protonId"] = "p-1"
-		case reads == 2 || time.Since(switchedAt) < p.promotingFor:
-			if reads == 2 {
-				switchedAt = time.Now()
-			}
-			replacement := replacementJSON(ReplacementStatusPromoting, "")
-			replacement["candidateProtonIds"] = []string{"p-2"}
-			body = workloadServingJSON("art-2", replacement)
-			body["protonId"] = "p-2"
-		default:
-			body = workloadServingJSON("art-2", nil)
-			body["protonId"] = "p-2"
+			_ = json.NewEncoder(w).Encode(body)
+			return
 		}
-		if reads > 1 && p.placements != nil {
+		body := workloadServingJSON("art-2", nil)
+		body["protonId"] = "p-2"
+		if p.placements != nil {
 			body["placements"] = p.placements
 		}
 		_ = json.NewEncoder(w).Encode(body)
@@ -721,25 +709,30 @@ func TestWaitForWorkloadReplacementWaitsOutTheGatewayRouteCache(t *testing.T) {
 	}
 }
 
-func TestWaitForWorkloadReplacementCountsTheRouteCacheFromTheSwitch(t *testing.T) {
-	// The cached route expires a TTL after the switch, not after the record
-	// settles: a record that settles late leaves less of the wait, or none.
-	const routeTTL, promoting = 400 * time.Millisecond, 300 * time.Millisecond
-	setRouteCacheTTL(t, routeTTL)
-	rollout := &promotedRollout{promotingFor: promoting}
+func TestRouteExpiry(t *testing.T) {
+	settled := time.Date(2026, 10, 5, 10, 16, 9, 0, time.UTC)
+	switched := settled.Add(-4 * time.Minute)
 
-	start := time.Now()
-	err := waitForRollout(context.Background(), rollout.serve(t), WaitForWorkloadReplacementOptions{
-		ExpectedArtifactID: "art-2",
-		WaitUntilServing:   true,
-	})
-	if err != nil {
-		t.Fatalf("WaitForWorkloadReplacement returned error: %v", err)
+	// The cached route expires a TTL after the switch, not after the settle.
+	if got := routeExpiry(switched, settled, 5*time.Minute); !got.Equal(switched.Add(5 * time.Minute)) {
+		t.Fatalf("expected the TTL to count from the switch, got %s", got)
 	}
-	// Measured from the switch it ends about routeTTL in; from the settle, no
-	// earlier than promoting + routeTTL.
-	if elapsed := time.Since(start); elapsed >= promoting+routeTTL-100*time.Millisecond {
-		t.Fatalf("expected the TTL to count from the switch, the wait lasted %s", elapsed)
+	// A switch no poll caught happened by the time the rollout settled.
+	if got := routeExpiry(time.Time{}, settled, 5*time.Minute); !got.Equal(settled.Add(5 * time.Minute)) {
+		t.Fatalf("expected the TTL to count from the settle, got %s", got)
+	}
+}
+
+func TestWaitUntilNewVersionServesCountsFromTheSwitch(t *testing.T) {
+	// A switch seen almost a TTL ago leaves almost nothing to wait; counted from
+	// now, the wait would outlast the deadline and come back unconfirmed.
+	setRouteCacheTTL(t, time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	switchover := handover{switchedBy: time.Now().Add(-time.Minute + 50*time.Millisecond)}
+	if err := waitUntilNewVersionServes(ctx, &Workload{ID: "wl-1"}, switchover); err != nil {
+		t.Fatalf("expected the wait to end a TTL after the switch, got %v", err)
 	}
 }
 
@@ -766,10 +759,17 @@ func TestWaitForWorkloadReplacementWaitAfterPromotionIsNotBoundByTheRolloutTimeo
 func TestWaitForWorkloadReplacementDoesNotWaitWhenTheGatewayDoesNotRoute(t *testing.T) {
 	setRouteCacheTTL(t, time.Minute)
 	cases := []struct {
-		name    string
-		rollout *promotedRollout
-		opts    WaitForWorkloadReplacementOptions
+		name     string
+		rollout  *promotedRollout
+		opts     WaitForWorkloadReplacementOptions
+		routeTTL string
 	}{
+		{
+			name:     "wait turned off",
+			rollout:  &promotedRollout{},
+			opts:     WaitForWorkloadReplacementOptions{ExpectedArtifactID: "art-2", WaitUntilServing: true},
+			routeTTL: "0",
+		},
 		{
 			// An Enclave-placed workload is reached at its proton's own address.
 			name:    "Enclave placement",
@@ -784,6 +784,9 @@ func TestWaitForWorkloadReplacementDoesNotWaitWhenTheGatewayDoesNotRoute(t *test
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.routeTTL != "" {
+				t.Setenv(WorkloadGatewayRouteTTLEnvVar, tc.routeTTL)
+			}
 			// A wait would outlast this deadline and come back unconfirmed.
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -866,6 +869,28 @@ func TestHandoverObserve(t *testing.T) {
 			t.Fatalf("got %+v", h)
 		}
 	})
+}
+
+func TestWorkloadGatewayRouteTTL(t *testing.T) {
+	setRouteCacheTTL(t, 5*time.Minute)
+	cases := []struct {
+		env  string
+		want time.Duration
+	}{
+		{env: "", want: 5 * time.Minute},
+		{env: "90s", want: 90 * time.Second},
+		{env: "0", want: 0},
+		{env: "-1s", want: 5 * time.Minute},
+		{env: "five minutes", want: 5 * time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%q", tc.env), func(t *testing.T) {
+			t.Setenv(WorkloadGatewayRouteTTLEnvVar, tc.env)
+			if got := workloadGatewayRouteTTL(); got != tc.want {
+				t.Fatalf("expected %s, got %s", tc.want, got)
+			}
+		})
+	}
 }
 
 func TestWorkloadReplacementPollSettings(t *testing.T) {

@@ -28,6 +28,7 @@ const (
 	ProtonStatusStopping     ProtonStatus = "stopping"
 	ProtonStatusStopped      ProtonStatus = "stopped"
 	ProtonStatusErrored      ProtonStatus = "errored"
+	ProtonStatusTerminated   ProtonStatus = "terminated"
 )
 
 type AutoscalingPolicy struct {
@@ -174,6 +175,10 @@ const (
 const (
 	WorkloadReplacementPollIntervalEnvVar = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL"
 	WorkloadReplacementPollTimeoutEnvVar  = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT"
+	// WorkloadGatewayRouteTTLEnvVar overrides gatewayRouteCacheTTL, for a
+	// cluster whose prediction gateway caches routes for another duration, or
+	// with 0 to skip the wait.
+	WorkloadGatewayRouteTTLEnvVar = "DATAROBOT_WORKLOAD_GATEWAY_ROUTE_TTL"
 
 	defaultReplacementPollInterval = 5 * time.Second
 	defaultReplacementPollTimeout  = 30 * time.Minute
@@ -185,6 +190,20 @@ func workloadReplacementPollInterval() time.Duration {
 
 func workloadReplacementPollTimeout() time.Duration {
 	return durationFromEnv(WorkloadReplacementPollTimeoutEnvVar, defaultReplacementPollTimeout)
+}
+
+// workloadGatewayRouteTTL is gatewayRouteCacheTTL unless the environment sets
+// another duration. Unlike the poll settings, zero is valid: it skips the wait.
+func workloadGatewayRouteTTL() time.Duration {
+	raw := os.Getenv(WorkloadGatewayRouteTTLEnvVar)
+	if raw == "" {
+		return gatewayRouteCacheTTL
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return gatewayRouteCacheTTL
+	}
+	return d
 }
 
 func durationFromEnv(envVar string, fallback time.Duration) time.Duration {
@@ -433,7 +452,9 @@ type handover struct {
 	// candidates, and the first poll is when the switch was seen.
 	previousProtonID string
 	// switchedBy is when a poll first found the workload on another proton. The
-	// switch happened no later than that.
+	// switch happened no later than that, and up to one poll interval earlier,
+	// so a wait counted from it can run that much longer than the cached route
+	// lives, never shorter. Counting from the poll before could end it early.
 	switchedBy time.Time
 }
 
@@ -458,8 +479,10 @@ func (h *handover) observe(workload *Workload, now time.Time) {
 // workload's requests to the version that was active when it last looked: each
 // gateway process caches the workload's active proton for
 // PREDICTIONS_GATEWAY_TTL_CACHE_SEC (300 seconds by default) and does not drop
-// the entry when the workload switches to a new one. A variable so tests can
-// shorten it.
+// the entry when the workload switches to a new one. The Workload API does not
+// expose that setting, so this mirrors the gateway's default, and
+// WorkloadGatewayRouteTTLEnvVar overrides it for a cluster that changes it. A
+// variable so tests can shorten it.
 var gatewayRouteCacheTTL = 300 * time.Second
 
 // waitUntilNewVersionServes returns once requests to the workload's endpoint
@@ -468,13 +491,15 @@ var gatewayRouteCacheTTL = 300 * time.Second
 // For a workload served through the prediction gateway, the one with no
 // Enclave placement, promotion is not that moment. The gateway keeps routing
 // requests to the replaced version until its cached route expires, up to
-// gatewayRouteCacheTTL after the switch: on MTS staging the previous version
+// the gateway's route TTL after the switch: on MTS staging the previous version
 // answered every request for more than three minutes after apply returned.
 // Dropping the cached route at promotion in the gateway would fix this for
 // every client and make this wait unnecessary. An Enclave-placed workload's
 // endpoint is its current proton's own address, which the gateway does not
 // route, so there the new version answers from the switch on and nothing is
-// waited for.
+// waited for; WaitForWorkloadReplacementOptions.WaitUntilServing lets a caller
+// that knows the workload targets an Enclave skip it too, for a platform that
+// does not report placements. So does WorkloadGatewayRouteTTLEnvVar set to 0.
 //
 // The wait is a clock, not a poll. The replaced proton's status cannot end it
 // sooner: the platform stops that proton no earlier than its keep window, 300
@@ -487,12 +512,8 @@ func waitUntilNewVersionServes(ctx context.Context, workload *Workload, switchov
 		return nil
 	}
 
-	// A switch no poll caught happened before the rollout settled, which is now.
-	switchedBy := switchover.switchedBy
-	if switchedBy.IsZero() {
-		switchedBy = time.Now()
-	}
-	routeExpires := switchedBy.Add(gatewayRouteCacheTTL)
+	// A TTL of zero has expired at the switch, so it skips the wait.
+	routeExpires := routeExpiry(switchover.switchedBy, time.Now(), workloadGatewayRouteTTL())
 	remaining := time.Until(routeExpires)
 	if remaining <= 0 {
 		return nil
@@ -501,6 +522,16 @@ func waitUntilNewVersionServes(ctx context.Context, workload *Workload, switchov
 		return &ServingUnconfirmedError{WorkloadID: workload.ID, RouteExpires: routeExpires, Err: err}
 	}
 	return nil
+}
+
+// routeExpiry is when the gateway's cached route to the replaced version has
+// expired at the latest: ttl after the switch. A switch no poll caught (the
+// workload reports no proton) happened before the rollout settled, at now.
+func routeExpiry(switchedBy, now time.Time, ttl time.Duration) time.Time {
+	if switchedBy.IsZero() {
+		switchedBy = now
+	}
+	return switchedBy.Add(ttl)
 }
 
 // WorkloadEvent is one entry of the workload's activity log

@@ -495,10 +495,9 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 }
 
 // workloadStoppedServing reports a Workload status from which it does not
-// answer requests. The Workload API also has terminated, which the client's
-// constants do not name.
+// answer requests.
 func workloadStoppedServing(status client.ProtonStatus) bool {
-	for _, stopped := range []client.ProtonStatus{client.ProtonStatusErrored, client.ProtonStatusStopped, "terminated"} {
+	for _, stopped := range []client.ProtonStatus{client.ProtonStatusErrored, client.ProtonStatusStopped, client.ProtonStatusTerminated} {
 		if strings.EqualFold(string(status), string(stopped)) {
 			return true
 		}
@@ -886,6 +885,12 @@ func workloadPlacementChanged(plan, state WorkloadRuntimeModel) bool {
 		!slices.Equal(enclaveNames(p.Enclaves), enclaveNames(s.Enclaves))
 }
 
+// workloadTargetsEnclave reports a runtime that asks for Enclave placement. The
+// platform runs such a workload on an Enclave or refuses it.
+func workloadTargetsEnclave(runtime WorkloadRuntimeModel) bool {
+	return !resolveWorkloadRuntime(runtime).EnclaveSelectionPolicy.IsNull()
+}
+
 // workloadPlacementCleared reports a plan that drops the placement in state. Unknown values
 // may still resolve to a placement, so they do not count.
 func workloadPlacementCleared(plan, state WorkloadRuntimeModel) bool {
@@ -1174,7 +1179,11 @@ func (r *WorkloadResource) triggerWorkloadReplacement(
 		// and clears the record as if it had completed; checking the served
 		// artifact is what turns that into an apply error.
 		ExpectedArtifactID: plan.ArtifactID.ValueString(),
-		WaitUntilServing:   artifactChanged,
+		// Only a new artifact answers differently from the version it replaces, and
+		// an Enclave-placed workload is not reached through the prediction gateway.
+		// The client also skips the wait when the platform reports a placement; the
+		// configuration covers a platform that does not.
+		WaitUntilServing: artifactChanged && !workloadTargetsEnclave(plan.Runtime),
 	})
 	return err
 }
