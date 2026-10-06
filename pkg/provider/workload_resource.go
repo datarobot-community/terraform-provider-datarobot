@@ -415,17 +415,9 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	// Relinked before any rollout below, which the platform checks against the Workload's
 	// Use Case links.
 	if !planned.UseCaseID.Equal(state.UseCaseID) {
-		// With no Use Case in state (an import that found several links), the planned one may
-		// already be linked. Linking it again can store a second link record, because the
-		// platform's duplicate check compares only one existing link, and a later unlink then
-		// removes just one of the two; so an existing link is only recorded.
-		alreadyLinked := state.UseCaseID.IsNull() && workloadLinkedToUseCase(ctx, r.provider.service, id, planned.UseCaseID)
-		if !alreadyLinked {
-			if err := updateUseCasesForEntity(ctx, r.provider.service, "workload", id,
-				useCaseIDList(state.UseCaseID), useCaseIDList(planned.UseCaseID)); err != nil {
-				resp.Diagnostics.AddError("Error changing the Use Case of the Workload", err.Error())
-				return
-			}
+		if err := relinkWorkloadUseCase(ctx, r.provider.service, id, state, planned.UseCaseID, &resp.Diagnostics); err != nil {
+			resp.Diagnostics.AddError("Error changing the Use Case of the Workload", err.Error())
+			return
 		}
 		// Recorded now, so that state matches the links even if the rollout fails.
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("use_case_id"), planned.UseCaseID)...)
@@ -565,17 +557,17 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 // attribute empty rather than failing an import that does not depend on it.
 func importWorkloadUseCaseID(ctx context.Context, service client.Service, id string, diags *diag.Diagnostics) types.String {
 	traceAPICall("ListUseCasesForEntity")
-	useCases, err := service.ListUseCasesForEntity(ctx, "workload", id)
+	useCases, more, err := service.ListUseCasesForEntity(ctx, "workload", id)
 	if err != nil {
 		diags.AddWarning("Could not read the Use Case of the Workload",
 			"`use_case_id` is imported empty; set it in the configuration if the Workload is linked to a Use Case. "+err.Error())
 		return types.StringNull()
 	}
 
-	switch len(useCases) {
-	case 0:
+	switch {
+	case len(useCases) == 0 && !more:
 		return types.StringNull()
-	case 1:
+	case len(useCases) == 1 && !more:
 		return types.StringValue(useCases[0].ID)
 	}
 
@@ -583,26 +575,68 @@ func importWorkloadUseCaseID(ctx context.Context, service client.Service, id str
 	for i, useCase := range useCases {
 		ids[i] = useCase.ID
 	}
+	linked := strings.Join(ids, ", ")
+	if more {
+		linked += fmt.Sprintf(", and to more Use Cases than the first %d the API lists", len(ids))
+	}
 	diags.AddWarning("Workload is linked to several Use Cases",
 		fmt.Sprintf("`use_case_id` holds one Use Case, so it is imported empty. The Workload is linked to %s. "+
-			"Set `use_case_id` to the one Terraform should manage; the others stay linked.", strings.Join(ids, ", ")))
+			"Set `use_case_id` to the one Terraform should manage; the others stay linked.", linked))
 	return types.StringNull()
 }
 
-// workloadLinkedToUseCase reports whether the Workload is linked to the Use Case. A failed lookup
-// reports false, so the caller links it as it would without the check.
-func workloadLinkedToUseCase(ctx context.Context, service client.Service, id string, useCaseID types.String) bool {
+// relinkWorkloadUseCase moves the Workload's link from the Use Case in state to the planned one.
+//
+// The planned Use Case may already be linked: outside Terraform, or as one of several an import
+// could not choose between. Linking it again can store a second link record, because the
+// platform's duplicate check compares only one existing link, and a later unlink then removes
+// just one of the two; so an existing link counts as already in place, and only the old Use Case
+// is unlinked. A failed or incomplete lookup links it as it would without the check.
+//
+// With no Use Case in state on a placed Workload, the configuration may name one it is not
+// linked to. Its other links are not in state, so they stay; the warning says so.
+func relinkWorkloadUseCase(ctx context.Context, service client.Service, id string, state WorkloadResourceModel, planned types.String, diags *diag.Diagnostics) error {
+	current := useCaseIDList(state.UseCaseID)
+	linked, known := workloadLinkedToUseCase(ctx, service, id, planned)
+	if linked {
+		current = append(current, planned)
+	}
+	if err := updateUseCasesForEntity(ctx, service, "workload", id, current, useCaseIDList(planned)); err != nil {
+		return err
+	}
+
+	if known && !linked && workloadUseCaseNotRecorded(state.UseCaseID, state.Runtime) {
+		diags.AddWarning("Workload linked to another Use Case",
+			fmt.Sprintf("The Workload was not linked to Use Case %s, so it is now linked to it as well. "+
+				"The Use Cases it was already linked to are not in state, so Terraform leaves them linked; "+
+				"unlink them outside Terraform if the Workload should belong to this Use Case only.", planned.ValueString()))
+	}
+	return nil
+}
+
+// workloadLinkedToUseCase reports whether the Workload is linked to the Use Case; known is false
+// when the lookup failed, or listed only a first page that does not include it.
+func workloadLinkedToUseCase(ctx context.Context, service client.Service, id string, useCaseID types.String) (linked, known bool) {
 	if useCaseID.IsNull() || useCaseID.IsUnknown() {
-		return false
+		return false, false
 	}
 	traceAPICall("ListUseCasesForEntity")
-	useCases, err := service.ListUseCasesForEntity(ctx, "workload", id)
+	useCases, more, err := service.ListUseCasesForEntity(ctx, "workload", id)
 	if err != nil {
-		return false
+		return false, false
 	}
-	return slices.ContainsFunc(useCases, func(useCase client.UseCaseResponse) bool {
+	if slices.ContainsFunc(useCases, func(useCase client.UseCaseResponse) bool {
 		return useCase.ID == useCaseID.ValueString()
-	})
+	}) {
+		return true, true
+	}
+	return false, !more
+}
+
+// workloadUseCaseNotRecorded reports a placed Workload with no Use Case in state. A placed
+// Workload always has a Use Case, so only an import that could not record it leaves this state.
+func workloadUseCaseNotRecorded(useCaseID types.String, runtime WorkloadRuntimeModel) bool {
+	return useCaseID.IsNull() && !resolveWorkloadRuntime(runtime).EnclaveSelectionPolicy.IsNull()
 }
 
 // ModifyPlan marks endpoint and status unknown when the Enclave placement changes: the
@@ -638,7 +672,7 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	useCaseNotRecorded := stateUseCase.IsNull() && !resolveWorkloadRuntime(state).EnclaveSelectionPolicy.IsNull()
+	useCaseNotRecorded := workloadUseCaseNotRecorded(stateUseCase, state)
 
 	if !planUseCase.Equal(stateUseCase) && !useCaseNotRecorded {
 		resp.RequiresReplace = append(resp.RequiresReplace, useCasePath)

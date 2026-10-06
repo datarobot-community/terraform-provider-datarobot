@@ -1,11 +1,12 @@
-## [0.12.6] - 2026-10-05
+## [0.12.6] - 2026-10-07
 
 ### Fixed
 
 - `datarobot_workload` now waits, after a rollout to a new `artifact_id` is promoted, until requests through the prediction gateway reach the new version. The gateway kept sending requests to the previous version for up to five minutes after `Apply complete!`, so a smoke test run right after `terraform apply` or `pulumi up` reached the old version. Such an apply takes up to five minutes longer; Enclave-placed workloads and changes that keep the artifact are not affected, and `DATAROBOT_WORKLOAD_GATEWAY_ROUTE_TTL` changes the wait (`0` skips it).
 - A new version that stops after it was promoted now fails the apply and is still recorded in state, and an apply interrupted during that wait records the rollout with a warning. Neither leaves a later apply asking for a rollout to the artifact the workload already runs.
 - `datarobot_workload` import now reads `use_case_id` from the Workload's Use Case link when it is linked to exactly one Use Case, so its real `use_case_id` no longer plans a change after import. A configuration that leaves `use_case_id` out now plans removing the link, which for a Workload on an Enclave is a replacement; `use_case_id` is still not refreshed.
-- A Workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, like any Workload imported by an earlier version. Setting it to one of them records the existing link without linking the Workload again, in place even together with a placement change, and removing such a Workload's placement is refused until it is set.
+- A Workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, like any Workload imported by an earlier version. Setting it records the link in place, even together with a placement change, and warns if the Workload was not linked to that Use Case; removing such a Workload's placement is refused until it is set.
+- Changing `use_case_id` to a Use Case the Workload is already linked to now only unlinks the old one. Linking it again made the platform store a second link record, so a later change left the Workload linked to that Use Case while state said otherwise.
 
 ## [0.12.5] - 2026-10-02
 

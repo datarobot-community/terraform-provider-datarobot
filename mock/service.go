@@ -2415,12 +2415,13 @@ func (mr *MockServiceMockRecorder) ListRegisteredModels(ctx, req any) *gomock.Ca
 }
 
 // ListUseCasesForEntity mocks base method.
-func (m *MockService) ListUseCasesForEntity(ctx context.Context, entityType, entityID string) ([]client.UseCaseResponse, error) {
+func (m *MockService) ListUseCasesForEntity(ctx context.Context, entityType, entityID string) ([]client.UseCaseResponse, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListUseCasesForEntity", ctx, entityType, entityID)
 	ret0, _ := ret[0].([]client.UseCaseResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListUseCasesForEntity indicates an expected call of ListUseCasesForEntity.

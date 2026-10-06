@@ -1086,7 +1086,7 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 
 	// Step 2: ImportState — ImportState fetches workload, then framework calls Read again
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // ImportState fetch
-	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, nil)
+	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, false, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id).Return(workload, nil) // post-import Read
 
 	// Destroy
@@ -1134,7 +1134,7 @@ func TestIntegrationWorkloadImportReadsUseCase(t *testing.T) {
 	workload.Runtime.EnclaveSelectionPolicy = enclavePolicyPtr(client.EnclaveSelectionPolicyAvailability)
 	expectWorkloadsCreatedAndDeleted(mockService, workload)
 	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
-		Return([]client.UseCaseResponse{{ID: useCaseID}}, nil)
+		Return([]client.UseCaseResponse{{ID: useCaseID}}, false, nil)
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -1193,7 +1193,7 @@ func TestIntegrationWorkloadAdoptsUseCaseAfterImport(t *testing.T) {
 			return nil, fmt.Errorf("replaced")
 		}).AnyTimes()
 	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
-		Return([]client.UseCaseResponse{{ID: firstUseCase}, {ID: secondUseCase}}, nil).AnyTimes()
+		Return([]client.UseCaseResponse{{ID: firstUseCase}, {ID: secondUseCase}}, false, nil).AnyTimes()
 	mockService.EXPECT().AddEntityToUseCase(gomock.Any(), gomock.Any(), "workload", id).DoAndReturn(
 		func(_ context.Context, useCaseID, _, _ string) error {
 			t.Errorf("linked again to Use Case %s, which the Workload is already linked to", useCaseID)
@@ -1252,6 +1252,7 @@ func TestIntegrationWorkloadImportUseCaseID(t *testing.T) {
 	tests := []struct {
 		name     string
 		useCases []client.UseCaseResponse
+		more     bool
 		err      error
 		want     types.String
 		warnings []string
@@ -1267,6 +1268,14 @@ func TestIntegrationWorkloadImportUseCaseID(t *testing.T) {
 			detail:   []string{first, second},
 		},
 		{
+			name:     "more than one page",
+			useCases: []client.UseCaseResponse{{ID: first}},
+			more:     true,
+			want:     types.StringNull(),
+			warnings: []string{"Workload is linked to several Use Cases"},
+			detail:   []string{first, "more Use Cases than the first 1 the API lists"},
+		},
+		{
 			name:     "lookup refused",
 			err:      fmt.Errorf("422 Unprocessable Entity"),
 			want:     types.StringNull(),
@@ -1280,7 +1289,7 @@ func TestIntegrationWorkloadImportUseCaseID(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockService := mock_client.NewMockService(ctrl)
-			mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", "wl").Return(tt.useCases, tt.err)
+			mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", "wl").Return(tt.useCases, tt.more, tt.err)
 
 			var diags diag.Diagnostics
 			got := importWorkloadUseCaseID(context.Background(), mockService, "wl", &diags)
@@ -1298,6 +1307,81 @@ func TestIntegrationWorkloadImportUseCaseID(t *testing.T) {
 				if detail := diags.Warnings()[0].Detail(); !strings.Contains(detail, want) {
 					t.Errorf("warning detail lacks %q: %s", want, detail)
 				}
+			}
+		})
+	}
+}
+
+func TestIntegrationWorkloadRelinkUseCase(t *testing.T) {
+	a, b := uuid.NewString(), uuid.NewString()
+	placed := WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringValue("availability")}
+	listed := func(ids ...string) []client.UseCaseResponse {
+		out := make([]client.UseCaseResponse, len(ids))
+		for i, id := range ids {
+			out[i] = client.UseCaseResponse{ID: id}
+		}
+		return out
+	}
+	tests := []struct {
+		name     string
+		state    types.String
+		runtime  WorkloadRuntimeModel
+		planned  types.String
+		lookup   bool // whether the lookup is called
+		listed   []client.UseCaseResponse
+		more     bool
+		err      error
+		links    []string
+		unlinks  []string
+		warnings []string
+	}{
+		{name: "to a new Use Case", state: types.StringValue(a), planned: types.StringValue(b), lookup: true,
+			listed: listed(a), links: []string{b}, unlinks: []string{a}},
+		{name: "to a Use Case already linked", state: types.StringValue(a), planned: types.StringValue(b), lookup: true,
+			listed: listed(a, b), unlinks: []string{a}},
+		{name: "unlinked", state: types.StringValue(a), planned: types.StringNull(), unlinks: []string{a}},
+		{name: "first link of a Hub Workload", state: types.StringNull(), planned: types.StringValue(b), lookup: true,
+			links: []string{b}},
+		{name: "adopted after import", state: types.StringNull(), runtime: placed, planned: types.StringValue(b), lookup: true,
+			listed: listed(a, b)},
+		{name: "adopted but not linked", state: types.StringNull(), runtime: placed, planned: types.StringValue(b), lookup: true,
+			listed: listed(a), links: []string{b}, warnings: []string{"Workload linked to another Use Case"}},
+		{name: "adopted, lookup failed", state: types.StringNull(), runtime: placed, planned: types.StringValue(b), lookup: true,
+			err: fmt.Errorf("502 Bad Gateway"), links: []string{b}},
+		{name: "adopted, not on the first page", state: types.StringNull(), runtime: placed, planned: types.StringValue(b), lookup: true,
+			listed: listed(a), more: true, links: []string{b}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockService := mock_client.NewMockService(ctrl)
+			if tt.lookup {
+				mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", "wl").Return(tt.listed, tt.more, tt.err)
+			}
+			var links, unlinks []string
+			mockService.EXPECT().AddEntityToUseCase(gomock.Any(), gomock.Any(), "workload", "wl").DoAndReturn(
+				func(_ context.Context, useCaseID, _, _ string) error {
+					links = append(links, useCaseID)
+					return nil
+				}).AnyTimes()
+			mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), gomock.Any(), "workload", "wl").DoAndReturn(
+				func(_ context.Context, useCaseID, _, _ string) error {
+					unlinks = append(unlinks, useCaseID)
+					return nil
+				}).AnyTimes()
+
+			var diags diag.Diagnostics
+			state := WorkloadResourceModel{UseCaseID: tt.state, Runtime: tt.runtime}
+			if err := relinkWorkloadUseCase(context.Background(), mockService, "wl", state, tt.planned, &diags); err != nil {
+				t.Fatalf("relinkWorkloadUseCase: %v", err)
+			}
+			if !slices.Equal(links, tt.links) || !slices.Equal(unlinks, tt.unlinks) {
+				t.Errorf("linked %v and unlinked %v, want %v and %v", links, unlinks, tt.links, tt.unlinks)
+			}
+			if warnings := diagWarningSummaries(diags); !slices.Equal(warnings, tt.warnings) {
+				t.Errorf("warnings = %v, want %v", warnings, tt.warnings)
 			}
 		})
 	}
@@ -3186,7 +3270,7 @@ func expectWorkloadsCreatedAndDeleted(mockService *mock_client.MockService, work
 }
 
 // A use_case_id change on its own moves the link in place, new link first, and keeps the
-// Workload. Set from nothing, it is looked up first; a link the lookup does not show but the
+// Workload. The new Use Case is looked up first; a link the lookup does not show but the
 // platform already has is accepted.
 func TestIntegrationWorkloadChangesUseCaseInPlace(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -3202,10 +3286,12 @@ func TestIntegrationWorkloadChangesUseCaseInPlace(t *testing.T) {
 	expectWorkloadsCreatedAndDeleted(mockService,
 		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint))
 	gomock.InOrder(
+		mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
+			Return([]client.UseCaseResponse{{ID: firstUseCase}}, false, nil),
 		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
 		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
 		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
-		mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, nil),
+		mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, false, nil),
 		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), firstUseCase, "workload", id).
 			Return(fmt.Errorf("409 Conflict: This workload is already linked to this Use Case.")),
 	)
@@ -3266,6 +3352,8 @@ func TestIntegrationWorkloadChangesUseCaseInPlaceOnItsEnclave(t *testing.T) {
 	expectWorkloadsCreatedAndDeleted(mockService,
 		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
 	gomock.InOrder(
+		mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
+			Return([]client.UseCaseResponse{{ID: firstUseCase}}, false, nil),
 		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
 		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
 	)
@@ -3348,6 +3436,8 @@ func TestIntegrationWorkloadKeepsUseCaseWhenLinkFails(t *testing.T) {
 	// Counted rather than strictly ordered: an unexpected call inside resource.Test hangs
 	// instead of failing, so ordering is checked with t.Errorf.
 	var links, unlinks int
+	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
+		Return([]client.UseCaseResponse{{ID: firstUseCase}}, false, nil).AnyTimes()
 	mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).DoAndReturn(
 		func(context.Context, string, string, string) error {
 			links++
@@ -3413,6 +3503,8 @@ func TestIntegrationWorkloadRecordsUseCaseWhenRolloutFails(t *testing.T) {
 	expectWorkloadsCreatedAndDeleted(mockService,
 		workloadFixture(id, artifact1, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
 	gomock.InOrder(
+		mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).
+			Return([]client.UseCaseResponse{{ID: firstUseCase}}, false, nil),
 		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
 		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
 		mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).
