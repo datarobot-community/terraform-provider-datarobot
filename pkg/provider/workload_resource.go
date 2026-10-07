@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -104,8 +105,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. " +
 					"It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the " +
 					"Enclaves an administrator has granted to this Use Case.\n\n" +
-					"Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: " +
-					"a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to.\n\n" +
+					"Not refreshed: the link is recorded outside the Workload entity, so a link changed outside Terraform is invisible to the plan. " +
+					"Import does read it: a Workload linked to exactly one Use Case is imported with its ID, and one linked to several is imported with this attribute empty " +
+					"and a warning that names them.\n\n" +
 					"Changing it on its own moves the link in place: the Workload is linked to the new Use Case and unlinked from the old one, and keeps its ID and endpoint. " +
 					"A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. " +
 					"Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint. " +
@@ -413,8 +415,7 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	// Relinked before any rollout below, which the platform checks against the Workload's
 	// Use Case links.
 	if !planned.UseCaseID.Equal(state.UseCaseID) {
-		if err := updateUseCasesForEntity(ctx, r.provider.service, "workload", id,
-			useCaseIDList(state.UseCaseID), useCaseIDList(planned.UseCaseID)); err != nil {
+		if err := relinkWorkloadUseCase(ctx, r.provider.service, id, state, planned.UseCaseID, &resp.Diagnostics); err != nil {
 			resp.Diagnostics.AddError("Error changing the Use Case of the Workload", err.Error())
 			return
 		}
@@ -546,7 +547,96 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 	if data.Description.ValueString() == "" {
 		data.Description = types.StringNull()
 	}
+	data.UseCaseID = importWorkloadUseCaseID(ctx, r.provider.service, req.ID, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// importWorkloadUseCaseID looks up the Use Case link, which is recorded outside the Workload
+// entity. A Workload can be linked to several Use Cases while `use_case_id` holds one, so only a
+// single link is adopted; with several there is no right one to pick. A failed lookup leaves the
+// attribute empty rather than failing an import that does not depend on it.
+func importWorkloadUseCaseID(ctx context.Context, service client.Service, id string, diags *diag.Diagnostics) types.String {
+	traceAPICall("ListUseCasesForEntity")
+	useCases, more, err := service.ListUseCasesForEntity(ctx, "workload", id)
+	if err != nil {
+		diags.AddWarning("Could not read the Use Case of the Workload",
+			"`use_case_id` is imported empty; set it in the configuration if the Workload is linked to a Use Case. "+err.Error())
+		return types.StringNull()
+	}
+
+	switch {
+	case len(useCases) == 0 && !more:
+		return types.StringNull()
+	case len(useCases) == 1 && !more:
+		return types.StringValue(useCases[0].ID)
+	}
+
+	ids := make([]string, len(useCases))
+	for i, useCase := range useCases {
+		ids[i] = useCase.ID
+	}
+	linked := strings.Join(ids, ", ")
+	if more {
+		linked += fmt.Sprintf(", and to more Use Cases than the first %d the API lists", len(ids))
+	}
+	diags.AddWarning("Workload is linked to several Use Cases",
+		fmt.Sprintf("`use_case_id` holds one Use Case, so it is imported empty. The Workload is linked to %s. "+
+			"Set `use_case_id` to the one Terraform should manage; the others stay linked.", linked))
+	return types.StringNull()
+}
+
+// relinkWorkloadUseCase moves the Workload's link from the Use Case in state to the planned one.
+//
+// The planned Use Case may already be linked: outside Terraform, or as one of several an import
+// could not choose between. Linking it again can store a second link record, because the
+// platform's duplicate check compares only one existing link, and a later unlink then removes
+// just one of the two; so an existing link counts as already in place, and only the old Use Case
+// is unlinked. A failed or incomplete lookup links it as it would without the check.
+//
+// With no Use Case in state on a placed Workload, the configuration may name one it is not
+// linked to. Its other links are not in state, so they stay; the warning says so.
+func relinkWorkloadUseCase(ctx context.Context, service client.Service, id string, state WorkloadResourceModel, planned types.String, diags *diag.Diagnostics) error {
+	current := useCaseIDList(state.UseCaseID)
+	linked, known := workloadLinkedToUseCase(ctx, service, id, planned)
+	if linked {
+		current = append(current, planned)
+	}
+	if err := updateUseCasesForEntity(ctx, service, "workload", id, current, useCaseIDList(planned)); err != nil {
+		return err
+	}
+
+	if known && !linked && workloadUseCaseNotRecorded(state.UseCaseID, state.Runtime) {
+		diags.AddWarning("Workload linked to another Use Case",
+			fmt.Sprintf("The Workload was not linked to Use Case %s, so it is now linked to it as well. "+
+				"The Use Cases it was already linked to are not in state, so Terraform leaves them linked; "+
+				"unlink them outside Terraform if the Workload should belong to this Use Case only.", planned.ValueString()))
+	}
+	return nil
+}
+
+// workloadLinkedToUseCase reports whether the Workload is linked to the Use Case; known is false
+// when the lookup failed, or listed only a first page that does not include it.
+func workloadLinkedToUseCase(ctx context.Context, service client.Service, id string, useCaseID types.String) (linked, known bool) {
+	if useCaseID.IsNull() || useCaseID.IsUnknown() {
+		return false, false
+	}
+	traceAPICall("ListUseCasesForEntity")
+	useCases, more, err := service.ListUseCasesForEntity(ctx, "workload", id)
+	if err != nil {
+		return false, false
+	}
+	if slices.ContainsFunc(useCases, func(useCase client.UseCaseResponse) bool {
+		return useCase.ID == useCaseID.ValueString()
+	}) {
+		return true, true
+	}
+	return false, !more
+}
+
+// workloadUseCaseNotRecorded reports a placed Workload with no Use Case in state. A placed
+// Workload always has a Use Case, so only an import that could not record it leaves this state.
+func workloadUseCaseNotRecorded(useCaseID types.String, runtime WorkloadRuntimeModel) bool {
+	return useCaseID.IsNull() && !resolveWorkloadRuntime(runtime).EnclaveSelectionPolicy.IsNull()
 }
 
 // ModifyPlan marks endpoint and status unknown when the Enclave placement changes: the
@@ -557,6 +647,10 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 // before it could change in place on its own; that is how a Workload leaves an Enclave. With
 // `use_case_id` unchanged, removing the placement is refused: the platform keeps a Workload
 // on the Enclave it runs on and refuses to clear its policy.
+//
+// A placed Workload always has a Use Case, so a placement in state without `use_case_id` comes
+// from an import that could not record it. Writing it down then names a link the Workload
+// already has, so it is not a Use Case change and does not replace the Workload.
 func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
 		return // destroy or create: nothing to compare against
@@ -578,8 +672,19 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	if !planUseCase.Equal(stateUseCase) {
+	useCaseNotRecorded := workloadUseCaseNotRecorded(stateUseCase, state)
+
+	if !planUseCase.Equal(stateUseCase) && !useCaseNotRecorded {
 		resp.RequiresReplace = append(resp.RequiresReplace, useCasePath)
+		return
+	}
+
+	if workloadPlacementCleared(plan, state) && useCaseNotRecorded {
+		resp.Diagnostics.AddAttributeError(policyPath, "Cannot move a Workload off its Enclave in place",
+			"The Workload runs on an Enclave, but its Use Case is not in state: it was imported while linked to several Use Cases, "+
+				"the lookup of its link failed, or it was imported by a provider version that did not read the link.\n\n"+
+				"Set `use_case_id` to the Use Case it runs under, keep the placement, and apply. To run outside any Enclave, "+
+				"then remove `use_case_id` together with the placement, which replaces the Workload with a new ID and endpoint.")
 		return
 	}
 

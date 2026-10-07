@@ -51,7 +51,7 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 | `runtime.container_groups` only | `PATCH /workloads/{id}/settings` + poll | No — platform defaults |
 | `runtime.enclave_selection_policy` or `runtime.enclaves` only | `PATCH /workloads/{id}/settings` + poll | No (platform defaults) |
 | `name`, `description`, `importance` | `PATCH /workloads/{id}/` | N/A |
-| `use_case_id` only | `POST /useCases/{new}/workloads/{id}/`, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
+| `use_case_id` only | `GET /useCases/?entityId={id}&entityType=workload`, `POST /useCases/{new}/workloads/{id}/` unless already linked, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
@@ -104,16 +104,19 @@ A workload that runs on an Enclave cannot leave it in place. The platform keeps 
 
 Replacing the workload while keeping `use_case_id` is not an alternative: the create refuses a Use Case link without a policy when the Use Case has Enclaves (`ENCLAVE_TARGETING_REQUIRED`), which it does for a workload placed on one of them, and Terraform destroys first, so nothing would be left.
 
-Changing `use_case_id` on its own is also an **in-place** update: the provider links the workload to the new Use Case, then unlinks it from the old one, and the workload keeps its ID and endpoint. A workload on an Enclave stays there, since the platform does not move a placed workload when its Use Case changes, and it checks that Enclave against the workload's Use Cases on every restart and rollout. If the new Use Case does not grant the Enclave, the change applies, but the platform refuses the workload's next rollout until the Enclave is granted to that Use Case or `use_case_id` changes back. The workload keeps serving meanwhile.
+Changing `use_case_id` on its own is also an **in-place** update: the provider links the workload to the new Use Case, then unlinks it from the old one, and the workload keeps its ID and endpoint. If the workload is already linked to the new Use Case, the provider only unlinks the old one: linking again would make the platform store a second link record, which a later unlink would not fully remove. A workload on an Enclave stays there, since the platform does not move a placed workload when its Use Case changes, and it checks that Enclave against the workload's Use Cases on every restart and rollout. If the new Use Case does not grant the Enclave, the change applies, but the platform refuses the workload's next rollout until the Enclave is granted to that Use Case or `use_case_id` changes back. The workload keeps serving meanwhile.
 
 Changed together with the placement, `use_case_id` still **replaces** the workload, a destroy and create with a **new workload ID and a new endpoint**. That includes removing it together with the placement to run outside any Enclave. Terraform destroys before it creates, so if the create is then refused (the new Use Case has no Enclave granted, or it has Enclaves and the configuration names no policy) the old workload is already gone. Set `lifecycle { create_before_destroy = true }` on a workload that serves traffic. That works because workload names are not unique: two workloads briefly share the name while the new one comes up. Pulumi creates the replacement before it deletes the original by default, so a failed create there leaves the original running.
 
 A workload whose policy was removed with provider 0.12.4, before this check existed, has no policy in state and keeps running on its Enclave. Its configuration plans no change, but it cannot be created from scratch while its Use Case has Enclaves, since the create then refuses a Use Case link without a policy. Set `enclave_selection_policy = "availability"` again to make the configuration describe where it runs; that is an in-place update.
 
-None of the three is read back from the platform:
+None of the three is refreshed from the platform:
 
-- `use_case_id` is write-only. The link lives outside the workload entity and no API response carries it, so it cannot be refreshed or imported — an imported workload has it empty no matter which Use Case it is linked to, and a link changed outside Terraform is invisible to the plan.
+- `use_case_id` is not refreshed. The link lives outside the workload entity, so a link changed outside Terraform is invisible to the plan. Import does read it from the workload's Use Case links: a workload linked to exactly one Use Case is imported with that ID, so its real `use_case_id` plans no change, and a configuration that leaves it out plans removing the link, which for a workload on an Enclave is a replacement.
+- A workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, and so is one imported by a provider version that did not read the link. Set it to the one Terraform should manage: the provider records that existing link without linking the workload again, the others stay linked, and it is an in-place update even together with a placement change. If it names a Use Case the workload is not linked to, the provider links it and warns that the other links stay. Until it is set, removing the placement of such a workload is refused at plan.
 - `enclave_selection_policy` and `enclaves` are stripped from API responses on clusters without the Enclave entitlement, so the provider keeps your configured values in state rather than reading them back. A placement changed outside Terraform is not detected; `enclaves` is desired state the platform never rewrites, so that only happens if someone edits the workload by hand.
+
+After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, and a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies. All but the last roll the workload out again.
 
 ## Apply duration
 
