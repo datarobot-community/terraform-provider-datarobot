@@ -660,6 +660,211 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 	})
 }
 
+// mockArtifactRollout sets up a create of workload id on artifactID1 and an
+// apply that rolls it to artifactID2, where the wait is asked to wait for the
+// new version to serve (or not, per serving), answers waitErr, and the workload
+// then reads as afterRollout. GetWorkload follows the platform rather than
+// counting calls, so the steps can refresh as often as Terraform likes.
+func mockArtifactRollout(
+	t *testing.T,
+	mockService *mock_client.MockService,
+	id, artifactID2 string,
+	workload1, afterRollout *client.Workload,
+	serving bool,
+	waitErr error,
+) {
+	t.Helper()
+	current := workload1
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(func(context.Context, string) (*client.Workload, error) {
+		if deleted {
+			return nil, client.NewNotFoundError("workload")
+		}
+		return current, nil
+	}).AnyTimes()
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
+	// The options are checked inside, with t.Errorf: a matcher that did not match
+	// would leave the call unexpected, which hangs resource.Test instead of failing.
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, opts *client.WaitForWorkloadReplacementOptions) (*client.WorkloadReplacement, error) {
+			want := waitExpectsServing{artifactID: artifactID2, serving: serving}
+			if !want.Matches(opts) {
+				t.Errorf("WaitForWorkloadReplacement got %+v, want %s", opts, want)
+			}
+			current = afterRollout
+			return replacement, waitErr
+		})
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(func(context.Context, string) error {
+		deleted = true
+		return nil
+	})
+}
+
+func TestIntegrationWorkloadInterruptedWaitAfterPromotionKeepsTheRollout(t *testing.T) {
+	// The rollout landed; only the wait for the previous version to stop taking
+	// requests was cut short. State must record the new artifact, or every later
+	// apply asks for a rollout to the artifact the workload already runs.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, workload2, true, &client.ServingUnconfirmedError{
+		WorkloadID: id,
+		Err:        context.Canceled,
+	})
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				Check:  resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadVersionThatStopsAfterPromotionIsRecordedAndReported(t *testing.T) {
+	// The new version was promoted and then errored. The apply fails, and the
+	// state still records the artifact the workload now runs, so the same
+	// configuration plans no further rollout to it.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	errored := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	errored.Status = client.ProtonStatusErrored
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, errored, true, nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				ExpectError: regexp.MustCompile(`(?s)Workload replacement failed.*promoted, but the Workload now reports status "errored".*` +
+					`console-nextgen/workloads/` + id + `/activity-log/otel-logs`),
+			},
+			{
+				Config:   workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadArtifactChangeOnEnclaveSkipsTheGatewayWait(t *testing.T) {
+	// A workload that asks for an Enclave is not reached through the prediction
+	// gateway, so a new artifact does not wait for the gateway's cached route,
+	// even on a platform that does not report placements.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://enclave.example.com/workloads/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, workload2, false, nil)
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID1, useCaseID, "availability", ""),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID2, useCaseID, "availability", ""),
+				Check:  resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+			},
+		},
+	})
+}
+
+func TestWorkloadTargetsEnclave(t *testing.T) {
+	enclaves := func(names ...string) types.List {
+		values := make([]attr.Value, 0, len(names))
+		for _, name := range names {
+			values = append(values, types.StringValue(name))
+		}
+		return types.ListValueMust(types.StringType, values)
+	}
+	cases := []struct {
+		name    string
+		runtime WorkloadRuntimeModel
+		want    bool
+	}{
+		{name: "no placement", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: types.ListNull(types.StringType)}, want: false},
+		{name: "empty pin", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: enclaves()}, want: false},
+		{name: "policy", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringValue("availability"), Enclaves: types.ListNull(types.StringType)}, want: true},
+		{name: "pin implies manual", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: enclaves("finance")}, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workloadTargetsEnclave(tc.runtime); got != tc.want {
+				t.Fatalf("workloadTargetsEnclave() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -692,7 +897,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	// Step 2: In-place replacement via settings endpoint (runtime-only)
 	replacement := workloadReplacementFixture(id1)
 	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id1, updateWorkloadSettingsReplicaMatcher(3)).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsArtifact(artifactID)).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsServing{artifactID: artifactID, serving: false}).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 
@@ -1104,6 +1309,23 @@ func (m waitExpectsArtifact) Matches(x any) bool {
 
 func (m waitExpectsArtifact) String() string {
 	return fmt.Sprintf("WaitForWorkloadReplacementOptions{expectedArtifactId=%q}", string(m))
+}
+
+// waitExpectsServing is waitExpectsArtifact plus whether the wait goes on past
+// promotion until the new version takes the workload's requests, which only a
+// rollout to a new artifact asks for.
+type waitExpectsServing struct {
+	artifactID string
+	serving    bool
+}
+
+func (m waitExpectsServing) Matches(x any) bool {
+	opts, ok := x.(*client.WaitForWorkloadReplacementOptions)
+	return ok && opts != nil && opts.ExpectedArtifactID == m.artifactID && opts.WaitUntilServing == m.serving
+}
+
+func (m waitExpectsServing) String() string {
+	return fmt.Sprintf("WaitForWorkloadReplacementOptions{expectedArtifactId=%q, waitUntilServing=%t}", m.artifactID, m.serving)
 }
 
 type startReplacementMatcher struct {

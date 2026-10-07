@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ const (
 	ProtonStatusStopping     ProtonStatus = "stopping"
 	ProtonStatusStopped      ProtonStatus = "stopped"
 	ProtonStatusErrored      ProtonStatus = "errored"
+	ProtonStatusTerminated   ProtonStatus = "terminated"
 )
 
 type AutoscalingPolicy struct {
@@ -110,6 +112,15 @@ type Workload struct {
 	Runtime     WorkloadRuntime      `json:"runtime"`
 	ProtonID    *string              `json:"protonId"`
 	Replacement *WorkloadReplacement `json:"replacement"`
+	// Placements lists the Enclaves the current version runs on. It is empty
+	// for a workload served through the prediction gateway.
+	Placements []WorkloadPlacement `json:"placements,omitempty"`
+}
+
+type WorkloadPlacement struct {
+	EnclaveID string `json:"enclaveId"`
+	Enclave   string `json:"enclave"`
+	Region    string `json:"region"`
 }
 
 type CreateWorkloadRequest struct {
@@ -164,6 +175,10 @@ const (
 const (
 	WorkloadReplacementPollIntervalEnvVar = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_INTERVAL"
 	WorkloadReplacementPollTimeoutEnvVar  = "DATAROBOT_WORKLOAD_REPLACEMENT_POLL_TIMEOUT"
+	// WorkloadGatewayRouteTTLEnvVar overrides gatewayRouteCacheTTL, for a
+	// cluster whose prediction gateway caches routes for another duration, or
+	// with 0 to skip the wait.
+	WorkloadGatewayRouteTTLEnvVar = "DATAROBOT_WORKLOAD_GATEWAY_ROUTE_TTL"
 
 	defaultReplacementPollInterval = 5 * time.Second
 	defaultReplacementPollTimeout  = 30 * time.Minute
@@ -175,6 +190,20 @@ func workloadReplacementPollInterval() time.Duration {
 
 func workloadReplacementPollTimeout() time.Duration {
 	return durationFromEnv(WorkloadReplacementPollTimeoutEnvVar, defaultReplacementPollTimeout)
+}
+
+// workloadGatewayRouteTTL is gatewayRouteCacheTTL unless the environment sets
+// another duration. Unlike the poll settings, zero is valid: it skips the wait.
+func workloadGatewayRouteTTL() time.Duration {
+	raw := os.Getenv(WorkloadGatewayRouteTTLEnvVar)
+	if raw == "" {
+		return gatewayRouteCacheTTL
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return gatewayRouteCacheTTL
+	}
+	return d
 }
 
 func durationFromEnv(envVar string, fallback time.Duration) time.Duration {
@@ -211,6 +240,7 @@ type WorkloadReplacement struct {
 	ID                  string              `json:"id"`
 	WorkloadID          string              `json:"workloadId"`
 	CandidateArtifactID string              `json:"candidateArtifactId"`
+	CandidateProtonIDs  []string            `json:"candidateProtonIds,omitempty"`
 	Status              ReplacementStatus   `json:"status"`
 	Strategy            ReplacementStrategy `json:"strategy"`
 	Config              ReplacementConfig   `json:"config,omitempty"`
@@ -228,6 +258,11 @@ type WaitForWorkloadReplacementOptions struct {
 	// version never becomes ready and keeps the old version serving, which is
 	// otherwise indistinguishable from a completed rollout.
 	ExpectedArtifactID string
+	// WaitUntilServing extends the wait past promotion until requests to the
+	// workload's endpoint reach the new version, see waitUntilNewVersionServes.
+	// Set it for a rollout to a new artifact. A runtime-only rollout runs the
+	// same artifact before and after, so either version answers the same.
+	WaitUntilServing bool
 }
 
 type ReplacementFailedError struct {
@@ -236,6 +271,27 @@ type ReplacementFailedError struct {
 
 func (e *ReplacementFailedError) Error() string {
 	return e.Message
+}
+
+// ServingUnconfirmedError reports a rollout that was promoted, but whose wait
+// for the replaced version to stop receiving requests ended early because ctx
+// did. The rollout itself succeeded.
+type ServingUnconfirmedError struct {
+	WorkloadID   string
+	RouteExpires time.Time
+	Err          error
+}
+
+func (e *ServingUnconfirmedError) Error() string {
+	return fmt.Sprintf(
+		"the rollout of workload %s was promoted, but the wait for its previous version to stop receiving requests "+
+			"was interrupted (%v). Requests through the prediction gateway may reach the previous version until %s.",
+		e.WorkloadID, e.Err, e.RouteExpires.UTC().Format(time.RFC3339),
+	)
+}
+
+func (e *ServingUnconfirmedError) Unwrap() error {
+	return e.Err
 }
 
 // IsReplacementFailed reports a status the replacement ended on without
@@ -287,6 +343,10 @@ func (s *ServiceImpl) UpdateWorkloadSettings(ctx context.Context, workloadID str
 // passes readiness is abandoned: the platform stops the new replica, keeps the
 // old one serving and clears the record, so the workload looks exactly like a
 // completed rollout. opts.ExpectedArtifactID tells the two apart.
+//
+// Nor is "promoted" the same as "serving": with opts.WaitUntilServing a
+// promoted rollout then waits in waitUntilNewVersionServes, which the timeout
+// does not cover.
 func (s *ServiceImpl) WaitForWorkloadReplacement(
 	ctx context.Context,
 	workloadID string,
@@ -303,13 +363,26 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 		}
 	}
 	expectedArtifactID := ""
+	waitUntilServing := false
 	if opts != nil {
 		expectedArtifactID = opts.ExpectedArtifactID
+		waitUntilServing = opts.WaitUntilServing
 	}
 
 	deadline := time.Now().Add(timeout)
 	seenActive := false
 	var lastReplacement *WorkloadReplacement
+	var switchover handover
+
+	settled := func(workload *Workload) error {
+		if err := s.settledReplacementError(ctx, workloadID, workload, expectedArtifactID); err != nil {
+			return err
+		}
+		if !waitUntilServing {
+			return nil
+		}
+		return waitUntilNewVersionServes(ctx, workload, switchover)
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -321,6 +394,7 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 			return lastReplacement, err
 		}
 		replacement := workload.Replacement
+		switchover.observe(workload, time.Now())
 
 		switch {
 		case replacement != nil && IsReplacementFailed(replacement.Status):
@@ -331,13 +405,13 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 			if IsReplacementTerminal(replacement.Status) {
 				// "completed" is rarely observable (cleaned up within ~1s), but
 				// accept it when caught.
-				return replacement, s.settledReplacementError(ctx, workloadID, workload, expectedArtifactID)
+				return replacement, settled(workload)
 			}
 			seenActive = true
 
 		default: // replacement == nil
 			if seenActive && workload.Status == ProtonStatusRunning {
-				return lastReplacement, s.settledReplacementError(ctx, workloadID, workload, expectedArtifactID)
+				return lastReplacement, settled(workload)
 			}
 		}
 
@@ -350,14 +424,114 @@ func (s *ServiceImpl) WaitForWorkloadReplacement(
 			)
 		}
 
-		timer := time.NewTimer(pollInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, pollInterval); err != nil {
+			return nil, err
 		}
 	}
+}
+
+// sleepCtx waits for d, or returns ctx.Err() if ctx ends first.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// handover finds when a rollout switched the workload to its new version, from
+// what successive polls of the workload show.
+type handover struct {
+	polled bool
+	// previousProtonID is the workload's proton on the first poll, which comes
+	// right after the rollout request. A fast candidate can already be
+	// promoted by then; the workload then names one of the rollout's
+	// candidates, and the first poll is when the switch was seen.
+	previousProtonID string
+	// switchedBy is when a poll first found the workload on another proton. The
+	// switch happened no later than that, and up to one poll interval earlier,
+	// so a wait counted from it can run that much longer than the cached route
+	// lives, never shorter. Counting from the poll before could end it early.
+	switchedBy time.Time
+}
+
+func (h *handover) observe(workload *Workload, now time.Time) {
+	protonID := ""
+	if workload.ProtonID != nil {
+		protonID = *workload.ProtonID
+	}
+	if !h.polled {
+		h.polled = true
+		if workload.Replacement == nil || !slices.Contains(workload.Replacement.CandidateProtonIDs, protonID) {
+			h.previousProtonID = protonID
+			return
+		}
+	}
+	if h.switchedBy.IsZero() && protonID != h.previousProtonID {
+		h.switchedBy = now
+	}
+}
+
+// gatewayRouteCacheTTL is how long the prediction gateway can go on routing a
+// workload's requests to the version that was active when it last looked: each
+// gateway process caches the workload's active proton for
+// PREDICTIONS_GATEWAY_TTL_CACHE_SEC (300 seconds by default) and does not drop
+// the entry when the workload switches to a new one. The Workload API does not
+// expose that setting, so this mirrors the gateway's default, and
+// WorkloadGatewayRouteTTLEnvVar overrides it for a cluster that changes it. A
+// variable so tests can shorten it.
+var gatewayRouteCacheTTL = 300 * time.Second
+
+// waitUntilNewVersionServes returns once requests to the workload's endpoint
+// reach the version a rollout promoted.
+//
+// For a workload served through the prediction gateway, the one with no
+// Enclave placement, promotion is not that moment. The gateway keeps routing
+// requests to the replaced version until its cached route expires, up to
+// the gateway's route TTL after the switch: on MTS staging the previous version
+// answered every request for more than three minutes after apply returned.
+// Dropping the cached route at promotion in the gateway would fix this for
+// every client and make this wait unnecessary. An Enclave-placed workload's
+// endpoint is its current proton's own address, which the gateway does not
+// route, so there the new version answers from the switch on and nothing is
+// waited for; WaitForWorkloadReplacementOptions.WaitUntilServing lets a caller
+// that knows the workload targets an Enclave skip it too, for a platform that
+// does not report placements. So does WorkloadGatewayRouteTTLEnvVar set to 0.
+//
+// The wait is a clock, not a poll. The replaced proton's status cannot end it
+// sooner: the platform stops that proton no earlier than its keep window, 300
+// seconds after the switch by default, which is when the cached route expires
+// anyway, and an install without the platform's cleanup job never stops it at
+// all. If ctx ends first, the error is a ServingUnconfirmedError, since the
+// rollout itself has succeeded.
+func waitUntilNewVersionServes(ctx context.Context, workload *Workload, switchover handover) error {
+	if len(workload.Placements) > 0 {
+		return nil
+	}
+
+	// A TTL of zero has expired at the switch, so it skips the wait.
+	routeExpires := routeExpiry(switchover.switchedBy, time.Now(), workloadGatewayRouteTTL())
+	remaining := time.Until(routeExpires)
+	if remaining <= 0 {
+		return nil
+	}
+	if err := sleepCtx(ctx, remaining); err != nil {
+		return &ServingUnconfirmedError{WorkloadID: workload.ID, RouteExpires: routeExpires, Err: err}
+	}
+	return nil
+}
+
+// routeExpiry is when the gateway's cached route to the replaced version has
+// expired at the latest: ttl after the switch. A switch no poll caught (the
+// workload reports no proton) happened before the rollout settled, at now.
+func routeExpiry(switchedBy, now time.Time, ttl time.Duration) time.Time {
+	if switchedBy.IsZero() {
+		switchedBy = now
+	}
+	return switchedBy.Add(ttl)
 }
 
 // WorkloadEvent is one entry of the workload's activity log
