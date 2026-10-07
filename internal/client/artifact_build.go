@@ -279,12 +279,8 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 			}
 		}
 
-		timer := time.NewTimer(pollInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+		if err := sleepCtx(ctx, pollInterval); err != nil {
+			return nil, err
 		}
 	}
 }

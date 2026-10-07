@@ -660,6 +660,211 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 	})
 }
 
+// mockArtifactRollout sets up a create of workload id on artifactID1 and an
+// apply that rolls it to artifactID2, where the wait is asked to wait for the
+// new version to serve (or not, per serving), answers waitErr, and the workload
+// then reads as afterRollout. GetWorkload follows the platform rather than
+// counting calls, so the steps can refresh as often as Terraform likes.
+func mockArtifactRollout(
+	t *testing.T,
+	mockService *mock_client.MockService,
+	id, artifactID2 string,
+	workload1, afterRollout *client.Workload,
+	serving bool,
+	waitErr error,
+) {
+	t.Helper()
+	current := workload1
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload1, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(func(context.Context, string) (*client.Workload, error) {
+		if deleted {
+			return nil, client.NewNotFoundError("workload")
+		}
+		return current, nil
+	}).AnyTimes()
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).Return(replacement, nil)
+	// The options are checked inside, with t.Errorf: a matcher that did not match
+	// would leave the call unexpected, which hangs resource.Test instead of failing.
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, opts *client.WaitForWorkloadReplacementOptions) (*client.WorkloadReplacement, error) {
+			want := waitExpectsServing{artifactID: artifactID2, serving: serving}
+			if !want.Matches(opts) {
+				t.Errorf("WaitForWorkloadReplacement got %+v, want %s", opts, want)
+			}
+			current = afterRollout
+			return replacement, waitErr
+		})
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(func(context.Context, string) error {
+		deleted = true
+		return nil
+	})
+}
+
+func TestIntegrationWorkloadInterruptedWaitAfterPromotionKeepsTheRollout(t *testing.T) {
+	// The rollout landed; only the wait for the previous version to stop taking
+	// requests was cut short. State must record the new artifact, or every later
+	// apply asks for a rollout to the artifact the workload already runs.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, workload2, true, &client.ServingUnconfirmedError{
+		WorkloadID: id,
+		Err:        context.Canceled,
+	})
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				Check:  resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadVersionThatStopsAfterPromotionIsRecordedAndReported(t *testing.T) {
+	// The new version was promoted and then errored. The apply fails, and the
+	// state still records the artifact the workload now runs, so the same
+	// configuration plans no further rollout to it.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	errored := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	errored.Status = client.ProtonStatusErrored
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, errored, true, nil)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID1, 1),
+			},
+			{
+				Config: workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				ExpectError: regexp.MustCompile(`(?s)Workload replacement failed.*promoted, but the Workload now reports status "errored".*` +
+					`console-nextgen/workloads/` + id + `/activity-log/otel-logs`),
+			},
+			{
+				Config:   workloadConfigWithReplicas(name, "", "low", artifactID2, 1),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+func TestIntegrationWorkloadArtifactChangeOnEnclaveSkipsTheGatewayWait(t *testing.T) {
+	// A workload that asks for an Enclave is not reached through the prediction
+	// gateway, so a new artifact does not wait for the gateway's cached route,
+	// even on a platform that does not report placements.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID1 := uuid.NewString()
+	artifactID2 := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://enclave.example.com/workloads/" + id
+	workload1 := workloadFixture(id, artifactID1, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload2 := workloadFixture(id, artifactID2, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+
+	mockArtifactRollout(t, mockService, id, artifactID2, workload1, workload2, false, nil)
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID1, useCaseID, "availability", ""),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID2, useCaseID, "availability", ""),
+				Check:  resource.TestCheckResourceAttr(resourceName, "artifact_id", artifactID2),
+			},
+		},
+	})
+}
+
+func TestWorkloadTargetsEnclave(t *testing.T) {
+	enclaves := func(names ...string) types.List {
+		values := make([]attr.Value, 0, len(names))
+		for _, name := range names {
+			values = append(values, types.StringValue(name))
+		}
+		return types.ListValueMust(types.StringType, values)
+	}
+	cases := []struct {
+		name    string
+		runtime WorkloadRuntimeModel
+		want    bool
+	}{
+		{name: "no placement", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: types.ListNull(types.StringType)}, want: false},
+		{name: "empty pin", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: enclaves()}, want: false},
+		{name: "policy", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringValue("availability"), Enclaves: types.ListNull(types.StringType)}, want: true},
+		{name: "pin implies manual", runtime: WorkloadRuntimeModel{EnclaveSelectionPolicy: types.StringNull(), Enclaves: enclaves("finance")}, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workloadTargetsEnclave(tc.runtime); got != tc.want {
+				t.Fatalf("workloadTargetsEnclave() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -692,7 +897,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	// Step 2: In-place replacement via settings endpoint (runtime-only)
 	replacement := workloadReplacementFixture(id1)
 	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id1, updateWorkloadSettingsReplicaMatcher(3)).Return(replacement, nil)
-	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsArtifact(artifactID)).Return(replacement, nil)
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id1, waitExpectsServing{artifactID: artifactID, serving: false}).Return(replacement, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 	mockService.EXPECT().GetWorkload(gomock.Any(), id1).Return(workload2, nil)
 
@@ -1104,6 +1309,23 @@ func (m waitExpectsArtifact) Matches(x any) bool {
 
 func (m waitExpectsArtifact) String() string {
 	return fmt.Sprintf("WaitForWorkloadReplacementOptions{expectedArtifactId=%q}", string(m))
+}
+
+// waitExpectsServing is waitExpectsArtifact plus whether the wait goes on past
+// promotion until the new version takes the workload's requests, which only a
+// rollout to a new artifact asks for.
+type waitExpectsServing struct {
+	artifactID string
+	serving    bool
+}
+
+func (m waitExpectsServing) Matches(x any) bool {
+	opts, ok := x.(*client.WaitForWorkloadReplacementOptions)
+	return ok && opts != nil && opts.ExpectedArtifactID == m.artifactID && opts.WaitUntilServing == m.serving
+}
+
+func (m waitExpectsServing) String() string {
+	return fmt.Sprintf("WaitForWorkloadReplacementOptions{expectedArtifactId=%q, waitUntilServing=%t}", m.artifactID, m.serving)
 }
 
 type startReplacementMatcher struct {
@@ -2688,29 +2910,123 @@ func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 	})
 }
 
-func TestIntegrationWorkloadLeavesEnclaveInPlace(t *testing.T) {
+// Removing the placement while use_case_id stays fails the plan; nothing reaches the API.
+func TestIntegrationWorkloadRefusesLeavingEnclaveInPlace(t *testing.T) {
+	for name, tc := range map[string]struct{ policy, enclaves string }{
+		"policy removed": {policy: "availability"},
+		"pin removed":    {enclaves: "finance"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockService := mock_client.NewMockService(ctrl)
+			defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+			mockAPIKey(t)
+
+			artifactID, useCaseID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+			replicaCount := int64(1)
+			expectWorkloadsCreatedAndDeleted(mockService,
+				workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+
+			resource.Test(t, resource.TestCase{
+				IsUnitTest:               true,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{Config: workloadConfigWithPlacement(name, artifactID, useCaseID, tc.policy, tc.enclaves)},
+					{
+						Config:      workloadConfigWithPlacement(name, artifactID, useCaseID, "", ""),
+						ExpectError: regexp.MustCompile("Cannot move a Workload off its Enclave in place"),
+					},
+				},
+			})
+		})
+	}
+}
+
+// Removing use_case_id along with the placement replaces the Workload instead.
+func TestIntegrationWorkloadLeavesEnclaveByReplacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
 	mockService := mock_client.NewMockService(ctrl)
-	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
-		return mockService
-	})()
-
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
-	id := uuid.NewString()
-	artifactID := uuid.NewString()
-	useCaseID := uuid.NewString()
-	name := "workload-" + uuid.NewString()[:8]
+	artifactID, name := uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil),
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "availability", "")},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, "", "", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("datarobot_workload.test", plancheck.ResourceActionReplace),
+				}},
+			},
+		},
+	})
+}
+
+// expectWorkloadsCreatedAndDeleted serves each Workload, in create order, until it is deleted.
+func expectWorkloadsCreatedAndDeleted(mockService *mock_client.MockService, workloads ...*client.Workload) {
+	live := map[string]*client.Workload{}
+	created := 0
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *client.CreateWorkloadRequest) (*client.Workload, error) {
+			w := workloads[created]
+			created++
+			live[w.ID] = w
+			return w, nil
+		}).Times(len(workloads))
+	mockService.EXPECT().GetWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) (*client.Workload, error) {
+			if w, ok := live[id]; ok {
+				return w, nil
+			}
+			return nil, client.NewNotFoundError("workload")
+		}).AnyTimes()
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) error {
+			delete(live, id)
+			return nil
+		}).Times(len(workloads))
+}
+
+// A use_case_id change on its own moves the link in place, new link first, and keeps the
+// Workload. A link that already exists, as after an import, is accepted.
+func TestIntegrationWorkloadChangesUseCaseInPlace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
 	replicaCount := int64(1)
 	endpoint := "https://workloads.example.com/" + id
-	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), firstUseCase, "workload", id).
+			Return(fmt.Errorf("409 Conflict: This workload is already linked to this Use Case.")),
+	)
 
-	expectWorkloadPlacementUpdate(mockService, workload, placementMatcher{explicit: true})
-
-	var initialID string
 	resourceName := "datarobot_workload.test"
+	inPlace := resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+		plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+	}}
+	var initialID string
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -2718,20 +3034,211 @@ func TestIntegrationWorkloadLeavesEnclaveInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "availability", ""),
+				Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				Check:  captureAttr(resourceName, "id", &initialID),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				ConfigPlanChecks: inPlace,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "runtime.enclave_selection_policy", "availability"),
-					captureAttr(resourceName, "id", &initialID),
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					resource.TestCheckResourceAttr(resourceName, "endpoint", endpoint),
+					checkWorkloadIDPreserved(&initialID),
 				),
 			},
 			{
-				Config:           workloadConfigWithPlacement(name, artifactID, useCaseID, "", ""),
-				ConfigPlanChecks: expectInPlacePlacementChange(resourceName),
+				Config:           workloadConfigWithPlacement(name, artifactID, "", "", ""),
+				ConfigPlanChecks: inPlace,
+				Check:            resource.TestCheckNoResourceAttr(resourceName, "use_case_id"),
+			},
+			{
+				Config:           workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				ConfigPlanChecks: inPlace,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr(resourceName, "runtime.enclave_selection_policy"),
-					resource.TestCheckResourceAttr(resourceName, "use_case_id", useCaseID),
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", firstUseCase),
 					checkWorkloadIDPreserved(&initialID),
 				),
+			},
+		},
+	})
+}
+
+// The QA repro: a Workload on an Enclave repointed at another Use Case with its placement
+// kept. It used to be destroyed first; now only the link moves and nothing is rolled out.
+func TestIntegrationWorkloadChangesUseCaseInPlaceOnItsEnclave(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+	)
+
+	resourceName := "datarobot_workload.test"
+	var initialID string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "availability", ""),
+				Check:  captureAttr(resourceName, "id", &initialID),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, secondUseCase, "availability", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+				}},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+		},
+	})
+}
+
+// Changed together with the placement, use_case_id still replaces the Workload.
+func TestIntegrationWorkloadReplacesWhenUseCaseAndPlacementChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	artifactID, name := uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil),
+		workloadFixture(uuid.NewString(), artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "", "")},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, uuid.NewString(), "availability", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("datarobot_workload.test", plancheck.ResourceActionReplace),
+				}},
+			},
+		},
+	})
+}
+
+// A failed link call leaves the old link and the old use_case_id in state, and the next apply
+// retries the move.
+func TestIntegrationWorkloadKeepsUseCaseWhenLinkFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	// Counted rather than strictly ordered: an unexpected call inside resource.Test hangs
+	// instead of failing, so ordering is checked with t.Errorf.
+	var links, unlinks int
+	mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).DoAndReturn(
+		func(context.Context, string, string, string) error {
+			links++
+			if links == 1 {
+				return fmt.Errorf("403 Forbidden: cannot link to this Use Case")
+			}
+			return nil
+		}).AnyTimes()
+	mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).DoAndReturn(
+		func(context.Context, string, string, string) error {
+			unlinks++
+			if links < 2 {
+				t.Errorf("old Use Case unlinked before the new link succeeded")
+			}
+			return nil
+		}).AnyTimes()
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifactID, firstUseCase, "", "")},
+			{
+				Config:      workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				ExpectError: regexp.MustCompile("Error changing the Use Case of the Workload"),
+			},
+			{
+				// The old value stayed in state.
+				Config:   workloadConfigWithPlacement(name, artifactID, firstUseCase, "", ""),
+				PlanOnly: true,
+			},
+			{
+				// The next apply retries the move.
+				Config: workloadConfigWithPlacement(name, artifactID, secondUseCase, "", ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "use_case_id", secondUseCase),
+					func(*terraform.State) error {
+						if links != 2 || unlinks != 1 {
+							return fmt.Errorf("link calls = %d, unlink calls = %d, want 2 and 1", links, unlinks)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// The new use_case_id reaches state as soon as the link moves, so a rollout that fails
+// afterwards leaves state matching the links and the next plan does not relink.
+func TestIntegrationWorkloadRecordsUseCaseWhenRolloutFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifact1, artifact2, name := uuid.NewString(), uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	firstUseCase, secondUseCase := uuid.NewString(), uuid.NewString()
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifact1, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	gomock.InOrder(
+		mockService.EXPECT().AddEntityToUseCase(gomock.Any(), secondUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), firstUseCase, "workload", id).Return(nil),
+		mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), id, gomock.Any()).
+			Return(nil, fmt.Errorf("422 ENCLAVE_NOT_IN_USE_CASE")),
+	)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithPlacement(name, artifact1, firstUseCase, "", "")},
+			{
+				Config:      workloadConfigWithPlacement(name, artifact2, secondUseCase, "", ""),
+				ExpectError: regexp.MustCompile("ENCLAVE_NOT_IN_USE_CASE"),
+			},
+			{
+				Config:   workloadConfigWithPlacement(name, artifact1, secondUseCase, "", ""),
+				PlanOnly: true,
 			},
 		},
 	})
@@ -2927,6 +3434,38 @@ func TestWorkloadPlacementChanged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got := workloadPlacementChanged(tc.plan, tc.state); got != tc.want {
 				t.Fatalf("workloadPlacementChanged = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWorkloadPlacementCleared(t *testing.T) {
+	nullList := types.ListNull(types.StringType)
+	none := types.StringNull()
+	availability := types.StringValue(string(client.EnclaveSelectionPolicyAvailability))
+	pin := enclaveListForTest("finance")
+	runtime := func(policy types.String, enclaves types.List) WorkloadRuntimeModel {
+		return workloadPlacementModel(types.StringNull(), policy, enclaves).Runtime
+	}
+
+	cases := map[string]struct {
+		plan, state WorkloadRuntimeModel
+		want        bool
+	}{
+		"policy removed":                 {runtime(none, nullList), runtime(availability, nullList), true},
+		"pin removed":                    {runtime(none, nullList), runtime(none, pin), true},
+		"pin emptied":                    {runtime(none, types.ListValueMust(types.StringType, nil)), runtime(none, pin), true},
+		"pin dropped for availability":   {runtime(availability, nullList), runtime(none, pin), false},
+		"never placed":                   {runtime(none, nullList), runtime(none, nullList), false},
+		"unresolved policy":              {runtime(types.StringUnknown(), nullList), runtime(availability, nullList), false},
+		"unresolved Enclave list":        {runtime(none, types.ListUnknown(types.StringType)), runtime(availability, nullList), false},
+		"unresolved Enclave in the list": {runtime(none, types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()})), runtime(none, pin), false},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := workloadPlacementCleared(tc.plan, tc.state); got != tc.want {
+				t.Fatalf("workloadPlacementCleared = %v, want %v", got, tc.want)
 			}
 		})
 	}

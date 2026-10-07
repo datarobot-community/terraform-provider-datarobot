@@ -177,7 +177,9 @@ func (e *Engine) gather(ctx context.Context) error {
 // exists for, and all pass: a clone of a locked artifact (PreviousArtifact,
 // or any older version from the same artifact repository, which is where a
 // checkout that last applied a few versions ago sits) and a
-// destroyed-and-recreated resource, whose old artifact is gone. The
+// destroyed-and-recreated resource, whose old artifact is gone, or, for a
+// locked version destroy had to leave in a repository the resource did not
+// create, was released from the directory by that destroy. The
 // lineage is the artifact repository, because that is what every version
 // of one resource shares; two resources deliberately pointed at one
 // repository and one directory are indistinguishable from one resource's

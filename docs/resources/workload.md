@@ -131,9 +131,10 @@ output "workload_endpoint" {
 # Enclave placement: confine a workload to an Enclave. Placement is governed by a
 # Use Case, so use_case_id is required whenever an Enclave is targeted. Setting
 # use_case_id on its own only links the workload to the Use Case and leaves it
-# outside any Enclave. Changing the policy or the Enclave moves the workload in
-# place and keeps its ID; changing use_case_id replaces the workload, which means
-# a new ID and a new endpoint.
+# outside any Enclave. Changing the policy, the Enclave or use_case_id updates
+# the workload in place and keeps its ID; changing use_case_id together with the
+# placement replaces it. A placed workload cannot leave its Enclave in place:
+# removing the placement while use_case_id stays is refused at plan time.
 
 resource "datarobot_use_case" "enclave_example" {
   name        = "example-enclave-use-case"
@@ -164,7 +165,7 @@ resource "datarobot_workload" "enclave_pinned" {
 
 Changes to `artifact_id` or `runtime` call the Workload API **replacement** endpoints during `Update`. Terraform does **not** destroy and recreate the workload. The workload `id` and `endpoint` stay stable across artifact and runtime updates.
 
-This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes, which still replaces the workload; see [Changing placement](#changing-placement).
+This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes together with the Enclave placement, which still replaces the workload; see [Changing placement](#changing-placement).
 
 For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
@@ -195,6 +196,7 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 | `runtime.container_groups` only | `PATCH /workloads/{id}/settings` + poll | No — platform defaults |
 | `runtime.enclave_selection_policy` or `runtime.enclaves` only | `PATCH /workloads/{id}/settings` + poll | No (platform defaults) |
 | `name`, `description`, `importance` | `PATCH /workloads/{id}/` | N/A |
+| `use_case_id` only | `POST /useCases/{new}/workloads/{id}/`, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
@@ -207,7 +209,7 @@ Asking for an Enclave is opt-in. `use_case_id` on its own links the workload to 
 | Configuration | Where the workload runs |
 |---------------|-------------------------|
 | neither `use_case_id` nor any `runtime.enclave_*` attribute | Outside any Enclave |
-| `use_case_id` only | Linked to the Use Case, outside any Enclave, on organizations without Enclaves. Organizations with Enclaves refuse this shape at create (`ENCLAVE_TARGETING_REQUIRED`), so set a policy there |
+| `use_case_id` only | Linked to the Use Case, outside any Enclave. Refused at create (`ENCLAVE_TARGETING_REQUIRED`) when the Use Case has Enclaves granted, so set a policy there; older platform versions refuse it on any organization with Enclaves |
 | `use_case_id` + `runtime.enclave_selection_policy = "availability"` | Any Enclave granted to that Use Case, chosen by the scheduler |
 | `use_case_id` + `runtime.enclaves` | Pinned to the named Enclave (`enclave_selection_policy` is sent as `manual`) |
 
@@ -230,13 +232,28 @@ Only one Enclave is accepted today. `enclaves` is a list because the platform in
 
 ### Changing placement
 
-`enclave_selection_policy` and `enclaves` are updated **in place**, like the rest of `runtime`. The change goes through `PATCH /workloads/{id}/settings`, or rides along with `POST /workloads/{id}/replacement` when `artifact_id` changes in the same apply; the platform rolls a new version out and the workload keeps its ID. Whenever placement changes, the provider writes both `enclave_selection_policy` and `enclaves` explicitly (a removed policy as `null`, a removed pin as an empty list), because on these endpoints omitting both fields means "keep the current placement" (which is what keeps a replica-only update from unplacing an Enclave workload). What the platform does with the recorded intent is up to the platform. It gates the change the same way it gates a create (Enclaves available, the Use Case granted at least one, the override permission for a pin) and refuses it with a 422 before anything rolls, so a refused change leaves the running workload untouched. One known gap: removing the policy from a workload that already runs on an Enclave records no placement, but the platform does not move that workload off its Enclave, it keeps serving from where it runs (tracked as RAPTOR-20492). The plan and state will read as unplaced while the workload is not.
+`enclave_selection_policy` and `enclaves` are updated **in place**, like the rest of `runtime`. The change goes through `PATCH /workloads/{id}/settings`, or rides along with `POST /workloads/{id}/replacement` when `artifact_id` changes in the same apply; the platform rolls a new version out and the workload keeps its ID. Whenever placement changes, the provider writes both `enclave_selection_policy` and `enclaves` explicitly (a removed pin as an empty list), because on these endpoints omitting both fields means "keep the current placement" (which is what keeps a replica-only update from unplacing an Enclave workload). What the platform does with the recorded intent is up to the platform. It gates the change the same way it gates a create (Enclaves available, the Use Case granted at least one, the override permission for a pin) and refuses it with a 422 before anything rolls, so a refused change leaves the running workload untouched.
+
+Moving a workload that runs outside any Enclave onto one does not reliably work in place. The platform accepts the update, but where it cannot place the new version next to the running one it fails the rollout (`no recorded placement; cannot co-locate candidate proton`), so the apply fails and the workload keeps serving outside the Enclave. Replace the workload instead, for example with `terraform apply -replace=datarobot_workload.<name>`; set `lifecycle { create_before_destroy = true }` first to keep it serving until the new one runs.
 
 The endpoint is served from the Enclave the workload runs on, so it is planned as `(known after apply)` whenever placement changes and re-read after the rollout. It is unchanged when the workload stays on the same Enclave. Whether a move between two Enclaves keeps it is up to the platform and has not been confirmed: no development cluster has more than one Enclave yet.
 
-`use_case_id` is the exception. It still **replaces** the workload, a destroy and create with a **new workload ID and a new endpoint**, because the platform fixes the Use Case link at creation and offers no way to move it. Terraform destroys first, so if the create is then refused (the new Use Case has no Enclave granted, or the organization places Use Case-linked workloads on Enclaves and the configuration names no policy) the old workload is already gone. Set `lifecycle { create_before_destroy = true }` on a workload whose Use Case may change, or avoid changing it on a running workload. That works because workload names are not unique: two workloads briefly share the name while the new one comes up.
+A workload that runs on an Enclave cannot leave it in place. The platform keeps a placed workload on an Enclave, so that restarts and rollouts keep its endpoint, and refuses to clear its placement (`422 ENCLAVE_POLICY_REQUIRED`; older platform versions accept the request and never act on it). The provider refuses the same change at plan time, before anything is applied: while `use_case_id` stays the same, removing `enclave_selection_policy`, or removing `enclaves` without setting a policy, fails the plan with `Cannot move a Workload off its Enclave in place`. What works instead:
 
-Note also that removing `enclave_selection_policy` while keeping `use_case_id` applies in place, but on an organization with Enclaves the same configuration cannot be created from scratch: the create path refuses a Use Case link without a policy. A `terraform destroy` followed by `terraform apply` of that configuration fails with a 422 until the platform aligns the two paths.
+| Goal | Change | Result |
+|------|--------|--------|
+| Let the scheduler choose among the Use Case's Enclaves | `enclave_selection_policy = "availability"`, no `enclaves` | In place. A pin is dropped and the workload stays where it runs |
+| Move to another Enclave the Use Case grants | `enclaves = ["<other-enclave>"]` | In place. The rollout schedules the new version onto that Enclave |
+| Run outside any Enclave | Remove `use_case_id` together with the policy and `enclaves` | Replaced: new ID and endpoint |
+| Run under another Use Case | Change `use_case_id` and keep the placement | In place. The link moves and the workload stays where it runs |
+
+Replacing the workload while keeping `use_case_id` is not an alternative: the create refuses a Use Case link without a policy when the Use Case has Enclaves (`ENCLAVE_TARGETING_REQUIRED`), which it does for a workload placed on one of them, and Terraform destroys first, so nothing would be left.
+
+Changing `use_case_id` on its own is also an **in-place** update: the provider links the workload to the new Use Case, then unlinks it from the old one, and the workload keeps its ID and endpoint. A workload on an Enclave stays there, since the platform does not move a placed workload when its Use Case changes, and it checks that Enclave against the workload's Use Cases on every restart and rollout. If the new Use Case does not grant the Enclave, the change applies, but the platform refuses the workload's next rollout until the Enclave is granted to that Use Case or `use_case_id` changes back. The workload keeps serving meanwhile.
+
+Changed together with the placement, `use_case_id` still **replaces** the workload, a destroy and create with a **new workload ID and a new endpoint**. That includes removing it together with the placement to run outside any Enclave. Terraform destroys before it creates, so if the create is then refused (the new Use Case has no Enclave granted, or it has Enclaves and the configuration names no policy) the old workload is already gone. Set `lifecycle { create_before_destroy = true }` on a workload that serves traffic. That works because workload names are not unique: two workloads briefly share the name while the new one comes up. Pulumi creates the replacement before it deletes the original by default, so a failed create there leaves the original running.
+
+A workload whose policy was removed with provider 0.12.4, before this check existed, has no policy in state and keeps running on its Enclave. Its configuration plans no change, but it cannot be created from scratch while its Use Case has Enclaves, since the create then refuses a Use Case link without a policy. Set `enclave_selection_policy = "availability"` again to make the configuration describe where it runs; that is an in-place update.
 
 None of the three is read back from the platform:
 
@@ -245,7 +262,13 @@ None of the three is read back from the platform:
 
 ## Apply duration
 
-Replacement is asynchronous. The provider polls `GET /workloads/{id}/replacement` until the rollout completes or errors. A single replacement can block `terraform apply` for **several minutes** while the platform performs rolling cutover.
+Replacement is asynchronous. The provider polls the workload until the rollout completes or errors, which takes as long as the platform needs to start the new version, plus `warmup_minutes`.
+
+When `artifact_id` changes on a workload served through the prediction gateway, which is any workload not placed on an Enclave, the provider then waits until requests reach the new version. The platform switches the workload to the new version when it promotes it, but the gateway caches each workload's route, for five minutes by default, and keeps sending requests to the previous version until the cached route expires. The provider waits until five minutes after the switch, so `Apply complete!` means requests reach the version you declared, and a test run right after `terraform apply` exercises it. This adds **up to five minutes** to such an apply. Nothing is added for an Enclave-placed workload, which is reached directly rather than through the gateway, nor for a change that keeps the artifact (replicas, resource bundles, placement), since both versions run the same code. The provider recognizes an Enclave-placed workload from the placements the platform reports, or from `enclave_selection_policy` or `enclaves` in the configuration. `keep_old_version_minutes` changes none of this.
+
+If your cluster's gateway caches routes for another duration (`PREDICTIONS_GATEWAY_TTL_CACHE_SEC`), set the environment variable `DATAROBOT_WORKLOAD_GATEWAY_ROUTE_TTL` to that duration, for example `2m`, before running Terraform or Pulumi. Set it to `0` to skip the wait, accepting that requests may reach the previous version for a while after the apply.
+
+If the apply is interrupted during that wait, the rollout has already succeeded: the provider records it and warns that the previous version may still answer requests until the cached route expires. If the new version stops after it was promoted, the apply fails, and state still records the artifact the workload now runs.
 
 If apply is interrupted mid-replacement, run `terraform apply` again — refresh reads the current replacement status and the provider reconciles.
 
@@ -264,7 +287,9 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
 - `use_case_id` (String) The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the Enclaves an administrator has granted to this Use Case.
 
-Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to. Changing it replaces the Workload, which means a new ID and a new endpoint.
+Write-only. The link is recorded outside the Workload entity and no API response carries it back, so it cannot be read, refreshed, or imported: a link changed outside Terraform is invisible to the plan, and an imported Workload has this attribute empty regardless of the Use Case it is linked to.
+
+Changing it on its own moves the link in place: the Workload is linked to the new Use Case and unlinked from the old one, and keeps its ID and endpoint. A Workload on an Enclave stays there, and the platform refuses its next rollout while the new Use Case does not grant that Enclave. Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint. Terraform destroys the current Workload first, so if the platform refuses the create nothing is left: set `lifecycle { create_before_destroy = true }` on a Workload that serves traffic.
 
 ### Read-Only
 
@@ -281,10 +306,14 @@ Optional:
 - `container_groups` (Attributes List) Per-group runtime configuration. (see [below for nested schema](#nestedatt--runtime--container_groups))
 - `enclave_selection_policy` (String) How the scheduler chooses an Enclave: `availability` to let it pick any Enclave the Workload is eligible for, or `manual` to pin the Workload to the Enclave named in `enclaves`. Omit it to run outside any Enclave, which is the default: setting `use_case_id` on its own does not request one. Both values require `use_case_id`; `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission, and is assumed when `enclaves` names one.
 
-Changing it updates the running Workload in place through a rolling replacement, keeping its ID: the new placement intent is recorded on the platform, which applies it when it schedules the new version. Removing the policy records no placement, but the platform does not yet move an already placed Workload off its Enclave for that; it keeps serving from where it runs. The endpoint is re-read afterwards, since it is served from the Enclave the Workload runs on. Not read back from the platform: the API omits it on clusters without the Enclave entitlement, so the configured value is what stays in state.
+Changing it updates the running Workload in place through a rolling replacement, keeping its ID: the new placement intent is recorded on the platform, which applies it when it schedules the new version. The endpoint is re-read afterwards, since it is served from the Enclave the Workload runs on.
+
+Adding it to a Workload that runs outside any Enclave does not reliably move the Workload onto one: the platform accepts the update, but where it cannot place the new version next to the running one it fails the rollout (`no recorded placement; cannot co-locate candidate proton`), so the apply fails and the Workload keeps serving outside the Enclave. Replace the Workload instead, for example with `terraform apply -replace`.
+
+Removing it while `use_case_id` stays the same is refused at plan time, because the platform does not move a Workload off the Enclave it runs on. Set `availability` instead to let the scheduler choose, or remove `use_case_id` as well to run outside any Enclave, which replaces the Workload. Not read back from the platform: the API omits it on clusters without the Enclave entitlement, so the configured value is what stays in state.
 - `enclaves` (List of String) Name of the Enclave to pin this Workload to. Exactly one entry is accepted today; the list shape is forward-compatible with running on several Enclaves. Requires `use_case_id`, and only applies with `enclave_selection_policy = "manual"`, which is assumed when this is set and no policy is given. The named Enclave must be granted to the Use Case and the caller must hold deploy access to it.
 
-This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards.
+This is desired state that the platform never rewrites; where the Workload actually runs is reported by the platform, not by this attribute. Changing it updates the running Workload in place through a rolling replacement, keeping its ID; the new pin is recorded on the platform and the endpoint is re-read afterwards. Adding it to a Workload that runs outside any Enclave has the same limitation as adding a policy. Removing it without setting `enclave_selection_policy` is refused at plan time, like removing the policy.
 - `replacement_policy` (Attributes) Replacement policy for in-place workload replacement (rolling strategy). Applied when `artifact_id` changes or when replacement policy settings change. Runtime-only changes use `PATCH /workloads/{id}/settings`, which does not accept custom replacement timing (WAPI uses platform defaults). (see [below for nested schema](#nestedatt--runtime--replacement_policy))
 
 <a id="nestedatt--runtime--container_groups"></a>
@@ -354,5 +383,5 @@ Optional:
 
 Optional:
 
-- `keep_old_version_minutes` (Number) Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`.
+- `keep_old_version_minutes` (Number) Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`, which current platform versions accept but do not apply: how long the old version is kept is a cluster setting (300 seconds by default).
 - `warmup_minutes` (Number) Duration in minutes for the warmup phase during replacement. Maps to WAPI `config.warmupDurationMinutes`.

@@ -1216,6 +1216,7 @@ func updateUseCasesForEntity(
 			found := false
 			for _, oldUseCaseID := range stateUseCaseIDs {
 				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					found = true
 					break
 				}
 			}
@@ -1236,6 +1237,7 @@ func updateUseCasesForEntity(
 			found := false
 			for _, useCaseID := range planUseCaseIDs {
 				if useCaseID.ValueString() == oldUseCaseID.ValueString() {
+					found = true
 					break
 				}
 			}
