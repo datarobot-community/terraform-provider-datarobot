@@ -73,7 +73,7 @@ pipeline:
                             memory: 4Gi
                             cpu: "4"
                   - step:
-                      name: Notify dsx-alerts
+                      name: Notify agent-lifecycle-alerts
                       identifier: Notify_dsxalerts_fast
                       template:
                         templateRef: org.Send_Slack_notification
@@ -82,7 +82,7 @@ pipeline:
                           type: Run
                           spec:
                             envVariables:
-                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_CHANNEL: agent-lifecycle-alerts
                               SLACK_URL: <+input>.default("")
                               MESSAGE_TYPE: Error
                               MESSAGE_TITLE: Declarative API Terraform Tests Failed (fast)
@@ -145,7 +145,7 @@ pipeline:
                             memory: 4Gi
                             cpu: "6"
                   - step:
-                      name: Notify dsx-alerts
+                      name: Notify agent-lifecycle-alerts
                       identifier: Notify_dsxalerts_models
                       template:
                         templateRef: org.Send_Slack_notification
@@ -154,7 +154,7 @@ pipeline:
                           type: Run
                           spec:
                             envVariables:
-                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_CHANNEL: agent-lifecycle-alerts
                               SLACK_URL: <+input>.default("")
                               MESSAGE_TYPE: Error
                               MESSAGE_TITLE: Declarative API Terraform Tests Failed (models)
@@ -217,7 +217,7 @@ pipeline:
                             memory: 4Gi
                             cpu: "6"
                   - step:
-                      name: Notify dsx-alerts
+                      name: Notify agent-lifecycle-alerts
                       identifier: Notify_dsxalerts_deployments
                       template:
                         templateRef: org.Send_Slack_notification
@@ -226,7 +226,7 @@ pipeline:
                           type: Run
                           spec:
                             envVariables:
-                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_CHANNEL: agent-lifecycle-alerts
                               SLACK_URL: <+input>.default("")
                               MESSAGE_TYPE: Error
                               MESSAGE_TITLE: Declarative API Terraform Tests Failed (deployments)
@@ -289,7 +289,7 @@ pipeline:
                             memory: 4Gi
                             cpu: "4"
                   - step:
-                      name: Notify dsx-alerts
+                      name: Notify agent-lifecycle-alerts
                       identifier: Notify_dsxalerts_apps
                       template:
                         templateRef: org.Send_Slack_notification
@@ -298,7 +298,7 @@ pipeline:
                           type: Run
                           spec:
                             envVariables:
-                              SLACK_CHANNEL: dsx-alerts
+                              SLACK_CHANNEL: agent-lifecycle-alerts
                               SLACK_URL: <+input>.default("")
                               MESSAGE_TYPE: Error
                               MESSAGE_TITLE: Declarative API Terraform Tests Failed (apps)
