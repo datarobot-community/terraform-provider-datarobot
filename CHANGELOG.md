@@ -1,3 +1,9 @@
+## [0.12.7] - 2026-10-14
+
+### Changed
+
+- Built with Go 1.27.2 and `golang.org/x/net` v0.60.0 (which brings `golang.org/x/crypto` v0.57.0), fixing nine `govulncheck` advisories in the HTTP/2, HTTP/1, TLS and MIME header handling of Go 1.27.1 and `golang.org/x/net` v0.58.0. Local linting needs golangci-lint v2.14.0 or newer, since older releases cannot read Go 1.27.2's export data.
+
 ## [0.12.6] - 2026-10-07
 
 ### Fixed
