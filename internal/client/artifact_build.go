@@ -3,12 +3,10 @@
 package client
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +45,8 @@ type ArtifactBuild struct {
 	Status     string `json:"status"`
 	CreatedAt  string `json:"createdAt"`
 	UpdatedAt  string `json:"updatedAt"`
+	// FailureReason is the platform's account of a FAILED or CANCELLED build.
+	FailureReason string `json:"failureReason,omitempty"`
 }
 
 type WaitForArtifactBuildOptions struct {
@@ -57,21 +57,17 @@ type WaitForArtifactBuildOptions struct {
 }
 
 type ArtifactBuildFailedError struct {
-	BuildID string
-	Status  string
-}
-
-// ArtifactBuildLogEntry is one JSONL record from GET /artifacts/{id}/builds/{buildId}/logs.
-type ArtifactBuildLogEntry struct {
-	Asctime   string `json:"asctime"`
-	Levelname string `json:"levelname"`
-	Name      string `json:"name,omitempty"`
-	Message   string `json:"message"`
-	BuildID   string `json:"build_id,omitempty"`
+	BuildID       string
+	Status        string
+	FailureReason string
 }
 
 func (e *ArtifactBuildFailedError) Error() string {
-	return fmt.Sprintf("artifact build %s ended with status %s", e.BuildID, e.Status)
+	msg := fmt.Sprintf("artifact build %s ended with status %s", e.BuildID, e.Status)
+	if e.FailureReason != "" {
+		msg += ": " + e.FailureReason
+	}
+	return msg
 }
 
 type ArtifactBuildTimeoutError struct {
@@ -136,85 +132,56 @@ func artifactBuildLogsTailLines() int {
 	return tailLines
 }
 
-// formatArtifactBuildLogLines formats each line of the build log body independently:
-// a line that parses as a structured JSONL entry is rendered as "[timestamp] LEVEL:
-// message"; any other line is kept as-is (IBS forwards BuildKit stderr as plain text -
-// see workload-api acceptance tests). Falling back per line, rather than treating the
-// whole body as JSON the moment any one line parses, means a single JSON line
-// elsewhere in the body can't cause a plain-text line - e.g. the "ERROR: failed to
-// solve" line this feature exists to surface - to be silently dropped.
-func formatArtifactBuildLogLines(body []byte) []string {
-	scanner := bufio.NewScanner(bytes.NewReader(body))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+// How long GetArtifactBuildLogs waits for a build's log to stop growing. Variables so
+// tests can shrink them.
+var (
+	artifactBuildLogsSettleInterval = 10 * time.Second
+	artifactBuildLogsSettleTimeout  = 60 * time.Second
+)
 
-	var lines []string
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		var entry ArtifactBuildLogEntry
-		if err := json.Unmarshal([]byte(line), &entry); err == nil {
-			lines = append(lines, formatArtifactBuildLogEntry(entry))
-			continue
-		}
-		lines = append(lines, line)
-	}
-
-	return lines
-}
-
-func tailPlainTextLogLines(text string, n int) string {
-	lines := strings.Split(text, "\n")
-	if n <= 0 || len(lines) <= n {
-		return strings.TrimRight(text, "\n")
-	}
-	return strings.Join(lines[len(lines)-n:], "\n")
-}
-
-func formatArtifactBuildLogsBody(body []byte) string {
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed == "" {
-		return ""
-	}
-
-	return tailPlainTextLogLines(strings.Join(formatArtifactBuildLogLines(body), "\n"), artifactBuildLogsTailLines())
-}
-
-func formatArtifactBuildLogEntry(entry ArtifactBuildLogEntry) string {
-	level := strings.ToUpper(entry.Levelname)
-	if level == "" {
-		level = "INFO"
-	}
-	timestamp := entry.Asctime
-	if timestamp == "" {
-		timestamp = "unknown"
-	}
-	return fmt.Sprintf("[%s] %s: %s", timestamp, level, entry.Message)
-}
-
+// GetArtifactBuildLogs returns the tail of one build's log, oldest line first, from the
+// artifact's OTEL stream filtered to that build. Log ingestion trails the builder: a
+// build already reported FAILED can have no records yet, or only the lines before its
+// error. So the tail is read again until two reads artifactBuildLogsSettleInterval apart
+// agree, or artifactBuildLogsSettleTimeout passes. No records is not an error: the
+// caller then shows only the link to the UI's build log page.
 func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
-	body, err := getRaw(s.client, ctx, "/artifacts/"+artifactID+"/builds/"+buildID+"/logs")
-	if err != nil {
-		otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines(), buildID)
-		if otelErr == nil && otelLogs != "" {
-			return otelLogs, nil
+	deadline := time.Now().Add(artifactBuildLogsSettleTimeout)
+	logs := ""
+	for {
+		next, err := s.readArtifactBuildLogTail(ctx, artifactID, buildID)
+		if err != nil {
+			if logs == "" {
+				return "", err
+			}
+			return logs, nil
 		}
+		if next != "" && next == logs {
+			return logs, nil
+		}
+		logs = next
+		if time.Now().Add(artifactBuildLogsSettleInterval).Before(deadline) &&
+			sleepCtx(ctx, artifactBuildLogsSettleInterval) == nil {
+			continue
+		}
+		return logs, nil
+	}
+}
+
+func (s *ServiceImpl) readArtifactBuildLogTail(ctx context.Context, artifactID, buildID string) (string, error) {
+	entries, err := s.getOtelEntityLogEntries(ctx, "artifact", artifactID, artifactBuildLogsTailLines(), buildID)
+	if err != nil {
 		return "", err
 	}
 
-	logs := formatArtifactBuildLogsBody(body)
-	if logs != "" {
-		return logs, nil
-	}
-
-	otelLogs, otelErr := s.getOtelEntityLogs(ctx, "artifact", artifactID, artifactBuildLogsTailLines(), buildID)
-	if otelErr == nil && otelLogs != "" {
-		return otelLogs, nil
-	}
-
-	return "", nil
+	// The server returns the newest records first, but orders them only to the
+	// millisecond, so lines logged within one millisecond arrive shuffled (a BuildKit
+	// error ahead of the step that raised it). Sort on the full timestamp.
+	slices.Reverse(entries)
+	slices.SortStableFunc(entries, func(a, b OtelLogEntry) int {
+		return strings.Compare(a.Timestamp, b.Timestamp)
+	})
+	return formatOtelLogEntries(entries), nil
 }
 
 func (s *ServiceImpl) WaitForArtifactBuild(
@@ -261,7 +228,11 @@ func (s *ServiceImpl) WaitForArtifactBuild(
 		if IsTerminalArtifactBuildStatus(build.Status) {
 			pollOtelLogs()
 			if IsArtifactBuildErrorStatus(build.Status) {
-				return build, &ArtifactBuildFailedError{BuildID: buildID, Status: build.Status}
+				return build, &ArtifactBuildFailedError{
+					BuildID:       buildID,
+					Status:        build.Status,
+					FailureReason: build.FailureReason,
+				}
 			}
 			return build, nil
 		}

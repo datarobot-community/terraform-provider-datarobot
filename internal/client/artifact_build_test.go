@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,29 @@ func artifactBuildJSON(status string) map[string]any {
 		"createdAt":  "2026-01-01T00:00:00Z",
 		"updatedAt":  "2026-01-01T00:01:00Z",
 	}
+}
+
+// fastArtifactBuildLogsSettle shrinks GetArtifactBuildLogs' settle wait so a test
+// reading the tail takes milliseconds, not the production 10s per read.
+func fastArtifactBuildLogsSettle(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	interval, oldTimeout := artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout
+	artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout = time.Millisecond, timeout
+	t.Cleanup(func() {
+		artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout = interval, oldTimeout
+	})
+}
+
+func otelLogsJSON(w http.ResponseWriter, entries ...map[string]any) {
+	if entries == nil {
+		entries = []map[string]any{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": entries})
+}
+
+func otelLogRecord(timestamp, message string) map[string]any {
+	return map[string]any{"level": "info", "message": message, "timestamp": timestamp}
 }
 
 func TestIsTerminalArtifactBuildStatus(t *testing.T) {
@@ -178,8 +202,10 @@ func TestWaitForArtifactBuildCallsOnPoll(t *testing.T) {
 
 func TestWaitForArtifactBuildReturnsFailedError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		build := artifactBuildJSON(ArtifactBuildStatusFailed)
+		build["failureReason"] = "The build failed; it was last seen executing the Dockerfile."
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(artifactBuildJSON(ArtifactBuildStatusFailed))
+		_ = json.NewEncoder(w).Encode(build)
 	}))
 	defer server.Close()
 
@@ -201,6 +227,10 @@ func TestWaitForArtifactBuildReturnsFailedError(t *testing.T) {
 	}
 	if failedErr.Status != ArtifactBuildStatusFailed {
 		t.Fatalf("unexpected status: %q", failedErr.Status)
+	}
+	want := "artifact build build-1 ended with status FAILED: The build failed; it was last seen executing the Dockerfile."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -247,11 +277,11 @@ func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(artifactBuildJSON(status))
 		case "/otel/artifact/art-1/logs/":
 			otelCalls++
-			if got := r.URL.Query()["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
-				t.Fatalf("expected searchKeys=build_id, got %v", got)
+			if got := r.URL.Query()["searchKeys"]; len(got) != 1 || got[0] != "external_build_id" {
+				t.Errorf("expected searchKeys=external_build_id, got %v", got)
 			}
 			if got := r.URL.Query()["searchValues"]; len(got) != 1 || got[0] != "build-1" {
-				t.Fatalf("expected searchValues=build-1, got %v", got)
+				t.Errorf("expected searchValues=build-1, got %v", got)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -262,7 +292,7 @@ func TestWaitForArtifactBuildStreamsOtelLogs(t *testing.T) {
 				}},
 			})
 		default:
-			t.Fatalf("unexpected path: %s", r.URL.Path)
+			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 	}))
 	defer server.Close()
@@ -313,11 +343,36 @@ func TestArtifactBuildPollSettings(t *testing.T) {
 	})
 }
 
-func TestGetArtifactBuildLogsParsesPlainTextBuildKitOutput(t *testing.T) {
-	body := "#1 [internal] load build definition from Dockerfile\n#2 ERROR: failed to solve: process \"/bin/sh\" did not complete\n#3 CANCELED\n"
+func TestGetArtifactBuildLogsReadsOtelTailOldestFirst(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, time.Second)
+	t.Setenv(ArtifactBuildLogsTailLinesEnvVar, "7")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(body))
+		if r.URL.Path != "/otel/artifact/art-1/logs/" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		q := r.URL.Query()
+		if got := q.Get("limit"); got != "7" {
+			t.Errorf("expected limit=7 from %s, got %q", ArtifactBuildLogsTailLinesEnvVar, got)
+		}
+		if got := q["searchKeys"]; len(got) != 1 || got[0] != "external_build_id" {
+			t.Errorf("expected searchKeys=external_build_id, got %v", got)
+		}
+		if got := q["searchValues"]; len(got) != 1 || got[0] != "build-1" {
+			t.Errorf("expected searchValues=build-1, got %v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// Newest first, as the server sends them, and like it ordered only to the
+		// millisecond: the last two share one, in the wrong order.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"level": "info", "message": "Image build FAILED in 4.3 seconds.", "timestamp": "2026-10-07 09:26:14.974976+00:00"},
+				{"level": "info", "message": "#12 [5/5] RUN exit 7", "timestamp": "2026-10-07 09:26:14.268356+00:00"},
+				{"level": "info", "message": "#12 ERROR: exit code: 7", "timestamp": "2026-10-07 09:26:14.268449+00:00"},
+			},
+		})
 	}))
 	defer server.Close()
 
@@ -330,37 +385,74 @@ func TestGetArtifactBuildLogsParsesPlainTextBuildKitOutput(t *testing.T) {
 		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
 	}
 
-	if !strings.Contains(logs, "ERROR: failed to solve") {
-		t.Fatalf("expected plain-text build logs, got:\n%s", logs)
+	want := "[2026-10-07 09:26:14.268356+00:00] INFO: #12 [5/5] RUN exit 7\n" +
+		"[2026-10-07 09:26:14.268449+00:00] INFO: #12 ERROR: exit code: 7\n" +
+		"[2026-10-07 09:26:14.974976+00:00] INFO: Image build FAILED in 4.3 seconds."
+	if logs != want {
+		t.Fatalf("logs =\n%s\nwant\n%s", logs, want)
 	}
 }
 
-func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
+func TestGetArtifactBuildLogsEmptyOtelIsNotAnError(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, 20*time.Millisecond)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/artifacts/art-1/builds/build-1/logs":
-			w.WriteHeader(http.StatusBadGateway)
-			_, _ = w.Write([]byte(`{"detail":"Failed to retrieve build logs"}`))
-		case "/otel/artifact/art-1/logs/":
-			if got := r.URL.Query().Get("limit"); got != "30" {
-				t.Fatalf("expected limit=30, got %q", got)
-			}
-			if got := r.URL.Query()["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
-				t.Fatalf("expected searchKeys=build_id, got %v", got)
-			}
-			if got := r.URL.Query()["searchValues"]; len(got) != 1 || got[0] != "build-1" {
-				t.Fatalf("expected searchValues=build-1, got %v", got)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": []map[string]any{{
-					"level":     "error",
-					"message":   "build failed in otel",
-					"timestamp": "2026-07-09T16:14:50Z",
-				}},
-			})
+		otelLogsJSON(w)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil || logs != "" {
+		t.Fatalf("GetArtifactBuildLogs = %q, %v; want empty logs and no error", logs, err)
+	}
+}
+
+// The removed per-build log endpoint must never be read, nor named in the error.
+func TestGetArtifactBuildLogsReportsOtelError(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, time.Second)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/otel/artifact/art-1/logs/" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	_, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err == nil {
+		t.Fatal("expected an error when the OTEL read fails")
+	}
+	if strings.Contains(err.Error(), "/builds/build-1/logs") {
+		t.Fatalf("error names the removed per-build log endpoint: %v", err)
+	}
+}
+
+// A build reported FAILED can have no records yet, then only the lines before its error:
+// the tail is the one two consecutive reads agree on.
+func TestGetArtifactBuildLogsWaitsForIngestionToSettle(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, time.Second)
+
+	step := otelLogRecord("2026-10-07 09:26:14.268356+00:00", "#12 [5/5] RUN exit 7")
+	failure := otelLogRecord("2026-10-07 09:26:14.268449+00:00", "#12 ERROR: exit code: 7")
+	reads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reads++
+		switch reads {
+		case 1:
+			otelLogsJSON(w)
+		case 2:
+			otelLogsJSON(w, step)
 		default:
-			t.Fatalf("unexpected path: %s", r.URL.Path)
+			otelLogsJSON(w, failure, step)
 		}
 	}))
 	defer server.Close()
@@ -373,22 +465,22 @@ func TestGetArtifactBuildLogsFallsBackToOtelArtifactLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
 	}
-
-	if !strings.Contains(logs, "build failed in otel") {
-		t.Fatalf("expected OTEL fallback logs, got:\n%s", logs)
+	if !strings.Contains(logs, "exit code: 7") {
+		t.Fatalf("expected the settled tail with the error line, got:\n%s", logs)
+	}
+	if reads != 4 {
+		t.Fatalf("expected 4 reads (empty, partial, full, full again), got %d", reads)
 	}
 }
 
-func TestGetArtifactBuildLogsParsesAndTailsJSONL(t *testing.T) {
-	body := `{"asctime":"2026-06-09 10:00:00","levelname":"INFO","message":"line-1"}
-{"asctime":"2026-06-09 10:00:01","levelname":"ERROR","message":"line-2"}
-`
+func TestGetArtifactBuildLogsStopsWaitingAtTimeout(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, 30*time.Millisecond)
 
+	reads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/artifacts/art-1/builds/build-1/logs" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		_, _ = w.Write([]byte(body))
+		reads++
+		// A build still running: every read has a newer line.
+		otelLogsJSON(w, otelLogRecord(fmt.Sprintf("2026-10-07 09:26:%02d", reads%60), fmt.Sprintf("line %d", reads)))
 	}))
 	defer server.Close()
 
@@ -396,29 +488,31 @@ func TestGetArtifactBuildLogsParsesAndTailsJSONL(t *testing.T) {
 	cfg.Endpoint = server.URL
 	svc := NewService(NewClient(cfg))
 
+	start := time.Now()
 	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
 	if err != nil {
 		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
 	}
-
-	for _, want := range []string{
-		"[2026-06-09 10:00:00] INFO: line-1",
-		"[2026-06-09 10:00:01] ERROR: line-2",
-	} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)
-		}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("expected to give up near the 30ms timeout, took %s", elapsed)
+	}
+	if !strings.Contains(logs, "line ") {
+		t.Fatalf("expected the last read's lines, got %q", logs)
 	}
 }
 
-// A single JSONL wrapper line elsewhere in the body must not cause a plain-text
-// BuildKit error line to be dropped - see the artifact-build-log-tail PR review.
-func TestGetArtifactBuildLogsKeepsPlainTextLineAlongsideJSONL(t *testing.T) {
-	body := "{\"asctime\":\"2026-06-09 10:00:00\",\"levelname\":\"INFO\",\"message\":\"pulling image\"}\n" +
-		"#2 ERROR: failed to solve: process \"/bin/sh\" did not complete\n"
+// A failed re-read must not throw away lines an earlier read already returned.
+func TestGetArtifactBuildLogsKeepsEarlierReadOnError(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, time.Second)
 
+	reads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(body))
+		reads++
+		if reads == 1 {
+			otelLogsJSON(w, otelLogRecord("2026-10-07 09:26:14.268356+00:00", "#12 [5/5] RUN exit 7"))
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()
 
@@ -430,24 +524,18 @@ func TestGetArtifactBuildLogsKeepsPlainTextLineAlongsideJSONL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
 	}
-
-	for _, want := range []string{
-		"[2026-06-09 10:00:00] INFO: pulling image",
-		"ERROR: failed to solve",
-	} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("expected logs to contain %q, got:\n%s", want, logs)
-		}
+	if !strings.Contains(logs, "RUN exit 7") {
+		t.Fatalf("expected the first read's lines, got %q", logs)
 	}
 }
 
-func TestGetArtifactBuildLogsTailLinesEnvVar(t *testing.T) {
-	body := `{"asctime":"2026-06-09 10:00:00","levelname":"INFO","message":"line-1"}
-{"asctime":"2026-06-09 10:00:01","levelname":"INFO","message":"line-2"}
-`
-
+// A context that ends during the wait returns what was read so far. The production 10s
+// interval is far longer than the context, so the wait is cut short by it.
+func TestGetArtifactBuildLogsStopsWaitingWhenContextEnds(t *testing.T) {
+	reads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(body))
+		reads++
+		otelLogsJSON(w, otelLogRecord("2026-10-07 09:26:14.268356+00:00", "#12 [5/5] RUN exit 7"))
 	}))
 	defer server.Close()
 
@@ -455,18 +543,18 @@ func TestGetArtifactBuildLogsTailLinesEnvVar(t *testing.T) {
 	cfg.Endpoint = server.URL
 	svc := NewService(NewClient(cfg))
 
-	t.Setenv(ArtifactBuildLogsTailLinesEnvVar, "1")
-
-	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	logs, err := svc.GetArtifactBuildLogs(ctx, "art-1", "build-1")
 	if err != nil {
 		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
 	}
-
-	if !strings.Contains(logs, "line-2") {
-		t.Errorf("expected tail to include last line, got:\n%s", logs)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("expected to stop when the context ended, took %s", elapsed)
 	}
-	if strings.Contains(logs, "line-1") {
-		t.Errorf("expected tail to exclude first line, got:\n%s", logs)
+	if reads != 1 || !strings.Contains(logs, "RUN exit 7") {
+		t.Fatalf("expected the first read's lines after one read, got %d reads: %q", reads, logs)
 	}
 }
 

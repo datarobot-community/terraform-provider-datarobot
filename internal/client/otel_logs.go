@@ -25,7 +25,10 @@ type getOtelLogsRequest struct {
 func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
 	req := &getOtelLogsRequest{Limit: limit}
 	if buildID != "" {
-		req.SearchKeys = []string{"build_id"}
+		// The image builder stamps the Workload API's build id, the one the provider
+		// holds, on each record as external_build_id. build_id is the builder's own id
+		// and matches nothing here.
+		req.SearchKeys = []string{"external_build_id"}
 		req.SearchValues = []string{buildID}
 	}
 	return req
@@ -165,7 +168,7 @@ func otelLogStreamGapEntry() OtelLogEntry {
 // otelLogsNextPath turns a PaginatedResponse.Next value (an absolute URL) into
 // a request path relative to the configured API endpoint, the same way
 // GetAllPages handles the same field. The server echoes the searchKeys /
-// searchValues filter back in Next, so following it keeps the build_id scope.
+// searchValues filter back in Next, so following it keeps the per-build scope.
 func otelLogsNextPath(basePath, next string) string {
 	if idx := strings.Index(next, "?"); idx != -1 {
 		return basePath + next[idx:]
