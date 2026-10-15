@@ -171,8 +171,8 @@ func TestOtelLogsRequestIncludesBuildIDFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query.Values returned error: %v", err)
 	}
-	if got := values["searchKeys"]; len(got) != 1 || got[0] != "build_id" {
-		t.Fatalf("expected searchKeys=build_id, got %v", got)
+	if got := values["searchKeys"]; len(got) != 1 || got[0] != "external_build_id" {
+		t.Fatalf("expected searchKeys=external_build_id, got %v", got)
 	}
 	if got := values["searchValues"]; len(got) != 1 || got[0] != "build-abc" {
 		t.Fatalf("expected searchValues=build-abc, got %v", got)
@@ -196,5 +196,32 @@ func TestFormatOtelLogEntryIncludesStackTrace(t *testing.T) {
 	})
 	if got != "[2026-07-09T16:14:50Z] ERROR: boom\ntraceback" {
 		t.Fatalf("unexpected format: %q", got)
+	}
+}
+
+func TestSortOtelLogEntries(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		timestamps []string // given in this order, expected back in reverse
+	}{
+		// The server's form, to the microsecond within one millisecond.
+		{"server form", []string{"2026-10-07 09:26:14.268449+00:00", "2026-10-07 09:26:14.268356+00:00"}},
+		// 10:00+02:00 is an hour before 09:00Z, though it sorts after it as a string.
+		{"offsets compare as times", []string{"2026-10-07T09:00:00Z", "2026-10-07T10:00:00+02:00"}},
+		// One timestamp does not parse, so all of them compare as strings.
+		{"strings when one does not parse", []string{"b", "2026-10-07T10:00:00+02:00"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entries := make([]OtelLogEntry, len(tc.timestamps))
+			for i, ts := range tc.timestamps {
+				entries[i] = OtelLogEntry{Timestamp: ts}
+			}
+			sortOtelLogEntries(entries)
+			for i, entry := range entries {
+				if want := tc.timestamps[len(tc.timestamps)-1-i]; entry.Timestamp != want {
+					t.Fatalf("position %d: got %q, want %q", i, entry.Timestamp, want)
+				}
+			}
+		})
 	}
 }
