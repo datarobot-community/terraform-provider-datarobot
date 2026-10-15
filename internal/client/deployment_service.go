@@ -256,6 +256,9 @@ type CreateCustomMetricRequest struct {
 	Value           *ColumnNameValue         `json:"value,omitempty"`
 	SampleCount     *ColumnNameValue         `json:"sampleCount,omitempty"`
 	Batch           *ColumnNameValue         `json:"batch,omitempty"`
+
+	// GeospatialSegmentAttribute is accepted on create only; PATCH does not support it.
+	GeospatialSegmentAttribute *string `json:"geospatialSegmentAttribute,omitempty"`
 }
 
 type CustomMetric struct {
@@ -274,6 +277,8 @@ type CustomMetric struct {
 	Value           *ColumnNameValue         `json:"value,omitempty"`
 	SampleCount     *ColumnNameValue         `json:"sampleCount,omitempty"`
 	Batch           *ColumnNameValue         `json:"batch,omitempty"`
+
+	GeospatialSegmentAttribute *string `json:"geospatialSegmentAttribute,omitempty"`
 }
 
 type UpdateCustomMetricRequest struct {
