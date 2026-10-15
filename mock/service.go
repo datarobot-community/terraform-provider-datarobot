@@ -1319,6 +1319,20 @@ func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
 }
 
+// DescribeWorkloadFailure mocks base method.
+func (m *MockService) DescribeWorkloadFailure(ctx context.Context, workloadID string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeWorkloadFailure", ctx, workloadID)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// DescribeWorkloadFailure indicates an expected call of DescribeWorkloadFailure.
+func (mr *MockServiceMockRecorder) DescribeWorkloadFailure(ctx, workloadID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkloadFailure", reflect.TypeOf((*MockService)(nil).DescribeWorkloadFailure), ctx, workloadID)
+}
+
 // FilesAPI mocks base method.
 func (m *MockService) FilesAPI() filesapi.Client {
 	m.ctrl.T.Helper()

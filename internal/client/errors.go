@@ -1,6 +1,9 @@
 package client
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // NotFoundError represents a custom error type for not found errors.
 type NotFoundError struct {
@@ -76,6 +79,8 @@ func WrapUnauthorizedError(resource string, err error) *UnauthorizedError {
 type GenericError struct {
 	Message    string
 	InnerError error
+	// StatusCode is the HTTP status of the response the error reports, 0 when it reports none.
+	StatusCode int
 }
 
 // Error implements the error interface for GenericError.
@@ -100,6 +105,15 @@ func (e *GenericError) Is(target error) bool {
 // NewGenericError creates a new GenericError.
 func NewGenericError(message string) *GenericError {
 	return &GenericError{Message: message}
+}
+
+// HTTPStatus is the HTTP status of the response err reports, 0 when it reports none.
+func HTTPStatus(err error) int {
+	var generic *GenericError
+	if errors.As(err, &generic) {
+		return generic.StatusCode
+	}
+	return 0
 }
 
 // WrapGenericError wraps an existing error into a GenericError.

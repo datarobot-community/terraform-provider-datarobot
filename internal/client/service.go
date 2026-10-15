@@ -302,6 +302,7 @@ type Service interface {
 	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
 	UpdateWorkloadSettings(ctx context.Context, workloadID string, req *UpdateWorkloadSettingsRequest) (*WorkloadReplacement, error)
 	WaitForWorkloadReplacement(ctx context.Context, workloadID string, opts *WaitForWorkloadReplacementOptions) (*WorkloadReplacement, error)
+	DescribeWorkloadFailure(ctx context.Context, workloadID string) string
 
 	// Key-values
 	ListKeyValues(ctx context.Context, req *ListKeyValuesRequest) ([]KeyValue, error)

@@ -121,3 +121,22 @@ func TestKeyValueWritesSendTheWholeEntry(t *testing.T) {
 		})
 	}
 }
+
+// A refused request carries its HTTP status, so callers need not match its text.
+func TestHTTPStatusOfRefusedRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message": "The name is already in use for the entity ID"}`))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	_, err := NewService(NewClient(cfg)).CreateKeyValue(context.Background(), &KeyValueRequest{Name: "team"})
+	if status := HTTPStatus(err); status != http.StatusConflict {
+		t.Errorf("HTTPStatus(%v) = %d, want %d", err, status, http.StatusConflict)
+	}
+	if status := HTTPStatus(NewNotFoundError("keyValue")); status != 0 {
+		t.Errorf("HTTPStatus of an error that reports no response = %d, want 0", status)
+	}
+}

@@ -6,7 +6,7 @@ description: |-
   A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
   Changes to artifact_id or runtime trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
   When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
-  A create that fails after the Workload API made the Workload, because the Workload does not start or a tag is refused, deletes it again, so the failed apply leaves no Workload behind; the next apply creates it anew.
+  A create whose Workload errors on start, or whose tags are refused, deletes the Workload again, so the failed apply leaves nothing behind; for a Workload that errors on start, the error quotes the platform's reason and the last lines of its log. A create interrupted or timed out while the Workload starts records the Workload in state with a warning instead, since it may still come up.
 ---
 
 # datarobot_workload (Resource)
@@ -17,7 +17,7 @@ Changes to `artifact_id` or `runtime` trigger an in-place workload replacement v
 
 When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
 
-A create that fails after the Workload API made the Workload, because the Workload does not start or a tag is refused, deletes it again, so the failed apply leaves no Workload behind; the next apply creates it anew.
+A create whose Workload errors on start, or whose tags are refused, deletes the Workload again, so the failed apply leaves nothing behind; for a Workload that errors on start, the error quotes the platform's reason and the last lines of its log. A create interrupted or timed out while the Workload starts records the Workload in state with a warning instead, since it may still come up.
 
 ## Example Usage
 
@@ -300,11 +300,11 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
 - `tags` (Attributes Set) Tags on the Workload: the tags the DataRobot UI shows and `GET /workloads/?tagKeys=` filters on. They are recorded outside the Workload entity, so they are written once the Workload exists, and changing them updates them in place, without replacing the Workload or rolling it out.
 
-Refreshed: a tag added, changed or removed outside Terraform shows as a change on the next plan, and a Workload whose configuration leaves `tags` out is planned with no tags, so tags added outside Terraform are removed by the next apply. Tags the platform sets itself, which cannot be changed, are left out. Where the platform refuses to list a Workload's tags (installations from before Workload tags, or a user without the seat its key-value API requires), a Workload without `tags` in state is read without them and a warning says so.
+Managed only when set: with `tags` in the configuration, the Workload has exactly those tags, a tag added, changed or removed outside Terraform shows as a change on the next plan, and `tags = []` removes them all. A configuration without `tags` leaves the Workload's tags alone and does not read them, and dropping `tags` from a configuration keeps the tags as they are. Tags the platform sets itself, which cannot be changed, are left out.
 
 With Pulumi, a preview or update compares with the tags the stack records unless it runs with `--refresh`. Use `pulumi up --refresh` after a failed update, which can leave tags on the Workload that the stack does not record, and when tags may have changed outside Pulumi, which an update without a refresh removes without showing them.
 
-Each name can appear once. The platform limits how many tags a Workload has, per installation, counting the tags it sets itself. If a tag is refused while the Workload is created, the Workload is deleted again together with the tags already written and its Use Case link, so the failed apply leaves nothing behind. Destroying a Workload leaves its tags in the platform's key-value store, as deleting it in the UI does. (see [below for nested schema](#nestedatt--tags))
+Each name can appear once. The platform limits how many tags a Workload has, per installation, counting the tags it sets itself. If a tag is refused while the Workload is created, the Workload is deleted again together with the tags already written and its Use Case link. Destroying the Workload removes the tags it manages, which the platform would otherwise keep. (see [below for nested schema](#nestedatt--tags))
 - `use_case_id` (String) The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the Enclaves an administrator has granted to this Use Case.
 
 Not refreshed: the link is recorded outside the Workload entity, so a link changed outside Terraform is invisible to the plan. Import does read it: a Workload linked to exactly one Use Case is imported with its ID, and one linked to several is imported with this attribute empty and a warning that names them.
