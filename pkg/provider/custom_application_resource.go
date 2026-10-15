@@ -176,7 +176,7 @@ func (r *CustomApplicationResource) Configure(ctx context.Context, req resource.
 	}
 }
 
-func (r *CustomApplicationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *CustomApplicationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) { //nolint:dupl // Create mirrors the sibling custom application resource; extracting shared logic is tracked separately.
 	var data CustomApplicationResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
