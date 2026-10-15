@@ -7,6 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -218,5 +225,92 @@ func checkCustomApplicationFromEnvironmentResourceExists() resource.TestCheckFun
 		}
 
 		return fmt.Errorf("Custom Application not found")
+	}
+}
+
+func customApplicationFromEnvironmentSchema(t *testing.T) fwresource.SchemaResponse {
+	t.Helper()
+
+	resp := fwresource.SchemaResponse{}
+	NewCustomApplicationFromEnvironmentResource().Schema(context.Background(), fwresource.SchemaRequest{}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", resp.Diagnostics)
+	}
+	return resp
+}
+
+func TestCustomApplicationFromEnvironmentResourceModelMatchesSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	resp := customApplicationFromEnvironmentSchema(t)
+
+	// Every field of the model needs an attribute in the schema, or the framework rejects the plan.
+	plan := tfsdk.Plan{Schema: resp.Schema, Raw: tftypes.NewValue(resp.Schema.Type().TerraformType(ctx), nil)}
+	model := CustomApplicationFromEnvironmentResourceModel{
+		ExternalAccessRecipients: types.ListNull(types.StringType),
+		Resources:                types.ObjectNull(applicationResourcesAttrTypes()),
+	}
+	if diags := plan.Set(ctx, &model); diags.HasError() {
+		t.Fatalf("the model has fields that the schema lacks: %+v", diags)
+	}
+}
+
+func TestCustomApplicationFromEnvironmentCreateSendsRequiredKeyScopeLevel(t *testing.T) {
+	cases := []struct {
+		name  string
+		level types.String
+		want  client.ScopeLevel
+	}{
+		{"set", types.StringValue("admin"), client.ScopeLevel("admin")},
+		{"unset", types.StringNull(), client.ScopeLevel("")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			applicationID := "app-id"
+			application := &client.Application{ID: applicationID, Status: "running"}
+			mockService := mock_client.NewMockService(ctrl)
+			var sent *client.CreateCustomApplicationRequest
+			mockService.EXPECT().
+				CreateCustomApplication(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *client.CreateCustomApplicationRequest) (*client.Application, error) {
+					sent = req
+					return application, nil
+				})
+			mockService.EXPECT().UpdateApplication(gomock.Any(), applicationID, gomock.Any()).Return(application, nil).AnyTimes()
+			mockService.EXPECT().GetApplication(gomock.Any(), applicationID).Return(application, nil).AnyTimes()
+
+			r := &CustomApplicationFromEnvironmentResource{provider: &Provider{service: mockService}}
+			resp := customApplicationFromEnvironmentSchema(t)
+			plan := tfsdk.Plan{Schema: resp.Schema, Raw: tftypes.NewValue(resp.Schema.Type().TerraformType(ctx), nil)}
+			model := CustomApplicationFromEnvironmentResourceModel{
+				Name:                     types.StringValue("app"),
+				EnvironmentID:            types.StringValue("env-id"),
+				ExternalAccessRecipients: types.ListNull(types.StringType),
+				Resources:                types.ObjectNull(applicationResourcesAttrTypes()),
+				RequiredKeyScopeLevel:    tc.level,
+			}
+			if diags := plan.Set(ctx, &model); diags.HasError() {
+				t.Fatalf("set plan: %+v", diags)
+			}
+
+			createResp := &fwresource.CreateResponse{State: tfsdk.State{
+				Schema: resp.Schema,
+				Raw:    tftypes.NewValue(resp.Schema.Type().TerraformType(ctx), nil),
+			}}
+			r.Create(ctx, fwresource.CreateRequest{Plan: plan}, createResp)
+
+			if createResp.Diagnostics.HasError() {
+				t.Fatalf("create diagnostics: %+v", createResp.Diagnostics)
+			}
+			if sent == nil || sent.RequiredKeyScopeLevel != tc.want {
+				t.Fatalf("request scope level = %+v, want %q", sent, tc.want)
+			}
+		})
 	}
 }

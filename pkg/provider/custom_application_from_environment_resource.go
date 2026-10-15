@@ -145,6 +145,13 @@ func (r *CustomApplicationFromEnvironmentResource) Schema(ctx context.Context, r
 				MarkdownDescription: "The list of Use Case IDs to add the Custom Application to.",
 				ElementType:         types.StringType,
 			},
+			"required_key_scope_level": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "The API key scope level required for requests to this custom application. Can be set to 'viewer', 'user', or 'admin'.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
 		},
 	}
 }
@@ -164,7 +171,7 @@ func (r *CustomApplicationFromEnvironmentResource) Configure(ctx context.Context
 	}
 }
 
-func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) { //nolint:dupl // Create mirrors the sibling custom application resource; extracting shared logic is tracked separately.
 	var data CustomApplicationFromEnvironmentResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -175,6 +182,10 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 	traceAPICall("CreateCustomApplication")
 	createRequest := &client.CreateCustomApplicationRequest{
 		EnvironmentID: data.EnvironmentID.ValueString(),
+	}
+
+	if IsKnown(data.RequiredKeyScopeLevel) {
+		createRequest.RequiredKeyScopeLevel = client.ScopeLevel(data.RequiredKeyScopeLevel.ValueString())
 	}
 
 	// Add resources if provided
