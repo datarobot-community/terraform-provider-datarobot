@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestZipDirectoryNoExtraRoot ensures that the zipDirectory helper does not add an
@@ -164,5 +165,66 @@ func TestZipDirectoryExplicitRootExclusion(t *testing.T) {
 	}
 	if !sawTop || !sawDeep {
 		t.Fatalf("missing expected entries; sawTop=%v sawDeep=%v", sawTop, sawDeep)
+	}
+}
+
+// TestZipDirectoryIgnoresModificationTimes ensures the archive, and so the hash that detects a changed
+// Docker context, depends on the content and not on when a checkout wrote the files.
+func TestZipDirectoryIgnoresModificationTimes(t *testing.T) {
+	source := t.TempDir()
+	nested := filepath.Join(source, "src")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(nested, "Main.java")
+	if err := os.WriteFile(file, []byte("class Main {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	zipTarget := filepath.Join(t.TempDir(), "context.zip")
+	first, err := zipDirectory(source, zipTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	later := time.Now().Add(48 * time.Hour)
+	for _, path := range []string{file, nested} {
+		if err := os.Chtimes(path, later, later); err != nil {
+			t.Fatal(err)
+		}
+	}
+	second, err := zipDirectory(source, zipTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if computeHash(first) != computeHash(second) {
+		t.Fatal("the archive of an unchanged directory differs after only its modification times changed")
+	}
+}
+
+// TestZipDirectoryHashChangesWithContent keeps the hash able to detect a real change.
+func TestZipDirectoryHashChangesWithContent(t *testing.T) {
+	source := t.TempDir()
+	file := filepath.Join(source, "Main.java")
+	if err := os.WriteFile(file, []byte("class Main {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	zipTarget := filepath.Join(t.TempDir(), "context.zip")
+	first, err := zipDirectory(source, zipTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("class Main { int x; }"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := zipDirectory(source, zipTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if computeHash(first) == computeHash(second) {
+		t.Fatal("the archive did not change after the file content changed")
 	}
 }

@@ -1261,6 +1261,8 @@ func updateUseCasesForEntity(
 	return
 }
 
+var zipEntryModifiedTime = time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC)
+
 func zipDirectory(source, target string) (content []byte, err error) {
 	zipFile, err := os.Create(target)
 	if err != nil {
@@ -1285,6 +1287,9 @@ func zipDirectory(source, target string) (content []byte, err error) {
 		if err != nil {
 			return err
 		}
+		// A fixed time keeps the archive, and the hash computed from it, the same for the same content.
+		// A fresh checkout gives every file a new modification time.
+		header.Modified = zipEntryModifiedTime
 
 		header.Name, err = filepath.Rel(source, path)
 		if err != nil {
