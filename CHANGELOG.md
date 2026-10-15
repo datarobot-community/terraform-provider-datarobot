@@ -4,6 +4,11 @@
 
 - Built with Go 1.27.2 and `golang.org/x/net` v0.60.0 (which brings `golang.org/x/crypto` v0.57.0), fixing nine `govulncheck` advisories in the HTTP/2, HTTP/1, TLS and MIME header handling of Go 1.27.1 and `golang.org/x/net` v0.58.0. Local linting needs golangci-lint v2.14.0 or newer, since older releases cannot read Go 1.27.2's export data.
 
+### Fixed
+
+- A failed `datarobot_artifact` image build now reports the platform's failure reason and the last lines of the build log, instead of an error naming a build log endpoint the Workload API has removed. The provider searched the log stream by a field the platform does not index, which also left the build log lines printed under `TF_LOG` empty.
+- Build log lines reach the log stream with a delay, so an apply that fails after starting an image build now waits up to a minute for them; `DATAROBOT_ARTIFACT_BUILD_LOGS_SETTLE_TIMEOUT` changes the wait, and `0` reads the log once. On clusters whose log stream does not index builds this way (Workload API before v11.12.0), the error has no log lines and the wait stops after three empty reads.
+
 ## [0.12.6] - 2026-10-07
 
 ### Fixed
