@@ -1,5 +1,9 @@
 ## [0.12.7] - 2026-10-14
 
+### Fixed
+
+- `datarobot_execution_environment` with `docker_context_path` no longer plans an update on every run from a fresh checkout. The hash that detects a changed context was computed from an archive that carried each file's modification time, and a checkout writes new times every run, so a CI job rebuilt the environment and everything built on it with no change to the context. The archive now uses a fixed time. **After upgrading, the first plan shows one update of `docker_context_hash`.** Apply it once, and later plans stay empty until the context changes.
+
 ### Changed
 
 - Built with Go 1.27.2 and `golang.org/x/net` v0.60.0 (which brings `golang.org/x/crypto` v0.57.0), fixing nine `govulncheck` advisories in the HTTP/2, HTTP/1, TLS and MIME header handling of Go 1.27.1 and `golang.org/x/net` v0.58.0. Local linting needs golangci-lint v2.14.0 or newer, since older releases cannot read Go 1.27.2's export data.
