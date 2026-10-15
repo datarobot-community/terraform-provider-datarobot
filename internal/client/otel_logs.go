@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,8 +27,8 @@ func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
 	req := &getOtelLogsRequest{Limit: limit}
 	if buildID != "" {
 		// The image builder stamps the Workload API's build id, the one the provider
-		// holds, on each record as external_build_id. build_id is the builder's own id
-		// and matches nothing here.
+		// holds, on each record as external_build_id, from Workload API v11.12.0 on.
+		// build_id is the builder's own id and matches nothing here.
 		req.SearchKeys = []string{"external_build_id"}
 		req.SearchValues = []string{buildID}
 	}
@@ -36,6 +37,40 @@ func otelLogsRequest(limit int, buildID string) *getOtelLogsRequest {
 
 func otelLogKey(entry OtelLogEntry) string {
 	return entry.Timestamp + "\x00" + entry.Level + "\x00" + entry.Message
+}
+
+// otelLogTimestampLayouts are the timestamp forms OTEL records have carried: the
+// server's own ("2026-10-07 09:38:31.789602+00:00") and RFC 3339. Fractional seconds
+// parse with both, although neither layout spells them out.
+var otelLogTimestampLayouts = []string{"2006-01-02 15:04:05Z07:00", time.RFC3339}
+
+func parseOtelLogTimestamp(raw string) (time.Time, bool) {
+	for _, layout := range otelLogTimestampLayouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// sortOtelLogEntries stable-sorts entries oldest first. It compares parsed times when
+// every timestamp parses, so a change of format or offset still sorts by time, and the
+// strings otherwise, which matches time order for the fixed-width form the server sends.
+func sortOtelLogEntries(entries []OtelLogEntry) {
+	times := make(map[string]time.Time, len(entries))
+	for _, entry := range entries {
+		t, ok := parseOtelLogTimestamp(entry.Timestamp)
+		if !ok {
+			slices.SortStableFunc(entries, func(a, b OtelLogEntry) int {
+				return strings.Compare(a.Timestamp, b.Timestamp)
+			})
+			return
+		}
+		times[entry.Timestamp] = t
+	}
+	slices.SortStableFunc(entries, func(a, b OtelLogEntry) int {
+		return times[a.Timestamp].Compare(times[b.Timestamp])
+	})
 }
 
 // FormatOtelLogEntry renders one OTEL log record for display.

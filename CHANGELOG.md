@@ -7,7 +7,7 @@
 ### Fixed
 
 - A failed `datarobot_artifact` image build now reports the platform's failure reason and the last lines of the build log, instead of an error naming a build log endpoint the Workload API has removed. The provider searched the log stream by a field the platform does not index, which also left the build log lines printed under `TF_LOG` empty.
-- Build log lines reach the log stream with a delay, so an apply that fails after starting an image build now waits up to a minute for them. On clusters whose log stream does not index builds this way, the error has no log lines.
+- Build log lines reach the log stream with a delay, so an apply that fails after starting an image build now waits up to a minute for them; `DATAROBOT_ARTIFACT_BUILD_LOGS_SETTLE_TIMEOUT` changes the wait, and `0` reads the log once. On clusters whose log stream does not index builds this way (Workload API before v11.12.0), the error has no log lines and the wait stops after three empty reads.
 
 ## [0.12.6] - 2026-10-07
 

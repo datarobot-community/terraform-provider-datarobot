@@ -8,7 +8,6 @@ import (
 	"os"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -132,22 +131,43 @@ func artifactBuildLogsTailLines() int {
 	return tailLines
 }
 
-// How long GetArtifactBuildLogs waits for a build's log to stop growing. Variables so
-// tests can shrink them.
-var (
-	artifactBuildLogsSettleInterval = 10 * time.Second
-	artifactBuildLogsSettleTimeout  = 60 * time.Second
+const (
+	// ArtifactBuildLogsSettleTimeoutEnvVar overrides how long GetArtifactBuildLogs waits
+	// for a failed build's log to stop growing; 0 reads it once.
+	ArtifactBuildLogsSettleTimeoutEnvVar  = "DATAROBOT_ARTIFACT_BUILD_LOGS_SETTLE_TIMEOUT"
+	defaultArtifactBuildLogsSettleTimeout = 60 * time.Second
+	// A stream still empty after this many reads in a row is taken to stay empty, as on a
+	// Workload API before v11.12.0, which does not index build logs by build. On staging
+	// the first lines arrived by the second read.
+	artifactBuildLogsMaxEmptyReads = 3
 )
+
+// The time between two reads of a build's log. A variable so tests can shrink it.
+var artifactBuildLogsSettleInterval = 10 * time.Second
+
+func artifactBuildLogsSettleTimeout() time.Duration {
+	raw := os.Getenv(ArtifactBuildLogsSettleTimeoutEnvVar)
+	if raw == "" {
+		return defaultArtifactBuildLogsSettleTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return defaultArtifactBuildLogsSettleTimeout
+	}
+	return d
+}
 
 // GetArtifactBuildLogs returns the tail of one build's log, oldest line first, from the
 // artifact's OTEL stream filtered to that build. Log ingestion trails the builder: a
 // build already reported FAILED can have no records yet, or only the lines before its
 // error. So the tail is read again until two reads artifactBuildLogsSettleInterval apart
-// agree, or artifactBuildLogsSettleTimeout passes. No records is not an error: the
-// caller then shows only the link to the UI's build log page.
+// agree, artifactBuildLogsMaxEmptyReads reads in a row find nothing, or the settle
+// timeout passes. No records is not an error: the caller then shows only the link to
+// the UI's build log page.
 func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buildID string) (string, error) {
-	deadline := time.Now().Add(artifactBuildLogsSettleTimeout)
+	deadline := time.Now().Add(artifactBuildLogsSettleTimeout())
 	logs := ""
+	emptyReads := 0
 	for {
 		next, err := s.readArtifactBuildLogTail(ctx, artifactID, buildID)
 		if err != nil {
@@ -156,10 +176,18 @@ func (s *ServiceImpl) GetArtifactBuildLogs(ctx context.Context, artifactID, buil
 			}
 			return logs, nil
 		}
-		if next != "" && next == logs {
-			return logs, nil
+		if next == "" {
+			emptyReads++
+			if emptyReads == artifactBuildLogsMaxEmptyReads {
+				return logs, nil
+			}
+		} else {
+			if next == logs {
+				return logs, nil
+			}
+			emptyReads = 0
+			logs = next
 		}
-		logs = next
 		if time.Now().Add(artifactBuildLogsSettleInterval).Before(deadline) &&
 			sleepCtx(ctx, artifactBuildLogsSettleInterval) == nil {
 			continue
@@ -178,9 +206,7 @@ func (s *ServiceImpl) readArtifactBuildLogTail(ctx context.Context, artifactID, 
 	// millisecond, so lines logged within one millisecond arrive shuffled (a BuildKit
 	// error ahead of the step that raised it). Sort on the full timestamp.
 	slices.Reverse(entries)
-	slices.SortStableFunc(entries, func(a, b OtelLogEntry) int {
-		return strings.Compare(a.Timestamp, b.Timestamp)
-	})
+	sortOtelLogEntries(entries)
 	return formatOtelLogEntries(entries), nil
 }
 

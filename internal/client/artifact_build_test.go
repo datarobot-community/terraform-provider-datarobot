@@ -26,11 +26,10 @@ func artifactBuildJSON(status string) map[string]any {
 // reading the tail takes milliseconds, not the production 10s per read.
 func fastArtifactBuildLogsSettle(t *testing.T, timeout time.Duration) {
 	t.Helper()
-	interval, oldTimeout := artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout
-	artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout = time.Millisecond, timeout
-	t.Cleanup(func() {
-		artifactBuildLogsSettleInterval, artifactBuildLogsSettleTimeout = interval, oldTimeout
-	})
+	t.Setenv(ArtifactBuildLogsSettleTimeoutEnvVar, timeout.String())
+	interval := artifactBuildLogsSettleInterval
+	artifactBuildLogsSettleInterval = time.Millisecond
+	t.Cleanup(func() { artifactBuildLogsSettleInterval = interval })
 }
 
 func otelLogsJSON(w http.ResponseWriter, entries ...map[string]any) {
@@ -393,10 +392,14 @@ func TestGetArtifactBuildLogsReadsOtelTailOldestFirst(t *testing.T) {
 	}
 }
 
-func TestGetArtifactBuildLogsEmptyOtelIsNotAnError(t *testing.T) {
-	fastArtifactBuildLogsSettle(t, 20*time.Millisecond)
+// A stream that stays empty, as on a cluster that does not index build logs, is not an
+// error, and stops being read long before the timeout.
+func TestGetArtifactBuildLogsStopsAfterEmptyReads(t *testing.T) {
+	fastArtifactBuildLogsSettle(t, time.Minute)
 
+	reads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reads++
 		otelLogsJSON(w)
 	}))
 	defer server.Close()
@@ -408,6 +411,38 @@ func TestGetArtifactBuildLogsEmptyOtelIsNotAnError(t *testing.T) {
 	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
 	if err != nil || logs != "" {
 		t.Fatalf("GetArtifactBuildLogs = %q, %v; want empty logs and no error", logs, err)
+	}
+	if reads != artifactBuildLogsMaxEmptyReads {
+		t.Fatalf("expected %d reads, got %d", artifactBuildLogsMaxEmptyReads, reads)
+	}
+}
+
+// A settle timeout of 0 reads the log once, without waiting for late lines. The
+// production 10s interval is left alone, so a wait would show in the elapsed time.
+func TestGetArtifactBuildLogsSettleTimeoutZeroReadsOnce(t *testing.T) {
+	t.Setenv(ArtifactBuildLogsSettleTimeoutEnvVar, "0")
+
+	reads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reads++
+		otelLogsJSON(w, otelLogRecord("2026-10-07 09:26:14.268356+00:00", fmt.Sprintf("line %d", reads)))
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	svc := NewService(NewClient(cfg))
+
+	start := time.Now()
+	logs, err := svc.GetArtifactBuildLogs(context.Background(), "art-1", "build-1")
+	if err != nil {
+		t.Fatalf("GetArtifactBuildLogs returned error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("expected no wait, took %s", elapsed)
+	}
+	if reads != 1 || !strings.Contains(logs, "line 1") {
+		t.Fatalf("expected one read, got %d reads: %q", reads, logs)
 	}
 }
 
@@ -571,4 +606,22 @@ func TestArtifactBuildLogsTailLines(t *testing.T) {
 			t.Errorf("expected default %d, got %d", defaultArtifactBuildLogsTailLines, got)
 		}
 	})
+}
+
+func TestArtifactBuildLogsSettleTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want time.Duration
+	}{
+		{"", defaultArtifactBuildLogsSettleTimeout},
+		{"15s", 15 * time.Second},
+		{"0", 0},
+		{"-1s", defaultArtifactBuildLogsSettleTimeout},
+		{"not-a-duration", defaultArtifactBuildLogsSettleTimeout},
+	} {
+		t.Setenv(ArtifactBuildLogsSettleTimeoutEnvVar, tc.raw)
+		if got := artifactBuildLogsSettleTimeout(); got != tc.want {
+			t.Errorf("%s=%q: got %s, want %s", ArtifactBuildLogsSettleTimeoutEnvVar, tc.raw, got, tc.want)
+		}
+	}
 }
