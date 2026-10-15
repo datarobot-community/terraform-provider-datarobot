@@ -24,6 +24,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &CustomApplicationResource{}
 var _ resource.ResourceWithImportState = &CustomApplicationResource{}
+var _ resource.ResourceWithModifyPlan = &CustomApplicationResource{}
 
 func NewCustomApplicationResource() resource.Resource {
 	return &CustomApplicationResource{}
@@ -159,6 +160,31 @@ func (r *CustomApplicationResource) Schema(ctx context.Context, req resource.Sch
 			},
 		},
 	}
+}
+
+// ModifyPlan marks resources unknown when the source version changes and the user did not set resources.
+// The API fills an application's resources from its source version, and returns none until a source version
+// sets them. The plan would otherwise keep the old value or null, and Terraform rejects the new value after apply.
+func (r *CustomApplicationResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip create and destroy.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan, state, config CustomApplicationResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !config.Resources.IsNull() || plan.SourceVersionID.Equal(state.SourceVersionID) {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(
+		ctx, path.Root("resources"), types.ObjectUnknown(applicationResourcesAttrTypes()))...)
 }
 
 func (r *CustomApplicationResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

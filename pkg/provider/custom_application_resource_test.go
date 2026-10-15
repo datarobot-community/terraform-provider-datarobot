@@ -8,6 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -78,7 +83,7 @@ if __name__ == "__main__":
 			// Create and Read
 			{
 				Config: customApplicationResourceConfig(
-					"",
+					"custom_application "+nameSalt,
 					1,
 					false,
 					[]string{},
@@ -228,6 +233,7 @@ resource "datarobot_use_case" "test_new_custom_application" {
 }
 
 resource "datarobot_application_source" "test" {
+	name = "custom_application_source %s"
 	base_environment_id = "`+testStreamlitBaseEnvID+`"
 	folder_path = "custom_application"
 	resources = {
@@ -243,7 +249,7 @@ resource "datarobot_custom_application" "test" {
 	%s
 	%s
 }
-`, nameSalt, nameSalt, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
+`, nameSalt, nameSalt, nameSalt, applicationSourceReplicas, externalAccess, allowAutoStopping, recipients, nameStr, useCaseIDsStr)
 }
 
 func checkCustomApplicationResourceExists() resource.TestCheckFunc {
@@ -954,4 +960,154 @@ func checkCustomApplicationScopeLevel(resourceName, expectedLevel string) resour
 
 		return nil
 	}
+}
+
+func customApplicationModifyPlan(
+	t *testing.T,
+	state *CustomApplicationResourceModel,
+	plan CustomApplicationResourceModel,
+	config CustomApplicationResourceModel,
+) CustomApplicationResourceModel {
+	t.Helper()
+
+	ctx := context.Background()
+	schemaResp := fwresource.SchemaResponse{}
+	NewCustomApplicationResource().Schema(ctx, fwresource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("schema diagnostics: %+v", schemaResp.Diagnostics)
+	}
+	schemaType := schemaResp.Schema.Type().TerraformType(ctx)
+
+	req := fwresource.ModifyPlanRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)},
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)},
+		State:  tfsdk.State{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)},
+	}
+	// tfsdk.Config has no setter, so build its raw value through a State.
+	configState := tfsdk.State{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)}
+	if diags := configState.Set(ctx, &config); diags.HasError() {
+		t.Fatalf("set config: %+v", diags)
+	}
+	req.Config.Raw = configState.Raw
+	if diags := req.Plan.Set(ctx, &plan); diags.HasError() {
+		t.Fatalf("set plan: %+v", diags)
+	}
+	if state != nil {
+		if diags := req.State.Set(ctx, state); diags.HasError() {
+			t.Fatalf("set state: %+v", diags)
+		}
+	}
+
+	resp := &fwresource.ModifyPlanResponse{Plan: req.Plan}
+	resource, ok := NewCustomApplicationResource().(fwresource.ResourceWithModifyPlan)
+	if !ok {
+		t.Fatal("the resource does not implement ModifyPlan")
+	}
+	resource.ModifyPlan(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("modify plan diagnostics: %+v", resp.Diagnostics)
+	}
+
+	var planned CustomApplicationResourceModel
+	if diags := resp.Plan.Get(ctx, &planned); diags.HasError() {
+		t.Fatalf("get plan: %+v", diags)
+	}
+	return planned
+}
+
+func customApplicationModel(sourceVersionID types.String, resources types.Object) CustomApplicationResourceModel {
+	return CustomApplicationResourceModel{
+		SourceVersionID:          sourceVersionID,
+		ExternalAccessRecipients: types.ListNull(types.StringType),
+		Resources:                resources,
+	}
+}
+
+func customApplicationResourcesWithReplicas(replicas int64) types.Object {
+	label := "cpu.xlarge"
+	return ApplicationResourcesFromAPI(context.Background(), client.ApplicationResources{
+		Replicas:      &replicas,
+		ResourceLabel: &label,
+	})
+}
+
+func TestCustomApplicationModifyPlanMarksResourcesUnknownWhenTheSourceVersionChanges(t *testing.T) {
+	t.Parallel()
+
+	nullResources := types.ObjectNull(applicationResourcesAttrTypes())
+	cases := []struct {
+		name           string
+		stateResources types.Object
+		planVersion    types.String
+	}{
+		// The API returns no resources for an application until its source version sets them.
+		{"state has no resources", nullResources, types.StringValue("version-2")},
+		{"state has resources", customApplicationResourcesWithReplicas(1), types.StringValue("version-2")},
+		{"new version is not known yet", nullResources, types.StringUnknown()},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := customApplicationModel(types.StringValue("version-1"), tc.stateResources)
+			plan := customApplicationModel(tc.planVersion, tc.stateResources)
+			config := customApplicationModel(tc.planVersion, nullResources)
+
+			planned := customApplicationModifyPlan(t, &state, plan, config)
+
+			if !planned.Resources.IsUnknown() {
+				t.Fatalf("resources = %s, want unknown, because the new source version can change them", planned.Resources)
+			}
+		})
+	}
+}
+
+func TestCustomApplicationModifyPlanKeepsResourcesWhenNothingCanChangeThem(t *testing.T) {
+	t.Parallel()
+
+	nullResources := types.ObjectNull(applicationResourcesAttrTypes())
+	stateResources := customApplicationResourcesWithReplicas(1)
+
+	t.Run("the source version is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		state := customApplicationModel(types.StringValue("version-1"), stateResources)
+		plan := customApplicationModel(types.StringValue("version-1"), stateResources)
+		config := customApplicationModel(types.StringValue("version-1"), nullResources)
+
+		planned := customApplicationModifyPlan(t, &state, plan, config)
+
+		if !planned.Resources.Equal(stateResources) {
+			t.Fatalf("resources = %s, want the state value %s", planned.Resources, stateResources)
+		}
+	})
+
+	t.Run("the user sets resources", func(t *testing.T) {
+		t.Parallel()
+
+		configured := customApplicationResourcesWithReplicas(3)
+		state := customApplicationModel(types.StringValue("version-1"), stateResources)
+		plan := customApplicationModel(types.StringValue("version-2"), configured)
+		config := customApplicationModel(types.StringValue("version-2"), configured)
+
+		planned := customApplicationModifyPlan(t, &state, plan, config)
+
+		if !planned.Resources.Equal(configured) {
+			t.Fatalf("resources = %s, want the configured value %s", planned.Resources, configured)
+		}
+	})
+
+	t.Run("the resource is being created", func(t *testing.T) {
+		t.Parallel()
+
+		plan := customApplicationModel(types.StringUnknown(), types.ObjectUnknown(applicationResourcesAttrTypes()))
+		config := customApplicationModel(types.StringUnknown(), nullResources)
+
+		planned := customApplicationModifyPlan(t, nil, plan, config)
+
+		if !planned.Resources.IsUnknown() {
+			t.Fatalf("resources = %s, want the unknown value that create planned", planned.Resources)
+		}
+	})
 }
