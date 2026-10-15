@@ -28,6 +28,12 @@ resource "datarobot_workload" "example" {
   description = "Example workload with in-place replacement"
   artifact_id = datarobot_artifact.example.artifact_id
 
+  # Changing tags updates them in place, without a rollout.
+  tags = [
+    { name = "team", value = "ml-platform" },
+    { name = "environment", value = "staging" },
+  ]
+
   runtime = {
     container_groups = [
       {

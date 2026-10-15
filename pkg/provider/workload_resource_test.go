@@ -108,6 +108,7 @@ func TestIntegrationWorkloadResource(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -181,6 +182,7 @@ func TestIntegrationWorkloadClearDescription(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -238,6 +240,7 @@ func TestIntegrationWorkloadReplaceOnArtifactIDChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -306,6 +309,7 @@ func TestIntegrationWorkloadReplaceWithReplacementPolicyOnArtifactChange(t *test
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -369,6 +373,7 @@ func TestIntegrationWorkloadReplaceOnReplacementPolicyChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -425,6 +430,7 @@ func TestIntegrationWorkloadUpdateMetadataAndArtifactChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -491,6 +497,7 @@ func TestIntegrationWorkloadUpdateMetadataPreservesReplacementPolicy(t *testing.
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -547,6 +554,7 @@ func TestIntegrationWorkloadReplaceOnArtifactAndRuntimeChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -612,6 +620,7 @@ func TestIntegrationWorkloadReplacementPollFailure(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -712,6 +721,7 @@ func TestIntegrationWorkloadInterruptedWaitAfterPromotionKeepsTheRollout(t *test
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -757,6 +767,7 @@ func TestIntegrationWorkloadVersionThatStopsAfterPromotionIsRecordedAndReported(
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -804,6 +815,7 @@ func TestIntegrationWorkloadArtifactChangeOnEnclaveSkipsTheGatewayWait(t *testin
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -871,6 +883,7 @@ func TestIntegrationWorkloadReplaceOnReplicaCountChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -939,6 +952,7 @@ func TestIntegrationWorkloadReplaceOnResourcesChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -1002,6 +1016,7 @@ func TestIntegrationWorkloadReplaceOnAutoscalingChange(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -1065,6 +1080,7 @@ func TestIntegrationWorkloadImportState(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -1125,6 +1141,7 @@ func TestIntegrationWorkloadImportReadsUseCase(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -1159,6 +1176,7 @@ func TestIntegrationWorkloadAdoptsUseCaseAfterImport(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -2272,6 +2290,7 @@ func TestIntegrationWorkloadNoDriftWhenScalingUnspecified(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -2398,6 +2417,7 @@ func TestIntegrationWorkloadResourceBundlesSentinel(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -2449,6 +2469,7 @@ func TestIntegrationWorkloadBundleSelectionPolicySentinel(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -2504,6 +2525,7 @@ func TestIntegrationWorkloadStringMemoryNormalization(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -3061,6 +3083,7 @@ func TestIntegrationWorkloadEnclavePlacement(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -3135,6 +3158,7 @@ func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -3190,6 +3214,7 @@ func TestIntegrationWorkloadRefusesLeavingEnclaveInPlace(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockService := mock_client.NewMockService(ctrl)
+			expectNoWorkloadTags(mockService)
 			defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 			mockAPIKey(t)
 
@@ -3219,6 +3244,7 @@ func TestIntegrationWorkloadLeavesEnclaveByReplacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -3242,6 +3268,12 @@ func TestIntegrationWorkloadLeavesEnclaveByReplacement(t *testing.T) {
 			},
 		},
 	})
+}
+
+// expectNoWorkloadTags answers every tag lookup with no tags, for tests whose configuration
+// sets none.
+func expectNoWorkloadTags(mockService *mock_client.MockService) {
+	mockService.EXPECT().ListKeyValues(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 }
 
 // expectWorkloadsCreatedAndDeleted serves each Workload, in create order, until it is deleted.
@@ -3276,6 +3308,7 @@ func TestIntegrationWorkloadChangesUseCaseInPlace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -3343,6 +3376,7 @@ func TestIntegrationWorkloadChangesUseCaseInPlaceOnItsEnclave(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -3392,6 +3426,7 @@ func TestIntegrationWorkloadReplacesWhenUseCaseAndPlacementChange(t *testing.T) 
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockService := mock_client.NewMockService(ctrl)
+			expectNoWorkloadTags(mockService)
 			defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 			mockAPIKey(t)
 
@@ -3425,6 +3460,7 @@ func TestIntegrationWorkloadKeepsUseCaseWhenLinkFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -3494,6 +3530,7 @@ func TestIntegrationWorkloadRecordsUseCaseWhenRolloutFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
 	mockAPIKey(t)
 
@@ -3534,6 +3571,7 @@ func TestIntegrationWorkloadPlacementChangeRidesArtifactReplacement(t *testing.T
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -3850,6 +3888,7 @@ func TestIntegrationWorkloadUnknownPlacementResolvingToSameValue(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
 	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
 		return mockService
 	})()
@@ -3939,4 +3978,636 @@ resource "datarobot_workload" "test" {
 			},
 		},
 	})
+}
+
+// ─── tags ──────────────────────────────────────────────────────────────────────
+
+// Tags are written once the Workload exists, synced in place against what the platform holds,
+// read back on import and on refresh, and never trigger a rollout. Tags the platform wrote
+// itself and other key-value categories are left alone.
+func TestIntegrationWorkloadTags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint))
+	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, false, nil).AnyTimes()
+	expectNoWorkloadRollout(t, mockService)
+	store := expectWorkloadTagStore(t, mockService, id)
+
+	var initialID string
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithTags(name, artifactID, "", []string{"team=ml", "env=dev"}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{"name": "team", "value": "ml"}),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{"name": "env", "value": "dev"}),
+					store.checkWrites(true, "POST env=dev", "POST team=ml"),
+					store.checkTags("env=dev", "team=ml"),
+					captureAttr(resourceName, "id", &initialID),
+				),
+			},
+			{
+				// One changed, one removed, one added: removed first, then changed, then added.
+				Config: workloadConfigWithTags(name, artifactID, "", []string{"team=platform", "owner=wojtek"}),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+				}},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+					resource.TestCheckTypeSetElemNestedAttrs(resourceName, "tags.*", map[string]string{"name": "owner", "value": "wojtek"}),
+					store.checkWrites(false, "DELETE env", "PATCH team=platform", "POST owner=wojtek"),
+					store.checkTags("owner=wojtek", "team=platform"),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				// Changed outside Terraform; a system tag and another category appear as well.
+				PreConfig: func() {
+					store.edit(func(tags []client.KeyValue) []client.KeyValue {
+						tags = slices.DeleteFunc(tags, func(tag client.KeyValue) bool { return tag.Name == "owner" })
+						notEditable := false
+						return append(tags,
+							client.KeyValue{ID: "kv-extra", Name: "extra", Value: "1", Category: client.KeyValueCategoryTag},
+							client.KeyValue{ID: "kv-system", Name: "datarobot.type", Value: "custom-application", Category: client.KeyValueCategoryTag, IsEditable: &notEditable},
+							client.KeyValue{ID: "kv-metric", Name: "accuracy", Value: "0.9", Category: "metric"})
+					})
+				},
+				Config:             workloadConfigWithTags(name, artifactID, "", []string{"team=platform", "owner=wojtek"}),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				Config: workloadConfigWithTags(name, artifactID, "", []string{"team=platform", "owner=wojtek"}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+					store.checkWrites(false, "DELETE extra", "POST owner=wojtek"),
+					store.checkTags("accuracy=0.9", "datarobot.type=custom-application", "owner=wojtek", "team=platform"),
+				),
+			},
+			{
+				// `tags = []` removes the Workload's tags and stays an empty set on refresh.
+				Config: workloadConfigWithTags(name, artifactID, "", []string{}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "0"),
+					store.checkWrites(true, "DELETE owner", "DELETE team"),
+					store.checkTags("accuracy=0.9", "datarobot.type=custom-application"),
+					checkWorkloadIDPreserved(&initialID),
+				),
+			},
+			{
+				Config: workloadConfigWithTags(name, artifactID, "", nil),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr(resourceName, "tags.#"),
+					store.checkWrites(true),
+				),
+			},
+			{
+				// With `tags` left out, a tag added outside Terraform plans its removal.
+				PreConfig: func() {
+					store.edit(func(tags []client.KeyValue) []client.KeyValue {
+						return append(tags, client.KeyValue{ID: "kv-ui", Name: "ui", Value: "1", Category: client.KeyValueCategoryTag})
+					})
+				},
+				Config:             workloadConfigWithTags(name, artifactID, "", nil),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// A refresh records it,
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// and once it is removed outside Terraform again, the next refresh plans no change.
+				PreConfig: func() {
+					store.edit(func(tags []client.KeyValue) []client.KeyValue {
+						return slices.DeleteFunc(tags, func(tag client.KeyValue) bool { return tag.Name == "ui" })
+					})
+				},
+				RefreshState: true,
+				Check:        resource.TestCheckNoResourceAttr(resourceName, "tags.#"),
+			},
+		},
+	})
+}
+
+// A tag refused while the Workload is created deletes the Workload again, together with the
+// tags already written and its Use Case link, since a failed create keeps no state; the error
+// carries the platform's message, which names the limit.
+func TestIntegrationWorkloadRefusedTagDeletesWorkload(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, useCaseID, name := uuid.NewString(), uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), useCaseID, "workload", id).Return(nil)
+	store := expectWorkloadTagStore(t, mockService, id)
+	store.refuseCreatesAfter = 2
+	store.createErr = client.NewGenericError("POST request http://localhost/api/v2/keyValues/ : response 422 Unprocessable Entity " +
+		`{"message": "The maximum number of tags for a deployment is 2. It already has 2."}`)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             store.checkTags(),
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithTags(name, artifactID, useCaseID, []string{"a=1", "b=2", "c=3"}),
+				ExpectError: regexp.MustCompile(`(?s)Error adding tags to the Workload.*adding tag "c".*` +
+					`maximum number of tags.*It already has 2.*applies to Workloads as well.*deleted again, so nothing is left behind`),
+			},
+		},
+	})
+}
+
+// A Workload that never starts is deleted again as well, with its tags and its Use Case link.
+func TestIntegrationWorkloadFailedStartDeletesWorkload(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, useCaseID, name := uuid.NewString(), uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil)
+	workload.Status = client.ProtonStatusErrored
+	expectWorkloadsCreatedAndDeleted(mockService, workload)
+	mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), useCaseID, "workload", id).Return(nil)
+	store := expectWorkloadTagStore(t, mockService, id)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             store.checkTags(),
+		Steps: []resource.TestStep{
+			{
+				Config:      workloadConfigWithTags(name, artifactID, useCaseID, []string{"a=1"}),
+				ExpectError: regexp.MustCompile(`(?s)Error waiting for Workload to start.*failed to start.*deleted again, so nothing is left behind`),
+			},
+		},
+	})
+}
+
+// The rollback goes on after an interrupt, within a bound, and says what it could not remove.
+func TestIntegrationWorkloadRollbackCreate(t *testing.T) {
+	cause := fmt.Errorf("adding tag %q: refused", "team")
+	tags := types.SetValueMust(tagObjectType, []attr.Value{types.ObjectValueMust(tagObjectType.AttrTypes,
+		map[string]attr.Value{"name": types.StringValue("team"), "value": types.StringValue("ml")})})
+	for name, tc := range map[string]struct {
+		planned     WorkloadResourceModel
+		listErr     error
+		deleteErr   error
+		want        string
+		wantDeletes []string
+	}{
+		"deleted": {
+			planned: WorkloadResourceModel{Tags: types.SetNull(tagObjectType)},
+			want:    "The Workload was deleted again, so nothing is left behind",
+		},
+		"already gone": {
+			planned:   WorkloadResourceModel{Tags: types.SetNull(tagObjectType)},
+			deleteErr: client.NewNotFoundError("workload"),
+			want:      "The Workload was deleted again, so nothing is left behind",
+		},
+		"delete refused": {
+			planned:   WorkloadResourceModel{Tags: types.SetNull(tagObjectType)},
+			deleteErr: client.NewGenericError("DELETE request : response 500"),
+			want:      "Workload wl-1 is left on the platform",
+		},
+		"tags and link removed first": {
+			planned:     WorkloadResourceModel{Tags: tags, UseCaseID: types.StringValue("uc-1")},
+			want:        "The Workload was deleted again, so nothing is left behind",
+			wantDeletes: []string{"tag kv-1", "link uc-1", "workload wl-1"},
+		},
+		"tags left behind": {
+			planned:     WorkloadResourceModel{Tags: tags},
+			listErr:     client.NewGenericError("GET request : response 503"),
+			want:        "The Workload was deleted again, but removing its tags: reading the current tags",
+			wantDeletes: []string{"workload wl-1"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockService := mock_client.NewMockService(ctrl)
+			var deletes []string
+			// Every call of the cleanup has to outlive the interrupt and still be bounded.
+			usable := func(ctx context.Context) {
+				if _, bounded := ctx.Deadline(); ctx.Err() != nil || !bounded {
+					t.Errorf("cleanup call with context err=%v bounded=%v", ctx.Err(), bounded)
+				}
+			}
+			mockService.EXPECT().ListKeyValues(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ctx context.Context, _ *client.ListKeyValuesRequest) ([]client.KeyValue, error) {
+					usable(ctx)
+					return []client.KeyValue{{ID: "kv-1", Name: "team", Value: "ml", Category: client.KeyValueCategoryTag}}, tc.listErr
+				}).AnyTimes()
+			mockService.EXPECT().DeleteKeyValue(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, id string) error {
+				usable(ctx)
+				deletes = append(deletes, "tag "+id)
+				return nil
+			}).AnyTimes()
+			mockService.EXPECT().RemoveEntityFromUseCase(gomock.Any(), gomock.Any(), "workload", "wl-1").DoAndReturn(
+				func(ctx context.Context, useCaseID, _, _ string) error {
+					usable(ctx)
+					deletes = append(deletes, "link "+useCaseID)
+					return nil
+				}).AnyTimes()
+			mockService.EXPECT().DeleteWorkload(gomock.Any(), "wl-1").DoAndReturn(func(ctx context.Context, id string) error {
+				usable(ctx)
+				deletes = append(deletes, "workload "+id)
+				return tc.deleteErr
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // the apply was interrupted while the tags were written
+			detail := rollbackWorkloadCreate(ctx, mockService, tc.planned, "wl-1", cause)
+			if !strings.Contains(detail, cause.Error()) || !strings.Contains(detail, tc.want) {
+				t.Errorf("detail = %q, want the cause and %q", detail, tc.want)
+			}
+			if tc.wantDeletes != nil && !slices.Equal(deletes, tc.wantDeletes) {
+				t.Errorf("deletes = %q, want %q", deletes, tc.wantDeletes)
+			}
+		})
+	}
+}
+
+// A failed tag lookup fails the refresh of a Workload whose tags are managed, rather than
+// reading as a Workload with no tags.
+func TestIntegrationWorkloadTagLookupFailureFailsRefresh(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	store := expectWorkloadTagStore(t, mockService, id)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithTags(name, artifactID, "", []string{"team=ml"})},
+			{
+				PreConfig:   func() { store.failNextLookup = true },
+				Config:      workloadConfigWithTags(name, artifactID, "", []string{"team=ml"}),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Error reading the tags of Workload"),
+			},
+		},
+	})
+}
+
+// A Workload that manages no tags stays manageable when the platform refuses the lookup, as one
+// from before Workload tags does.
+func TestIntegrationWorkloadTagLookupRefusedWithoutTags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	expectWorkloadsCreatedAndDeleted(mockService,
+		workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil))
+	store := expectWorkloadTagStore(t, mockService, id)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithTags(name, artifactID, "", nil)},
+			{
+				PreConfig: func() { store.failNextLookup = true },
+				Config:    workloadConfigWithTags(name, artifactID, "", nil),
+				PlanOnly:  true,
+			},
+		},
+	})
+}
+
+// A status the Workload reports after the plan does not fail a tags-only update: the update
+// applies the planned status, and the next refresh records the new one.
+func TestIntegrationWorkloadTagUpdateKeepsPlannedStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	id, artifactID, name := uuid.NewString(), uuid.NewString(), "workload-"+uuid.NewString()[:8]
+	replicaCount := int64(1)
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, nil)
+	expectWorkloadsCreatedAndDeleted(mockService, workload)
+	expectNoWorkloadRollout(t, mockService)
+	store := expectWorkloadTagStore(t, mockService, id)
+
+	resourceName := "datarobot_workload.test"
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: workloadConfigWithTags(name, artifactID, "", []string{"team=ml"})},
+			{
+				PreConfig: func() { store.onCreate = func() { workload.Status = client.ProtonStatusErrored } },
+				Config:    workloadConfigWithTags(name, artifactID, "", []string{"team=ml", "env=dev"}),
+				Check:     resource.TestCheckResourceAttr(resourceName, "status", "running"),
+			},
+			{
+				RefreshState: true,
+				Check:        resource.TestCheckResourceAttr(resourceName, "status", "errored"),
+			},
+		},
+	})
+}
+
+// The client sends a request again after a lost response: the create then finds its tag in
+// place and the delete finds it gone, which are not failures.
+func TestIntegrationWorkloadTagWritesSentTwice(t *testing.T) {
+	conflict := client.NewGenericError("POST request : response 409 Conflict " +
+		`{"message": "The name is already in use for the entity ID"}`)
+	for name, tc := range map[string]struct {
+		before, after []client.KeyValue
+		planned       []string
+		createErr     error
+		deleteErr     error
+		wantErr       string
+	}{
+		"create finds its own tag": {
+			after:   []client.KeyValue{{ID: "kv-1", Name: "team", Value: "ml"}},
+			planned: []string{"team=ml"}, createErr: conflict,
+		},
+		"create finds another value": {
+			after:   []client.KeyValue{{ID: "kv-1", Name: "team", Value: "platform"}},
+			planned: []string{"team=ml"}, createErr: conflict, wantErr: "409 Conflict",
+		},
+		"delete finds it gone": {
+			before:    []client.KeyValue{{ID: "kv-1", Name: "old", Value: "1"}},
+			deleteErr: client.NewNotFoundError("keyValue"),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockService := mock_client.NewMockService(ctrl)
+			mockService.EXPECT().ListKeyValues(gomock.Any(), gomock.Any()).Return(tc.before, nil)
+			mockService.EXPECT().ListKeyValues(gomock.Any(), gomock.Any()).Return(tc.after, nil).AnyTimes()
+			mockService.EXPECT().CreateKeyValue(gomock.Any(), gomock.Any()).Return(nil, tc.createErr).AnyTimes()
+			mockService.EXPECT().DeleteKeyValue(gomock.Any(), gomock.Any()).Return(tc.deleteErr).AnyTimes()
+
+			planned := make([]attr.Value, len(tc.planned))
+			for i, tag := range tc.planned {
+				tagName, value, _ := strings.Cut(tag, "=")
+				planned[i] = types.ObjectValueMust(tagObjectType.AttrTypes,
+					map[string]attr.Value{"name": types.StringValue(tagName), "value": types.StringValue(value)})
+			}
+			err := syncWorkloadTags(context.Background(), mockService, "wl-1", types.SetValueMust(tagObjectType, planned))
+			if tc.wantErr == "" && err != nil || tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Errorf("err = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// Tags the platform refuses are refused at plan, before anything is created.
+func TestIntegrationWorkloadRefusesInvalidTags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service { return mockService })()
+	mockAPIKey(t)
+
+	config := func(tags ...string) string { return workloadConfigWithTags("workload", uuid.NewString(), "", tags) }
+	steps := []resource.TestStep{}
+	for _, tc := range []struct {
+		tags []string
+		want string
+	}{
+		{[]string{"team=ml", "team=platform"}, `Tag "team" is set more than once`},
+		{[]string{"=ml"}, `(?s)character count.*must be between 1 and 4096, got: 0`},
+		{[]string{"team="}, `(?s)character count.*must be between 1 and 4096, got: 0`},
+		{[]string{"team=" + strings.Repeat("x", 4097)}, `(?s)character count.*must be between 1 and 4096, got: 4097`},
+		{[]string{"te{am=ml"}, `(?s)must not contain \{,.*\}, ; or \|`},
+		{[]string{"datarobot.type=ml"}, `Tag "datarobot.type" starts with a prefix the platform reserves`},
+		{[]string{"integrations.x=ml"}, `Tag "integrations.x" starts with a prefix the platform reserves`},
+	} {
+		steps = append(steps, resource.TestStep{Config: config(tc.tags...), PlanOnly: true, ExpectError: regexp.MustCompile(tc.want)})
+	}
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps:                    steps,
+	})
+}
+
+// expectNoWorkloadRollout fails the test on any call that would update the Workload itself.
+func expectNoWorkloadRollout(t *testing.T, mockService *mock_client.MockService) {
+	mockService.EXPECT().UpdateWorkloadMetadata(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, string, *client.UpdateWorkloadRequest) (*client.Workload, error) {
+			t.Errorf("unexpected UpdateWorkloadMetadata")
+			return nil, fmt.Errorf("unexpected UpdateWorkloadMetadata")
+		}).AnyTimes()
+	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, string, *client.UpdateWorkloadSettingsRequest) (*client.WorkloadReplacement, error) {
+			t.Errorf("unexpected UpdateWorkloadSettings")
+			return nil, fmt.Errorf("unexpected UpdateWorkloadSettings")
+		}).AnyTimes()
+	mockService.EXPECT().StartWorkloadReplacement(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, string, *client.StartReplacementRequest) (*client.WorkloadReplacement, error) {
+			t.Errorf("unexpected StartWorkloadReplacement")
+			return nil, fmt.Errorf("unexpected StartWorkloadReplacement")
+		}).AnyTimes()
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, string, *client.WaitForWorkloadReplacementOptions) (*client.WorkloadReplacement, error) {
+			t.Errorf("unexpected WaitForWorkloadReplacement")
+			return nil, fmt.Errorf("unexpected WaitForWorkloadReplacement")
+		}).AnyTimes()
+}
+
+// workloadTagStore serves the key-value calls from memory, as the platform keeps a Workload's
+// tags, and records every write. Terraform makes one call at a time, and checks run once the
+// provider has stopped, so the store needs no lock.
+type workloadTagStore struct {
+	t          *testing.T
+	workloadID string
+
+	keyValues []client.KeyValue
+	writes    []string
+	nextID    int
+
+	failNextLookup     bool
+	refuseCreatesAfter int   // creates accepted before createErr answers them, when createErr is set
+	createErr          error // answer to creates past refuseCreatesAfter
+	onCreate           func()
+}
+
+func expectWorkloadTagStore(t *testing.T, mockService *mock_client.MockService, workloadID string) *workloadTagStore {
+	s := &workloadTagStore{t: t, workloadID: workloadID}
+	mockService.EXPECT().ListKeyValues(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.ListKeyValuesRequest) ([]client.KeyValue, error) {
+			if req.EntityType != "workload" || req.EntityID != s.workloadID || req.Category != client.KeyValueCategoryTag {
+				t.Errorf("unexpected key-value lookup %+v", *req)
+			}
+			if s.failNextLookup {
+				s.failNextLookup = false
+				return nil, client.NewGenericError("GET request : response 503 Service Unavailable")
+			}
+			return slices.DeleteFunc(slices.Clone(s.keyValues), func(keyValue client.KeyValue) bool {
+				return keyValue.Category != req.Category
+			}), nil
+		}).AnyTimes()
+	mockService.EXPECT().CreateKeyValue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *client.KeyValueRequest) (*client.CreateKeyValueResponse, error) {
+			s.checkRequest(req)
+			s.writes = append(s.writes, "POST "+req.Name+"="+req.Value)
+			if s.onCreate != nil {
+				s.onCreate()
+			}
+			if s.createErr != nil && s.nextID >= s.refuseCreatesAfter {
+				return nil, s.createErr
+			}
+			s.nextID++
+			id := fmt.Sprintf("kv-%d", s.nextID)
+			s.keyValues = append(s.keyValues, client.KeyValue{ID: id, Name: req.Name, Value: req.Value, Category: req.Category})
+			return &client.CreateKeyValueResponse{ID: id}, nil
+		}).AnyTimes()
+	mockService.EXPECT().UpdateKeyValue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string, req *client.KeyValueRequest) (*client.KeyValue, error) {
+			s.checkRequest(req)
+			s.writes = append(s.writes, "PATCH "+req.Name+"="+req.Value)
+			for i := range s.keyValues {
+				if s.keyValues[i].ID == id {
+					s.keyValues[i].Name, s.keyValues[i].Value = req.Name, req.Value
+					updated := s.keyValues[i]
+					return &updated, nil
+				}
+			}
+			return nil, client.NewNotFoundError("keyValue")
+		}).AnyTimes()
+	mockService.EXPECT().DeleteKeyValue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, id string) error {
+			for i, keyValue := range s.keyValues {
+				if keyValue.ID == id {
+					if keyValue.IsEditable != nil && !*keyValue.IsEditable {
+						t.Errorf("deleted read-only key-value %q", keyValue.Name)
+					}
+					s.writes = append(s.writes, "DELETE "+keyValue.Name)
+					s.keyValues = slices.Delete(s.keyValues, i, i+1)
+					return nil
+				}
+			}
+			return client.NewNotFoundError("keyValue")
+		}).AnyTimes()
+	return s
+}
+
+func (s *workloadTagStore) checkRequest(req *client.KeyValueRequest) {
+	if req.EntityID != s.workloadID || req.EntityType != "workload" || req.Category != client.KeyValueCategoryTag || req.ValueType != client.KeyValueTypeString {
+		s.t.Errorf("unexpected key-value write %+v", *req)
+	}
+}
+
+// edit changes the stored key-values, as an edit outside Terraform would.
+func (s *workloadTagStore) edit(change func([]client.KeyValue) []client.KeyValue) {
+	s.keyValues = change(s.keyValues)
+}
+
+// checkWrites compares the writes since the last check, sorted first when their order is not
+// part of the expectation, and starts over.
+func (s *workloadTagStore) checkWrites(sorted bool, want ...string) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		got := s.writes
+		s.writes = nil
+		if sorted {
+			got = slices.Sorted(slices.Values(got))
+		}
+		if !slices.Equal(got, want) {
+			return fmt.Errorf("key-value writes = %q, want %q", got, want)
+		}
+		return nil
+	}
+}
+
+func (s *workloadTagStore) checkTags(want ...string) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		var got []string
+		for _, keyValue := range s.keyValues {
+			got = append(got, keyValue.Name+"="+keyValue.Value)
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			return fmt.Errorf("stored key-values = %q, want %q", got, want)
+		}
+		return nil
+	}
+}
+
+// workloadConfigWithTags renders a Workload with the given "name=value" tags; nil leaves
+// `tags` out, and an empty useCaseID leaves `use_case_id` out.
+func workloadConfigWithTags(name, artifactID, useCaseID string, tags []string) string {
+	tagsAttr := ""
+	if tags != nil {
+		elements := make([]string, len(tags))
+		for i, tag := range tags {
+			tagName, value, _ := strings.Cut(tag, "=")
+			elements[i] = fmt.Sprintf("{ name = %q, value = %q }", tagName, value)
+		}
+		tagsAttr = "tags = [" + strings.Join(elements, ", ") + "]"
+	}
+	useCaseAttr := ""
+	if useCaseID != "" {
+		useCaseAttr = fmt.Sprintf("use_case_id = %q", useCaseID)
+	}
+	return workloadMockConfig(fmt.Sprintf(`
+resource "datarobot_workload" "test" {
+  name        = %q
+  importance  = "low"
+  artifact_id = %q
+  %s
+  %s
+  runtime = {
+    container_groups = [
+      {
+        replica_count    = 1
+        resource_bundles = ["cpu.small"]
+      }
+    ]
+  }
+}
+`, name, artifactID, useCaseAttr, tagsAttr))
 }

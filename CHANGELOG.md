@@ -1,4 +1,9 @@
-## [0.12.7] - 2026-10-14
+## [0.12.7] - 2026-10-15
+
+### Added
+
+- `datarobot_workload` has a `tags` attribute: a set of `name`/`value` pairs, written once the Workload exists and changed in place without a rollout. Names and values the platform refuses are refused at plan; a tag refused while the Workload is created, for example over its per-installation tag limit, deletes the Workload again together with the tags already written and its Use Case link.
+- Tags are refreshed from the platform, so tags changed outside Terraform show as a change on the next plan (with Pulumi, with `--refresh`). After upgrading, a Workload whose configuration leaves `tags` out but carries tags added in the UI plans their removal; where the platform refuses to list tags, such a Workload is read without them and a warning says so.
 
 ### Changed
 
@@ -8,6 +13,8 @@
 
 - A failed `datarobot_artifact` image build now reports the platform's failure reason and the last lines of the build log, instead of an error naming a build log endpoint the Workload API has removed. The provider searched the log stream by a field the platform does not index, which also left the build log lines printed under `TF_LOG` empty.
 - Build log lines reach the log stream with a delay, so an apply that fails after starting an image build now waits up to a minute for them; `DATAROBOT_ARTIFACT_BUILD_LOGS_SETTLE_TIMEOUT` changes the wait, and `0` reads the log once. On clusters whose log stream does not index builds this way (Workload API before v11.12.0), the error has no log lines and the wait stops after three empty reads.
+- `datarobot_workload` deletes a Workload that does not start (it errors, the wait for it times out, or the apply is interrupted) instead of leaving it on the platform outside state, where the next apply created a second one. The error no longer links the Workload's logs, which are deleted with it.
+- An update that does not roll the Workload out no longer fails with `Provider produced inconsistent result after apply` when the Workload's status changed after the plan; the next refresh records the new status.
 
 ## [0.12.6] - 2026-10-07
 

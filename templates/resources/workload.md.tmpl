@@ -52,6 +52,7 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 | `runtime.enclave_selection_policy` or `runtime.enclaves` only | `PATCH /workloads/{id}/settings` + poll | No (platform defaults) |
 | `name`, `description`, `importance` | `PATCH /workloads/{id}/` | N/A |
 | `use_case_id` only | `GET /useCases/?entityId={id}&entityType=workload`, `POST /useCases/{new}/workloads/{id}/` unless already linked, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
+| `tags` only | `GET /keyValues/?entityType=workload&entityId={id}&category=tag`, then `DELETE /keyValues/{tagId}/` for each removed tag, `PATCH` for each changed one and `POST /keyValues/` for each added one | N/A |
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
@@ -116,7 +117,7 @@ None of the three is refreshed from the platform:
 - A workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, and so is one imported by a provider version that did not read the link. Set it to the one Terraform should manage: the provider records that existing link without linking the workload again, the others stay linked, and it is an in-place update even together with a placement change. If it names a Use Case the workload is not linked to, the provider links it and warns that the other links stay. Until it is set, removing the placement of such a workload is refused at plan.
 - `enclave_selection_policy` and `enclaves` are stripped from API responses on clusters without the Enclave entitlement, so the provider keeps your configured values in state rather than reading them back. A placement changed outside Terraform is not detected; `enclaves` is desired state the platform never rewrites, so that only happens if someone edits the workload by hand.
 
-After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, and a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies. All but the last roll the workload out again.
+After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies, and `tags = []` on a workload without tags plans an update that changes nothing. All but the last two roll the workload out again.
 
 ## Apply duration
 

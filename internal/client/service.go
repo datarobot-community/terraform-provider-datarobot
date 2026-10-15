@@ -303,6 +303,12 @@ type Service interface {
 	UpdateWorkloadSettings(ctx context.Context, workloadID string, req *UpdateWorkloadSettingsRequest) (*WorkloadReplacement, error)
 	WaitForWorkloadReplacement(ctx context.Context, workloadID string, opts *WaitForWorkloadReplacementOptions) (*WorkloadReplacement, error)
 
+	// Key-values
+	ListKeyValues(ctx context.Context, req *ListKeyValuesRequest) ([]KeyValue, error)
+	CreateKeyValue(ctx context.Context, req *KeyValueRequest) (*CreateKeyValueResponse, error)
+	UpdateKeyValue(ctx context.Context, id string, req *KeyValueRequest) (*KeyValue, error)
+	DeleteKeyValue(ctx context.Context, id string) error
+
 	// Quota
 	CreateQuota(ctx context.Context, req *CreateQuotaRequest) (*Quota, error)
 	GetQuotaForResource(ctx context.Context, resourceType, resourceID string) (*Quota, error)

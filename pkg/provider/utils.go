@@ -1058,6 +1058,12 @@ func convertClientTagsToTfTags(clientTags []client.Tag) []Tag {
 	return tfTags
 }
 
+// tagObjectType is the element type of the `tags` sets.
+var tagObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	"name":  types.StringType,
+	"value": types.StringType,
+}}
+
 func convertSetTagsToClientTags(tagsSet types.Set) []client.Tag {
 	if tagsSet.IsNull() || tagsSet.IsUnknown() {
 		return []client.Tag{}

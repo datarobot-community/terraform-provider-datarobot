@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -54,7 +56,9 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 			"The workload ID and endpoint remain stable across artifact and runtime updates.\n\n" +
 			"When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous " +
 			"version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a " +
-			"rollout that did not happen is not reported as a successful update.",
+			"rollout that did not happen is not reported as a successful update.\n\n" +
+			"A create that fails after the Workload API made the Workload, because the Workload does not start or a tag is refused, " +
+			"deletes it again, so the failed apply leaves no Workload behind; the next apply creates it anew.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -113,6 +117,44 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 					"Changing it together with the Enclave placement replaces the Workload, which means a new ID and a new endpoint. " +
 					"Terraform destroys the current Workload first, so if the platform refuses the create nothing is left: " +
 					"set `lifecycle { create_before_destroy = true }` on a Workload that serves traffic.",
+			},
+			"tags": schema.SetNestedAttribute{
+				Optional: true,
+				MarkdownDescription: "Tags on the Workload: the tags the DataRobot UI shows and `GET /workloads/?tagKeys=` filters on. " +
+					"They are recorded outside the Workload entity, so they are written once the Workload exists, and changing them " +
+					"updates them in place, without replacing the Workload or rolling it out.\n\n" +
+					"Refreshed: a tag added, changed or removed outside Terraform shows as a change on the next plan, and a Workload " +
+					"whose configuration leaves `tags` out is planned with no tags, so tags added outside Terraform are removed by the next apply. " +
+					"Tags the platform sets itself, which cannot be changed, are left out. Where the platform refuses to list a Workload's tags " +
+					"(installations from before Workload tags, or a user without the seat its key-value API requires), a Workload without " +
+					"`tags` in state is read without them and a warning says so.\n\n" +
+					"With Pulumi, a preview or update compares with the tags the stack records unless it runs with `--refresh`. Use " +
+					"`pulumi up --refresh` after a failed update, which can leave tags on the Workload that the stack does not record, and " +
+					"when tags may have changed outside Pulumi, which an update without a refresh removes without showing them.\n\n" +
+					"Each name can appear once. The platform limits how many tags a Workload has, per installation, counting the tags it sets itself. " +
+					"If a tag is refused while the Workload is created, the Workload is deleted again together with the tags already written " +
+					"and its Use Case link, so the failed apply leaves nothing behind. Destroying a Workload leaves its tags in the platform's " +
+					"key-value store, as deleting it in the UI does.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required: true,
+							MarkdownDescription: "The name of the tag: 1 to 4096 characters, without `{`, `}`, `;` or `|`, and not starting " +
+								"with `datarobot.` or `integrations.`, which the platform reserves.",
+							Validators: []validator.String{
+								stringvalidator.UTF8LengthBetween(1, 4096),
+								stringvalidator.RegexMatches(regexp.MustCompile(`^[^{};|]*$`), "must not contain {, }, ; or |"),
+							},
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The value of the tag: 1 to 4096 characters.",
+							Validators: []validator.String{
+								stringvalidator.UTF8LengthBetween(1, 4096),
+							},
+						},
+					},
+				},
 			},
 			"runtime": schema.SingleNestedAttribute{
 				Required:            true,
@@ -334,10 +376,17 @@ func (r *WorkloadResource) Create(ctx context.Context, req resource.CreateReques
 		resp.Diagnostics.AddError("Error creating Workload", err.Error())
 		return
 	}
+	id := workload.ID
 
-	workload, err = waitForWorkloadToBeRunning(ctx, r.provider.service, workload.ID, r.provider.service.BaseURL)
+	// Written before the wait, so that a refused tag is rolled back before the Workload starts.
+	if err := addWorkloadTags(ctx, r.provider.service, id, convertSetTagsToClientTags(data.Tags)); err != nil {
+		resp.Diagnostics.AddError("Error adding tags to the Workload", rollbackWorkloadCreate(ctx, r.provider.service, data, id, err))
+		return
+	}
+
+	workload, err = waitForWorkloadToBeRunning(ctx, r.provider.service, id)
 	if err != nil {
-		resp.Diagnostics.AddError("Error waiting for Workload to start", err.Error())
+		resp.Diagnostics.AddError("Error waiting for Workload to start", rollbackWorkloadCreate(ctx, r.provider.service, data, id, err))
 		return
 	}
 
@@ -382,6 +431,20 @@ func (r *WorkloadResource) Read(ctx context.Context, req resource.ReadRequest, r
 	preserveWorkloadReplacementPolicy(prior, &data)
 	preserveWorkloadEnclavePlacement(prior, &data)
 	applySentinels(prior, &data)
+
+	tags, err := listWorkloadTags(ctx, r.provider.service, data.ID.ValueString())
+	switch {
+	case err == nil:
+		data.Tags = workloadTagsValue(tags, prior.Tags, &resp.Diagnostics)
+	case prior.Tags.IsNull():
+		// A Workload with no tags in state stays manageable where the platform refuses the lookup:
+		// installations from before Workload tags, or a user without the seat it requires.
+		resp.Diagnostics.AddWarning("Could not read the tags of the Workload",
+			fmt.Sprintf("Workload %s is read without its tags: %s", data.ID.ValueString(), err))
+	default:
+		resp.Diagnostics.AddError(fmt.Sprintf("Error reading the tags of Workload %s", data.ID.ValueString()), err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -421,6 +484,15 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 		// Recorded now, so that state matches the links even if the rollout fails.
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("use_case_id"), planned.UseCaseID)...)
+	}
+
+	if !planned.Tags.Equal(state.Tags) {
+		if err := syncWorkloadTags(ctx, r.provider.service, id, planned.Tags); err != nil {
+			resp.Diagnostics.AddError("Error updating the tags of the Workload", err.Error())
+			return
+		}
+		// Recorded now, so that state matches the tags even if the rollout fails.
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("tags"), planned.Tags)...)
 	}
 
 	// Reads after a rollout that landed use readCtx, so that an interrupt during
@@ -489,6 +561,17 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	preserveWorkloadReplacementPolicy(planned, &plan)
 	preserveWorkloadEnclavePlacement(planned, &plan)
 	applySentinels(planned, &plan)
+	// Status and endpoint are planned as they were unless the placement changes, and an update
+	// must apply what it planned: a status the reads above saw change shows on the next refresh.
+	// A failed rollout is reported as an error, which records what the Workload reports now.
+	if promotedVersionFailure == "" {
+		if !planned.Status.IsUnknown() {
+			plan.Status = planned.Status
+		}
+		if !planned.Endpoint.IsUnknown() {
+			plan.Endpoint = planned.Endpoint
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if promotedVersionFailure != "" {
 		resp.Diagnostics.AddError("Workload replacement failed", promotedVersionFailure)
@@ -548,6 +631,8 @@ func (r *WorkloadResource) ImportState(ctx context.Context, req resource.ImportS
 		data.Description = types.StringNull()
 	}
 	data.UseCaseID = importWorkloadUseCaseID(ctx, r.provider.service, req.ID, &resp.Diagnostics)
+	// Read, which runs after import, fills in the tags.
+	data.Tags = types.SetNull(tagObjectType)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -639,6 +724,191 @@ func workloadUseCaseNotRecorded(useCaseID types.String, runtime WorkloadRuntimeM
 	return useCaseID.IsNull() && !resolveWorkloadRuntime(runtime).EnclaveSelectionPolicy.IsNull()
 }
 
+// listWorkloadTags reads the Workload's tags from the key-value store, where they are recorded
+// outside the Workload entity. `GET /workloads/{id}/` returns tags too, but mixed with other
+// key-value categories, and with none at all when its own lookup fails. Tags the platform wrote
+// itself cannot be changed or deleted, so they are left out.
+func listWorkloadTags(ctx context.Context, service client.Service, id string) ([]client.KeyValue, error) {
+	traceAPICall("ListKeyValues")
+	keyValues, err := service.ListKeyValues(ctx, &client.ListKeyValuesRequest{
+		EntityType: "workload",
+		EntityID:   id,
+		Category:   client.KeyValueCategoryTag,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(keyValues, func(keyValue client.KeyValue) bool {
+		return keyValue.IsEditable != nil && !*keyValue.IsEditable
+	}), nil
+}
+
+// syncWorkloadTags makes the Workload's tags match planned. It compares against the tags on the
+// platform, not those in state: an apply that failed partway leaves state behind them. A name
+// holds one value, so a changed value is updated in place. Removed tags are deleted first,
+// because the platform checks its tag limit only when a tag is added.
+func syncWorkloadTags(ctx context.Context, service client.Service, id string, planned types.Set) error {
+	current, err := listWorkloadTags(ctx, service, id)
+	if err != nil {
+		return fmt.Errorf("reading the current tags: %w", err)
+	}
+	desired := convertSetTagsToClientTags(planned)
+
+	wanted := make(map[string]bool, len(desired))
+	for _, tag := range desired {
+		wanted[tag.Name] = true
+	}
+	existing := make(map[string]client.KeyValue, len(current))
+	for _, keyValue := range current {
+		if wanted[keyValue.Name] {
+			existing[keyValue.Name] = keyValue
+			continue
+		}
+		traceAPICall("DeleteKeyValue")
+		// A tag already gone is a delete the client sent again after its response was lost.
+		if err := service.DeleteKeyValue(ctx, keyValue.ID); err != nil {
+			if _, gone := err.(*client.NotFoundError); !gone {
+				return fmt.Errorf("removing tag %q: %w", keyValue.Name, err)
+			}
+		}
+	}
+
+	var added []client.Tag
+	for _, tag := range desired {
+		keyValue, found := existing[tag.Name]
+		if !found {
+			added = append(added, tag)
+			continue
+		}
+		if keyValue.Value == tag.Value {
+			continue
+		}
+		traceAPICall("UpdateKeyValue")
+		if _, err := service.UpdateKeyValue(ctx, keyValue.ID, workloadTagRequest(id, tag)); err != nil {
+			return fmt.Errorf("changing tag %q: %w", tag.Name, err)
+		}
+	}
+	return addWorkloadTags(ctx, service, id, added)
+}
+
+// addWorkloadTags writes tags the Workload does not have yet, one at a time.
+func addWorkloadTags(ctx context.Context, service client.Service, id string, tags []client.Tag) error {
+	for _, tag := range tags {
+		traceAPICall("CreateKeyValue")
+		_, err := service.CreateKeyValue(ctx, workloadTagRequest(id, tag))
+		switch {
+		case err == nil:
+		case strings.Contains(err.Error(), "409 Conflict") && workloadHasTag(ctx, service, id, tag):
+			// A create the client sent again after its response was lost finds its own tag in place.
+		case strings.Contains(err.Error(), "maximum number of tags"):
+			// The platform's message names the limit, but calls it a deployment limit.
+			return fmt.Errorf("adding tag %q: %w\nThe limit applies to Workloads as well and is set per installation; "+
+				"remove tags from the configuration to stay within it", tag.Name, err)
+		default:
+			return fmt.Errorf("adding tag %q: %w", tag.Name, err)
+		}
+	}
+	return nil
+}
+
+func workloadHasTag(ctx context.Context, service client.Service, id string, tag client.Tag) bool {
+	current, err := listWorkloadTags(ctx, service, id)
+	return err == nil && slices.ContainsFunc(current, func(keyValue client.KeyValue) bool {
+		return keyValue.Name == tag.Name && keyValue.Value == tag.Value
+	})
+}
+
+func workloadTagRequest(id string, tag client.Tag) *client.KeyValueRequest {
+	return &client.KeyValueRequest{
+		EntityID:   id,
+		EntityType: "workload",
+		Category:   client.KeyValueCategoryTag,
+		Name:       tag.Name,
+		Value:      tag.Value,
+		ValueType:  client.KeyValueTypeString,
+	}
+}
+
+// workloadTagsValue is the `tags` value for the tags read from the platform. With none, it is
+// null unless state holds `tags = []`, so that a configuration without `tags` plans no change,
+// also once tags added outside Terraform and recorded by a refresh are gone again.
+func workloadTagsValue(tags []client.KeyValue, prior types.Set, diags *diag.Diagnostics) types.Set {
+	if len(tags) == 0 && (prior.IsNull() || len(prior.Elements()) > 0) {
+		return types.SetNull(tagObjectType)
+	}
+	clientTags := make([]client.Tag, len(tags))
+	for i, tag := range tags {
+		clientTags[i] = client.Tag{Name: tag.Name, Value: tag.Value}
+	}
+	return initializeTagsFromModel(clientTags, diags)
+}
+
+// workloadRollbackTimeout bounds the cleanup after a failed create. The cleanup goes on after an
+// interrupt, so an API that stopped answering would otherwise hold the interrupt as well.
+const workloadRollbackTimeout = 2 * time.Minute
+
+// rollbackWorkloadCreate deletes a Workload whose create failed after the Workload API created
+// it, and returns the error detail. A failed create cannot keep the Workload in state: Terraform
+// would mark it tainted and replace it on the next apply, and Pulumi drops it. The platform keeps
+// a deleted Workload's tags and Use Case link, so the cleanup removes those first. It also runs
+// after an interrupt, which must not leave the Workload behind.
+func rollbackWorkloadCreate(ctx context.Context, service client.Service, planned WorkloadResourceModel, id string, cause error) string {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadRollbackTimeout)
+	defer cancel()
+
+	var leftovers []string
+	if len(planned.Tags.Elements()) > 0 {
+		if err := syncWorkloadTags(ctx, service, id, types.SetNull(tagObjectType)); err != nil {
+			leftovers = append(leftovers, "its tags: "+err.Error())
+		}
+	}
+	if useCaseID := planned.UseCaseID; !useCaseID.IsNull() && !useCaseID.IsUnknown() {
+		traceAPICall("RemoveEntityFromUseCase")
+		if err := service.RemoveEntityFromUseCase(ctx, useCaseID.ValueString(), "workload", id); err != nil {
+			if _, gone := err.(*client.NotFoundError); !gone {
+				leftovers = append(leftovers, fmt.Sprintf("its link to Use Case %s: %s", useCaseID.ValueString(), err))
+			}
+		}
+	}
+
+	traceAPICall("DeleteWorkload")
+	if err := service.DeleteWorkload(ctx, id); err != nil {
+		if _, gone := err.(*client.NotFoundError); !gone {
+			return fmt.Sprintf("%s\n\nDeleting the Workload afterwards failed too, so Workload %s is left on the platform "+
+				"and is not in state; delete it by hand: %s", cause, id, err)
+		}
+	}
+	if len(leftovers) > 0 {
+		return fmt.Sprintf("%s\n\nThe Workload was deleted again, but removing %s failed.", cause, strings.Join(leftovers, "; and "))
+	}
+	return fmt.Sprintf("%s\n\nThe Workload was deleted again, so nothing is left behind.", cause)
+}
+
+// validateWorkloadTags refuses a tag name given twice, since a Workload holds one value per name,
+// and one with a prefix the platform reserves, which it refuses only once the Workload exists.
+func validateWorkloadTags(data WorkloadResourceModel, resp *resource.ValidateConfigResponse) {
+	seen := make(map[string]int)
+	for _, element := range data.Tags.Elements() {
+		tag, ok := element.(types.Object)
+		if !ok {
+			continue
+		}
+		name, ok := tag.Attributes()["name"].(types.String)
+		if !ok || name.IsNull() || name.IsUnknown() {
+			continue
+		}
+		seen[name.ValueString()]++
+		if seen[name.ValueString()] == 2 {
+			resp.Diagnostics.AddAttributeError(path.Root("tags"), "Duplicate tag name",
+				fmt.Sprintf("Tag %q is set more than once. A Workload holds one value per tag name, so give each tag its own name.", name.ValueString()))
+		}
+		if strings.HasPrefix(name.ValueString(), "datarobot.") || strings.HasPrefix(name.ValueString(), "integrations.") {
+			resp.Diagnostics.AddAttributeError(path.Root("tags"), "Reserved tag name",
+				fmt.Sprintf("Tag %q starts with a prefix the platform reserves for the tags it sets itself; give it another name.", name.ValueString()))
+		}
+	}
+}
+
 // ModifyPlan marks endpoint and status unknown when the Enclave placement changes: the
 // endpoint host is the Enclave the Workload runs on and the change rolls a new version, so
 // UseStateForUnknown would carry stale values.
@@ -712,6 +982,7 @@ func (r *WorkloadResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 
 	validateWorkloadEnclavePlacement(data, resp)
+	validateWorkloadTags(data, resp)
 
 	if len(data.Runtime.ContainerGroups) > 1 {
 		resp.Diagnostics.AddAttributeError(
@@ -803,7 +1074,7 @@ func workloadLogsURL(baseURL, id string) string {
 	return baseURL + "/console-nextgen/workloads/" + id + "/activity-log/otel-logs"
 }
 
-func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string, baseURL func() string) (*client.Workload, error) {
+func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string) (*client.Workload, error) {
 	expBackoff := getExponentialBackoff()
 
 	var running *client.Workload
@@ -813,9 +1084,9 @@ func waitForWorkloadToBeRunning(ctx context.Context, s client.Service, id string
 		if err != nil {
 			return backoff.Permanent(err)
 		}
+		// No logs link: the create deletes the Workload, and its logs with it.
 		if workload.Status == client.ProtonStatusErrored {
-			logsURL := workloadLogsURL(baseURL(), id)
-			return backoff.Permanent(fmt.Errorf("workload failed to start, review the workload logs for details: %s", logsURL))
+			return backoff.Permanent(errors.New("workload failed to start: the platform reports it errored"))
 		}
 		if workload.Status != client.ProtonStatusRunning {
 			return fmt.Errorf("workload is not running yet (status: %s)", workload.Status)
