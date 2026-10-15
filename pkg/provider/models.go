@@ -1209,6 +1209,7 @@ type WorkloadResourceModel struct {
 	Endpoint    types.String         `tfsdk:"endpoint"`
 	Status      types.String         `tfsdk:"status"`
 	UseCaseID   types.String         `tfsdk:"use_case_id"`
+	Tags        types.Set            `tfsdk:"tags"`
 	Runtime     WorkloadRuntimeModel `tfsdk:"runtime"`
 }
 

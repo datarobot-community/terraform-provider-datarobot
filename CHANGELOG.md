@@ -1,4 +1,9 @@
-## [0.12.7] - 2026-10-14
+## [0.13.0] - 2026-10-15
+
+### Added
+
+- `datarobot_workload` has a `tags` attribute: a set of `name`/`value` pairs, written once the Workload exists and changed in place without a rollout. Names and values the platform refuses are refused at plan; a tag refused while the Workload is created, for example over its per-installation tag limit, deletes the Workload again together with the tags already written and its Use Case link, and destroying a Workload removes its tags.
+- Tags are managed only when `tags` is set: they are then refreshed, so tags changed outside Terraform show as a change on the next plan (with Pulumi, with `--refresh`), and `tags = []` removes them all. A configuration without `tags` leaves the Workload's tags alone and never reads them.
 
 ### Changed
 
@@ -11,6 +16,8 @@
 - `datarobot_execution_environment` with `docker_context_path` no longer plans an update on every run from a fresh checkout. The hash that detects a changed context was computed from an archive that carried each file's modification time, and a checkout writes new times every run, so a CI job rebuilt the environment and everything built on it with no change to the context. The archive now uses a fixed time. **After upgrading, the first plan shows one update of `docker_context_hash`.** Apply it once, and later plans stay empty until the context changes.
 - A failed `datarobot_artifact` image build now reports the platform's failure reason and the last lines of the build log, instead of an error naming a build log endpoint the Workload API has removed. The provider searched the log stream by a field the platform does not index, which also left the build log lines printed under `TF_LOG` empty.
 - Build log lines reach the log stream with a delay, so an apply that fails after starting an image build now waits up to a minute for them; `DATAROBOT_ARTIFACT_BUILD_LOGS_SETTLE_TIMEOUT` changes the wait, and `0` reads the log once. On clusters whose log stream does not index builds this way (Workload API before v11.12.0), the error has no log lines and the wait stops after three empty reads.
+- `datarobot_workload` no longer leaves a Workload that does not start on the platform outside state, where the next apply created a second one. One that errors on start is deleted again, and the error quotes the platform's reason and the last lines of its log; one whose wait times out or is interrupted is recorded in state with a warning, since it may still come up.
+- An update no longer fails with `Provider produced inconsistent result after apply` when the Workload's status changed after the plan: `status` is planned as known after apply and records what the update reads.
 
 ## [0.12.6] - 2026-10-07
 

@@ -686,6 +686,84 @@ func describeUnreadyContainer(protonStatuses map[string]WorkloadEventProtonStatu
 	return ""
 }
 
+// ReplicaStatusesSnapshot is the platform's latest account of each replica of a proton.
+type ReplicaStatusesSnapshot struct {
+	Replicas []ReplicaStatus `json:"replicas"`
+}
+
+type ReplicaStatus struct {
+	Name       string                   `json:"name"`
+	Containers []ReplicaContainerStatus `json:"containers"`
+}
+
+type ReplicaContainerStatus struct {
+	Name         string                       `json:"name"`
+	Ready        bool                         `json:"ready"`
+	RestartCount int64                        `json:"restartCount"`
+	Reason       string                       `json:"reason"`
+	Message      string                       `json:"message"`
+	ExitCode     *int64                       `json:"exitCode"`
+	LastState    *WorkloadEventContainerState `json:"lastState"`
+}
+
+// workloadFailureLogLines is how much of its log the account of a failed Workload quotes.
+const workloadFailureLogLines = 20
+
+// DescribeWorkloadFailure is the platform's account of why a Workload is not running: each
+// container that is not ready, with the reason Kubernetes gives, and the last lines of the
+// Workload's log. It is read for an error already decided, so a part that cannot be read is left
+// out; empty when neither could be read.
+func (s *ServiceImpl) DescribeWorkloadFailure(ctx context.Context, workloadID string) string {
+	var parts []string
+	if workload, err := s.GetWorkload(ctx, workloadID); err == nil && workload.ProtonID != nil {
+		protonID := *workload.ProtonID
+		path := "/workloads/" + workloadID + "/protons/" + protonID + "/statusDetails"
+		if snapshot, err := Get[ReplicaStatusesSnapshot](s.client, ctx, path); err == nil {
+			parts = append(parts, describeUnreadyReplicas(snapshot, "lrs-"+protonID+"-")...)
+		}
+	}
+	if entries, err := s.getOtelEntityLogEntries(ctx, "workload", workloadID, workloadFailureLogLines, ""); err == nil && len(entries) > 0 {
+		sortOtelLogEntries(entries)
+		lines := make([]string, len(entries))
+		for i, entry := range entries {
+			lines[i] = FormatOtelLogEntry(entry)
+		}
+		parts = append(parts, "Last lines of the Workload's log:\n"+strings.Join(lines, "\n"))
+	}
+	return strings.Join(parts, "\n")
+}
+
+// describeUnreadyReplicas names each container that is not ready, once however many replicas
+// report it. Container names carry the proton's pod prefix, which namePrefix strips.
+func describeUnreadyReplicas(snapshot *ReplicaStatusesSnapshot, namePrefix string) []string {
+	var lines []string
+	for _, replica := range snapshot.Replicas {
+		for _, container := range replica.Containers {
+			if container.Ready {
+				continue
+			}
+			line := "Container " + strings.TrimPrefix(container.Name, namePrefix) + " is not ready"
+			if container.Reason != "" {
+				line += ": " + container.Reason
+			}
+			if container.Message != "" {
+				line += ": " + container.Message
+			}
+			exitCode := container.ExitCode
+			if exitCode == nil && container.LastState != nil {
+				exitCode = container.LastState.ExitCode
+			}
+			if exitCode != nil {
+				line += fmt.Sprintf(" (exited with code %d, %d restarts)", *exitCode, container.RestartCount)
+			}
+			if line += "."; !slices.Contains(lines, line) {
+				lines = append(lines, line)
+			}
+		}
+	}
+	return lines
+}
+
 // replacementFailureMessage names the status the rollout ended on and carries
 // the platform's own account of it when there is one. Without the status the
 // reader of a bare message cannot tell a failed rollout from a failed request.

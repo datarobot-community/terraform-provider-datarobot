@@ -6,6 +6,7 @@ description: |-
   A Workload runs a containerized artifact in the cluster and exposes an inference endpoint.
   Changes to artifact_id or runtime trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
   When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
+  A create whose Workload errors on start, or whose tags are refused, deletes the Workload again, so the failed apply leaves nothing behind; for a Workload that errors on start, the error quotes the platform's reason and the last lines of its log. A create interrupted or timed out while the Workload starts records the Workload in state with a warning instead, since it may still come up.
 ---
 
 # datarobot_workload (Resource)
@@ -15,6 +16,8 @@ A Workload runs a containerized artifact in the cluster and exposes an inference
 Changes to `artifact_id` or `runtime` trigger an in-place workload replacement via the Workload API. The workload ID and endpoint remain stable across artifact and runtime updates.
 
 When the new version never becomes ready, the platform abandons the rollout: it stops the new replica and the previous version keeps serving. Apply fails in that case, naming the artifact the workload is still on and linking its logs, so a rollout that did not happen is not reported as a successful update.
+
+A create whose Workload errors on start, or whose tags are refused, deletes the Workload again, so the failed apply leaves nothing behind; for a Workload that errors on start, the error quotes the platform's reason and the last lines of its log. A create interrupted or timed out while the Workload starts records the Workload in state with a warning instead, since it may still come up.
 
 ## Example Usage
 
@@ -48,6 +51,12 @@ resource "datarobot_workload" "example" {
   name        = "example-workload"
   description = "Example workload with in-place replacement"
   artifact_id = datarobot_artifact.example.artifact_id
+
+  # Changing tags updates them in place, without a rollout.
+  tags = [
+    { name = "team", value = "ml-platform" },
+    { name = "environment", value = "staging" },
+  ]
 
   runtime = {
     container_groups = [
@@ -197,6 +206,7 @@ The computed `type` attribute mirrors the deployed artifact type (`service`, `ni
 | `runtime.enclave_selection_policy` or `runtime.enclaves` only | `PATCH /workloads/{id}/settings` + poll | No (platform defaults) |
 | `name`, `description`, `importance` | `PATCH /workloads/{id}/` | N/A |
 | `use_case_id` only | `GET /useCases/?entityId={id}&entityType=workload`, `POST /useCases/{new}/workloads/{id}/` unless already linked, then `DELETE /useCases/{old}/workloads/{id}/` | N/A |
+| `tags` only | `GET /keyValues/?entityType=workload&entityId={id}&category=tag`, then `DELETE /keyValues/{tagId}/` for each removed tag, `PATCH` for each changed one and `POST /keyValues/` for each added one | N/A |
 
 `runtime.replacement_policy` is stored in Terraform state but not returned by `GET /workloads/{id}/`; the provider preserves your configured values across reads.
 
@@ -261,7 +271,7 @@ None of the three is refreshed from the platform:
 - A workload linked to several Use Cases is imported with `use_case_id` empty and a warning that names them, and so is one imported by a provider version that did not read the link. Set it to the one Terraform should manage: the provider records that existing link without linking the workload again, the others stay linked, and it is an in-place update even together with a placement change. If it names a Use Case the workload is not linked to, the provider links it and warns that the other links stay. Until it is set, removing the placement of such a workload is refused at plan.
 - `enclave_selection_policy` and `enclaves` are stripped from API responses on clusters without the Enclave entitlement, so the provider keeps your configured values in state rather than reading them back. A placement changed outside Terraform is not detected; `enclaves` is desired state the platform never rewrites, so that only happens if someone edits the workload by hand.
 
-After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, and a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies. All but the last roll the workload out again.
+After an import, attributes the API returns in another form, or that the configuration leaves to the platform, can still plan a one-time update: `memory` and `gpu_memory` come back in bytes, `replacement_policy` is not returned, `container_groups` and `autoscaling` left out of the configuration are imported as the platform reports them, a workload pinned with `enclaves` alone is imported with the `manual` policy that the pin implies, and `tags = []` on a workload without tags plans an update that changes nothing. All but the last two roll the workload out again.
 
 ## Apply duration
 
@@ -288,6 +298,13 @@ If apply is interrupted mid-replacement, run `terraform apply` again — refresh
 
 - `description` (String) A human-readable description of the Workload.
 - `importance` (String) Priority level for the Workload: `critical`, `high`, `moderate`, or `low`. Defaults to `low`.
+- `tags` (Attributes Set) Tags on the Workload: the tags the DataRobot UI shows and `GET /workloads/?tagKeys=` filters on. They are recorded outside the Workload entity, so they are written once the Workload exists, and changing them updates them in place, without replacing the Workload or rolling it out.
+
+Managed only when set: with `tags` in the configuration, the Workload has exactly those tags, a tag added, changed or removed outside Terraform shows as a change on the next plan, and `tags = []` removes them all. A configuration without `tags` leaves the Workload's tags alone and does not read them, and dropping `tags` from a configuration keeps the tags as they are. Tags the platform sets itself, which cannot be changed, are left out.
+
+With Pulumi, a preview or update compares with the tags the stack records unless it runs with `--refresh`. Use `pulumi up --refresh` after a failed update, which can leave tags on the Workload that the stack does not record, and when tags may have changed outside Pulumi, which an update without a refresh removes without showing them.
+
+Each name can appear once. The platform limits how many tags a Workload has, per installation, counting the tags it sets itself. If a tag is refused while the Workload is created, the Workload is deleted again together with the tags already written and its Use Case link. Destroying the Workload removes the tags it manages, which the platform would otherwise keep. (see [below for nested schema](#nestedatt--tags))
 - `use_case_id` (String) The Use Case to link this Workload to, which groups it with the Use Case's other assets. Setting it alone has no effect on placement. It is additionally required when `runtime.enclave_selection_policy` or `runtime.enclaves` is set, because Enclave placement is restricted to the Enclaves an administrator has granted to this Use Case.
 
 Not refreshed: the link is recorded outside the Workload entity, so a link changed outside Terraform is invisible to the plan. Import does read it: a Workload linked to exactly one Use Case is imported with its ID, and one linked to several is imported with this attribute empty and a warning that names them.
@@ -388,3 +405,13 @@ Optional:
 
 - `keep_old_version_minutes` (Number) Duration in minutes to keep the old version during replacement. Maps to WAPI `config.keepOldVersionMinutes`, which current platform versions accept but do not apply: how long the old version is kept is a cluster setting (300 seconds by default).
 - `warmup_minutes` (Number) Duration in minutes for the warmup phase during replacement. Maps to WAPI `config.warmupDurationMinutes`.
+
+
+
+<a id="nestedatt--tags"></a>
+### Nested Schema for `tags`
+
+Required:
+
+- `name` (String) The name of the tag: 1 to 4096 characters, without `{`, `}`, `;` or `|`, and not starting with `datarobot.` or `integrations.`, which the platform reserves.
+- `value` (String) The value of the tag: 1 to 4096 characters.

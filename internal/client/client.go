@@ -141,7 +141,7 @@ func doRequestWithResponseHeaders[T any](c *Client, ctx context.Context, method,
 		if c.cfg.Debug {
 			errorMessage += getCurlCommand(req, jsonBody)
 		}
-		return result, &resp.Header, NewGenericError(errorMessage)
+		return result, &resp.Header, &GenericError{Message: errorMessage, StatusCode: resp.StatusCode}
 	}
 
 	if (req.Method == http.MethodDelete || req.Method == http.MethodPatch || req.Method == http.MethodPut) &&
@@ -375,7 +375,7 @@ func uploadFilesFromBinaries[T any](
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errorMessage := fmt.Sprintf("%s request %s : response %s %s", req.Method, req.URL.String(), resp.Status, string(respBody))
-		return result, NewGenericError(errorMessage)
+		return result, &GenericError{Message: errorMessage, StatusCode: resp.StatusCode}
 	}
 
 	// Deserialize the response into the provided result type

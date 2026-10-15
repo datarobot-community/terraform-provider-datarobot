@@ -555,6 +555,21 @@ func (mr *MockServiceMockRecorder) CreateHostedCustomMetricTemplate(ctx, customJ
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateHostedCustomMetricTemplate", reflect.TypeOf((*MockService)(nil).CreateHostedCustomMetricTemplate), ctx, customJobID, req)
 }
 
+// CreateKeyValue mocks base method.
+func (m *MockService) CreateKeyValue(ctx context.Context, req *client.KeyValueRequest) (*client.CreateKeyValueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateKeyValue", ctx, req)
+	ret0, _ := ret[0].(*client.CreateKeyValueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateKeyValue indicates an expected call of CreateKeyValue.
+func (mr *MockServiceMockRecorder) CreateKeyValue(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateKeyValue", reflect.TypeOf((*MockService)(nil).CreateKeyValue), ctx, req)
+}
+
 // CreateLLMBlueprint mocks base method.
 func (m *MockService) CreateLLMBlueprint(ctx context.Context, req *client.CreateLLMBlueprintRequest) (*client.LLMBlueprint, error) {
 	m.ctrl.T.Helper()
@@ -1094,6 +1109,20 @@ func (mr *MockServiceMockRecorder) DeleteExecutionEnvironment(ctx, id any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecutionEnvironment", reflect.TypeOf((*MockService)(nil).DeleteExecutionEnvironment), ctx, id)
 }
 
+// DeleteKeyValue mocks base method.
+func (m *MockService) DeleteKeyValue(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteKeyValue", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteKeyValue indicates an expected call of DeleteKeyValue.
+func (mr *MockServiceMockRecorder) DeleteKeyValue(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteKeyValue", reflect.TypeOf((*MockService)(nil).DeleteKeyValue), ctx, id)
+}
+
 // DeleteLLMBlueprint mocks base method.
 func (m *MockService) DeleteLLMBlueprint(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()
@@ -1288,6 +1317,20 @@ func (m *MockService) DeleteWorkload(ctx context.Context, id string) error {
 func (mr *MockServiceMockRecorder) DeleteWorkload(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkload", reflect.TypeOf((*MockService)(nil).DeleteWorkload), ctx, id)
+}
+
+// DescribeWorkloadFailure mocks base method.
+func (m *MockService) DescribeWorkloadFailure(ctx context.Context, workloadID string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeWorkloadFailure", ctx, workloadID)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// DescribeWorkloadFailure indicates an expected call of DescribeWorkloadFailure.
+func (mr *MockServiceMockRecorder) DescribeWorkloadFailure(ctx, workloadID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkloadFailure", reflect.TypeOf((*MockService)(nil).DescribeWorkloadFailure), ctx, workloadID)
 }
 
 // FilesAPI mocks base method.
@@ -2384,6 +2427,21 @@ func (mr *MockServiceMockRecorder) ListGuardTemplates(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGuardTemplates", reflect.TypeOf((*MockService)(nil).ListGuardTemplates), ctx)
 }
 
+// ListKeyValues mocks base method.
+func (m *MockService) ListKeyValues(ctx context.Context, req *client.ListKeyValuesRequest) ([]client.KeyValue, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListKeyValues", ctx, req)
+	ret0, _ := ret[0].([]client.KeyValue)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListKeyValues indicates an expected call of ListKeyValues.
+func (mr *MockServiceMockRecorder) ListKeyValues(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListKeyValues", reflect.TypeOf((*MockService)(nil).ListKeyValues), ctx, req)
+}
+
 // ListRegisteredModelVersions mocks base method.
 func (m *MockService) ListRegisteredModelVersions(ctx context.Context, id string) ([]client.RegisteredModelVersion, error) {
 	m.ctrl.T.Helper()
@@ -2922,6 +2980,21 @@ func (m *MockService) UpdateHostedCustomMetricTemplate(ctx context.Context, cust
 func (mr *MockServiceMockRecorder) UpdateHostedCustomMetricTemplate(ctx, customJobID, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHostedCustomMetricTemplate", reflect.TypeOf((*MockService)(nil).UpdateHostedCustomMetricTemplate), ctx, customJobID, req)
+}
+
+// UpdateKeyValue mocks base method.
+func (m *MockService) UpdateKeyValue(ctx context.Context, id string, req *client.KeyValueRequest) (*client.KeyValue, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateKeyValue", ctx, id, req)
+	ret0, _ := ret[0].(*client.KeyValue)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateKeyValue indicates an expected call of UpdateKeyValue.
+func (mr *MockServiceMockRecorder) UpdateKeyValue(ctx, id, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateKeyValue", reflect.TypeOf((*MockService)(nil).UpdateKeyValue), ctx, id, req)
 }
 
 // UpdateLLMBlueprint mocks base method.

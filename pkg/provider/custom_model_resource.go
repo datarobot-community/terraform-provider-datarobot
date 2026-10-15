@@ -2102,10 +2102,7 @@ func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.S
 	tagElements := make([]attr.Value, 0, len(tags))
 	for _, tag := range tags {
 		tagObject, tagDiags := types.ObjectValue(
-			map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
+			tagObjectType.AttrTypes,
 			map[string]attr.Value{
 				"name":  types.StringValue(tag.Name),
 				"value": types.StringValue(tag.Value),
@@ -2113,33 +2110,15 @@ func initializeTagsFromModel(tags []client.Tag, diags *diag.Diagnostics) types.S
 		)
 		if tagDiags.HasError() {
 			diags.Append(tagDiags...)
-			return types.SetNull(types.ObjectType{
-				AttrTypes: map[string]attr.Type{
-					"name":  types.StringType,
-					"value": types.StringType,
-				},
-			})
+			return types.SetNull(tagObjectType)
 		}
 		tagElements = append(tagElements, tagObject)
 	}
 
-	tagSet, setDiags := types.SetValue(
-		types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
-		},
-		tagElements,
-	)
+	tagSet, setDiags := types.SetValue(tagObjectType, tagElements)
 	if setDiags.HasError() {
 		diags.Append(setDiags...)
-		return types.SetNull(types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"name":  types.StringType,
-				"value": types.StringType,
-			},
-		})
+		return types.SetNull(tagObjectType)
 	}
 	return tagSet
 }
