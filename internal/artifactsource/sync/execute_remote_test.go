@@ -509,3 +509,58 @@ func TestEngine_ExecuteRemote_EmptyPlanOnLockedArtifactRecordsTheSync(t *testing
 	assert.Equal(t, "ver-2", *cfg.LastSyncedVersionID)
 	assert.False(t, HasRollback(f.dir))
 }
+
+// End to end over the shape the bug was reported in: a source.dir with no
+// sync state, an artifact already pointing at a catalog version, and a file
+// removed from the tree. The whole point is that DeleteFiles goes out, so
+// the removed file leaves the new catalog version and stops reaching the
+// image build.
+func TestEngine_ExecuteRemote_SeededDirectoryDeletesRemovedFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "same"})
+
+	sameHash, sameSize := hashContent("same")
+	goneHash, goneSize := hashContent("dead code")
+
+	files := &fakeFilesAPI{
+		allFiles: map[string]filesapi.FileMeta{
+			"agent.py": {Hash: sameHash, Size: sameSize},
+			"gone.py":  {Hash: goneHash, Size: goneSize},
+		},
+		deleteVersionID: "ver-3",
+	}
+
+	artifacts := &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-2"), nil },
+	}
+
+	e, err := New(dir, "art-1", files, artifacts)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	e.nowFn = fixedNow
+	e.BindCatalog("cat-1", "ver-2")
+
+	_, err = e.Plan(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, e.ExecuteLocal(context.Background()))
+
+	result, err := e.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, [][]string{{"gone.py"}}, files.deletedPaths)
+	assert.Equal(t, 1, result.DeletedRemote)
+	assert.Zero(t, result.Uploaded, "the file that did not change is not pushed again")
+	assert.Empty(t, files.stagedPaths())
+
+	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-3"}}, artifacts.patches,
+		"the artifact has to move to the version the delete produced")
+
+	assert.NotContains(t, loadBase(t, dir), "gone.py")
+	assert.Contains(t, loadBase(t, dir), "agent.py")
+	assert.Equal(t, "same", readProjectFile(t, dir, "agent.py"), "the local tree is left alone")
+	requireAbsent(t, dir, "gone.py")
+}

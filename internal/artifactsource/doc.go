@@ -1,8 +1,13 @@
-// Package artifactsource provides local directory upload orchestration over the
-// DataRobot Files API client (internal/client/filesapi).
+// Package artifactsource provides the local-directory primitives the
+// DataRobot Files API client (internal/client/filesapi) is driven with.
 //
-// PushDirectory walks a local directory, hashes files, and uploads via either
-// the stage path (small change sets) or zip/fromFile path (large change sets).
-// When CatalogID and BaseFiles (per-path hashes from Terraform state) are set,
-// only added, modified, and deleted files are synced incrementally.
+// CollectLocalFiles walks and hashes a directory; FingerprintDirectory
+// digests the result into the source.dir hash the resource keeps in state;
+// UploadFiles pushes a set of those files through the stage path (small
+// change sets) or the zip/fromFile path (large ones).
+//
+// Deciding what to upload, delete, or leave alone is not done here. That is
+// internal/artifactsource/sync's three-way engine (BASE / LOCAL / REMOTE),
+// which is the only thing that can express a deletion; this package just
+// carries out what it asks for.
 package artifactsource
