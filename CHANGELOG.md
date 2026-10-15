@@ -1,5 +1,9 @@
 ## [0.12.7] - 2026-10-14
 
+### Fixed
+
+- `datarobot_custom_application_from_environment` can be created again. Every create failed with `Struct defines fields not found in object: required_key_scope_level`, because the resource model had the field and the schema did not. The resource now accepts `required_key_scope_level` and sends it on create, as `datarobot_custom_application` does. Changing it replaces the resource.
+
 ### Changed
 
 - Built with Go 1.27.2 and `golang.org/x/net` v0.60.0 (which brings `golang.org/x/crypto` v0.57.0), fixing nine `govulncheck` advisories in the HTTP/2, HTTP/1, TLS and MIME header handling of Go 1.27.1 and `golang.org/x/net` v0.58.0. Local linting needs golangci-lint v2.14.0 or newer, since older releases cannot read Go 1.27.2's export data.
