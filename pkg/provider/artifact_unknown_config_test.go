@@ -339,6 +339,73 @@ func testArtifactPlanOnlyStep(t *testing.T, config string, expectError *regexp.R
 	})
 }
 
+// testArtifactApplyStep runs a real apply rather than stopping at the plan, so a
+// reference that only resolves once its dependency is created is exercised on
+// the walk that resolves it. The mock expects no calls: reaching the API at all
+// means validation let the configuration through.
+func testArtifactApplyStep(t *testing.T, config string, expectError *regexp.Regexp) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{{
+			Config:      config,
+			ExpectError: expectError,
+		}},
+	})
+}
+
+// A reference to a resource created in the same apply is still unknown on the
+// plan walk, so the apply walk is the last chance to catch it — and it has to
+// be caught before CreateArtifact runs, or the failed apply leaves an artifact
+// and its repository behind, one orphan per attempt. terraform_data.seed.id is
+// exactly that shape: unknown until its own resource is created.
+//
+// This is what lets the container rules defer an unknown instead of guessing.
+// Terraform re-runs ValidateResourceConfig here with the reference resolved, so
+// the provider needs no apply-time recheck of its own.
+func TestArtifactApplyWalkRejectsSameApplyImageURIReference(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactApplyStep(t, `
+resource "terraform_data" "seed" {
+  input = "seed"
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "same-apply-image-uri"
+  status = "draft"
+  source = {
+    dir = "`+dir+`"
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = terraform_data.seed.id
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, regexp.MustCompile("Conflicting image source"))
+}
+
 // The configuration from examples/workflows/workload_replacement, which the
 // workload docs link to as a runnable walkthrough.
 func TestArtifactPlanAcceptsVariableImageURI(t *testing.T) {
@@ -450,6 +517,109 @@ resource "datarobot_artifact" "test" {
     }]
   }
 }`, nil)
+}
+
+// The mirror image of the test above: image_uri literal, wait_for_build behind
+// a variable. Which rule applies is undecidable on the validate walk, because
+// wait_for_build = false makes image_uri required and wait_for_build = true
+// makes it refused. Deciding it early rejects a configuration that is valid the
+// moment the variable resolves.
+func TestArtifactPlanAcceptsVariableWaitForBuildWithImageURI(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactPlanOnlyStep(t, `
+variable "wait_for_build" {
+  type    = bool
+  default = false
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "variable-wait-for-build-flag"
+  status = "locked"
+  source = {
+    dir            = "`+dir+`"
+    wait_for_build = var.wait_for_build
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = "containous/whoami:latest"
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, nil)
+}
+
+// Deferring the undecided wait_for_build must not lose the refusal. Terraform
+// validates a second time on the plan walk, where the variable has resolved to
+// true, and there the build does overwrite image_uri.
+func TestArtifactPlanRejectsVariableWaitForBuildResolvingToTrue(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactPlanOnlyStep(t, `
+variable "wait_for_build" {
+  type    = bool
+  default = true
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "variable-wait-for-build-true"
+  status = "locked"
+  source = {
+    dir            = "`+dir+`"
+    wait_for_build = var.wait_for_build
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = "containous/whoami:latest"
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, regexp.MustCompile("Conflicting image source"))
+}
+
+// The other half of the complement, deferred the same way: once the variable
+// resolves to false the lock needs an image_uri, and its absence is still
+// reported rather than swallowed by the deferral.
+func TestArtifactPlanRejectsVariableWaitForBuildFalseWithoutImageURI(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactPlanOnlyStep(t, `
+variable "wait_for_build" {
+  type    = bool
+  default = false
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "variable-wait-for-build-no-image"
+  status = "locked"
+  source = {
+    dir            = "`+dir+`"
+    wait_for_build = var.wait_for_build
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary = true
+        port    = 8080
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, regexp.MustCompile("Invalid wait_for_build on locked artifact"))
 }
 
 func TestArtifactPlanAcceptsVariableSourceDir(t *testing.T) {

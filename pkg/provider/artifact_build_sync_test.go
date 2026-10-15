@@ -668,6 +668,10 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 	}
 
+	// Terraform rejects a plan that turns a known configured value unknown, so a
+	// configured image_uri has to survive ModifyPlan. validateContainerImageURINotSourceManaged
+	// is what keeps that from colliding with a build: the only configuration that
+	// reaches here with one is a locked artifact that does not wait for its build.
 	t.Run("manual image_uri in config is not marked unknown", func(t *testing.T) {
 		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
 		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
@@ -715,6 +719,38 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 
 		primary := primaryPlanImageURI(plan)
 		if !primary.IsUnknown() {
+			t.Fatalf("primary image_uri = %v, want unknown", primary)
+		}
+
+		sidecar := plan.Spec.ContainerGroups[0].Containers[1].ImageURI
+		if sidecar.IsUnknown() || sidecar.ValueString() != "nginx:latest" {
+			t.Fatalf("sidecar image_uri = %v, want nginx:latest", sidecar)
+		}
+	})
+
+	// A sidecar image_uri is legitimate next to a source-built primary: nothing
+	// builds the sidecar, so the user keeps naming its image. It used to suppress
+	// the primary's unknown marking, because the exemption scanned every container
+	// in the spec instead of the one it was deciding about. The primary then planned
+	// as the stale image and apply wrote the built one over it, which Terraform
+	// rejects as an inconsistent result.
+	t.Run("sidecar image_uri in config does not pin the primary", func(t *testing.T) {
+		// Separate specs: testSourcePlanModel stores the pointer it is given, so
+		// one spec shared between config and plan would alias.
+		config := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()),
+			func(m *ArtifactResourceModel) {
+				m.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringNull()
+				m.Spec.ContainerGroups[0].Containers[1].ImageURI = types.StringValue("nginx:latest")
+			})
+		plan := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), testSidecarWithBuildConfig()),
+			func(m *ArtifactResourceModel) {
+				m.Source.DirHash = dirHash
+			})
+		setKnownImageURIs(plan)
+
+		applySourceManagedImageURIToPlan(config, plan, nil, true)
+
+		if primary := primaryPlanImageURI(plan); !primary.IsUnknown() {
 			t.Fatalf("primary image_uri = %v, want unknown", primary)
 		}
 

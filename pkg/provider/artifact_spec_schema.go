@@ -268,9 +268,12 @@ func artifactResourceContainerAttributes(probeAttributes, imageBuildConfigAttrib
 			},
 		},
 		"image_uri": schema.StringAttribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.",
+			Optional: true,
+			Computed: true,
+			MarkdownDescription: "Docker image URI. Set this for a prebuilt image. When `source` and `image_build_config` are both " +
+				"set, apply builds the image and populates this attribute, and configuring it is rejected because the build would " +
+				"overwrite it. The exception is a locked artifact with `source.wait_for_build = false`, where the lock cannot wait " +
+				"for the build and `image_uri` is required instead.",
 			PlanModifiers: []planmodifier.String{
 				artifactImageURIUseStateForUnknown{},
 			},
