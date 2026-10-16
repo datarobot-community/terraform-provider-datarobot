@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -600,12 +601,21 @@ func TestUnitDeploymentModelReplacementSuccess(t *testing.T) {
 		Importance: "MODERATE",
 	}
 
-	// GetDeployment returns oldDeployment until model replacement completes, then newDeployment.
-	replacementApplied := false
+	// Delete polls GetDeployment until it returns NotFound (30 minutes by default), so bound the
+	// waits to make a regression fail quickly instead of hanging.
+	t.Setenv(TimeoutMinutesEnvVar, "1")
+
+	// GetDeployment returns oldDeployment until model replacement completes, then newDeployment,
+	// and NotFound once the deployment has been deleted. The mock is called from the provider's
+	// server goroutines, hence the atomics.
+	var replacementApplied, deleted atomic.Bool
 	mockService.EXPECT().
 		GetDeployment(gomock.Any(), depID).
 		DoAndReturn(func(_ context.Context, _ string) (*client.Deployment, error) {
-			if replacementApplied {
+			if deleted.Load() {
+				return nil, &client.NotFoundError{Resource: "deployment"}
+			}
+			if replacementApplied.Load() {
 				return newDeployment, nil
 			}
 			return oldDeployment, nil
@@ -633,7 +643,7 @@ func TestUnitDeploymentModelReplacementSuccess(t *testing.T) {
 	mockService.EXPECT().
 		UpdateDeploymentModel(gomock.Any(), depID, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, _ *client.UpdateDeploymentModelRequest) (*client.Deployment, string, error) {
-			replacementApplied = true
+			replacementApplied.Store(true)
 			return nil, updateTaskID, nil
 		})
 	mockService.EXPECT().
@@ -643,8 +653,13 @@ func TestUnitDeploymentModelReplacementSuccess(t *testing.T) {
 		UpdateDeploymentSettings(gomock.Any(), depID, gomock.Any()).
 		Return(&client.DeploymentSettings{}, nil)
 
-	// Destroy
-	mockService.EXPECT().DeleteDeployment(gomock.Any(), depID).Return(nil)
+	// Destroy: once deleted, GetDeployment returns NotFound so Delete's wait for removal ends.
+	mockService.EXPECT().
+		DeleteDeployment(gomock.Any(), depID).
+		DoAndReturn(func(context.Context, string) error {
+			deleted.Store(true)
+			return nil
+		})
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -703,9 +718,22 @@ func TestUnitDeploymentModelReplacementMismatch(t *testing.T) {
 		Importance: "MODERATE",
 	}
 
+	// The provider polls for the new model package, and later for the deletion, with the 30 minute
+	// default timeout. This test waits out the first poll before the expected error, so bound it
+	// (the timeout is in whole minutes).
+	t.Setenv(TimeoutMinutesEnvVar, "1")
+
+	// GetDeployment keeps returning oldDeployment, and NotFound once the deployment has been
+	// deleted. The mock is called from the provider's server goroutines, hence the atomic.
+	var deleted atomic.Bool
 	mockService.EXPECT().
 		GetDeployment(gomock.Any(), depID).
-		Return(oldDeployment, nil).
+		DoAndReturn(func(_ context.Context, _ string) (*client.Deployment, error) {
+			if deleted.Load() {
+				return nil, &client.NotFoundError{Resource: "deployment"}
+			}
+			return oldDeployment, nil
+		}).
 		AnyTimes()
 
 	// Create
@@ -734,8 +762,14 @@ func TestUnitDeploymentModelReplacementMismatch(t *testing.T) {
 		Return(&client.TaskStatusResponse{Status: "COMPLETED"}, nil)
 	// No UpdateDeploymentSettings: update returns error before reaching that point
 
-	// Destroy (cleanup after failed update step)
-	mockService.EXPECT().DeleteDeployment(gomock.Any(), depID).Return(nil)
+	// Destroy (cleanup after failed update step): once deleted, GetDeployment returns NotFound so
+	// Delete's wait for removal ends.
+	mockService.EXPECT().
+		DeleteDeployment(gomock.Any(), depID).
+		DoAndReturn(func(context.Context, string) error {
+			deleted.Store(true)
+			return nil
+		})
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,

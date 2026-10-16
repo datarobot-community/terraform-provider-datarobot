@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- The deployment unit tests no longer hang or fail when the whole `pkg/provider` suite runs. Fixes made to tests: `TestUnitDeploymentModelReplacementSuccess`, `TestUnitDeploymentModelReplacementMismatch`, `TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL` and `TestWaitForDeploymentStatusErroredLogRetrievalFailure`. This changes tests only; the provider's behavior is unchanged.
+
 ## [0.13.0] - 2026-10-15
 
 ### Added

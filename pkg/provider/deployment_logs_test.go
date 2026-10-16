@@ -51,7 +51,8 @@ func TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL(t *testing.T) {
 
 	mockService.EXPECT().GetDeployment(gomock.Any(), "dep-1").Return(&client.Deployment{Status: "error"}, nil)
 	mockService.EXPECT().GetDeploymentLogs(gomock.Any(), "dep-1").Return("[2026-07-09T16:14:50Z] ERROR: failed to load model", nil)
-	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com")
+	// The logs URL is built both when the poll sees the error and when the final error is wrapped.
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
 
 	_, err := r.waitForDeploymentToBeReady(context.Background(), "dep-1")
 	if err == nil {
@@ -79,7 +80,8 @@ func TestWaitForDeploymentStatusErroredLogRetrievalFailure(t *testing.T) {
 
 	mockService.EXPECT().GetDeployment(gomock.Any(), "dep-1").Return(&client.Deployment{Status: "error"}, nil)
 	mockService.EXPECT().GetDeploymentLogs(gomock.Any(), "dep-1").Return("", errors.New("logs unavailable"))
-	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com")
+	// The logs URL is built both when the poll sees the error and when the final error is wrapped.
+	mockService.EXPECT().BaseURL().Return("https://app.datarobot.com").AnyTimes()
 
 	_, err := r.waitForDeploymentToBeReady(context.Background(), "dep-1")
 	if err == nil {
