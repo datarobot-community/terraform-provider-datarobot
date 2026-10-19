@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Tests no longer call the live DataRobot API when `TF_ACC` is not set, so `go test` without credentials no longer fails on them with access denied. `TestAccDatastoreResource`, `TestAccDatasourceResource`, `TestAccDatasetFromDatasourceResource`, `TestAccExecutionEnvironmentDataSource` and `TestAccGlobalModelDataSource` looked up real drivers, connectors, environments or models before `resource.Test` could skip them; they now skip first, and with `TF_ACC=1` and no `DATAROBOT_API_TOKEN` they fail at once with a message that names the variable. `TestIntegrationExecutionEnvironmentDataSource` and `TestIntegrationGlobalModelDataSource`, which run against a mocked service, now use fixed fixtures instead of fetching names from the live API, and set the API key environment variable themselves, so they pass offline and in a full-suite run. No change to provider behavior.
+
 ## [0.13.0] - 2026-10-15
 
 ### Added
