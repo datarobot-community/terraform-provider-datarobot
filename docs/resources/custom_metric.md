@@ -92,6 +92,7 @@ output "example_id" {
 - `baseline_value` (Number) The baseline value used to add “reference dots” to the values over time chart.
 - `batch` (Attributes) A Custom Metric batch ID source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--batch))
 - `description` (String) Description of the Custom Metric.
+- `geospatial_segment_attribute` (String) Name of the column that contains geospatial values. Required when `is_geospatial` is `true` and not allowed otherwise. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. It can only be set when the Custom Metric is created, so changing it replaces the Custom Metric.
 - `sample_count` (Attributes) A Custom Metric sample source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--sample_count))
 - `timestamp` (Attributes) A Custom Metric timestamp column source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--timestamp))
 - `value` (Attributes) A Custom Metric value source when reading values from columnar dataset. (see [below for nested schema](#nestedatt--value))

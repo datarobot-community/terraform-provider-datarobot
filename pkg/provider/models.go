@@ -384,6 +384,8 @@ type CustomMetricResourceModel struct {
 	Value           *ColumnNameValue         `tfsdk:"value"`
 	SampleCount     *ColumnNameValue         `tfsdk:"sample_count"`
 	Batch           *ColumnNameValue         `tfsdk:"batch"`
+
+	GeospatialSegmentAttribute types.String `tfsdk:"geospatial_segment_attribute"`
 }
 
 type MetricTimestampSpoofing struct {
