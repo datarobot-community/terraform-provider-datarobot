@@ -14,9 +14,16 @@ import (
 )
 
 func TestAccGlobalModelDataSource(t *testing.T) {
+	testAccRequireTFAcc(t)
+	testAccPreCheck(t)
 	t.Parallel()
 
-	testGlobalModelDataSource(t, false)
+	globalModels, err := getGlobalModels()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testGlobalModelDataSource(t, false, globalModels)
 }
 
 func TestIntegrationGlobalModelDataSource(t *testing.T) {
@@ -28,13 +35,17 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	// Set unconditionally: an earlier test may have left globalTestCfg.ApiKey set
+	// without setting the env var, which is what the provider reads. t.Setenv
+	// restores the original value when this test ends.
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	mockAPIKey(t)
 
-	globalModels, err := getGlobalModels()
-	if err != nil {
-		t.Fatal(err)
+	// Static fixtures: the mocked service echoes these names back, so there is no
+	// need to discover real global models from the live API.
+	globalModels := []client.RegisteredModel{
+		{Name: "Fixture Global Model A", IsGlobal: true},
+		{Name: "Fixture Global Model B", IsGlobal: true},
 	}
 
 	for _, globalModel := range globalModels {
@@ -67,18 +78,13 @@ func TestIntegrationGlobalModelDataSource(t *testing.T) {
 		Search:   "invalid",
 	}).Return([]client.RegisteredModel{}, nil)
 
-	testGlobalModelDataSource(t, true)
+	testGlobalModelDataSource(t, true, globalModels)
 }
 
-func testGlobalModelDataSource(t *testing.T, isMock bool) {
+func testGlobalModelDataSource(t *testing.T, isMock bool, globalModels []client.RegisteredModel) {
 	dataSourceName := "data.datarobot_global_model.test"
 
 	steps := []resource.TestStep{}
-
-	globalModels, err := getGlobalModels()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, globalModel := range globalModels {
 		steps = append(steps, resource.TestStep{

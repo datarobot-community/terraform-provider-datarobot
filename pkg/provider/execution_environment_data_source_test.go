@@ -14,9 +14,16 @@ import (
 )
 
 func TestAccExecutionEnvironmentDataSource(t *testing.T) {
+	testAccRequireTFAcc(t)
+	testAccPreCheck(t)
 	t.Parallel()
 
-	testExecutionEnvironmentDataSource(t, false)
+	executionEnvironments, err := getExecutionEnvironments()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testExecutionEnvironmentDataSource(t, false, executionEnvironments)
 }
 
 func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
@@ -28,13 +35,17 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 		return mockService
 	})()
 
-	if globalTestCfg.ApiKey == "" {
-		t.Setenv(DataRobotApiKeyEnvVar, "fake")
-	}
+	// Set unconditionally: an earlier test may have left globalTestCfg.ApiKey set
+	// without setting the env var, which is what the provider reads. t.Setenv
+	// restores the original value when this test ends.
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+	mockAPIKey(t)
 
-	executionEnvironments, err := getExecutionEnvironments()
-	if err != nil {
-		t.Fatal(err)
+	// Static fixtures: the mocked service echoes these names back, so there is no
+	// need to discover real environments from the live API.
+	executionEnvironments := []client.ExecutionEnvironment{
+		{Name: "Fixture Python Environment A", IsPublic: true, LatestVersion: client.ExecutionEnvironmentVersion{ID: "fixture-version-a"}},
+		{Name: "Fixture Python Environment B", IsPublic: true, LatestVersion: client.ExecutionEnvironmentVersion{ID: "fixture-version-b"}},
 	}
 
 	for _, executionEnvironment := range executionEnvironments {
@@ -76,18 +87,13 @@ func TestIntegrationExecutionEnvironmentDataSource(t *testing.T) {
 
 	mockService.EXPECT().ListExecutionEnvironments(gomock.Any()).Return([]client.ExecutionEnvironment{}, nil)
 
-	testExecutionEnvironmentDataSource(t, true)
+	testExecutionEnvironmentDataSource(t, true, executionEnvironments)
 }
 
-func testExecutionEnvironmentDataSource(t *testing.T, isMock bool) {
+func testExecutionEnvironmentDataSource(t *testing.T, isMock bool, executionEnvironments []client.ExecutionEnvironment) {
 	dataSourceName := "data.datarobot_execution_environment.test"
 
 	steps := []resource.TestStep{}
-
-	executionEnvironments, err := getExecutionEnvironments()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, executionEnvironment := range executionEnvironments {
 		steps = append(steps, resource.TestStep{
