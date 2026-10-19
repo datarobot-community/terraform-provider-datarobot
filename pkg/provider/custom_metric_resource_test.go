@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
@@ -179,6 +181,77 @@ func TestCustomMetricResourceSchema(t *testing.T) {
 
 	if diagnostics.HasError() {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
+
+func TestValidateGeospatialSegmentAttribute(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		isGeospatial    types.Bool
+		attribute       types.String
+		wantErrorDetail string
+	}{
+		{
+			name:         "geospatial with attribute",
+			isGeospatial: types.BoolValue(true),
+			attribute:    types.StringValue("location"),
+		},
+		{
+			name:         "not geospatial without attribute",
+			isGeospatial: types.BoolValue(false),
+			attribute:    types.StringNull(),
+		},
+		{
+			name:            "geospatial without attribute",
+			isGeospatial:    types.BoolValue(true),
+			attribute:       types.StringNull(),
+			wantErrorDetail: "required when is_geospatial is true",
+		},
+		{
+			name:            "not geospatial with attribute",
+			isGeospatial:    types.BoolValue(false),
+			attribute:       types.StringValue("location"),
+			wantErrorDetail: "can only be set when is_geospatial is true",
+		},
+		{
+			name:         "unknown is_geospatial is skipped",
+			isGeospatial: types.BoolUnknown(),
+			attribute:    types.StringNull(),
+		},
+		{
+			name:         "unknown attribute is skipped",
+			isGeospatial: types.BoolValue(true),
+			attribute:    types.StringUnknown(),
+		},
+		{
+			name:         "unknown attribute with non-geospatial is skipped",
+			isGeospatial: types.BoolValue(false),
+			attribute:    types.StringUnknown(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := validateGeospatialSegmentAttribute(tc.isGeospatial, tc.attribute)
+
+			if tc.wantErrorDetail == "" {
+				if diags.HasError() {
+					t.Fatalf("unexpected diagnostics: %+v", diags)
+				}
+				return
+			}
+
+			if len(diags) != 1 || !diags.HasError() {
+				t.Fatalf("expected exactly one error diagnostic, got: %+v", diags)
+			}
+			if !strings.Contains(diags[0].Detail(), tc.wantErrorDetail) {
+				t.Fatalf("expected detail containing %q, got %q", tc.wantErrorDetail, diags[0].Detail())
+			}
+		})
 	}
 }
 

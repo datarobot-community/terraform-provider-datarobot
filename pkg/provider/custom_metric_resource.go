@@ -6,18 +6,22 @@ import (
 	"fmt"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &CustomMetricResource{}
 var _ resource.ResourceWithImportState = &CustomMetricResource{}
+var _ resource.ResourceWithValidateConfig = &CustomMetricResource{}
 
 func NewCustomMetricResource() resource.Resource {
 	return &CustomMetricResource{}
@@ -76,6 +80,20 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 				MarkdownDescription: "Determines whether the metric is geospatial.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
+				},
+			},
+			"geospatial_segment_attribute": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Name of the column that contains geospatial values. " +
+					"Required when `is_geospatial` is `true` and not allowed otherwise. " +
+					"It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, " +
+					"and the corresponding feature must be of geospatial type. " +
+					"It can only be set when the Custom Metric is created, so changing it replaces the Custom Metric.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"type": schema.StringAttribute{
@@ -141,6 +159,50 @@ func (r *CustomMetricResource) Schema(ctx context.Context, req resource.SchemaRe
 	}
 }
 
+func (r *CustomMetricResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var isGeospatial types.Bool
+	var segmentAttribute types.String
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("is_geospatial"), &isGeospatial)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("geospatial_segment_attribute"), &segmentAttribute)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(validateGeospatialSegmentAttribute(isGeospatial, segmentAttribute)...)
+}
+
+// validateGeospatialSegmentAttribute checks that geospatial_segment_attribute is set exactly when
+// is_geospatial is true. The API does not enforce this on create, so a geospatial Custom Metric
+// without the attribute (which cannot be fixed in place) would otherwise be created silently.
+// Values that are not yet known at validation time are skipped.
+func validateGeospatialSegmentAttribute(isGeospatial types.Bool, segmentAttribute types.String) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if isGeospatial.IsUnknown() || segmentAttribute.IsUnknown() {
+		return diags
+	}
+
+	attributePath := path.Root("geospatial_segment_attribute")
+
+	switch {
+	case isGeospatial.ValueBool() && segmentAttribute.IsNull():
+		diags.AddAttributeError(
+			attributePath,
+			"Missing geospatial_segment_attribute",
+			"geospatial_segment_attribute is required when is_geospatial is true.",
+		)
+	case !isGeospatial.ValueBool() && !segmentAttribute.IsNull():
+		diags.AddAttributeError(
+			attributePath,
+			"Unexpected geospatial_segment_attribute",
+			"geospatial_segment_attribute can only be set when is_geospatial is true.",
+		)
+	}
+
+	return diags
+}
+
 func (r *CustomMetricResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
@@ -172,6 +234,8 @@ func (r *CustomMetricResource) Create(ctx context.Context, req resource.CreateRe
 		IsGeospatial:    data.IsGeospatial.ValueBool(),
 		Type:            data.Type.ValueString(),
 		Directionality:  data.Directionality.ValueString(),
+
+		GeospatialSegmentAttribute: StringValuePointerOptional(data.GeospatialSegmentAttribute),
 	}
 
 	if IsKnown(data.BaselineValue) {
@@ -255,6 +319,13 @@ func (r *CustomMetricResource) Read(ctx context.Context, req resource.ReadReques
 	data.Type = types.StringValue(customMetric.Type)
 	data.IsModelSpecific = types.BoolValue(customMetric.IsModelSpecific)
 	data.IsGeospatial = types.BoolValue(customMetric.IsGeospatial)
+	// The API returns null when there is no attribute; treat an empty string the same so state
+	// matches a configuration that leaves the attribute out.
+	if customMetric.GeospatialSegmentAttribute == nil || *customMetric.GeospatialSegmentAttribute == "" {
+		data.GeospatialSegmentAttribute = types.StringNull()
+	} else {
+		data.GeospatialSegmentAttribute = types.StringValue(*customMetric.GeospatialSegmentAttribute)
+	}
 	if customMetric.BaselineValues != nil && len(*customMetric.BaselineValues) > 0 {
 		baselineValues := *customMetric.BaselineValues
 		data.BaselineValue = types.Float64Value(baselineValues[0].Value)

@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Added
+
+- `datarobot_custom_metric` accepts `geospatial_segment_attribute`, the name of the column that contains geospatial values, serialized as `geospatialSegmentAttribute` on `POST /deployments/{deploymentId}/customMetrics/`. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. The API accepts it on create only, so changing it replaces the Custom Metric.
+- The attribute is required when `is_geospatial` is `true` and rejected when it is `false`, checked at plan time. The API does not enforce this on create: a geospatial Custom Metric with no attribute is accepted, but it has no column to read geospatial values from and, because the attribute cannot be changed in place, can only be fixed by replacing it. A configuration that already sets `is_geospatial = true` without the attribute now fails to plan until the attribute is set.
+
 ### Fixed
 
 - Tests no longer call the live DataRobot API when `TF_ACC` is not set, so `go test` without credentials no longer fails on them with access denied. `TestAccDatastoreResource`, `TestAccDatasourceResource`, `TestAccDatasetFromDatasourceResource`, `TestAccExecutionEnvironmentDataSource` and `TestAccGlobalModelDataSource` looked up real drivers, connectors, environments or models before `resource.Test` could skip them; they now skip first, and with `TF_ACC=1` and no `DATAROBOT_API_TOKEN` they fail at once with a message that names the variable. `TestIntegrationExecutionEnvironmentDataSource` and `TestIntegrationGlobalModelDataSource`, which run against a mocked service, now use fixed fixtures instead of fetching names from the live API, and set the API key environment variable themselves, so they pass offline and in a full-suite run. No change to provider behavior.
