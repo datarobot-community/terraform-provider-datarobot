@@ -11,6 +11,7 @@
 - A locked artifact with `source.wait_for_build = false` is refused at plan time, with or without `image_uri`. The platform locks an artifact only once its build has completed, so the apply failed after creating the artifact. When `status` comes from a variable, this check now waits for it instead of assuming locked.
 - A sidecar's `image_uri` no longer keeps the primary container's `image_uri` at its previous build in the plan, which failed the apply after a source change. A change that creates a new version of such an artifact now rebuilds the primary image, as it already did without a sidecar.
 - The deployment unit tests no longer hang or fail when the whole `pkg/provider` suite runs. Fixes made to tests: `TestUnitDeploymentModelReplacementSuccess`, `TestUnitDeploymentModelReplacementMismatch`, `TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL` and `TestWaitForDeploymentStatusErroredLogRetrievalFailure`. This changes tests only; the provider's behavior is unchanged.
+- Docs: the `datarobot_workload` page has a "Failed applies" section, and the `datarobot_artifact` page says what a create that fails partway leaves behind, under Terraform and under Pulumi. Neither engine rolls completed resources back: an artifact created before a `datarobot_workload` the platform refuses stays in state, the retry reuses it without another upload or build, and `terraform destroy` removes it.
 
 ## [0.13.0] - 2026-10-15
 
