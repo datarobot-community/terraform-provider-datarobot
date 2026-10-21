@@ -113,7 +113,8 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.\n\n" +
 			"A create that fails partway, in the source upload, the image build or the lock, deletes the version it created, and the repository too when this resource created it, so the next apply starts over; the uploaded files stay in the catalog bound to `source.dir` and the retry reuses them. " +
-			"A build that is still running when `source.wait_for_build` ends is handled differently: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand. " +
+			"The cleanup is best effort: when its delete fails, the version or repository stays on the platform and the apply reports only the original error. " +
+			"A create whose build is still running when `source.wait_for_build` ends is handled differently: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand. " +
 			"An artifact whose create succeeded stays when a later resource in the same apply fails, for example a `datarobot_workload` the platform refuses: it is in state, the retry reuses it without another upload or build, and `terraform destroy` removes it. " +
 			"Neither Terraform nor Pulumi rolls completed resources back; see Failed applies on the `datarobot_workload` page.",
 
@@ -197,7 +198,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"A file changed on both sides since the last sync (edited or deleted locally, and edited or deleted in the catalog) fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
 					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
 					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded. " +
-					"A create that fails after the upload deletes the draft it created, but the uploaded files stay in the catalog bound to `dir`, and a retry from the same directory syncs against that catalog instead of uploading everything again.",
+					"A create that fails after the upload tries to delete the draft it created, but the uploaded files stay in the catalog bound to `dir`, and a retry from the same directory syncs against that catalog instead of uploading everything again.",
 				Attributes: map[string]schema.Attribute{
 					"dir": schema.StringAttribute{
 						Required:            true,
@@ -227,7 +228,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 						Optional: true,
 						Computed: true,
 						MarkdownDescription: "When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated; only a draft artifact can skip the wait, since an artifact is locked only once its build has completed. " +
-							"When the build is still running at the end of the wait, the apply fails: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand.",
+							"A create whose build is still running at the end of the wait fails: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand.",
 						Default: booldefault.StaticBool(true),
 						PlanModifiers: []planmodifier.Bool{
 							boolplanmodifier.UseStateForUnknown(),
