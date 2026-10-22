@@ -668,6 +668,9 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		})
 	}
 
+	// Terraform rejects a plan that turns a known configured value unknown, so a
+	// configured image_uri has to survive ModifyPlan, even though validation
+	// refuses one on a source-built container.
 	t.Run("manual image_uri in config is not marked unknown", func(t *testing.T) {
 		manualSpec := testDraftSourceSpec(testPrimaryWithBuildConfig())
 		config := testSourcePlanModel(t, dir, manualSpec, func(m *ArtifactResourceModel) {
@@ -721,6 +724,31 @@ func TestApplySourceManagedImageURIToPlan(t *testing.T) {
 		sidecar := plan.Spec.ContainerGroups[0].Containers[1].ImageURI
 		if sidecar.IsUnknown() || sidecar.ValueString() != "nginx:latest" {
 			t.Fatalf("sidecar image_uri = %v, want nginx:latest", sidecar)
+		}
+	})
+
+	// A sidecar names its own image next to a source-built primary. That used to
+	// keep the primary at its previous build in the plan, so a source change failed
+	// the apply with an inconsistent result once the new image was written back.
+	t.Run("sidecar image_uri in config does not pin the primary", func(t *testing.T) {
+		sidecar := ArtifactContainerModel{
+			Name:     types.StringValue("sidecar"),
+			Primary:  types.BoolValue(false),
+			ImageURI: types.StringValue("busybox:latest"),
+		}
+		config := testSourcePlanModel(t, dir, testDraftSourceSpec(testPrimaryWithBuildConfig(), sidecar))
+		// The plan carries the primary's last build, as UseStateForUnknown leaves it.
+		plan := cloneArtifactResourceModel(config)
+		plan.Source.DirHash = types.StringValue("new-hash")
+		plan.Spec.ContainerGroups[0].Containers[0].ImageURI = types.StringValue("registry/app:build-1")
+
+		applySourceManagedImageURIToPlan(config, plan, draftState(dirHash), false)
+
+		if primary := primaryPlanImageURI(plan); !primary.IsUnknown() {
+			t.Fatalf("primary image_uri = %v, want unknown", primary)
+		}
+		if got := plan.Spec.ContainerGroups[0].Containers[1].ImageURI; got.ValueString() != "busybox:latest" {
+			t.Fatalf("sidecar image_uri = %v, want busybox:latest", got)
 		}
 	})
 }

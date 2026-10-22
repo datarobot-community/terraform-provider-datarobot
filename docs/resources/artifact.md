@@ -19,6 +19,10 @@ Artifact definition for the Workload API. Artifacts define container images and 
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
 # - MCP: type = "mcp" (same spec shape as service)
+#
+# image_uri and a source-driven build are alternatives: when source and
+# image_build_config are both set, the build produces the image and writes
+# image_uri, so setting it yourself is rejected at plan time.
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -141,7 +145,7 @@ output "from_source_locked_artifact_id" {
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
 # from an execution environment, so the two ids are read from a variable or a
-# data source rather than pasted in: a string attribute such as image_uri,
+# data source rather than pasted in: a string attribute such as
 # execution_environment_id or source.dir takes a variable, data source, or
 # resource reference, and only a null or empty value counts as unset. List
 # attributes such as entrypoint and routes are the exception - a whole list
@@ -301,7 +305,7 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
+- `image_uri` (String) Docker image URI. Set this for a prebuilt image. When `source` and `image_build_config` are both set, apply builds the image and populates this attribute, and configuring it is rejected because the build would overwrite it.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
@@ -445,7 +449,7 @@ Required:
 Optional:
 
 - `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, the `<path>.LOCAL.<timestamp>` copies the DataRobot CLI's sync keeps, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.
-- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
+- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated; only a draft artifact can skip the wait, since an artifact is locked only once its build has completed.
 
 Read-Only:
 

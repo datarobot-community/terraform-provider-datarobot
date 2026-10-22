@@ -7,7 +7,9 @@
 
 ### Fixed
 
-- Tests no longer call the live DataRobot API when `TF_ACC` is not set, so `go test` without credentials no longer fails on them with access denied. `TestAccDatastoreResource`, `TestAccDatasourceResource`, `TestAccDatasetFromDatasourceResource`, `TestAccExecutionEnvironmentDataSource` and `TestAccGlobalModelDataSource` looked up real drivers, connectors, environments or models before `resource.Test` could skip them; they now skip first, and with `TF_ACC=1` and no `DATAROBOT_API_TOKEN` they fail at once with a message that names the variable. `TestIntegrationExecutionEnvironmentDataSource` and `TestIntegrationGlobalModelDataSource`, which run against a mocked service, now use fixed fixtures instead of fetching names from the live API, and set the API key environment variable themselves, so they pass offline and in a full-suite run. No change to provider behavior.
+- `datarobot_artifact` refuses an `image_uri` on a container built from `source` before anything is created. Such a configuration failed apply with `Provider produced inconsistent result after apply` once the artifact existed, and under Pulumi showed a diff on every preview. **After upgrading, remove `image_uri` from such containers:** plan and destroy refuse the configuration until then, and the built value stays in state.
+- A locked artifact with `source.wait_for_build = false` is refused at plan time, with or without `image_uri`. The platform locks an artifact only once its build has completed, so the apply failed after creating the artifact. When `status` comes from a variable, this check now waits for it instead of assuming locked.
+- A sidecar's `image_uri` no longer keeps the primary container's `image_uri` at its previous build in the plan, which failed the apply after a source change. A change that creates a new version of such an artifact now rebuilds the primary image, as it already did without a sidecar.
 
 ## [0.13.0] - 2026-10-15
 
