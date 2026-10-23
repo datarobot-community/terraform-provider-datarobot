@@ -131,6 +131,20 @@ If the apply is interrupted during that wait, the rollout has already succeeded:
 
 If apply is interrupted mid-replacement, run `terraform apply` again — refresh reads the current replacement status and the provider reconciles.
 
+## Failed applies
+
+Terraform applies `datarobot_artifact` before the `datarobot_workload` that references it, and records each resource as soon as its create returns. Neither Terraform nor Pulumi rolls a completed resource back when a later one fails, and the provider cannot do it for them: it is never told that another resource failed.
+
+A create the platform refuses (a `422`, for example on an unsupported `scaling_metric` or `importance`) creates **no workload**. The artifact created earlier in the same apply **stays**, on the platform and in state. Fix the configuration and run `terraform apply` again: the retry creates only the workload and does not upload or build the artifact again. `terraform destroy` removes the artifact like any other resource. `pulumi up` and `pulumi destroy` behave the same way.
+
+Within its own create the artifact does clean up: a source upload, image build or lock that fails partway deletes the version that create made, and the repository when it created one, so the next apply starts over; the uploaded files stay in the catalog bound to `source.dir`, and the retry reuses them. This cleanup is best effort: when its delete fails, the version or repository stays on the platform and the apply reports only the original error. A create whose build is still running when `wait_for_build` ends is instead saved to state under Terraform, so that the next apply **replaces** it; see `source` and `wait_for_build` on `datarobot_artifact`.
+
+A workload the platform reports `errored` while it starts, for example when its image cannot be pulled or its container cannot start, fails the apply and is **deleted again**, with the tags already written and its Use Case link; the error quotes the platform's reason and the last lines of the workload's log. The artifact stays, as above, and the retry creates a single workload. An apply interrupted or timed out while the workload starts records it in state with a warning instead, since it may still come up.
+
+A workload is recorded in state as soon as the platform reports it `running`, which it does once the pod has started, before the container has shown that it stays up. A container that keeps crashing then turns the workload `errored` shortly after `Apply complete!` while state still records it, so check the workload's status after a first apply. Whether a crashing container fails the apply or is recorded this way depends on whether the platform reports the crash before or after `running`.
+
+A replacement that fails is a different case: Terraform destroys first, Pulumi creates first; see [Changing placement](#changing-placement).
+
 {{ .SchemaMarkdown | trimspace }}
 {{- if .HasImport }}
 
