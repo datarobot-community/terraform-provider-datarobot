@@ -7,6 +7,9 @@
 
 ### Fixed
 
+- `datarobot_artifact` refuses an `image_uri` on a container built from `source` before anything is created. Such a configuration failed apply with `Provider produced inconsistent result after apply` once the artifact existed, and under Pulumi showed a diff on every preview. **After upgrading, remove `image_uri` from such containers:** plan and destroy refuse the configuration until then, and the built value stays in state.
+- A locked artifact with `source.wait_for_build = false` is refused at plan time, with or without `image_uri`. The platform locks an artifact only once its build has completed, so the apply failed after creating the artifact. When `status` comes from a variable, this check now waits for it instead of assuming locked.
+- A sidecar's `image_uri` no longer keeps the primary container's `image_uri` at its previous build in the plan, which failed the apply after a source change. A change that creates a new version of such an artifact now rebuilds the primary image, as it already did without a sidecar.
 - The deployment unit tests no longer hang or fail when the whole `pkg/provider` suite runs. Fixes made to tests: `TestUnitDeploymentModelReplacementSuccess`, `TestUnitDeploymentModelReplacementMismatch`, `TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL` and `TestWaitForDeploymentStatusErroredLogRetrievalFailure`. This changes tests only; the provider's behavior is unchanged.
 
 ## [0.13.0] - 2026-10-15

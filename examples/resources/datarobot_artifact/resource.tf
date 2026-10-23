@@ -4,6 +4,10 @@
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
 # - MCP: type = "mcp" (same spec shape as service)
+#
+# image_uri and a source-driven build are alternatives: when source and
+# image_build_config are both set, the build produces the image and writes
+# image_uri, so setting it yourself is rejected at plan time.
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -126,7 +130,7 @@ output "from_source_locked_artifact_id" {
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
 # from an execution environment, so the two ids are read from a variable or a
-# data source rather than pasted in: a string attribute such as image_uri,
+# data source rather than pasted in: a string attribute such as
 # execution_environment_id or source.dir takes a variable, data source, or
 # resource reference, and only a null or empty value counts as unset. List
 # attributes such as entrypoint and routes are the exception - a whole list

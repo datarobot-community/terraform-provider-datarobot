@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"context"
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -178,44 +180,6 @@ func TestArtifactGeneratedDockerfileUnknownExecutionEnvironment(t *testing.T) {
 	}
 }
 
-// wait_for_build = false on a locked artifact is only allowed when image_uri is
-// given. It reads image_uri through artifactHasPrimaryImageURI, so an unknown
-// value has to count there too.
-func TestArtifactHasPrimaryImageURIUnknown(t *testing.T) {
-	t.Parallel()
-
-	specWith := func(uri types.String) *ArtifactSpecModel {
-		return &ArtifactSpecModel{
-			ContainerGroups: []ArtifactContainerGroupModel{{
-				Containers: []ArtifactContainerModel{{
-					Primary:  types.BoolValue(true),
-					ImageURI: uri,
-				}},
-			}},
-		}
-	}
-
-	tests := []struct {
-		name string
-		uri  types.String
-		want bool
-	}{
-		{name: "unknown counts as configured", uri: types.StringUnknown(), want: true},
-		{name: "literal counts as configured", uri: types.StringValue("nginx:latest"), want: true},
-		{name: "null does not", uri: types.StringNull(), want: false},
-		{name: "empty does not", uri: types.StringValue(""), want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := artifactHasPrimaryImageURI(specWith(tt.uri)); got != tt.want {
-				t.Fatalf("artifactHasPrimaryImageURI = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 // source.dir fed by a variable is unknown on the validate walk. The filesystem
 // checks need the literal path and wait; a null dir is still reported.
 func TestArtifactSourceDirUnknownDefersFilesystemChecks(t *testing.T) {
@@ -339,6 +303,70 @@ func testArtifactPlanOnlyStep(t *testing.T, config string, expectError *regexp.R
 	})
 }
 
+// testArtifactApplyStep runs a real apply rather than stopping at the plan, so a
+// reference that only resolves once its dependency is created is exercised on
+// the walk that resolves it. Reaching CreateArtifact means validation let the
+// configuration through; the call is registered rather than left unexpected,
+// because gomock's Fatalf on the provider's goroutine hangs the test.
+func testArtifactApplyStep(t *testing.T, config string, expectError *regexp.Regexp) {
+	t.Helper()
+
+	mockService := newArtifactDeleteMockService(t)
+	mockService.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *client.CreateArtifactRequest) (*client.Artifact, error) {
+			t.Errorf("CreateArtifact called: validation let the configuration through to apply")
+			return nil, errors.New("unexpected CreateArtifact")
+		}).AnyTimes()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{{
+			Config:      config,
+			ExpectError: expectError,
+		}},
+	})
+}
+
+// A reference to a resource created in the same apply is still unknown on the
+// plan walk, so the apply walk is the last chance to catch it, and it has to
+// be caught before CreateArtifact runs, or the failed apply leaves an artifact
+// and its repository behind, one orphan per attempt. terraform_data.seed.id is
+// exactly that shape: unknown until its own resource is created.
+//
+// This is what lets the container rules defer an unknown instead of guessing.
+// Terraform re-runs ValidateResourceConfig here with the reference resolved, so
+// the provider needs no apply-time recheck of its own.
+func TestIntegrationArtifactApplyWalkRejectsSameApplyImageURIReference(t *testing.T) {
+	dir := t.TempDir()
+
+	testArtifactApplyStep(t, `
+resource "terraform_data" "seed" {
+  input = "seed"
+}
+
+resource "datarobot_artifact" "test" {
+  name   = "same-apply-image-uri"
+  status = "draft"
+  source = {
+    dir = "`+dir+`"
+  }
+  spec = {
+    container_groups = [{
+      containers = [{
+        primary   = true
+        port      = 8080
+        image_uri = terraform_data.seed.id
+        image_build_config = {
+          dockerfile = { source = "provided" }
+        }
+      }]
+    }]
+  }
+}`, regexp.MustCompile("Conflicting image source"))
+}
+
 // The configuration from examples/workflows/workload_replacement, which the
 // workload docs link to as a runnable walkthrough.
 func TestArtifactPlanAcceptsVariableImageURI(t *testing.T) {
@@ -420,36 +448,36 @@ resource "datarobot_artifact" "test" {
 }`, nil)
 }
 
-// wait_for_build = false on a locked artifact, with image_uri behind a variable.
-func TestArtifactPlanAcceptsVariableImageURIWithWaitForBuildFalse(t *testing.T) {
+// An unresolved wait_for_build defers the locked-artifact rule on the validate
+// walk; once the variable resolves to false on the plan walk it still fires.
+func TestIntegrationArtifactPlanRejectsVariableWaitForBuildFalseOnLocked(t *testing.T) {
 	dir := t.TempDir()
 
 	testArtifactPlanOnlyStep(t, `
-variable "container_image" {
-  type    = string
-  default = "nginx:latest"
+variable "wait_for_build" {
+  type    = bool
+  default = false
 }
 
 resource "datarobot_artifact" "test" {
-  name   = "variable-wait-for-build"
+  name   = "variable-wait-for-build-no-image"
   status = "locked"
   source = {
     dir            = "`+dir+`"
-    wait_for_build = false
+    wait_for_build = var.wait_for_build
   }
   spec = {
     container_groups = [{
       containers = [{
-        primary   = true
-        port      = 8080
-        image_uri = var.container_image
+        primary = true
+        port    = 8080
         image_build_config = {
           dockerfile = { source = "provided" }
         }
       }]
     }]
   }
-}`, nil)
+}`, regexp.MustCompile("Invalid wait_for_build on locked artifact"))
 }
 
 func TestArtifactPlanAcceptsVariableSourceDir(t *testing.T) {
@@ -649,9 +677,6 @@ func TestArtifactPrimaryHelpersUnknownPrimary(t *testing.T) {
 		}},
 	}
 
-	if !artifactHasPrimaryImageURI(spec) {
-		t.Error("unknown primary must not hide the container's image_uri")
-	}
 	if !artifactHasPrimaryImageBuildConfig(spec) {
 		t.Error("unknown primary must not hide the container's image_build_config")
 	}
@@ -660,12 +685,17 @@ func TestArtifactPrimaryHelpersUnknownPrimary(t *testing.T) {
 	notPrimary := &ArtifactSpecModel{
 		ContainerGroups: []ArtifactContainerGroupModel{{
 			Containers: []ArtifactContainerModel{
-				{Primary: types.BoolValue(false), ImageURI: types.StringValue("nginx:latest")},
+				{
+					Primary: types.BoolValue(false),
+					ImageBuildConfig: &ArtifactImageBuildConfigModel{
+						Dockerfile: &ArtifactDockerfileModel{Source: types.StringValue("provided")},
+					},
+				},
 				{Primary: types.BoolValue(true)},
 			},
 		}},
 	}
-	if artifactHasPrimaryImageURI(notPrimary) {
+	if artifactHasPrimaryImageBuildConfig(notPrimary) {
 		t.Error("primary = false must not count as the primary container")
 	}
 }
