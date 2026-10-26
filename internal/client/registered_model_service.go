@@ -114,8 +114,9 @@ type ListRegisteredModelsResponse struct {
 }
 
 type UpdateRegisteredModelRequest struct {
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name string `json:"name,omitempty"`
+	// An empty string clears the description; nil leaves it unchanged.
+	Description *string `json:"description,omitempty"`
 }
 
 type RegisteredModelVersion struct {

@@ -532,12 +532,15 @@ func (r *RegisteredModelFromExternalResource) Update(ctx context.Context, req re
 
 	if plan.Name.ValueString() != state.Name.ValueString() ||
 		plan.Description.ValueString() != state.Description.ValueString() {
+		// The description is always sent, so that removing it from the configuration
+		// clears it: the API accepts an empty description.
+		description := plan.Description.ValueString()
 		traceAPICall("UpdateRegisteredModel")
 		_, err := r.provider.service.UpdateRegisteredModel(ctx,
 			plan.ID.ValueString(),
 			&client.UpdateRegisteredModelRequest{
 				Name:        plan.Name.ValueString(),
-				Description: plan.Description.ValueString(),
+				Description: &description,
 			})
 		if err != nil {
 			if errors.Is(err, &client.NotFoundError{}) {

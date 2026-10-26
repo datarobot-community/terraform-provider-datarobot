@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
@@ -176,6 +177,20 @@ def score(data: pd.DataFrame, model: Any, **kwargs: Dict[str, Any]) -> pd.DataFr
 					}),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Removing the description clears it in place; the post-apply plan must be empty
+			{
+				Config: registeredModelResourceConfigWithTags(newName, "", "2"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Also checks that the API returns an empty description
+					checkRegisteredModelResourceExists(resourceName, nil),
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
 				),
 			},
 			// Delete is tested automatically
@@ -656,6 +671,11 @@ resource "datarobot_registered_model" "test" {
 }
 
 func registeredModelResourceConfigWithTags(name, description string, guardName string) string {
+	descriptionStr := ""
+	if description != "" {
+		descriptionStr = fmt.Sprintf(`description = "%s"`, description)
+	}
+
 	return fmt.Sprintf(`
 resource "datarobot_use_case" "test_registered_model" {
 	name = "test registered model"
@@ -682,7 +702,7 @@ resource "datarobot_custom_model" "test_registered_model" {
 }
 resource "datarobot_registered_model" "test" {
 	name = "%s"
-	description = "%s"
+	%s
 	custom_model_version_id = "${datarobot_custom_model.test_registered_model.version_id}"
 
 	tags = [
@@ -696,7 +716,7 @@ resource "datarobot_registered_model" "test" {
 		}
 	]
 }
-`, guardName, name, description)
+`, guardName, name, descriptionStr)
 }
 
 func textGenerationRegisteredModelResourceConfig(

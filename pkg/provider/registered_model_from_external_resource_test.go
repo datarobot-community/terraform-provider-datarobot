@@ -37,6 +37,7 @@ func TestAccRegisteredModelFromExternalResource(t *testing.T) {
 	idDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	versionIDSame := statecheck.CompareValue(compare.ValuesSame())
 	versionIDDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	versionIDKept := statecheck.CompareValue(compare.ValuesSame())
 
 	name := "registered_model_from_external " + nameSalt
 	newName := "new_registered_model_from_external " + nameSalt
@@ -65,6 +66,9 @@ func TestAccRegisteredModelFromExternalResource(t *testing.T) {
 	newVersion := updatedMetadata
 	newVersion.PredictionThreshold = "0.6"
 	newVersion.ModelLocation = "s3://bucket/model-v2"
+
+	removedDescription := newVersion
+	removedDescription.Description = ""
 
 	replaced := newVersion
 	replaced.TargetName = "readmitted_new"
@@ -131,6 +135,7 @@ func TestAccRegisteredModelFromExternalResource(t *testing.T) {
 					idSame.AddStateValue(resourceName, tfjsonpath.New("id")),
 					idDiffer.AddStateValue(resourceName, tfjsonpath.New("id")),
 					versionIDDiffer.AddStateValue(resourceName, tfjsonpath.New("version_id")),
+					versionIDKept.AddStateValue(resourceName, tfjsonpath.New("version_id")),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromExternalResourceExists(),
@@ -139,6 +144,24 @@ func TestAccRegisteredModelFromExternalResource(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "target.prediction_threshold", "0.6"),
 					resource.TestCheckResourceAttr(resourceName, "model_description.location", "s3://bucket/model-v2"),
 					resource.TestCheckResourceAttrSet(resourceName, "use_case_ids.0"),
+				),
+			},
+			// Removing the description clears it in place; the post-apply plan must be empty
+			{
+				Config: registeredModelFromExternalResourceConfig(removedDescription, true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					idSame.AddStateValue(resourceName, tfjsonpath.New("id")),
+					versionIDKept.AddStateValue(resourceName, tfjsonpath.New("version_id")),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Also checks that the API returns an empty description
+					checkRegisteredModelFromExternalResourceExists(),
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
 				),
 			},
 			// Update target name replaces the registered model
@@ -547,6 +570,7 @@ func TestIntegrationRegisteredModelFromExternalResource(t *testing.T) {
 	idDiffer := statecheck.CompareValue(compare.ValuesDiffer())
 	versionIDSame := statecheck.CompareValue(compare.ValuesSame())
 	versionIDDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	versionIDKept := statecheck.CompareValue(compare.ValuesSame())
 
 	name := "registered model " + uuid.NewString()
 	newName := "new registered model " + uuid.NewString()
@@ -574,6 +598,9 @@ func TestIntegrationRegisteredModelFromExternalResource(t *testing.T) {
 
 	removedVersionDescription := newVersion
 	removedVersionDescription.ModelVersionDescription = ""
+
+	removedDescription := removedVersionDescription
+	removedDescription.Description = ""
 
 	replaced := removedVersionDescription
 	replaced.TargetName = "new_target"
@@ -707,6 +734,7 @@ func TestIntegrationRegisteredModelFromExternalResource(t *testing.T) {
 					idSame.AddStateValue(resourceName, tfjsonpath.New("id")),
 					idDiffer.AddStateValue(resourceName, tfjsonpath.New("id")),
 					versionIDDiffer.AddStateValue(resourceName, tfjsonpath.New("version_id")),
+					versionIDKept.AddStateValue(resourceName, tfjsonpath.New("version_id")),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "version_name", newName+" (v3)"),
@@ -716,6 +744,38 @@ func TestIntegrationRegisteredModelFromExternalResource(t *testing.T) {
 						}
 						if description := registry.createRequests[2].ModelDescription.Description; description != nil {
 							return fmt.Errorf("expected no version description, got %q", *description)
+						}
+						return nil
+					},
+				),
+			},
+			// Removing the description clears it in place; the post-apply plan must be empty
+			{
+				Config: registeredModelFromExternalResourceConfig(removedDescription, false),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					idSame.AddStateValue(resourceName, tfjsonpath.New("id")),
+					versionIDKept.AddStateValue(resourceName, tfjsonpath.New("version_id")),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
+					func(s *terraform.State) error {
+						if len(registry.createRequests) != 3 {
+							return fmt.Errorf("expected no new version, got %d create requests", len(registry.createRequests))
+						}
+						if len(registry.modelUpdates) == 0 {
+							return fmt.Errorf("expected a registered model update")
+						}
+						update := registry.modelUpdates[len(registry.modelUpdates)-1]
+						if update.Description == nil || *update.Description != "" {
+							return fmt.Errorf("expected an empty description in the update, got %v", update.Description)
+						}
+						if description := registry.models[s.RootModule().Resources[resourceName].Primary.ID].Description; description != "" {
+							return fmt.Errorf("expected the description to be cleared, got %q", description)
 						}
 						return nil
 					},
@@ -829,6 +889,11 @@ func registeredModelFromExternalResourceConfig(cfg registeredModelFromExternalTe
 		versionNameStr = fmt.Sprintf(`version_name = "%s"`, cfg.VersionName)
 	}
 
+	descriptionStr := ""
+	if cfg.Description != "" {
+		descriptionStr = fmt.Sprintf(`description = "%s"`, cfg.Description)
+	}
+
 	versionDescriptionStr := ""
 	if cfg.ModelVersionDescription != "" {
 		versionDescriptionStr = fmt.Sprintf(`description = "%s"`, cfg.ModelVersionDescription)
@@ -866,7 +931,7 @@ resource "datarobot_use_case" "test_new_registered_model_from_external" {
 %s
 resource "datarobot_registered_model_from_external" "test" {
 	name        = "%s"
-	description = "%s"
+	%s
 	%s
 	target = {
 		type                 = "Binary"
@@ -883,7 +948,7 @@ resource "datarobot_registered_model_from_external" "test" {
 	%s
 	%s
 }
-`, useCasesStr, cfg.Name, cfg.Description, versionNameStr, cfg.TargetName, cfg.PredictionThreshold,
+`, useCasesStr, cfg.Name, descriptionStr, versionNameStr, cfg.TargetName, cfg.PredictionThreshold,
 		cfg.ModelName, cfg.ModelLocation, versionDescriptionStr, useCaseIDsStr, tagsStr)
 }
 
@@ -953,6 +1018,7 @@ type fakeExternalModelRegistry struct {
 	models         map[string]*client.RegisteredModel
 	versions       map[string][]client.RegisteredModelVersion
 	createRequests []client.CreateRegisteredModelFromExternalRequest
+	modelUpdates   []client.UpdateRegisteredModelRequest
 	versionUpdates []client.UpdateRegisteredModelVersionRequest
 	deletedIDs     []string
 }
@@ -1130,6 +1196,7 @@ func (f *fakeExternalModelRegistry) getLatestVersion(_ context.Context, id strin
 }
 
 func (f *fakeExternalModelRegistry) update(_ context.Context, id string, req *client.UpdateRegisteredModelRequest) (*client.RegisteredModel, error) {
+	f.modelUpdates = append(f.modelUpdates, *req)
 	registeredModel, ok := f.models[id]
 	if !ok {
 		return nil, &client.NotFoundError{Resource: id}
@@ -1137,8 +1204,9 @@ func (f *fakeExternalModelRegistry) update(_ context.Context, id string, req *cl
 	if req.Name != "" {
 		registeredModel.Name = req.Name
 	}
-	if req.Description != "" {
-		registeredModel.Description = req.Description
+	// Like the API, an empty description clears it and a missing one leaves it unchanged.
+	if req.Description != nil {
+		registeredModel.Description = *req.Description
 	}
 	registeredModelCopy := *registeredModel
 	return &registeredModelCopy, nil
