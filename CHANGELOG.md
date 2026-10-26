@@ -2,6 +2,13 @@
 
 ### Added
 
+- `datarobot_registered_model_from_external`: a Registered Model for a model that runs outside of DataRobot, created through `POST /modelPackages/fromJSON/` from `target`, `model_description`, `datasets`, `timeseries`, `text_generation` and `geospatial_monitoring`, with optional `model_id`, `tags` and `use_case_ids`. How a change is applied depends on what changes:
+  - `name`, `description`, `version_name` and `model_description.description` are updated in place on the Registered Model or its latest version. Removing `model_description.description` creates a new version, because the API cannot clear it in place.
+  - `target.type`, `target.name`, `target.class_names`, adding or removing `timeseries`, setting or removing `timeseries.series_column_name`, and changing `timeseries.datetime_column_name`, `datetime_column_format`, `forecast_distances_time_unit` or `forecast_distances` replace the Registered Model, because DataRobot rejects a new version that differs from the previous one in these.
+  - Any other change creates a new version of the Registered Model.
+  - `target.name` is required at plan time unless `target.type` is `AgenticWorkflow` or `MCP`.
+  - Import reads the model package fields from the latest version, so the first plan after an import does not replace the Registered Model. Values DataRobot uses by default when they are left out are imported as unset, and `use_case_ids` is not imported.
+
 - `datarobot_custom_metric` accepts `geospatial_segment_attribute`, the name of the column that contains geospatial values, serialized as `geospatialSegmentAttribute` on `POST /deployments/{deploymentId}/customMetrics/`. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. The API accepts it on create only, so changing it replaces the Custom Metric.
 - The attribute is required when `is_geospatial` is `true` and rejected when it is `false`, checked at plan time. The API does not enforce this on create: a geospatial Custom Metric with no attribute is accepted, but it has no column to read geospatial values from and, because the attribute cannot be changed in place, can only be fixed by replacing it. A configuration that already sets `is_geospatial = true` without the attribute now fails to plan until the attribute is set.
 
