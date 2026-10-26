@@ -168,7 +168,7 @@ func (r *RegisteredModelFromExternalResource) Schema(ctx context.Context, req re
 			},
 			"datasets": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The datasets for the model package. `target.name` is required when training or holdout data is set.",
+				MarkdownDescription: "The datasets for the model package. `target.name` is required when training or holdout data is set, whatever the target type. Not allowed when `target.type` is `AgenticWorkflow`.",
 				Attributes: map[string]schema.Attribute{
 					"training_data_catalog_id": schema.StringAttribute{
 						Optional:            true,
@@ -190,7 +190,7 @@ func (r *RegisteredModelFromExternalResource) Schema(ctx context.Context, req re
 			},
 			"timeseries": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The time series information for the model package. Adding or removing it replaces the Registered Model.",
+				MarkdownDescription: "The time series information for the model package. Adding or removing it replaces the Registered Model. Not allowed when `target.type` is `AgenticWorkflow`.",
 				PlanModifiers: []planmodifier.Object{
 					objectplanmodifier.RequiresReplaceIf(
 						requiresReplaceIfObjectAddedOrRemoved,
@@ -304,7 +304,7 @@ func (r *RegisteredModelFromExternalResource) Schema(ctx context.Context, req re
 			},
 			"geospatial_monitoring": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "The geospatial monitoring information for the model package.",
+				MarkdownDescription: "The geospatial monitoring information for the model package. Not allowed when `target.type` is `AgenticWorkflow`.",
 				Attributes: map[string]schema.Attribute{
 					"primary_location_column": schema.StringAttribute{
 						Required:            true,
@@ -354,21 +354,68 @@ func (r *RegisteredModelFromExternalResource) Configure(ctx context.Context, req
 
 func (r *RegisteredModelFromExternalResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var targetType, targetName types.String
+	var trainingDataID, trainingDataVersionID, holdoutDataID, holdoutDataVersionID types.String
+	var timeseries, geospatialMonitoring types.Object
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("target").AtName("type"), &targetType)...)
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("target").AtName("name"), &targetName)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("datasets").AtName("training_data_catalog_id"), &trainingDataID)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("datasets").AtName("training_data_catalog_version_id"), &trainingDataVersionID)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("datasets").AtName("holdout_data_catalog_id"), &holdoutDataID)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("datasets").AtName("holdout_data_catalog_version_id"), &holdoutDataVersionID)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("timeseries"), &timeseries)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("geospatial_monitoring"), &geospatialMonitoring)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if !IsKnown(targetType) || !targetName.IsNull() || contains(externalModelTargetTypesWithoutName, targetType.ValueString()) {
-		return
+	// The checks below mirror the ones DataRobot makes on create, so that these
+	// configurations fail at plan instead of at apply. Unknown values count as set,
+	// since dataset IDs usually come from another resource.
+	targetNamePath := path.Root("target").AtName("name")
+	hasTrainingOrHoldoutData := !trainingDataID.IsNull() || !holdoutDataID.IsNull()
+	switch {
+	case !targetName.IsNull():
+		// target.name is set, or will be.
+	case IsKnown(targetType) && !contains(externalModelTargetTypesWithoutName, targetType.ValueString()):
+		resp.Diagnostics.AddAttributeError(
+			targetNamePath,
+			"Missing target name",
+			fmt.Sprintf("target.name is required when target.type is %q. Only AgenticWorkflow and MCP targets can omit it.", targetType.ValueString()),
+		)
+	case hasTrainingOrHoldoutData:
+		resp.Diagnostics.AddAttributeError(
+			targetNamePath,
+			"Missing target name",
+			"target.name is required when datasets has training or holdout data, whatever the target type.",
+		)
 	}
 
-	resp.Diagnostics.AddAttributeError(
-		path.Root("target").AtName("name"),
-		"Missing target name",
-		fmt.Sprintf("target.name is required when target.type is %q. Only AgenticWorkflow and MCP targets can omit it.", targetType.ValueString()),
-	)
+	if !IsKnown(targetType) || targetType.ValueString() != "AgenticWorkflow" {
+		return
+	}
+	// datasets is checked by its IDs rather than as a block: a block with no IDs
+	// is sent as an empty object, which DataRobot accepts.
+	if hasTrainingOrHoldoutData || !trainingDataVersionID.IsNull() || !holdoutDataVersionID.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("datasets"),
+			"Datasets not allowed",
+			"An AgenticWorkflow target is not compatible with training or holdout data.",
+		)
+	}
+	if !timeseries.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("timeseries"),
+			"Time series not allowed",
+			"An AgenticWorkflow target is not compatible with timeseries.",
+		)
+	}
+	if !geospatialMonitoring.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("geospatial_monitoring"),
+			"Geospatial monitoring not allowed",
+			"An AgenticWorkflow target is not compatible with geospatial_monitoring.",
+		)
+	}
 }
 
 func (r *RegisteredModelFromExternalResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
@@ -866,8 +867,129 @@ resource "datarobot_registered_model_from_external" "test" {
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
+			// Training or holdout data needs a target name, whatever the target type
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "MCP"
+	}
+	datasets = {
+		training_data_catalog_id = "training-dataset-id"
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("target.name is required when datasets has training or holdout data"),
+			},
+			// A dataset ID from another resource is unknown at plan, and still needs a target name
+			{
+				Config: `
+resource "terraform_data" "dataset" {}
+
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "MCP"
+	}
+	datasets = {
+		holdout_data_catalog_id = terraform_data.dataset.id
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("target.name is required when datasets has training or holdout data"),
+			},
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "MCP"
+		name = "target"
+	}
+	datasets = {
+		holdout_data_catalog_id = "holdout-dataset-id"
+	}
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			// AgenticWorkflow targets do not accept datasets, timeseries or geospatial_monitoring
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "AgenticWorkflow"
+		name = "target"
+	}
+	datasets = {
+		training_data_catalog_id = "training-dataset-id"
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("not compatible with training or holdout data"),
+			},
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "AgenticWorkflow"
+	}
+	timeseries = {
+		datetime_column_name          = "date"
+		datetime_column_format        = "%Y-%m-%d"
+		forecast_point_column_name    = "forecast_point"
+		forecast_distance_column_name = "forecast_distance"
+		forecast_distances_time_unit  = "DAY"
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("not compatible with timeseries"),
+			},
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "AgenticWorkflow"
+	}
+	geospatial_monitoring = {
+		primary_location_column = "location"
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("not compatible with geospatial_monitoring"),
+			},
+			// A datasets block without IDs is sent as an empty object, which DataRobot accepts
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "AgenticWorkflow"
+	}
+	datasets = {}
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
 		},
 	})
+}
+
+// planErrorPattern matches phrase in Terraform's output, which wraps long diagnostics
+// across lines.
+func planErrorPattern(phrase string) *regexp.Regexp {
+	return regexp.MustCompile(strings.ReplaceAll(regexp.QuoteMeta(phrase), " ", `\s+`))
 }
 
 type registeredModelFromExternalTestConfig struct {

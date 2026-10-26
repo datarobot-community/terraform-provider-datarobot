@@ -71,14 +71,14 @@ output "datarobot_registered_model_from_external_version_id" {
 
 ### Optional
 
-- `datasets` (Attributes) The datasets for the model package. `target.name` is required when training or holdout data is set. (see [below for nested schema](#nestedatt--datasets))
+- `datasets` (Attributes) The datasets for the model package. `target.name` is required when training or holdout data is set, whatever the target type. Not allowed when `target.type` is `AgenticWorkflow`. (see [below for nested schema](#nestedatt--datasets))
 - `description` (String) The description of the Registered Model.
-- `geospatial_monitoring` (Attributes) The geospatial monitoring information for the model package. (see [below for nested schema](#nestedatt--geospatial_monitoring))
+- `geospatial_monitoring` (Attributes) The geospatial monitoring information for the model package. Not allowed when `target.type` is `AgenticWorkflow`. (see [below for nested schema](#nestedatt--geospatial_monitoring))
 - `model_description` (Attributes) The model description information for the model package. (see [below for nested schema](#nestedatt--model_description))
 - `model_id` (String) The ID of the external model. Changing it creates a new version.
 - `tags` (Attributes Set) The list of tags to assign to the Registered Model version. Changing it creates a new version. (see [below for nested schema](#nestedatt--tags))
 - `text_generation` (Attributes) The text generation information for the model package. (see [below for nested schema](#nestedatt--text_generation))
-- `timeseries` (Attributes) The time series information for the model package. Adding or removing it replaces the Registered Model. (see [below for nested schema](#nestedatt--timeseries))
+- `timeseries` (Attributes) The time series information for the model package. Adding or removing it replaces the Registered Model. Not allowed when `target.type` is `AgenticWorkflow`. (see [below for nested schema](#nestedatt--timeseries))
 - `use_case_ids` (List of String) The list of Use Case IDs to add the Registered Model version to.
 - `version_name` (String) The name of the Registered Model Version. If not set, a new version is named `<name> (v<version number>)`.
 
