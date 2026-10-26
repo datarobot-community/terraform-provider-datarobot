@@ -10,7 +10,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
@@ -1173,6 +1175,118 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 	})
 
+	// freshCheckout is a directory last synced from somewhere else, as a
+	// fresh clone or a CI checkout sees it: no sync state, catalog cat-1 at
+	// ver-1 holding the tree plus gone.py, and Terraform state pointing
+	// there. It returns the directory and that state.
+	freshCheckout := func(t *testing.T, filesAPI *syncTestFilesAPI) (string, *ArtifactResourceModel) {
+		t.Helper()
+
+		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "same"})
+		if _, err := ignore.WriteDefaultDrignoreIfMissing(dir); err != nil {
+			t.Fatal(err)
+		}
+		filesAPI.catalogID = "cat-1"
+		filesAPI.version = 1
+		mirrorRemoteTree(t, filesAPI, dir, "main.py", ignore.FileName)
+		filesAPI.remoteFile("gone.py", "deleted from the directory")
+
+		state := syncedState(dir)
+		state.Spec = artifactSpecWithCodeRef("cat-1", "ver-1")
+
+		return dir, state
+	}
+
+	t.Run("a directory without sync state removes files deleted since the version in state", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		dir, state := freshCheckout(t, filesAPI)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, "cat-1", "ver-2").
+			Return(artifactWithCodeRef(artifactID, "cat-1", "ver-2"), nil)
+
+		_, synced, diags, err := syncOnceWithDiags(t, mockService, dir, artifactWithCodeRef(artifactID, "cat-1", "ver-1"), artifactID, state)
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if !synced {
+			t.Fatal("expected the delete to count as a sync")
+		}
+		if diags.WarningsCount() != 1 {
+			t.Fatalf("expected one warning naming the removed file, got %v", diags)
+		}
+		if w := diags.Warnings()[0]; w.Summary() != "Files removed from the catalog" || !strings.Contains(w.Detail(), "gone.py") || !strings.Contains(w.Detail(), "ver-1") {
+			t.Fatalf("warning does not name the removal: %q / %q", w.Summary(), w.Detail())
+		}
+		if want := []string{"gone.py"}; !slices.Equal(filesAPI.deletedPaths, want) {
+			t.Fatalf("deleted %v, want %v", filesAPI.deletedPaths, want)
+		}
+		if got := filesAPI.uploadCalls(); got != 0 {
+			t.Fatalf("unchanged files were uploaded again: %v", filesAPI.uploadToStagePaths)
+		}
+		if want := []string{"ver-1"}; !slices.Equal(filesAPI.allFilesVersions, want) {
+			t.Fatalf("listed versions %v, want %v", filesAPI.allFilesVersions, want)
+		}
+	})
+
+	t.Run("a retry after a failed build syncs nothing and still builds", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		dir, state := freshCheckout(t, filesAPI)
+		// The failed apply's code already landed: the catalog matches the tree.
+		delete(filesAPI.allFiles, "gone.py")
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+
+		failed := artifactWithCodeRef(artifactID, "cat-1", "ver-1")
+		failed.Spec.ContainerGroups[0].Containers[0].Build = &client.ArtifactContainerBuildInfo{Status: client.ArtifactBuildStatusFailed}
+
+		_, synced, _, err := syncOnceWithDiags(t, mockService, dir, failed, artifactID, state)
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if got := filesAPI.uploadCalls() + len(filesAPI.deletedPaths); got != 0 {
+			t.Fatalf("the sync moved %d file(s), want none", got)
+		}
+		if !synced {
+			t.Fatal("an empty sync over a failed build must report work, so the build runs again")
+		}
+	})
+
+	t.Run("a directory without sync state whose version in state is gone warns and uploads", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockService := mock_client.NewMockService(ctrl)
+		filesAPI := newSyncTestFilesAPI()
+		dir, state := freshCheckout(t, filesAPI)
+		filesAPI.allFilesErr = fmt.Errorf("GET request ... : response 404 Not Found: %w", filesapi.ErrNotFound)
+
+		mockService.EXPECT().FilesAPI().Return(filesAPI)
+		mockService.EXPECT().
+			PatchArtifactCodeRef(gomock.Any(), artifactID, "cat-1", "ver-2").
+			Return(artifactWithCodeRef(artifactID, "cat-1", "ver-2"), nil)
+
+		_, _, diags, err := syncOnceWithDiags(t, mockService, dir, artifactWithCodeRef(artifactID, "cat-1", "ver-1"), artifactID, state)
+		if err != nil {
+			t.Fatalf("syncArtifactSource() error = %v", err)
+		}
+		if diags.WarningsCount() != 1 {
+			t.Fatalf("expected one warning about the unreadable version, got %v", diags)
+		}
+		if w := diags.Warnings()[0]; !strings.Contains(w.Summary(), "stay in the catalog") || !strings.Contains(w.Detail(), "ver-1") {
+			t.Fatalf("warning does not explain the skipped deletes: %q / %q", w.Summary(), w.Detail())
+		}
+		if len(filesAPI.deletedPaths) != 0 {
+			t.Fatalf("deleted %v without a base to diff against", filesAPI.deletedPaths)
+		}
+		if want := []string{ignore.FileName, "main.py"}; !slices.Equal(slices.Sorted(slices.Values(filesAPI.uploadToStagePaths)), want) {
+			t.Fatalf("uploaded %v, want the whole tree %v", filesAPI.uploadToStagePaths, want)
+		}
+	})
+
 	t.Run("remote additions are downloaded into source dir", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockService := mock_client.NewMockService(ctrl)
@@ -2045,8 +2159,8 @@ func writeArtifactSourceTree(t *testing.T, files map[string]string) string {
 }
 
 // mirrorRemoteTree registers the on-disk content of paths as catalog
-// content, so a drifted AllFiles call reports a remote that agrees with
-// source.dir on everything except what the test adds on top.
+// content, so AllFiles reports a catalog that agrees with source.dir on
+// everything except what the test adds on top.
 func mirrorRemoteTree(t *testing.T, filesAPI *syncTestFilesAPI, dir string, paths ...string) {
 	t.Helper()
 
@@ -2100,18 +2214,27 @@ type syncTestFilesAPI struct {
 	version   int
 	uploadErr error
 
-	// allFiles is the catalog manifest AllFiles serves once the engine
-	// sees the catalog version drift; blobs is the content DownloadFile
-	// streams for the same paths. Both are populated by remoteFile.
+	// allFiles is the catalog manifest every AllFiles call serves, whether
+	// the engine lists REMOTE for a drifted catalog or BASE for a directory
+	// without sync state; blobs is the content DownloadFile streams for the
+	// same paths. Both are populated by remoteFile.
 	allFiles map[string]filesapi.FileMeta
 	blobs    map[string]string
 
+	// allFilesErr fails every AllFiles call; allFilesVersions records the
+	// version each call listed.
+	allFilesErr      error
+	allFilesVersions []string
+
 	createCatalogCalls    int
 	uploadFromZipNewCalls int
-	uploadToStagePaths    []string
-	allFilesCalls         int
-	downloadedPaths       []string
-	deletedPaths          []string
+	// uploadToStagePaths is appended to by the stage uploader's parallel
+	// workers, hence uploadMu.
+	uploadMu           sync.Mutex
+	uploadToStagePaths []string
+	allFilesCalls      int
+	downloadedPaths    []string
+	deletedPaths       []string
 
 	// downloadHook, when set, runs at the start of every DownloadFile
 	// call, so a test can change the state directory mid-sync: after the
@@ -2155,6 +2278,8 @@ func (m *syncTestFilesAPI) remoteFile(path, content string) {
 // uploadCalls counts every code-bearing request the engine made, so a test
 // can assert that an unchanged tree touched the Files API not at all.
 func (m *syncTestFilesAPI) uploadCalls() int {
+	m.uploadMu.Lock()
+	defer m.uploadMu.Unlock()
 	return len(m.uploadToStagePaths) + m.uploadFromZipNewCalls
 }
 
@@ -2184,6 +2309,8 @@ func (m *syncTestFilesAPI) UploadToStage(_ context.Context, _, _, name string, _
 	if m.uploadErr != nil {
 		return m.uploadErr
 	}
+	m.uploadMu.Lock()
+	defer m.uploadMu.Unlock()
 	m.uploadToStagePaths = append(m.uploadToStagePaths, name)
 	return nil
 }
@@ -2229,8 +2356,12 @@ func (m *syncTestFilesAPI) PollStatus(context.Context, string) (*filesapi.Status
 	return &filesapi.StatusResp{Status: filesapi.StatusCompleted}, nil
 }
 
-func (m *syncTestFilesAPI) AllFiles(context.Context, string, string) (map[string]filesapi.FileMeta, error) {
+func (m *syncTestFilesAPI) AllFiles(_ context.Context, _, versionID string) (map[string]filesapi.FileMeta, error) {
 	m.allFilesCalls++
+	m.allFilesVersions = append(m.allFilesVersions, versionID)
+	if m.allFilesErr != nil {
+		return nil, m.allFilesErr
+	}
 	return m.allFiles, nil
 }
 

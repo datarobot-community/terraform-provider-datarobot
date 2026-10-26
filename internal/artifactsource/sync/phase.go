@@ -108,6 +108,9 @@ func (e *Engine) gather(ctx context.Context) error {
 	}
 	e.base = baseFromManifest(manifest)
 	e.baseExtra = manifest.Extra
+	e.baseRecorded = manifest.SyncedVersionID != nil || len(manifest.Files) > 0
+	e.unreadableBase = ""
+	e.adoptedBase = ""
 
 	// A locked artifact is immutable, so nothing can be pushed into it.
 	// That refuses a sync, but it must not refuse a plan: the caller asks
@@ -285,6 +288,10 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 		return errors.New(formatCaseCollisions(collisions))
 	}
 
+	if err := e.adoptPinnedBase(ctx); err != nil {
+		return err
+	}
+
 	if !e.drifted {
 		e.remote = copyManifest(e.base)
 		return nil
@@ -304,6 +311,64 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 		return fmt.Errorf("fetch remote manifest: %w", err)
 	}
 	e.remote = fromFilesAPI(remote)
+
+	return nil
+}
+
+// adoptPinnedBase (phase 2) gives a directory that has never recorded a
+// sync the file list of the catalog version it is pinned at as BASE. Such a
+// directory is the state preflight seeds from BindCatalog: a fresh clone or a
+// CI checkout, because the state directory ignores itself. Its manifest is
+// empty, and an empty BASE cannot express a deletion: a file removed from
+// the tree is then in none of BASE, LOCAL and REMOTE, so it stays in the
+// catalog, or reads as a remote addition and is downloaded back when the
+// catalog moved on.
+//
+// The listing is recorded in manifest.json against the pinned version right
+// away, so the DataRobot CLI, which the conflict refusal sends the user to,
+// merges this directory against the same BASE instead of the empty one.
+//
+// Only a version pinned in config.json counts, never the artifact's own
+// code_ref: `dr artifact code init` pins the catalog but no version, and
+// such a directory keeps the CLI's merge against an empty BASE. A pinned
+// version the Files API cannot find keeps the empty BASE, which only
+// uploads, and is reported through UnreadableBaseVersion; failing instead
+// would fail every apply, since preflight seeds the same pin again
+// whenever the directory is removed.
+func (e *Engine) adoptPinnedBase(ctx context.Context) error {
+	catalogID := ptrOrEmpty(e.config.CatalogID)
+	versionID := ptrOrEmpty(e.config.LastSyncedVersionID)
+	if e.baseRecorded || catalogID == "" || versionID == "" {
+		return nil
+	}
+
+	files, err := e.files.AllFiles(ctx, catalogID, versionID)
+	if errors.Is(err, filesapi.ErrNotFound) {
+		e.unreadableBase = versionID
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("fetch base manifest for catalog version %s: %w", ShortVer(versionID), err)
+	}
+
+	e.base = fromFilesAPI(files)
+
+	recorded := make(map[string]wapi.FileMeta, len(e.base))
+	for path, entry := range e.base {
+		recorded[path] = wapi.FileMeta{Hash: entry.Hash, Size: entry.Size}
+	}
+	now := e.nowFn().UTC()
+	if err := wapi.SaveManifest(e.projectDir, wapi.Manifest{
+		Version:         wapi.ManifestVersion,
+		SyncedAt:        &now,
+		SyncedVersionID: &versionID,
+		Files:           recorded,
+		Extra:           e.baseExtra,
+	}); err != nil {
+		return fmt.Errorf("record base manifest for catalog version %s: %w", ShortVer(versionID), err)
+	}
+	e.baseRecorded = true
+	e.adoptedBase = versionID
 
 	return nil
 }
