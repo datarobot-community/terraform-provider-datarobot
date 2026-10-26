@@ -22,7 +22,7 @@ Changes to `artifact_id` or `runtime` call the Workload API **replacement** endp
 
 This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes together with the Enclave placement, which still replaces the workload; see [Changing placement](#changing-placement).
 
-For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
+For a runnable end-to-end walkthrough that rolls out two workloads at once, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
 ## Artifact dual-ID wiring
 
@@ -129,7 +129,11 @@ If your cluster's gateway caches routes for another duration (`PREDICTIONS_GATEW
 
 If the apply is interrupted during that wait, the rollout has already succeeded: the provider records it and warns that the previous version may still answer requests until the cached route expires. If the new version stops after it was promoted, the apply fails, and state still records the artifact the workload now runs.
 
-If apply is interrupted mid-replacement, run `terraform apply` again — refresh reads the current replacement status and the provider reconciles.
+If the apply is interrupted before the rollout completes, the rollout carries on without Terraform. Applying again before it completes fails with `There is already a pending replacement for this workload` and changes nothing. Once it completes, refresh reads the new artifact and the plan shows no changes.
+
+### Multiple workloads
+
+Workloads that do not depend on each other roll out at the same time. Terraform applies up to ten resources at once by default (`-parallelism`), and each workload starts its own rollout and runs its own waits, the gateway route wait included, so an apply that rolls out several workloads takes about as long as the slowest one rather than the sum of all. The artifacts they use are updated first, also in parallel. [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement) rolls out two workloads in one apply.
 
 ## Failed applies
 
