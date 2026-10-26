@@ -5,6 +5,18 @@
 - `datarobot_custom_metric` accepts `geospatial_segment_attribute`, the name of the column that contains geospatial values, serialized as `geospatialSegmentAttribute` on `POST /deployments/{deploymentId}/customMetrics/`. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. The API accepts it on create only, so changing it replaces the Custom Metric.
 - The attribute is required when `is_geospatial` is `true` and rejected when it is `false`, checked at plan time. The API does not enforce this on create: a geospatial Custom Metric with no attribute is accepted, but it has no column to read geospatial values from and, because the attribute cannot be changed in place, can only be fixed by replacing it. A configuration that already sets `is_geospatial = true` without the attribute now fails to plan until the attribute is set.
 
+### Changed
+
+- Built with Go 1.27.3, fixing a `govulncheck` advisory in Go 1.27.2's `crypto/x509`: certificate verification now refuses intermediate certificates that are known to be compromised, also on systems whose trust store has not been updated.
+
+### Fixed
+
+- `datarobot_artifact` refuses an `image_uri` on a container built from `source` before anything is created. Such a configuration failed apply with `Provider produced inconsistent result after apply` once the artifact existed, and under Pulumi showed a diff on every preview. **After upgrading, remove `image_uri` from such containers:** plan and destroy refuse the configuration until then, and the built value stays in state.
+- A locked artifact with `source.wait_for_build = false` is refused at plan time, with or without `image_uri`. The platform locks an artifact only once its build has completed, so the apply failed after creating the artifact. When `status` comes from a variable, this check now waits for it instead of assuming locked.
+- A sidecar's `image_uri` no longer keeps the primary container's `image_uri` at its previous build in the plan, which failed the apply after a source change. A change that creates a new version of such an artifact now rebuilds the primary image, as it already did without a sidecar.
+- The deployment unit tests no longer hang or fail when the whole `pkg/provider` suite runs. Fixes made to tests: `TestUnitDeploymentModelReplacementSuccess`, `TestUnitDeploymentModelReplacementMismatch`, `TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL` and `TestWaitForDeploymentStatusErroredLogRetrievalFailure`. This changes tests only; the provider's behavior is unchanged.
+- Docs: the `datarobot_workload` page has a "Failed applies" section, and the `datarobot_artifact` page says what a create that fails partway leaves behind, under Terraform and under Pulumi. Neither engine rolls completed resources back: an artifact created before a `datarobot_workload` the platform refuses stays in state, the retry reuses it without another upload or build, and `terraform destroy` removes it.
+
 ## [0.13.0] - 2026-10-15
 
 ### Added

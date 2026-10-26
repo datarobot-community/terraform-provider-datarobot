@@ -4,11 +4,14 @@ page_title: "datarobot_artifact Resource - datarobot"
 subcategory: ""
 description: |-
   Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.
+  A create that fails partway, in the source upload, the image build or the lock, deletes the version it created, and the repository too when this resource created it, so the next apply starts over; the uploaded files stay in the catalog bound to source.dir and the retry reuses them. The cleanup is best effort: when its delete fails, the version or repository stays on the platform and the apply reports only the original error. A create whose build is still running when source.wait_for_build ends is handled differently: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand. An artifact whose create succeeded stays when a later resource in the same apply fails, for example a datarobot_workload the platform refuses: it is in state, the retry reuses it without another upload or build, and terraform destroy removes it. Neither Terraform nor Pulumi rolls completed resources back; see Failed applies on the datarobot_workload page.
 ---
 
 # datarobot_artifact (Resource)
 
 Artifact definition for the Workload API. Artifacts define container images and runtime configuration for workloads.
+
+A create that fails partway, in the source upload, the image build or the lock, deletes the version it created, and the repository too when this resource created it, so the next apply starts over; the uploaded files stay in the catalog bound to `source.dir` and the retry reuses them. The cleanup is best effort: when its delete fails, the version or repository stays on the platform and the apply reports only the original error. A create whose build is still running when `source.wait_for_build` ends is handled differently: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand. An artifact whose create succeeded stays when a later resource in the same apply fails, for example a `datarobot_workload` the platform refuses: it is in state, the retry reuses it without another upload or build, and `terraform destroy` removes it. Neither Terraform nor Pulumi rolls completed resources back; see Failed applies on the `datarobot_workload` page.
 
 ## Example Usage
 
@@ -19,6 +22,10 @@ Artifact definition for the Workload API. Artifacts define container images and 
 # - Build from source with existing catalog refs: set image_build_config.code_ref manually (no source block)
 # - Agent: type = "agent" with optional spec.a2a_enabled for A2A card management
 # - MCP: type = "mcp" (same spec shape as service)
+#
+# image_uri and a source-driven build are alternatives: when source and
+# image_build_config are both set, the build produces the image and writes
+# image_uri, so setting it yourself is rejected at plan time.
 
 resource "datarobot_artifact" "prebuilt" {
   name        = "example-prebuilt-service"
@@ -141,7 +148,7 @@ output "from_source_locked_artifact_id" {
 
 # Build from source with a DataRobot-generated Dockerfile. The base image comes
 # from an execution environment, so the two ids are read from a variable or a
-# data source rather than pasted in: a string attribute such as image_uri,
+# data source rather than pasted in: a string attribute such as
 # execution_environment_id or source.dir takes a variable, data source, or
 # resource reference, and only a null or empty value counts as unset. List
 # attributes such as entrypoint and routes are the exception - a whole list
@@ -264,7 +271,7 @@ output "mcp_artifact_id" {
 
 - `artifact_repository_id` (String) ID of the artifact repository for versioning. Computed on first create if not provided; subsequent updates create new versions in the same repository. What destroy deletes depends on whether this resource created the repository; see `created_artifact_repository_id`.
 - `description` (String) The description of the Artifact.
-- `source` (Attributes) Local source directory to synchronize with the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider syncs, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. **Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` (last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. A file changed on both sides since the last sync (edited or deleted locally, and edited or deleted in the catalog) fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded. (see [below for nested schema](#nestedatt--source))
+- `source` (Attributes) Local source directory to synchronize with the DataRobot catalog and attach to the primary container's `image_build_config.code_ref`. When source content changes, the provider syncs, triggers an image build on the draft artifact, and (by default) waits for completion before proceeding. On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. **Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` (last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. A file changed on both sides since the last sync (edited or deleted locally, and edited or deleted in the catalog) fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded. A create that fails after the upload tries to delete the draft it created, but the uploaded files stay in the catalog bound to `dir`, and a retry from the same directory syncs against that catalog instead of uploading everything again. (see [below for nested schema](#nestedatt--source))
 - `status` (String) Artifact lifecycle status: `draft` (the current artifact version is mutable; spec changes are applied in-place and `artifact_id` stays the same) or `locked` (artifact versions are immutable; spec changes create a new version with a new `artifact_id` in the same `artifact_repository_id`). Defaults to `locked`. Locking a draft artifact is one-way. Changing `status` from `locked` to `draft` creates a new draft artifact (the Workload API cannot unlock in place).
 - `type` (String) The artifact type: `service`, `nim`, `agent`, or `mcp`. Defaults to `service`.
 
@@ -301,7 +308,7 @@ Optional:
 - `entrypoint` (List of String) Container entrypoint.
 - `environment_vars` (Attributes List) Environment variables for the container. (see [below for nested schema](#nestedatt--spec--container_groups--containers--environment_vars))
 - `image_build_config` (Attributes) Configuration for server-side image builds from source code. (see [below for nested schema](#nestedatt--spec--container_groups--containers--image_build_config))
-- `image_uri` (String) Docker image URI. Populated by the provider after a completed image build when `source` and `image_build_config` are set. May be set explicitly when not using source-driven builds.
+- `image_uri` (String) Docker image URI. Set this for a prebuilt image. When `source` and `image_build_config` are both set, apply builds the image and populates this attribute, and configuring it is rejected because the build would overwrite it.
 - `liveness_probe` (Attributes) Container liveness check configuration. (see [below for nested schema](#nestedatt--spec--container_groups--containers--liveness_probe))
 - `name` (String) Name of the container.
 - `port` (Number) Container access port (1024-65535). Required for primary containers; omit for non-primary.
@@ -445,7 +452,7 @@ Required:
 Optional:
 
 - `generate_ignore` (Boolean) When `true` (default), if `dir` has neither `.drignore` nor `.wapiignore`, the provider writes a default `.drignore` at the start of apply. Existing ignore files are never overwritten. Set to `false` to skip autogeneration. System excludes always apply and cannot be re-enabled from `.drignore`: `.datarobot.yaml`, `.git`, `.gitignore`, `.wapi`, `.datarobot/workload`, the `<path>.LOCAL.<timestamp>` copies the DataRobot CLI's sync keeps, and Terraform's own `.terraform`, `terraform.tfstate*` and `*.tfvars` files.
-- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated.
+- `wait_for_build` (Boolean) When `true` (default), after a source upload the provider triggers an image build and polls until it completes before proceeding (for example, before locking). When `false`, the build is triggered but apply does not wait for `image_uri` to be populated; only a draft artifact can skip the wait, since an artifact is locked only once its build has completed. A create whose build is still running at the end of the wait fails: under Terraform the artifact is saved to state and marked tainted, so the next apply replaces it; under Pulumi a failed create keeps no state, so the artifact stays on the platform untracked and has to be deleted by hand.
 
 Read-Only:
 

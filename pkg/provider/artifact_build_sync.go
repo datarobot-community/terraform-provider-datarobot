@@ -238,11 +238,20 @@ func applySourceManagedBuildToPlan(plan, state *ArtifactResourceModel, isCreate 
 	}
 }
 
+// applySourceManagedImageURIToPlan marks the primary container's image_uri unknown
+// whenever apply will upload source and trigger a build that produces the image, so
+// that the built value is not rejected as an inconsistent result after apply.
+//
+// A container whose configuration supplies a known image_uri, `""` included, is left
+// alone: Terraform refuses a plan that turns a known configured value unknown
+// ("Provider produced an invalid plan ... does not match config value").
+// validateContainerImageURINotSourceManaged refuses such a value on a source-built
+// container, so that it fails with its real reason before this runs.
+//
+// The check is per container. A sidecar's image_uri is its own, never built from
+// source, and must not decide anything about the primary's.
 func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel, isCreate bool) {
 	if !artifactModifyPlanNeedsUnknownImageURI(plan, state, isCreate) || plan.Spec == nil {
-		return
-	}
-	if config != nil && artifactHasManualImageURI(config.Spec) {
 		return
 	}
 
@@ -253,7 +262,7 @@ func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel
 			if !artifactContainerIsPrimary(*container, group) {
 				continue
 			}
-			if config != nil && containerImageURIManuallySet(config, gi, ci) {
+			if containerImageURIManuallySet(config, gi, ci) {
 				continue
 			}
 			container.ImageURI = types.StringUnknown()
@@ -261,20 +270,8 @@ func applySourceManagedImageURIToPlan(config, plan, state *ArtifactResourceModel
 	}
 }
 
-func artifactHasManualImageURI(spec *ArtifactSpecModel) bool {
-	if spec == nil {
-		return false
-	}
-	for _, group := range spec.ContainerGroups {
-		for _, container := range group.Containers {
-			if !container.ImageURI.IsNull() && !container.ImageURI.IsUnknown() && container.ImageURI.ValueString() != "" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
+// containerImageURIManuallySet reports whether the configuration gives the container
+// at gi/ci a resolved image_uri.
 func containerImageURIManuallySet(model *ArtifactResourceModel, gi, ci int) bool {
 	if model == nil || model.Spec == nil {
 		return false
@@ -286,8 +283,7 @@ func containerImageURIManuallySet(model *ArtifactResourceModel, gi, ci int) bool
 	if ci >= len(group.Containers) {
 		return false
 	}
-	uri := group.Containers[ci].ImageURI
-	return !uri.IsNull() && !uri.IsUnknown() && uri.ValueString() != ""
+	return IsKnown(group.Containers[ci].ImageURI)
 }
 
 func artifactPrimaryContainerImageURI(artifact *client.Artifact) string {
