@@ -144,3 +144,9 @@ resource "datarobot_workload" "enclave_pinned" {
     }]
   }
 }
+
+# The Enclave the workload runs on, as the platform reports it. With
+# enclave_selection_policy = "availability", this is the one the scheduler chose.
+output "enclave_workload_enclave" {
+  value = one(datarobot_workload.enclave_pinned.placements[*].enclave)
+}

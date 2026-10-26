@@ -168,6 +168,12 @@ resource "datarobot_workload" "enclave_pinned" {
     }]
   }
 }
+
+# The Enclave the workload runs on, as the platform reports it. With
+# enclave_selection_policy = "availability", this is the one the scheduler chose.
+output "enclave_workload_enclave" {
+  value = one(datarobot_workload.enclave_pinned.placements[*].enclave)
+}
 ```
 
 ## In-place replacement
@@ -239,6 +245,16 @@ resource "datarobot_workload" "agent" {
 Naming an `enclaves` entry fills in `enclave_selection_policy = "manual"` for you, since the platform accepts a pin only with that policy; the derived value stays out of state, so your configuration and your state agree. Setting the policy explicitly is always accepted: `availability` to let the scheduler choose, `manual` to pin. `manual` additionally requires the `CAN_OVERRIDE_WORKLOAD_PLACEMENT` permission.
 
 Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
+
+`placements` reports where the workload actually runs, as the platform reports it: the Enclave's ID, name and region. Under `availability` this is how to learn which Enclave the scheduler chose, for example to export it:
+
+```hcl
+output "agent_enclave" {
+  value = one(datarobot_workload.agent.placements[*].enclave)
+}
+```
+
+It is empty for a workload outside any Enclave, is read on every refresh, and is planned as `(known after apply)` on any update, since a rollout can land on another Enclave. `enclave_selection_policy` and `enclaves` stay the placement you asked for.
 
 ### Changing placement
 
@@ -333,6 +349,7 @@ Changing it on its own moves the link in place: the Workload is linked to the ne
 
 - `endpoint` (String) The inference endpoint URL for the Workload.
 - `id` (String) The ID of the Workload.
+- `placements` (Attributes List) The Enclaves the Workload runs on, as the platform reports them: with `enclave_selection_policy = "availability"`, this is the Enclave the scheduler chose. Empty for a Workload served through the prediction gateway, which is any Workload not placed on an Enclave, and for one the platform has not scheduled yet. Read on every refresh, and known only after apply on an update, since a rollout can move the Workload. Unlike `runtime.enclaves`, which is the placement requested, this is the placement in effect. A list because the platform intends to run a Workload on several Enclaves; it holds one entry today. (see [below for nested schema](#nestedatt--placements))
 - `status` (String) Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.
 - `type` (String) Artifact type mirrored by this workload: `service`, `nim`, `agent`, or `mcp`. Set from the deployed artifact; not user-configurable.
 
@@ -433,3 +450,13 @@ Required:
 
 - `name` (String) The name of the tag: 1 to 4096 characters, without `{`, `}`, `;` or `|`, and not starting with `datarobot.` or `integrations.`, which the platform reserves.
 - `value` (String) The value of the tag: 1 to 4096 characters.
+
+
+<a id="nestedatt--placements"></a>
+### Nested Schema for `placements`
+
+Read-Only:
+
+- `enclave` (String) The name of the Enclave.
+- `enclave_id` (String) The ID of the Enclave.
+- `region` (String) The region the Enclave is deployed in, when the platform reports one.

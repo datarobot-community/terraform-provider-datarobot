@@ -86,6 +86,16 @@ Naming an `enclaves` entry fills in `enclave_selection_policy = "manual"` for yo
 
 Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
 
+`placements` reports where the workload actually runs, as the platform reports it: the Enclave's ID, name and region. Under `availability` this is how to learn which Enclave the scheduler chose, for example to export it:
+
+```hcl
+output "agent_enclave" {
+  value = one(datarobot_workload.agent.placements[*].enclave)
+}
+```
+
+It is empty for a workload outside any Enclave, is read on every refresh, and is planned as `(known after apply)` on any update, since a rollout can land on another Enclave. `enclave_selection_policy` and `enclaves` stay the placement you asked for.
+
 ### Changing placement
 
 `enclave_selection_policy` and `enclaves` are updated **in place**, like the rest of `runtime`. The change goes through `PATCH /workloads/{id}/settings`, or rides along with `POST /workloads/{id}/replacement` when `artifact_id` changes in the same apply; the platform rolls a new version out and the workload keeps its ID. Whenever placement changes, the provider writes both `enclave_selection_policy` and `enclaves` explicitly (a removed pin as an empty list), because on these endpoints omitting both fields means "keep the current placement" (which is what keeps a replica-only update from unplacing an Enclave workload). What the platform does with the recorded intent is up to the platform. It gates the change the same way it gates a create (Enclaves available, the Use Case granted at least one, the override permission for a pin) and refuses it with a 422 before anything rolls, so a refused change leaves the running workload untouched.

@@ -2,6 +2,7 @@
 
 ### Added
 
+- `datarobot_workload` has a computed `placements` attribute: the Enclaves the Workload runs on, with `enclave_id`, `enclave` and `region`, as the platform reports them. With `enclave_selection_policy = "availability"`, it names the Enclave the scheduler chose. It is empty for a Workload outside any Enclave and is known only after apply on an update, since a rollout can move the Workload.
 - `datarobot_custom_metric` accepts `geospatial_segment_attribute`, the name of the column that contains geospatial values, serialized as `geospatialSegmentAttribute` on `POST /deployments/{deploymentId}/customMetrics/`. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. The API accepts it on create only, so changing it replaces the Custom Metric.
 - The attribute is required when `is_geospatial` is `true` and rejected when it is `false`, checked at plan time. The API does not enforce this on create: a geospatial Custom Metric with no attribute is accepted, but it has no column to read geospatial values from and, because the attribute cannot be changed in place, can only be fixed by replacing it. A configuration that already sets `is_geospatial = true` without the attribute now fails to plan until the attribute is set.
 

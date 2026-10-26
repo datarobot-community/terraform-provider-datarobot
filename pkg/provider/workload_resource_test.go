@@ -2847,6 +2847,40 @@ func TestLoadWorkloadIntoModelType(t *testing.T) {
 	}
 }
 
+func TestWorkloadPlacementsValue(t *testing.T) {
+	t.Parallel()
+
+	empty := workloadPlacementsValue(nil)
+	if empty.IsNull() || empty.IsUnknown() || len(empty.Elements()) != 0 {
+		t.Fatalf("no placements = %v, want a known empty list", empty)
+	}
+
+	var got []struct {
+		EnclaveID types.String `tfsdk:"enclave_id"`
+		Enclave   types.String `tfsdk:"enclave"`
+		Region    types.String `tfsdk:"region"`
+	}
+	diags := workloadPlacementsValue([]client.WorkloadPlacement{
+		{EnclaveID: "enclave-1", Enclave: "finance"},
+		{EnclaveID: "enclave-2", Enclave: "research", Region: "us-east-1"},
+	}).ElementsAs(context.Background(), &got, false)
+	if diags.HasError() {
+		t.Fatalf("ElementsAs: %v", diags)
+	}
+	if len(got) != 2 {
+		t.Fatalf("placements = %v, want 2 entries", got)
+	}
+	if got[0].EnclaveID.ValueString() != "enclave-1" || got[0].Enclave.ValueString() != "finance" {
+		t.Fatalf("first placement = %v", got[0])
+	}
+	if !got[0].Region.IsNull() {
+		t.Fatalf("region without one = %v, want null", got[0].Region)
+	}
+	if got[1].Region.ValueString() != "us-east-1" {
+		t.Fatalf("region = %v, want us-east-1", got[1].Region)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Enclave placement (use_case_id, runtime.enclave_selection_policy, runtime.enclaves)
 // ---------------------------------------------------------------------------
@@ -3359,6 +3393,92 @@ func TestIntegrationWorkloadRepinsEnclaveInPlace(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "endpoint", endpoint),
 					checkWorkloadIDPreserved(&initialID),
 				),
+			},
+		},
+	})
+}
+
+// placements reports the Enclave the Workload runs on, and a rollout that moves it is read back.
+func TestIntegrationWorkloadReportsPlacements(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	expectNoWorkloadTags(mockService)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return mockService
+	})()
+
+	mockAPIKey(t)
+
+	id := uuid.NewString()
+	artifactID := uuid.NewString()
+	useCaseID := uuid.NewString()
+	name := "workload-" + uuid.NewString()[:8]
+	replicaCount := int64(1)
+	endpoint := "https://workloads.example.com/" + id
+	workload := workloadFixture(id, artifactID, name, "", client.WorkloadImportanceLow, &replicaCount, &endpoint)
+	workload.Placements = []client.WorkloadPlacement{{EnclaveID: "enclave-finance", Enclave: "finance"}}
+
+	deleted := false
+	mockService.EXPECT().CreateWorkload(gomock.Any(), gomock.Any()).Return(workload, nil)
+	mockService.EXPECT().GetWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) (*client.Workload, error) {
+			if deleted {
+				return nil, client.NewNotFoundError("workload")
+			}
+			return workload, nil
+		}).AnyTimes()
+	manual := client.EnclaveSelectionPolicyManual
+	replacement := workloadReplacementFixture(id)
+	mockService.EXPECT().UpdateWorkloadSettings(gomock.Any(), id, settingsPlacementMatcher{placementMatcher{policy: &manual, enclaves: []string{"research"}, explicit: true}}).DoAndReturn(
+		func(context.Context, string, *client.UpdateWorkloadSettingsRequest) (*client.WorkloadReplacement, error) {
+			workload.Placements = []client.WorkloadPlacement{{EnclaveID: "enclave-research", Enclave: "research", Region: "us-east-1"}}
+			return replacement, nil
+		})
+	mockService.EXPECT().WaitForWorkloadReplacement(gomock.Any(), id, waitExpectsArtifact(artifactID)).Return(replacement, nil)
+	mockService.EXPECT().DeleteWorkload(gomock.Any(), id).DoAndReturn(
+		func(context.Context, string) error {
+			deleted = true
+			return nil
+		})
+	mockService.EXPECT().ListUseCasesForEntity(gomock.Any(), "workload", id).Return(nil, false, nil).AnyTimes()
+
+	resourceName := "datarobot_workload.test"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "finance"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "placements.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "placements.0.enclave_id", "enclave-finance"),
+					resource.TestCheckResourceAttr(resourceName, "placements.0.enclave", "finance"),
+					resource.TestCheckNoResourceAttr(resourceName, "placements.0.region"),
+				),
+			},
+			{
+				Config: workloadConfigWithPlacement(name, artifactID, useCaseID, "manual", "research"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+					plancheck.ExpectUnknownValue(resourceName, tfjsonpath.New("placements")),
+				}},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "placements.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "placements.0.enclave_id", "enclave-research"),
+					resource.TestCheckResourceAttr(resourceName, "placements.0.enclave", "research"),
+					resource.TestCheckResourceAttr(resourceName, "placements.0.region", "us-east-1"),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+				// The fixture carries no Use Case link or Enclave fields; import reads placements as refresh does.
+				ImportStateVerifyIgnore: []string{"use_case_id", "runtime.enclave_selection_policy", "runtime.enclaves"},
 			},
 		},
 	})
