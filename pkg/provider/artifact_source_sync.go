@@ -279,6 +279,10 @@ func (r *ArtifactResource) runArtifactSourceSync(
 		artifactSourceStaleRollbackWarning(diags, absDir)
 	}
 
+	if version := engine.UnreadableBaseVersion(); version != "" {
+		artifactSourceUnreadableBaseWarning(diags, absDir, version)
+	}
+
 	if plan.HasConflicts() {
 		return nil, nil, artifactSourceConflictError(absDir, plan.ConflictPaths())
 	}
@@ -312,6 +316,9 @@ func (r *ArtifactResource) runArtifactSourceSync(
 	}
 
 	artifactSourceMutationWarning(diags, plan)
+	if version := engine.AdoptedBaseVersion(); version != "" {
+		artifactSourceFirstSyncRemovalWarning(diags, absDir, version, plan)
+	}
 
 	return result, store.patched, nil
 }
@@ -348,6 +355,63 @@ func artifactSourceStaleRollbackWarning(diags *diag.Diagnostics, absDir string) 
 				"Those files were put back the way that apply found them before this sync planned, so the directory may differ from what you last saw in it. "+
 				"Review it (a version control diff shows what moved) before committing.",
 			absDir),
+	)
+}
+
+// artifactSourceUnreadableBaseWarning reports a first sync of a directory
+// (no sync state yet, as in a fresh clone or a CI checkout) whose pinned
+// catalog version the Files API could not find. Without that version's
+// file list the sync cannot tell a file deleted locally from one that was
+// never there, so it removes nothing from the catalog, and when the catalog
+// moved on since that version it downloads such a file back.
+func artifactSourceUnreadableBaseWarning(diags *diag.Diagnostics, absDir, versionID string) {
+	if diags == nil {
+		return
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		"Files deleted from the source directory stay in the catalog",
+		fmt.Sprintf(
+			"%s had no sync state yet, so this sync compares it with catalog version %s, the one Terraform state points at. "+
+				"The Files API could not find that version (it or its catalog was deleted, or this user cannot read it), "+
+				"so this sync cannot tell a file deleted from the directory from one that was never in it, and removes nothing from the catalog. "+
+				"Files deleted from the directory before this sync stay in the catalog, and when the catalog has changed since that version they are downloaded back into the directory. "+
+				"Later syncs only remove files deleted after this one.",
+			absDir, versionID),
+	)
+}
+
+// artifactSourceFirstSyncRemovalWarning names the files a first sync of a
+// directory without sync state removed from the catalog. That sync takes
+// the pinned catalog version as the directory's last sync, so every file
+// in that version which this checkout lacks goes, including ones it lacks
+// only because they were never committed or a submodule was not fetched.
+// A routine sync's catalog deletions mirror a deletion the user made and
+// are not announced.
+func artifactSourceFirstSyncRemovalWarning(diags *diag.Diagnostics, absDir, versionID string, plan *artifactsync.SyncPlan) {
+	if diags == nil || plan == nil {
+		return
+	}
+
+	var removed []string
+	for _, fa := range plan.Deletes {
+		if fa.Action == artifactsync.ActUploadDelete {
+			removed = append(removed, fa.Path)
+		}
+	}
+	if len(removed) == 0 {
+		return
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("source").AtName("dir"),
+		"Files removed from the catalog",
+		fmt.Sprintf(
+			"%s had no sync state yet, so this sync took catalog version %s, the one Terraform state points at, as its last sync "+
+				"and removed from the catalog the files that are not in the directory (%d):\n%s\n\n"+
+				"If the directory lacks files the image needs (uncommitted or git-ignored files, a submodule that was not fetched), restore them and apply again.",
+			absDir, versionID, len(removed), artifactSourcePathList(removed)),
 	)
 }
 
@@ -538,8 +602,12 @@ func (r *ArtifactResource) syncArtifactSource(
 	// The sync did work when it moved files in either direction or pointed
 	// the artifact at a version. A plan that turned out empty against an
 	// artifact already on that version did neither, and there is nothing
-	// to build for it.
-	worked := patched != nil || result.Uploaded+result.Downloaded+result.DeletedRemote+result.DeletedLocal > 0
+	// to build for it, unless the artifact's last build failed: that is the
+	// retry of an apply whose build failed after its code landed, and a
+	// fresh checkout reads the catalog as already matching, so the retry
+	// would otherwise record the new tree over the failed build.
+	worked := patched != nil || result.Uploaded+result.Downloaded+result.DeletedRemote+result.DeletedLocal > 0 ||
+		artifactLastBuildFailed(artifact)
 
 	if patched != nil {
 		artifact = patched
@@ -605,6 +673,14 @@ func (r *ArtifactResource) syncArtifactSourceAndBuild(
 	}
 
 	return artifact, nil
+}
+
+// artifactLastBuildFailed reports whether the primary container's latest
+// build ended without an image.
+func artifactLastBuildFailed(artifact *client.Artifact) bool {
+	build := primaryContainerBuildInfo(artifact)
+
+	return build != nil && (build.Status == client.ArtifactBuildStatusFailed || build.Status == client.ArtifactBuildStatusCancelled)
 }
 
 // artifactDraftHasNoImage reports whether artifact's primary container has

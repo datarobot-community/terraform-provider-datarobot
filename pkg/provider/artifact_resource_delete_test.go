@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -469,6 +470,131 @@ func TestArtifactRepositoryOwnershipRepositoryDeleteNotFound(t *testing.T) {
 			r := &ArtifactResource{provider: &Provider{service: mockService}}
 			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringValue(repoID)))
 			assertArtifactDeleteError(t, diags, tc.wantError)
+		})
+	}
+}
+
+// The Workload API refuses a repository delete with 409 while a workload runs one of its
+// artifacts, without naming it. A workload left out of state by a failed apply then fails
+// every destroy, so the error names the workloads that use the repository.
+func TestArtifactRepositoryDeleteInUseNamesWorkloads(t *testing.T) {
+	many := make([]client.Workload, artifactRepositoryRemainingNoteLimit+2)
+	for i := range many {
+		many[i] = client.Workload{ID: fmt.Sprintf("wl-%02d", i), Name: "app", Status: client.ProtonStatusRunning}
+	}
+	for _, tc := range []struct {
+		name      string
+		workloads []client.Workload
+		listErr   error
+		want      []string
+		dontWant  []string
+	}{
+		{
+			name:      "workload left behind",
+			workloads: []client.Workload{{ID: "6ab2ca493e573ae8037566ee", Name: "qa-app", Status: client.ProtonStatusErrored}},
+			want:      []string{"409 Conflict", `6ab2ca493e573ae8037566ee ("qa-app", errored)`, "DELETE /api/v2/workloads/{id}/"},
+		},
+		{
+			name:      "more than the limit",
+			workloads: many,
+			want:      []string{"wl-09 (", "and 2 more"},
+			dontWant:  []string{"wl-10", "wl-11"},
+		},
+		{
+			name: "none visible",
+			want: []string{"409 Conflict", "No workload this principal can see", "may belong to other users", "may have been deleted since"},
+		},
+		{
+			name:    "list fails",
+			listErr: client.NewGenericError("503 Service Unavailable"),
+			want:    []string{"409 Conflict", "503 Service Unavailable", "GET /api/v2/workloads/?repositoryId="},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			repoID := uuid.NewString()
+			locked := artifactFixture(uuid.NewString(), &repoID, "owned")
+
+			mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(&client.GenericError{
+				Message:    `response 409 Conflict {"detail":"Cannot delete artifact repository because some artifacts are still used by workloads."}`,
+				StatusCode: http.StatusConflict,
+			})
+			mockService.EXPECT().ListWorkloads(gomock.Any(), &client.ListWorkloadsRequest{RepositoryID: repoID}).Return(tc.workloads, tc.listErr)
+
+			r := &ArtifactResource{provider: &Provider{service: mockService}}
+			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringValue(repoID)))
+			if len(diags.Errors()) != 1 {
+				t.Fatalf("expected one error, got %v", diags)
+			}
+			detail := diags.Errors()[0].Detail()
+			for _, want := range tc.want {
+				if !strings.Contains(detail, want) {
+					t.Errorf("error detail does not mention %q:\n%s", want, detail)
+				}
+			}
+			for _, dontWant := range tc.dontWant {
+				if strings.Contains(detail, dontWant) {
+					t.Errorf("error detail mentions %q:\n%s", dontWant, detail)
+				}
+			}
+		})
+	}
+}
+
+// Any other refusal is reported as the Workload API gave it, without a workload lookup.
+func TestArtifactRepositoryDeleteOtherErrorListsNoWorkloads(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockService := mock_client.NewMockService(ctrl)
+	repoID := uuid.NewString()
+	locked := artifactFixture(uuid.NewString(), &repoID, "owned")
+
+	mockService.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(&client.GenericError{
+		Message: "response 500 Internal Server Error", StatusCode: http.StatusInternalServerError,
+	})
+
+	r := &ArtifactResource{provider: &Provider{service: mockService}}
+	diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringValue(repoID)))
+	assertArtifactDeleteError(t, diags, "500 Internal Server Error")
+}
+
+// A draft in a repository the resource did not create is deleted on its own, and the
+// Workload API refuses that with 409 too while a workload runs it. Only once the read
+// after it shows the draft is not locked does the 409 mean a workload.
+func TestArtifactVersionDeleteInUseNamesWorkloads(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		getErr error
+		want   string
+	}{
+		{"draft in use", nil, `Workloads using artifact %s: 6ab2ca493e573ae8037566ee ("qa-app", errored)`},
+		{"read back fails", client.NewGenericError("503 Service Unavailable"), "Delete the workload(s) first."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			repoID := uuid.NewString()
+			draft := artifactFixtureWithStatus(uuid.NewString(), &repoID, "shared", client.ArtifactStatusDraft)
+
+			mockService.EXPECT().DeleteArtifact(gomock.Any(), draft.ID).Return(&client.GenericError{
+				Message:    `response 409 Conflict {"detail":"Cannot delete artifact referenced by 1 workload(s): 6ab2ca493e573ae8037566ee. Delete the workload(s) first."}`,
+				StatusCode: http.StatusConflict,
+			})
+			if tc.getErr == nil {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(draft, nil)
+				mockService.EXPECT().ListWorkloads(gomock.Any(), &client.ListWorkloadsRequest{ArtifactID: draft.ID}).
+					Return([]client.Workload{{ID: "6ab2ca493e573ae8037566ee", Name: "qa-app", Status: client.ProtonStatusErrored}}, nil)
+			} else {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(nil, tc.getErr)
+			}
+
+			r := &ArtifactResource{provider: &Provider{service: mockService}}
+			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(draft, types.StringValue("")))
+			want := tc.want
+			if strings.Contains(want, "%s") {
+				want = fmt.Sprintf(want, draft.ID)
+			}
+			assertArtifactDeleteError(t, diags, want)
 		})
 	}
 }

@@ -154,6 +154,18 @@ func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/workloads/"+id+"/")
 }
 
+// ListWorkloadsRequest filters GET /workloads/. ArtifactID matches each workload's current
+// artifact, and RepositoryID that artifact's repository.
+type ListWorkloadsRequest struct {
+	ArtifactID   string `url:"artifactId,omitempty"`
+	RepositoryID string `url:"repositoryId,omitempty"`
+}
+
+// ListWorkloads returns the workloads the principal can see that match the filter.
+func (s *ServiceImpl) ListWorkloads(ctx context.Context, req *ListWorkloadsRequest) ([]Workload, error) {
+	return GetAllPages[Workload](s.client, ctx, "/workloads/", req)
+}
+
 type ReplacementStrategy string
 type ReplacementStatus string
 

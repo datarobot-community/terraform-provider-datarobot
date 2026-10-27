@@ -28,6 +28,10 @@ package sync
 //   - UseIgnore lets the resource hand over the ignore matcher it already
 //     resolved, so the walk applies the same patterns plan hashed with even
 //     when the directory could not be given its starter .drignore.
+//   - A state directory this provider seeded, which pins a catalog version
+//     but has never recorded a sync, takes its BASE from that version's file
+//     list and records it (adoptPinnedBase in phase.go). `dr artifact code
+//     init` pins no version, so the CLI never seeds such a directory itself.
 
 import (
 	"context"
@@ -123,6 +127,14 @@ type Engine struct {
 
 	config wapi.Config
 	base   BaseManifest
+	// baseRecorded is false for the empty manifest Initialize seeds, true
+	// once a sync (this engine's phase 6 or the CLI's) has written one.
+	baseRecorded bool
+	// adoptedBase is the pinned version adoptPinnedBase read BASE from, by
+	// this Plan or by an earlier one that no sync has followed yet, and
+	// unreadableBase the one it could not find; both empty otherwise.
+	adoptedBase    string
+	unreadableBase string
 	// baseExtra is what the loaded manifest.json held beyond the fields
 	// this build knows (a newer CLI's keys); phase 6 writes it back.
 	baseExtra map[string]json.RawMessage
@@ -186,11 +198,12 @@ func New(projectDir, artifactID string, files filesapi.Client, artifacts Artifac
 // BindCatalog tells the engine where the caller knows the directory's code
 // to be: the catalog and the version its record of the artifact points at.
 //
-// For a directory that has code in the catalog but no state yet (the shape
-// a tree is in when it was last uploaded by the push-only uploader this
-// engine replaces) both seed the state directory, so that first Plan is a
-// plain push (BASE empty, REMOTE not drifted) instead of creating a second
-// catalog beside the one Terraform state already points at. Once
+// For a directory that has code in the catalog but no state yet (a fresh
+// clone or a CI checkout, since the state directory ignores itself, or a
+// tree last uploaded by the push-only uploader this engine replaces) both
+// seed the state directory, so that the first Plan syncs into the catalog
+// Terraform state already points at instead of creating a second one, and
+// takes that version's file list as BASE (see adoptPinnedBase). Once
 // config.json exists the file's own catalog wins. The version has one more
 // use after that: an artifact with no code_ref of its own (a draft just
 // cloned from a locked one) diffs against it rather than against the
@@ -255,6 +268,18 @@ func (e *Engine) Plan(ctx context.Context) (*SyncPlan, error) {
 // StaleRollbackRestored reports whether preflight restored a stale
 // rollback tree left by a previously interrupted sync.
 func (e *Engine) StaleRollbackRestored() bool { return e.staleNote }
+
+// AdoptedBaseVersion returns the catalog version a never-synced directory
+// took its BASE from (see adoptPinnedBase), empty otherwise. The plan's
+// catalog deletions are then every pinned file missing from the directory.
+// It stays set across Plans until a sync completes, so a retry after a
+// failed apply still reports the first sync's removals.
+func (e *Engine) AdoptedBaseVersion() string { return e.adoptedBase }
+
+// UnreadableBaseVersion returns the catalog version a never-synced
+// directory is pinned at when the Files API cannot find it, empty
+// otherwise (see adoptPinnedBase).
+func (e *Engine) UnreadableBaseVersion() string { return e.unreadableBase }
 
 // ArtifactLocked reports whether the artifact this plan was built against
 // is locked. The plan is still accurate — it describes what a sync would

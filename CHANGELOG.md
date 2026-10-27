@@ -2,16 +2,24 @@
 
 ### Added
 
+- `datarobot_workload` has a computed `placements` attribute: the Enclaves the Workload runs on, with `enclave_id`, `enclave` and `region`, as the platform reports them. With `enclave_selection_policy = "availability"`, it names the Enclave the scheduler chose. It is empty for a Workload outside any Enclave and is known only after apply when `artifact_id` or `runtime` changes, since the rollout that follows can move the Workload.
 - `datarobot_custom_metric` accepts `geospatial_segment_attribute`, the name of the column that contains geospatial values, serialized as `geospatialSegmentAttribute` on `POST /deployments/{deploymentId}/customMetrics/`. It must be a segment attribute of the Deployment, segment analysis must be enabled on the Deployment, and the corresponding feature must be of geospatial type. The API accepts it on create only, so changing it replaces the Custom Metric.
 - The attribute is required when `is_geospatial` is `true` and rejected when it is `false`, checked at plan time. The API does not enforce this on create: a geospatial Custom Metric with no attribute is accepted, but it has no column to read geospatial values from and, because the attribute cannot be changed in place, can only be fixed by replacing it. A configuration that already sets `is_geospatial = true` without the attribute now fails to plan until the attribute is set.
+
+### Changed
+
+- Built with Go 1.27.3, fixing a `govulncheck` advisory in Go 1.27.2's `crypto/x509`: certificate verification now refuses intermediate certificates that are known to be compromised, also on systems whose trust store has not been updated.
 
 ### Fixed
 
 - `datarobot_artifact` refuses an `image_uri` on a container built from `source` before anything is created. Such a configuration failed apply with `Provider produced inconsistent result after apply` once the artifact existed, and under Pulumi showed a diff on every preview. **After upgrading, remove `image_uri` from such containers:** plan and destroy refuse the configuration until then, and the built value stays in state.
 - A locked artifact with `source.wait_for_build = false` is refused at plan time, with or without `image_uri`. The platform locks an artifact only once its build has completed, so the apply failed after creating the artifact. When `status` comes from a variable, this check now waits for it instead of assuming locked.
 - A sidecar's `image_uri` no longer keeps the primary container's `image_uri` at its previous build in the plan, which failed the apply after a source change. A change that creates a new version of such an artifact now rebuilds the primary image, as it already did without a sidecar.
+- A `datarobot_artifact` destroy that the platform refuses with `409 Conflict` because workloads still use its version or repository now names those workloads, with their ID, name and status. A workload that an earlier version left out of state after it failed to start could block every destroy, and the platform's error did not say which workload to delete.
 - The deployment unit tests no longer hang or fail when the whole `pkg/provider` suite runs. Fixes made to tests: `TestUnitDeploymentModelReplacementSuccess`, `TestUnitDeploymentModelReplacementMismatch`, `TestWaitForDeploymentStatusErroredIncludesLogsAndUIURL` and `TestWaitForDeploymentStatusErroredLogRetrievalFailure`. This changes tests only; the provider's behavior is unchanged.
 - Docs: the `datarobot_workload` page has a "Failed applies" section, and the `datarobot_artifact` page says what a create that fails partway leaves behind, under Terraform and under Pulumi. Neither engine rolls completed resources back: an artifact created before a `datarobot_workload` the platform refuses stays in state, the retry reuses it without another upload or build, and `terraform destroy` removes it.
+- `datarobot_artifact` removes a file deleted from `source.dir` from the catalog when the directory has no sync state yet, as in a fresh clone or a CI checkout (`.datarobot/workload/` is git-ignored); the file used to stay in the catalog and reach the image build, or was downloaded back when the catalog had moved on. **After upgrading, the first apply that syncs such a checkout removes every catalog file that is not in `source.dir`, including files `.drignore` excludes, and names them in a warning, so the checkout must hold every file the image needs.**
+- An apply retried after a failed image build builds again when the sync finds the catalog already matching `source.dir`, instead of recording the source over the failed build.
 
 ## [0.13.0] - 2026-10-15
 

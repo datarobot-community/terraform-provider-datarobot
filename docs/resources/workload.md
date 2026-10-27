@@ -168,6 +168,12 @@ resource "datarobot_workload" "enclave_pinned" {
     }]
   }
 }
+
+# The Enclave the workload runs on, as the platform reports it. With
+# enclave_selection_policy = "availability", this is the one the scheduler chose.
+output "enclave_workload_enclave" {
+  value = try(datarobot_workload.enclave_pinned.placements[0].enclave, null)
+}
 ```
 
 ## In-place replacement
@@ -176,7 +182,7 @@ Changes to `artifact_id` or `runtime` call the Workload API **replacement** endp
 
 This differs from older provider behavior that used `RequiresReplace` (delete + create). You no longer need `lifecycle { create_before_destroy = true }` workarounds that existed only to preserve endpoint URLs, except when `use_case_id` changes together with the Enclave placement, which still replaces the workload; see [Changing placement](#changing-placement).
 
-For a runnable end-to-end walkthrough, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
+For a runnable end-to-end walkthrough that rolls out two workloads at once, see [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement).
 
 ## Artifact dual-ID wiring
 
@@ -240,6 +246,16 @@ Naming an `enclaves` entry fills in `enclave_selection_policy = "manual"` for yo
 
 Only one Enclave is accepted today. `enclaves` is a list because the platform intends to support several later.
 
+`placements` reports where the workload actually runs, as the platform reports it: the Enclave's ID, name and region. Under `availability` this is how to learn which Enclave the scheduler chose, for example to export it:
+
+```hcl
+output "agent_enclave" {
+  value = try(datarobot_workload.agent.placements[0].enclave, null)
+}
+```
+
+It is empty for a workload outside any Enclave, is read on every refresh, and is planned as `(known after apply)` when `artifact_id` or `runtime` changes, since the rollout that follows can land on another Enclave; other changes, such as tags, keep it. `enclave_selection_policy` and `enclaves` stay the placement you asked for.
+
 ### Changing placement
 
 `enclave_selection_policy` and `enclaves` are updated **in place**, like the rest of `runtime`. The change goes through `PATCH /workloads/{id}/settings`, or rides along with `POST /workloads/{id}/replacement` when `artifact_id` changes in the same apply; the platform rolls a new version out and the workload keeps its ID. Whenever placement changes, the provider writes both `enclave_selection_policy` and `enclaves` explicitly (a removed pin as an empty list), because on these endpoints omitting both fields means "keep the current placement" (which is what keeps a replica-only update from unplacing an Enclave workload). What the platform does with the recorded intent is up to the platform. It gates the change the same way it gates a create (Enclaves available, the Use Case granted at least one, the override permission for a pin) and refuses it with a 422 before anything rolls, so a refused change leaves the running workload untouched.
@@ -283,7 +299,11 @@ If your cluster's gateway caches routes for another duration (`PREDICTIONS_GATEW
 
 If the apply is interrupted during that wait, the rollout has already succeeded: the provider records it and warns that the previous version may still answer requests until the cached route expires. If the new version stops after it was promoted, the apply fails, and state still records the artifact the workload now runs.
 
-If apply is interrupted mid-replacement, run `terraform apply` again — refresh reads the current replacement status and the provider reconciles.
+If the apply is interrupted before the rollout completes, the rollout carries on without Terraform. Applying again before it completes fails with `There is already a pending replacement for this workload` and changes nothing. Once it completes, refresh reads the new artifact and the plan shows no changes.
+
+### Multiple workloads
+
+Workloads that do not depend on each other roll out at the same time. Terraform applies up to ten resources at once by default (`-parallelism`), and each workload starts its own rollout and runs its own waits, the gateway route wait included, so an apply that rolls out several workloads takes about as long as the slowest one rather than the sum of all. The artifacts they use are updated first, also in parallel. [`examples/workflows/workload_replacement`](https://github.com/datarobot-community/terraform-provider-datarobot/tree/main/examples/workflows/workload_replacement) rolls out two workloads in one apply.
 
 ## Failed applies
 
@@ -294,6 +314,8 @@ A create the platform refuses (a `422`, for example on an unsupported `scaling_m
 Within its own create the artifact does clean up: a source upload, image build or lock that fails partway deletes the version that create made, and the repository when it created one, so the next apply starts over; the uploaded files stay in the catalog bound to `source.dir`, and the retry reuses them. This cleanup is best effort: when its delete fails, the version or repository stays on the platform and the apply reports only the original error. A create whose build is still running when `wait_for_build` ends is instead saved to state under Terraform, so that the next apply **replaces** it; see `source` and `wait_for_build` on `datarobot_artifact`.
 
 A workload the platform reports `errored` while it starts, for example when its image cannot be pulled or its container cannot start, fails the apply and is **deleted again**, with the tags already written and its Use Case link; the error quotes the platform's reason and the last lines of the workload's log. The artifact stays, as above, and the retry creates a single workload. An apply interrupted or timed out while the workload starts records it in state with a warning instead, since it may still come up.
+
+Provider versions before 0.13.0 left such a workload on the platform and out of state. Destroy deletes a `datarobot_workload` before its artifact, but it cannot delete a workload it does not know of, and the platform does not delete an artifact, or an artifact repository, while any workload runs it: destroying the `datarobot_artifact` then fails with `409 Conflict`. The error names the workloads that use it, whether left behind this way or created outside the configuration. Delete the ones no longer needed, or move them to another artifact, and destroy again.
 
 A workload is recorded in state as soon as the platform reports it `running`, which it does once the pod has started, before the container has shown that it stays up. A container that keeps crashing then turns the workload `errored` shortly after `Apply complete!` while state still records it, so check the workload's status after a first apply. Whether a crashing container fails the apply or is recorded this way depends on whether the platform reports the crash before or after `running`.
 
@@ -329,6 +351,7 @@ Changing it on its own moves the link in place: the Workload is linked to the ne
 
 - `endpoint` (String) The inference endpoint URL for the Workload.
 - `id` (String) The ID of the Workload.
+- `placements` (Attributes List) The Enclaves the Workload runs on, as the platform reports them: with `enclave_selection_policy = "availability"`, this is the Enclave the scheduler chose. Empty for a Workload served through the prediction gateway, which is any Workload not placed on an Enclave, and for one the platform has not scheduled yet. Read on every refresh, and known only after apply when `artifact_id` or `runtime` changes, since the rollout that follows can move the Workload. Unlike `runtime.enclaves`, which is the placement requested, this is the placement in effect. A list because the platform intends to run a Workload on several Enclaves; it holds one entry today. (see [below for nested schema](#nestedatt--placements))
 - `status` (String) Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.
 - `type` (String) Artifact type mirrored by this workload: `service`, `nim`, `agent`, or `mcp`. Set from the deployed artifact; not user-configurable.
 
@@ -429,3 +452,13 @@ Required:
 
 - `name` (String) The name of the tag: 1 to 4096 characters, without `{`, `}`, `;` or `|`, and not starting with `datarobot.` or `integrations.`, which the platform reserves.
 - `value` (String) The value of the tag: 1 to 4096 characters.
+
+
+<a id="nestedatt--placements"></a>
+### Nested Schema for `placements`
+
+Read-Only:
+
+- `enclave` (String) The name of the Enclave.
+- `enclave_id` (String) The ID of the Enclave.
+- `region` (String) The region the Enclave is deployed in, when the platform reports one.
