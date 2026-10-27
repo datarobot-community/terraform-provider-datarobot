@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,6 +196,7 @@ func (r *ArtifactResource) Schema(ctx context.Context, req resource.SchemaReques
 					"On draft artifacts, uploads are applied in-place. On locked artifacts, source changes clone to a new draft version, upload, build, patch `code_ref`, and lock the new version. " +
 					"**Apply writes to `dir`:** the sync is three-way (last-synced state vs. local files vs. catalog), the same algorithm the DataRobot CLI uses, so besides uploading local changes it also keeps bookkeeping under `dir/.datarobot/workload/` " +
 					"(last-synced manifest, catalog pointers and lock file; the directory carries its own `.gitignore`), downloads files that exist in the catalog but not locally, and removes local files that were deleted from the catalog, reporting each as a warning. " +
+					"A directory without that bookkeeping, such as a fresh clone or a CI checkout, takes the catalog version in Terraform state as its last sync, so files in that version that are missing from `dir`, including ones `.drignore` excludes, are removed from the catalog and named in a warning. " +
 					"A file changed on both sides since the last sync (edited or deleted locally, and edited or deleted in the catalog) fails the apply before anything is uploaded or written, because `terraform apply` cannot ask which side wins; resolve it in that directory with the DataRobot CLI (`dr artifact code sync`) and apply again. " +
 					"When the artifact's catalog version moved since the directory last synced (the CLI synced the artifact from another checkout, or this resource was last applied from one), the plan shows `dir_hash` as known after apply and apply brings the catalog's changes down. " +
 					"A directory can back only one `datarobot_artifact` resource: its sync state is bound to that resource's catalog, so a second resource over a directory that already backs a live artifact from another artifact repository is refused. `.datarobot.yaml` is never uploaded. " +
@@ -591,6 +593,10 @@ func (r *ArtifactResource) deleteArtifactRepository(ctx context.Context, reposit
 		return
 	}
 	summary := fmt.Sprintf("Error deleting Artifact Repository with ID %s", repositoryID)
+	if client.HTTPStatus(err) == http.StatusConflict {
+		diags.AddError(summary, err.Error()+"\n\n"+r.artifactInUseDetail(ctx, &client.ListWorkloadsRequest{RepositoryID: repositoryID}))
+		return
+	}
 	if _, ok := err.(*client.NotFoundError); !ok {
 		diags.AddError(summary, err.Error())
 		return
@@ -600,6 +606,41 @@ func (r *ArtifactResource) deleteArtifactRepository(ctx context.Context, reposit
 	if detail := artifactNotFoundOnDeleteDetail("artifact repository", repositoryID, getErr); detail != "" {
 		diags.AddError(summary, detail)
 	}
+}
+
+// artifactInUseDetail names the workloads behind a 409 to the delete of an artifact, or of a
+// repository holding one: the Workload API refuses either while a workload runs the artifact.
+// A workload that is not in state, such as one a failed apply left behind, then fails every
+// destroy until it is found. filter sets exactly one of ArtifactID and RepositoryID.
+func (r *ArtifactResource) artifactInUseDetail(ctx context.Context, filter *client.ListWorkloadsRequest) string {
+	what, param, id := "artifact repository", "repositoryId", filter.RepositoryID
+	refusal := "The Workload API does not delete an artifact repository while a workload runs one of its artifacts."
+	if filter.ArtifactID != "" {
+		what, param, id = "artifact", "artifactId", filter.ArtifactID
+		refusal = "The Workload API does not delete an artifact while a workload runs it."
+	}
+
+	traceAPICall("ListWorkloads")
+	workloads, err := r.provider.service.ListWorkloads(ctx, filter)
+	if err != nil {
+		return fmt.Sprintf("Listing the workloads that use %s %s failed too: %s. "+
+			"GET /api/v2/workloads/?%s=%s lists them.", what, id, err, param, id)
+	}
+	if len(workloads) == 0 {
+		return fmt.Sprintf("No workload this principal can see uses %s %s. The ones that block the delete may belong to other users, "+
+			"who have to delete them or move them to another artifact, or may have been deleted since; then try again.", what, id)
+	}
+	names := make([]string, 0, artifactRepositoryRemainingNoteLimit)
+	for i, w := range workloads {
+		if i == artifactRepositoryRemainingNoteLimit {
+			names = append(names, fmt.Sprintf("and %d more", len(workloads)-i))
+			break
+		}
+		names = append(names, fmt.Sprintf("%s (%q, %s)", w.ID, w.Name, w.Status))
+	}
+	return fmt.Sprintf("%s Workloads using %s %s: %s. A workload left behind by a failed apply is not in state, so destroy cannot delete it: "+
+		"delete the workloads that are no longer needed (DELETE /api/v2/workloads/{id}/, or from the Workloads page), "+
+		"or move them to another artifact, then try again.", refusal, what, id, strings.Join(names, ", "))
 }
 
 // artifactNotFoundOnDeleteDetail explains a 404 to a delete, given the read made after
@@ -649,6 +690,9 @@ func (r *ArtifactResource) deleteArtifactVersion(ctx context.Context, data Artif
 			if detail := artifactNotFoundOnDeleteDetail("artifact", repositoryID, getErr); detail != "" {
 				diags.AddError(summary, detail)
 			}
+		case getErr == nil && client.HTTPStatus(err) == http.StatusConflict:
+			// Not locked, so the 409 is a workload running this version.
+			diags.AddError(summary, err.Error()+"\n\n"+r.artifactInUseDetail(ctx, &client.ListWorkloadsRequest{ArtifactID: artifactID}))
 		default:
 			diags.AddError(summary, err.Error())
 		}
@@ -724,7 +768,7 @@ func artifactRepositoryNotCreatedNote(data ArtifactResourceModel) string {
 		"so destroy does not delete the repository: that would delete every version in it, including any created outside Terraform.", repositoryID)
 }
 
-// artifactRepositoryRemainingNoteLimit caps how many versions a destroy warning names.
+// artifactRepositoryRemainingNoteLimit caps how many versions or workloads a destroy diagnostic names.
 const artifactRepositoryRemainingNoteLimit = 10
 
 func artifactRepositoryRemainingNote(repositoryID string, remaining []client.Artifact) string {

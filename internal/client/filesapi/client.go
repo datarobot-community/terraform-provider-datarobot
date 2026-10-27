@@ -9,12 +9,14 @@
 //     httpClientWithTimeout live here; CLI delegates equivalents to drapi.EndpointURL,
 //     drapi.AssertNextOnSameHost, drapi.ErrFromResp, drapi.GetJSON, drapi.DeleteJSON,
 //     and ad-hoc http.Client construction in each call site.
+//   - errFromResp marks a 404 or 410 as ErrNotFound; the CLI's error is untyped.
 package filesapi
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,6 +83,26 @@ func (c *httpClient) assertNextOnSameHost(rawNextURL string) error {
 	return nil
 }
 
+// ErrNotFound matches, through errors.Is, a 404 or 410 from a request that
+// goes through errFromResp (AllFiles, ListVersions, DeleteFiles,
+// DownloadFile, UploadToStage, PollStatus): the catalog or version does not
+// exist, was deleted, or is not visible to the caller. The JSON posts made
+// through HTTPTransport.Post report these with the transport's own errors.
+var ErrNotFound = errors.New("files API: not found")
+
+// statusError is a non-2xx response. Only its message is shown; the status
+// code is kept for ErrNotFound to match on.
+type statusError struct {
+	status int
+	msg    string
+}
+
+func (e *statusError) Error() string { return e.msg }
+
+func (e *statusError) Is(target error) bool {
+	return target == ErrNotFound && (e.status == http.StatusNotFound || e.status == http.StatusGone)
+}
+
 // CLI: drapi.ErrFromResp(resp, requestURL).
 func errFromResp(resp *http.Response, requestURL string) error {
 	defer func() { _ = resp.Body.Close() }()
@@ -90,11 +112,12 @@ func errFromResp(resp *http.Response, requestURL string) error {
 	if resp.Request != nil {
 		method = resp.Request.Method
 	}
+	msg := fmt.Sprintf("%s request %s : response %s", method, requestURL, resp.Status)
 	if len(body) > 0 {
-		return fmt.Errorf("%s request %s : response %s %s", method, requestURL, resp.Status, string(body))
+		msg += " " + string(body)
 	}
 
-	return fmt.Errorf("%s request %s : response %s", method, requestURL, resp.Status)
+	return &statusError{status: resp.StatusCode, msg: msg}
 }
 
 // CLI: drapi.GetJSON(pageURL, label, v) — provider uses context-aware GET with transport auth.

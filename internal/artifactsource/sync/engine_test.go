@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -71,6 +72,15 @@ type fakeFilesAPI struct {
 	allFilesCalled bool
 	lastCatalogID  string
 	lastVersionID  string
+
+	// allFilesByVersion serves a listing per catalog version, for tests
+	// where BASE and REMOTE are read at different versions; a version with
+	// no entry gets allFiles. allFilesErrByVersion fails one version's
+	// listing only. allFilesVersions records every version listed, in call
+	// order.
+	allFilesByVersion    map[string]map[string]filesapi.FileMeta
+	allFilesErrByVersion map[string]error
+	allFilesVersions     []string
 
 	// blobs is the remote file content DownloadFile serves, keyed by
 	// path; a path with no entry (and no downloadErr) is a test bug and
@@ -198,8 +208,15 @@ func (f *fakeFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) 
 	f.allFilesCalled = true
 	f.lastCatalogID = catalogID
 	f.lastVersionID = versionID
+	f.allFilesVersions = append(f.allFilesVersions, versionID)
 	if f.allFilesErr != nil {
 		return nil, f.allFilesErr
+	}
+	if err := f.allFilesErrByVersion[versionID]; err != nil {
+		return nil, err
+	}
+	if listing, ok := f.allFilesByVersion[versionID]; ok {
+		return listing, nil
 	}
 	return f.allFiles, nil
 }
@@ -306,6 +323,27 @@ func hashContent(body string) (string, int64) {
 
 func draftInfo(catalogID, versionID string) ArtifactInfo {
 	return ArtifactInfo{CatalogID: catalogID, CatalogVersionID: versionID}
+}
+
+// listing is a catalog version's file list as AllFiles returns it, built
+// from path -> content.
+func listing(files map[string]string) map[string]filesapi.FileMeta {
+	out := make(map[string]filesapi.FileMeta, len(files))
+	for path, body := range files {
+		hash, size := hashContent(body)
+		out[path] = filesapi.FileMeta{Hash: hash, Size: size}
+	}
+
+	return out
+}
+
+func actionPaths(actions []FileAction) []string {
+	out := make([]string, 0, len(actions))
+	for _, fa := range actions {
+		out = append(out, fa.Path)
+	}
+
+	return out
 }
 
 func TestEngine_New_ValidatesArgs(t *testing.T) {
@@ -686,6 +724,9 @@ func TestEngine_Plan_AllFilesErrorReleasesLock(t *testing.T) {
 		CatalogID:           "cat-1",
 		LastSyncedVersionID: "ver-1",
 	}))
+	// A recorded BASE, so the failing listing is REMOTE's, not BASE's.
+	synced := "ver-1"
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{Version: wapi.ManifestVersion, SyncedVersionID: &synced}))
 
 	files := &fakeFilesAPI{allFilesErr: errors.New("boom")}
 	e, err := New(dir, "art-1", files, &fakeArtifactStore{
@@ -694,6 +735,7 @@ func TestEngine_Plan_AllFilesErrorReleasesLock(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = e.Plan(context.Background())
+	require.ErrorContains(t, err, "fetch remote manifest")
 	require.ErrorContains(t, err, "boom")
 
 	// A second Engine must be able to acquire the lock immediately: the
@@ -1156,7 +1198,7 @@ func TestEngine_BindCatalog_SeedsWapiForATreeWithoutIt(t *testing.T) {
 	dir := t.TempDir()
 	writeProjectFiles(t, dir, map[string]string{"agent.py": "x"})
 
-	files := &fakeFilesAPI{}
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "x"})}
 	e, err := New(dir, "art-1", files, &fakeArtifactStore{
 		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-state", "ver-state"), nil },
 	})
@@ -1164,15 +1206,17 @@ func TestEngine_BindCatalog_SeedsWapiForATreeWithoutIt(t *testing.T) {
 	t.Cleanup(func() { _ = e.Close() })
 
 	// Terraform state says the tree already has code in cat-state; the
-	// first engine run must push into that catalog, not create a new one.
+	// first engine run must sync with that catalog, not create a new one.
 	e.BindCatalog("cat-state", "ver-state")
 
 	plan, err := e.Plan(context.Background())
 	require.NoError(t, err)
 
 	assert.Equal(t, "cat-state", e.catalogID)
-	assert.False(t, files.allFilesCalled, "a seeded version matches, so the catalog is not drifted")
-	assert.Len(t, plan.Uploads, 1, "BASE is empty, so the whole tree is pushed once")
+	assert.Equal(t, []string{"ver-state"}, files.allFilesVersions,
+		"BASE is the seeded version's file list; the catalog is not drifted, so that one listing is REMOTE too")
+	assert.Equal(t, "cat-state", files.lastCatalogID)
+	assert.True(t, plan.IsEmpty(), "the tree matches the version it was seeded from: %+v", plan)
 
 	cfg, err := wapi.LoadConfig(dir)
 	require.NoError(t, err)
@@ -1255,6 +1299,246 @@ func TestEngine_BindCatalog_VersionIsTheBaselineForAnArtifactWithoutCodeRef(t *t
 	assert.Empty(t, plan.Uploads)
 	require.Len(t, plan.Downloads, 1)
 	assert.Equal(t, "helper.py", plan.Downloads[0].Path)
+}
+
+// unsyncedPlan plans local against a directory that has never synced, the
+// shape of a fresh clone or a CI checkout: no state directory, and
+// Terraform state pinning cat-1 at ver-1. The artifact reports remoteVer.
+func unsyncedPlan(t *testing.T, local map[string]string, remoteVer string, files *fakeFilesAPI) (*Engine, *SyncPlan, error) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, local)
+
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", remoteVer), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+	e.BindCatalog("cat-1", "ver-1")
+
+	plan, err := e.Plan(context.Background())
+
+	return e, plan, err
+}
+
+func TestEngine_Plan_UnsyncedDirectoryReadsBaseFromPinnedVersion(t *testing.T) {
+	t.Parallel()
+
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{
+		"agent.py":  "same",
+		"edited.py": "old",
+		"gone.py":   "deleted locally",
+	})}
+
+	e, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same", "edited.py": "new"}, "ver-1", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"ver-1"}, files.allFilesVersions, "one listing serves BASE and the undrifted REMOTE")
+	require.Len(t, plan.Deletes, 1)
+	assert.Equal(t, "gone.py", plan.Deletes[0].Path)
+	assert.Equal(t, ClsLocalDeleted, plan.Deletes[0].Classification)
+	assert.Equal(t, ActUploadDelete, plan.Deletes[0].Action)
+	assert.Equal(t, []string{"edited.py"}, actionPaths(plan.Uploads), "an unchanged file is not uploaded again")
+	assert.Empty(t, plan.Downloads)
+	assert.Empty(t, plan.Conflicts)
+	assert.Equal(t, "ver-1", e.AdoptedBaseVersion())
+
+	// The adopted BASE is recorded against the pinned version, so the CLI
+	// and a later Plan read it from disk instead of an empty manifest.
+	manifest, err := wapi.LoadManifest(e.projectDir)
+	require.NoError(t, err)
+	require.NotNil(t, manifest.SyncedVersionID)
+	assert.Equal(t, "ver-1", *manifest.SyncedVersionID)
+	assert.NotNil(t, manifest.SyncedAt)
+	assert.ElementsMatch(t, []string{"agent.py", "edited.py", "gone.py"}, mapKeys(manifest.Files))
+
+	require.NoError(t, e.Close())
+	again, err := New(e.projectDir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = again.Close() })
+	replan, err := again.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ver-1"}, files.allFilesVersions, "a recorded BASE is not listed again")
+	assert.Equal(t, "ver-1", again.AdoptedBaseVersion(), "a retry before any sync still reports the adopted BASE")
+	assert.Equal(t, actionPaths(plan.Deletes), actionPaths(replan.Deletes))
+}
+
+func TestEngine_Plan_AdoptedBaseMarkerNeedsMatchingVersion(t *testing.T) {
+	t.Parallel()
+
+	// The CLI drops keys it does not know when it saves, but a manifest
+	// that names another version than the marker was rewritten by a sync
+	// either way, so its BASE was not adopted.
+	dir := linkedDir(t, "art-1")
+	manifest, err := wapi.LoadManifest(dir)
+	require.NoError(t, err)
+	manifest.Extra = withAdoptedBaseMarker(map[string]json.RawMessage{"cliKey": json.RawMessage(`true`)}, "ver-0")
+	require.NoError(t, wapi.SaveManifest(dir, manifest))
+
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "x"})}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, e.AdoptedBaseVersion())
+	assert.Equal(t, map[string]json.RawMessage{"cliKey": json.RawMessage(`true`)}, e.baseExtra, "the marker is dropped, other keys are kept")
+}
+
+func mapKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+
+	return out
+}
+
+func TestEngine_Plan_UnsyncedDirectoryDriftedKeepsRemoteAddition(t *testing.T) {
+	t.Parallel()
+
+	// State pins ver-1; since then someone added colleague.py, and the
+	// artifact now points at ver-3.
+	pinned := map[string]string{"agent.py": "same", "gone.py": "deleted locally"}
+	live := map[string]string{"agent.py": "same", "gone.py": "deleted locally", "colleague.py": "remote add"}
+	files := &fakeFilesAPI{allFilesByVersion: map[string]map[string]filesapi.FileMeta{
+		"ver-1": listing(pinned),
+		"ver-3": listing(live),
+	}}
+
+	_, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same"}, "ver-3", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"ver-1", "ver-3"}, files.allFilesVersions, "BASE at the pinned version, REMOTE at the artifact's")
+	require.Len(t, plan.Deletes, 1)
+	assert.Equal(t, "gone.py", plan.Deletes[0].Path)
+	assert.Equal(t, ActUploadDelete, plan.Deletes[0].Action, "a local deletion goes to the catalog instead of being downloaded back")
+	require.Len(t, plan.Downloads, 1)
+	assert.Equal(t, "colleague.py", plan.Downloads[0].Path)
+	assert.Equal(t, ClsRemoteAdded, plan.Downloads[0].Classification)
+	assert.Empty(t, plan.Uploads)
+}
+
+func TestEngine_Plan_UnsyncedDirectoryDeletesIgnoredCatalogPath(t *testing.T) {
+	t.Parallel()
+
+	// local.tfvars is a system exclude: it is on disk but never walked. A
+	// recorded BASE holding it would delete it from the catalog, and an
+	// adopted one does the same.
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "same", "local.tfvars": "secret = 1"})}
+
+	_, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same", "local.tfvars": "secret = 1"}, "ver-1", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"local.tfvars"}, actionPaths(plan.Deletes))
+	assert.Empty(t, plan.Uploads)
+}
+
+func TestEngine_Plan_RecordedEmptyBaseIsKept(t *testing.T) {
+	t.Parallel()
+
+	// A sync that removed the last file records an empty BASE; it is not
+	// the seeded placeholder and must not be replaced.
+	dir := linkedDir(t, "art-1")
+	synced := "ver-1"
+	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{Version: wapi.ManifestVersion, SyncedVersionID: &synced}))
+
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "x"})}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+
+	assert.Empty(t, files.allFilesVersions)
+	assert.Equal(t, []string{"agent.py"}, actionPaths(plan.Uploads))
+}
+
+func TestEngine_Plan_CatalogPinnedWithoutVersionSkipsBaseRead(t *testing.T) {
+	t.Parallel()
+
+	// What `dr artifact code init` writes for an artifact that has code:
+	// the catalog, but no version. The merge against an empty BASE stays
+	// the CLI's. (A new artifact, with nothing pinned at all, is
+	// TestEngine_Plan_FirstSyncEmptyRemote.)
+	dir := t.TempDir()
+	writeProjectFiles(t, dir, map[string]string{"agent.py": "local"})
+	require.NoError(t, wapi.Initialize(dir, wapi.InitOptions{ArtifactID: "art-1", CatalogID: "cat-1"}))
+
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "remote"})}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-3"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ver-3"}, files.allFilesVersions, "only REMOTE is listed")
+	require.Len(t, plan.Conflicts, 1)
+	assert.Equal(t, ClsAddConflict, plan.Conflicts[0].Classification)
+}
+
+func TestEngine_Plan_PinnedVersionGoneFallsBackToEmptyBase(t *testing.T) {
+	t.Parallel()
+
+	files := &fakeFilesAPI{allFilesErr: fmt.Errorf("GET request ... : response 404 Not Found: %w", filesapi.ErrNotFound)}
+
+	e, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "x", "util.py": "y"}, "ver-1", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ver-1", e.UnreadableBaseVersion())
+	assert.Empty(t, e.AdoptedBaseVersion())
+	assert.ElementsMatch(t, []string{"agent.py", "util.py"}, actionPaths(plan.Uploads), "an empty BASE pushes the tree")
+	assert.Empty(t, plan.Deletes)
+
+	manifest, err := wapi.LoadManifest(e.projectDir)
+	require.NoError(t, err)
+	assert.Nil(t, manifest.SyncedVersionID, "nothing was read, so nothing is recorded")
+}
+
+func TestEngine_Plan_PinnedVersionGoneDriftedDownloadsDeletedFile(t *testing.T) {
+	t.Parallel()
+
+	// With no BASE to diff against, a file deleted locally that the moved
+	// catalog still holds reads as a remote addition, as before the fix.
+	files := &fakeFilesAPI{
+		allFilesErrByVersion: map[string]error{"ver-1": fmt.Errorf("response 410 Gone: %w", filesapi.ErrNotFound)},
+		allFilesByVersion: map[string]map[string]filesapi.FileMeta{
+			"ver-3": listing(map[string]string{"agent.py": "same", "gone.py": "deleted locally"}),
+		},
+	}
+
+	e, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same"}, "ver-3", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ver-1", e.UnreadableBaseVersion())
+	assert.Equal(t, []string{"gone.py"}, actionPaths(plan.Downloads))
+	assert.Empty(t, plan.Deletes)
+}
+
+func TestEngine_Plan_BaseReadErrorFailsAndReleasesLock(t *testing.T) {
+	t.Parallel()
+
+	files := &fakeFilesAPI{allFilesErr: errors.New("boom")}
+
+	e, _, err := unsyncedPlan(t, map[string]string{"agent.py": "x"}, "ver-1", files)
+	require.ErrorContains(t, err, "fetch base manifest for catalog version ver-1")
+	require.ErrorContains(t, err, "boom")
+	assert.Empty(t, e.UnreadableBaseVersion())
+
+	lock, err := AcquireLock(e.projectDir)
+	require.NoError(t, err, "a failed Plan must release the sync lock")
+	require.NoError(t, lock.Unlock())
 }
 
 // linkedDir is a project directory with one file, whose state directory

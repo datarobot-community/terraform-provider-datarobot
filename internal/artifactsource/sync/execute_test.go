@@ -56,9 +56,13 @@ func newSyncFixture(t *testing.T, local, base, remote map[string]string) *syncFi
 		baseFiles[path] = wapi.FileMeta{Hash: hash, Size: size}
 	}
 
+	// Recorded the way phase 6 records it, so an empty base map is an
+	// empty BASE rather than a never-synced directory adopting ver-1.
+	syncedVersion := "ver-1"
 	require.NoError(t, wapi.SaveManifest(dir, wapi.Manifest{
-		Version: wapi.ManifestVersion,
-		Files:   baseFiles,
+		Version:         wapi.ManifestVersion,
+		SyncedVersionID: &syncedVersion,
+		Files:           baseFiles,
 	}))
 
 	files := &fakeFilesAPI{
