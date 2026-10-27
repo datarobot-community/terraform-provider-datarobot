@@ -1173,6 +1173,43 @@ func TestListArtifactsFiltersByRepository(t *testing.T) {
 	}
 }
 
+// The listing's `next` link keeps the filter, so every page is read.
+func TestListWorkloadsFiltersByRepository(t *testing.T) {
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.String())
+		if r.Method != http.MethodGet || r.URL.Path != "/workloads/" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.URL.Query().Get("repositoryId"); got != "repo-1" {
+			t.Errorf("repositoryId = %q, want repo-1", got)
+		}
+		page := map[string]any{
+			"data": []map[string]any{{"id": "wl-1", "name": "first", "status": "errored"}},
+			"next": "http://" + r.Host + "/api/v2/workloads/?repositoryId=repo-1&offset=1&limit=1",
+		}
+		if r.URL.Query().Get("offset") == "1" {
+			page = map[string]any{"data": []map[string]any{{"id": "wl-2", "name": "second", "status": "running"}}, "next": nil}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(page)
+	}))
+	defer server.Close()
+
+	cfg := NewConfiguration("fake-token")
+	cfg.Endpoint = server.URL
+	workloads, err := NewService(NewClient(cfg)).ListWorkloads(context.Background(), &ListWorkloadsRequest{RepositoryID: "repo-1"})
+	if err != nil {
+		t.Fatalf("ListWorkloads returned error: %v", err)
+	}
+	if len(workloads) != 2 || workloads[0].ID != "wl-1" || workloads[0].Status != ProtonStatusErrored || workloads[1].Name != "second" {
+		t.Fatalf("got %+v, want wl-1 then wl-2", workloads)
+	}
+	if len(requests) != 2 {
+		t.Errorf("got %d requests, want 2: %v", len(requests), requests)
+	}
+}
+
 func TestGetArtifactRepositoryUsesRepositoryPath(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/artifactRepositories/repo-1/" {
