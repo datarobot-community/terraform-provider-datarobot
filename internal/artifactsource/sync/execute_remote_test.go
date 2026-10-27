@@ -109,6 +109,39 @@ func TestEngine_ExecuteRemote_LocalDeleteRemovesCatalogFile(t *testing.T) {
 	assert.NotContains(t, loadBase(t, f.dir), "gone.py", "a deleted path must leave the new BASE")
 }
 
+func TestEngine_ExecuteRemote_UnsyncedDirectoryDeletesRemovedFile(t *testing.T) {
+	t.Parallel()
+
+	files := &fakeFilesAPI{
+		allFiles:        listing(map[string]string{"agent.py": "same", "gone.py": "deleted locally"}),
+		deleteVersionID: "ver-2",
+	}
+	e, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same"}, "ver-1", files)
+	require.NoError(t, err)
+	require.Len(t, plan.Deletes, 1)
+
+	artifacts, ok := e.artifacts.(*fakeArtifactStore)
+	require.True(t, ok)
+
+	require.NoError(t, e.ExecuteLocal(context.Background()))
+	result, err := e.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, [][]string{{"gone.py"}}, files.deletedPaths)
+	assert.Empty(t, files.stagedPaths(), "nothing changed locally, so nothing is uploaded")
+	assert.Equal(t, 1, result.DeletedRemote)
+	assert.Equal(t, []patchCall{{ArtifactID: "art-1", CatalogID: "cat-1", CatalogVersionID: "ver-2"}}, artifacts.patches)
+	assert.FileExists(t, filepath.Join(e.projectDir, "agent.py"), "source.dir is left alone")
+
+	manifest, err := wapi.LoadManifest(e.projectDir)
+	require.NoError(t, err)
+	sameHash, sameSize := hashContent("same")
+	assert.Equal(t, map[string]wapi.FileMeta{"agent.py": {Hash: sameHash, Size: sameSize}}, manifest.Files, "the deleted path leaves the new BASE")
+	require.NotNil(t, manifest.SyncedVersionID)
+	assert.Equal(t, "ver-2", *manifest.SyncedVersionID, "the BASE is recorded, so the next Plan reads it instead of the catalog")
+	assert.NotContains(t, manifest.Extra, adoptedBaseKey, "a completed sync is no longer a first sync")
+}
+
 func TestEngine_ExecuteRemote_ConflictBaseTakesRemoteHash(t *testing.T) {
 	t.Parallel()
 
