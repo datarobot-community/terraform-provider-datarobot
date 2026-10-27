@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -281,6 +282,36 @@ func TestAllFiles_RejectsBlankChecksum(t *testing.T) {
 	assert.Contains(t, err.Error(), "blank fileChecksum")
 	assert.Contains(t, err.Error(), "blank.py")
 	assert.Nil(t, got)
+}
+
+// Provider-only: the sync engine reads a missing catalog version as "no base
+// to diff against" and any other failure as an error, so only 404 and 410
+// may match ErrNotFound.
+func TestAllFiles_ErrNotFoundOnlyForMissingVersion(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		notFound bool
+	}{
+		{http.StatusNotFound, true},
+		{http.StatusGone, true},
+		{http.StatusForbidden, false},
+		{http.StatusInternalServerError, false},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"message":"nope"}`))
+			}))
+
+			got, err := c.AllFiles(context.Background(), "cid-1", "v1")
+			require.Error(t, err)
+			assert.Nil(t, got)
+			assert.Equal(t, tc.notFound, errors.Is(err, filesapi.ErrNotFound))
+			assert.Contains(t, err.Error(), "/files/cid-1/versions/v1/allFiles/")
+			assert.Contains(t, err.Error(), fmt.Sprintf("response %d", tc.status))
+			assert.Contains(t, err.Error(), `{"message":"nope"}`)
+		})
+	}
 }
 
 func TestDownloadFile_RejectsHostilePath(t *testing.T) {
