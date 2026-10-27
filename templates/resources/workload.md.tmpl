@@ -90,11 +90,11 @@ Only one Enclave is accepted today. `enclaves` is a list because the platform in
 
 ```hcl
 output "agent_enclave" {
-  value = one(datarobot_workload.agent.placements[*].enclave)
+  value = try(datarobot_workload.agent.placements[0].enclave, null)
 }
 ```
 
-It is empty for a workload outside any Enclave, is read on every refresh, and is planned as `(known after apply)` on any update, since a rollout can land on another Enclave. `enclave_selection_policy` and `enclaves` stay the placement you asked for.
+It is empty for a workload outside any Enclave, is read on every refresh, and is planned as `(known after apply)` when `artifact_id` or `runtime` changes, since the rollout that follows can land on another Enclave; other changes, such as tags, keep it. `enclave_selection_policy` and `enclaves` stay the placement you asked for.
 
 ### Changing placement
 

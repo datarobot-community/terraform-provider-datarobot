@@ -120,7 +120,7 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "The Enclaves the Workload runs on, as the platform reports them: with `enclave_selection_policy = \"availability\"`, " +
 					"this is the Enclave the scheduler chose. Empty for a Workload served through the prediction gateway, which is any Workload " +
 					"not placed on an Enclave, and for one the platform has not scheduled yet. Read on every refresh, and known only after apply " +
-					"on an update, since a rollout can move the Workload. Unlike `runtime.enclaves`, which is the placement requested, this is " +
+					"when `artifact_id` or `runtime` changes, since the rollout that follows can move the Workload. Unlike `runtime.enclaves`, which is the placement requested, this is " +
 					"the placement in effect. A list because the platform intends to run a Workload on several Enclaves; it holds one entry today.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -623,6 +623,11 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	if promotedVersionFailure == "" && !planned.Endpoint.IsUnknown() {
 		plan.Endpoint = planned.Endpoint
 	}
+	// The same holds for the placements, which are planned as they were unless a rollout runs; a
+	// move made outside Terraform since the plan is read on the next refresh.
+	if promotedVersionFailure == "" && !planned.Placements.IsUnknown() {
+		plan.Placements = planned.Placements
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if promotedVersionFailure != "" {
 		resp.Diagnostics.AddError("Workload replacement failed", promotedVersionFailure)
@@ -998,16 +1003,23 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	}
 
 	// An update reads the Workload back, and its status may have changed since the plan, so the
-	// update records what it reads. So may its placements, since a rollout can land on another
-	// Enclave. Its type follows the artifact.
+	// update records what it reads. Its type follows the artifact.
 	if !req.Plan.Raw.Equal(req.State.Raw) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("status"), types.StringUnknown())...)
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("placements"), types.ListUnknown(workloadPlacementObjectType))...)
 		var planArtifact, stateArtifact types.String
+		var planRuntime, stateRuntime types.Object
 		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("artifact_id"), &planArtifact)...)
 		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("artifact_id"), &stateArtifact)...)
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("runtime"), &planRuntime)...)
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("runtime"), &stateRuntime)...)
 		if !planArtifact.Equal(stateArtifact) {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("type"), types.StringUnknown())...)
+		}
+		// Only a rollout can land the Workload on another Enclave, and only an artifact or runtime
+		// change rolls one out. Anything else keeps the placements, so that what depends on them
+		// is not planned to change on a tag or description edit.
+		if !planArtifact.Equal(stateArtifact) || !planRuntime.Equal(stateRuntime) {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("placements"), types.ListUnknown(workloadPlacementObjectType))...)
 		}
 	}
 
