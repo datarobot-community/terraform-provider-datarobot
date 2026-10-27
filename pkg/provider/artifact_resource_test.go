@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -83,6 +84,117 @@ func TestIntegrationArtifactSourceUploadLocked(t *testing.T) {
 	t.Setenv(DataRobotApiKeyEnvVar, "fake")
 
 	testArtifactSourceUploadLocked(t, true, true, mockService)
+}
+
+// TestIntegrationArtifactSourceFreshCheckoutRemovesDeletedFile applies a
+// source tree, then applies it again from what a fresh clone or a CI
+// checkout looks like: no .datarobot/ sync state (it ignores itself), and
+// one file deleted. The deletion has to reach the catalog without the
+// rest of the tree being uploaded again.
+func TestIntegrationArtifactSourceFreshCheckoutRemovesDeletedFile(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	svc := mock_client.NewMockService(ctrl)
+	defer HookGlobal(&NewService, func(c *client.Client) client.Service {
+		return svc
+	})()
+
+	mockAPIKey(t)
+	t.Setenv(DataRobotApiKeyEnvVar, "fake")
+
+	dir := writeArtifactSourceTree(t, map[string]string{
+		"main.py":    "print('v1')",
+		"gone.py":    "print('deleted in step 2')",
+		"Dockerfile": "FROM python:3.11-slim\nWORKDIR /app\nCOPY main.py .\nCMD [\"python\", \"main.py\"]\n",
+	})
+
+	resourceName := "datarobot_artifact.test"
+	name := "source-fresh-checkout-" + uuid.NewString()[:8]
+
+	artifactID := uuid.NewString()
+	repoID := uuid.NewString()
+	draftArtifact := artifactFixtureDraftWithBuildConfig(artifactID, &repoID, name)
+	filesAPI := newSyncTestFilesAPI()
+
+	var currentArtifact *client.Artifact
+	svc.EXPECT().CreateArtifact(gomock.Any(), gomock.Any()).Return(draftArtifact, nil).Times(1)
+	svc.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+	svc.EXPECT().PatchArtifactCodeRef(gomock.Any(), artifactID, gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, catalogID, versionID string) (*client.Artifact, error) {
+			currentArtifact = artifactSourcePatchedArtifact(draftArtifact, catalogID, versionID)
+			return currentArtifact, nil
+		},
+	).Times(2)
+	expectArtifactBuildAfterUploadFromLatest(svc, artifactID, &currentArtifact)
+	expectArtifactBuildAfterUploadFromLatest(svc, artifactID, &currentArtifact)
+	// A draft's update patches the spec before syncing.
+	svc.EXPECT().PatchArtifact(gomock.Any(), artifactID, gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, _ *client.PatchArtifactRequest) (*client.Artifact, error) {
+			return currentArtifact, nil
+		},
+	).Times(1)
+	svc.EXPECT().GetArtifact(gomock.Any(), artifactID).DoAndReturn(
+		func(_ context.Context, _ string) (*client.Artifact, error) {
+			if currentArtifact != nil {
+				return artifactSourceBuiltForRead(currentArtifact), nil
+			}
+			return draftArtifact, nil
+		},
+	).AnyTimes()
+	svc.EXPECT().DeleteArtifactRepository(gomock.Any(), repoID).Return(nil)
+
+	var pinnedVersion string
+	var uploadsAfterCreate int
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: artifactConfigWithSource(name, "draft", dir),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureAttr(resourceName, artifactCodeRefVersionAttr(), &pinnedVersion),
+					func(*terraform.State) error {
+						uploadsAfterCreate = filesAPI.uploadCalls()
+						if len(filesAPI.deletedPaths) != 0 {
+							return fmt.Errorf("create deleted %v", filesAPI.deletedPaths)
+						}
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					// The catalog holds what step 1 uploaded; the checkout
+					// has everything but gone.py and no sync state.
+					mirrorRemoteTree(t, filesAPI, dir, "main.py", "gone.py", "Dockerfile", ignore.FileName)
+					if err := os.Remove(filepath.Join(dir, "gone.py")); err != nil {
+						t.Error(err)
+					}
+					if err := os.RemoveAll(filepath.Join(dir, ".datarobot")); err != nil {
+						t.Error(err)
+					}
+				},
+				Config: artifactConfigWithSource(name, "draft", dir),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					func(*terraform.State) error {
+						if got := strings.Join(filesAPI.deletedPaths, ","); got != "gone.py" {
+							return fmt.Errorf("deleted from the catalog: %q, want gone.py", got)
+						}
+						if got := filesAPI.uploadCalls(); got != uploadsAfterCreate {
+							return fmt.Errorf("the unchanged files were uploaded again (%d upload calls after create, %d now)", uploadsAfterCreate, got)
+						}
+						if pinnedVersion == "" || !slices.Contains(filesAPI.allFilesVersions, pinnedVersion) {
+							return fmt.Errorf("the catalog version in state (%q) was not read as the base: listed %v", pinnedVersion, filesAPI.allFilesVersions)
+						}
+						return nil
+					},
+					checkArtifactSourceCatalogVersionChanged(resourceName, &pinnedVersion),
+				),
+			},
+		},
+	})
 }
 
 func TestIntegrationArtifactResource(t *testing.T) {

@@ -15,6 +15,8 @@ import (
 )
 
 func TestAccDatasetFromDatasourceResource(t *testing.T) {
+	testAccRequireTFAcc(t)
+	testAccPreCheck(t)
 	t.Parallel()
 	resourceName := "datarobot_dataset_from_datasource.test"
 

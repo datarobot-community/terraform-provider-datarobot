@@ -26,6 +26,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -109,6 +110,33 @@ func (r *WorkloadResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "Current status of the Workload: `unknown`, `submitted`, `initializing`, `running`, `stopping`, `stopped`, or `errored`.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"placements": schema.ListNestedAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+				MarkdownDescription: "The Enclaves the Workload runs on, as the platform reports them: with `enclave_selection_policy = \"availability\"`, " +
+					"this is the Enclave the scheduler chose. Empty for a Workload served through the prediction gateway, which is any Workload " +
+					"not placed on an Enclave, and for one the platform has not scheduled yet. Read on every refresh, and known only after apply " +
+					"when `artifact_id` or `runtime` changes, since the rollout that follows can move the Workload. Unlike `runtime.enclaves`, which is the placement requested, this is " +
+					"the placement in effect. A list because the platform intends to run a Workload on several Enclaves; it holds one entry today.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"enclave_id": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The ID of the Enclave.",
+						},
+						"enclave": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The name of the Enclave.",
+						},
+						"region": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The region the Enclave is deployed in, when the platform reports one.",
+						},
+					},
 				},
 			},
 			"use_case_id": schema.StringAttribute{
@@ -595,6 +623,11 @@ func (r *WorkloadResource) Update(ctx context.Context, req resource.UpdateReques
 	if promotedVersionFailure == "" && !planned.Endpoint.IsUnknown() {
 		plan.Endpoint = planned.Endpoint
 	}
+	// The same holds for the placements, which are planned as they were unless a rollout runs; a
+	// move made outside Terraform since the plan is read on the next refresh.
+	if promotedVersionFailure == "" && !planned.Placements.IsUnknown() {
+		plan.Placements = planned.Placements
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if promotedVersionFailure != "" {
 		resp.Diagnostics.AddError("Workload replacement failed", promotedVersionFailure)
@@ -974,10 +1007,19 @@ func (r *WorkloadResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	if !req.Plan.Raw.Equal(req.State.Raw) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("status"), types.StringUnknown())...)
 		var planArtifact, stateArtifact types.String
+		var planRuntime, stateRuntime types.Object
 		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("artifact_id"), &planArtifact)...)
 		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("artifact_id"), &stateArtifact)...)
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("runtime"), &planRuntime)...)
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("runtime"), &stateRuntime)...)
 		if !planArtifact.Equal(stateArtifact) {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("type"), types.StringUnknown())...)
+		}
+		// Only a rollout can land the Workload on another Enclave, and only an artifact or runtime
+		// change rolls one out. Anything else keeps the placements, so that what depends on them
+		// is not planned to change on a tag or description edit.
+		if !planArtifact.Equal(stateArtifact) || !planRuntime.Equal(stateRuntime) {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("placements"), types.ListUnknown(workloadPlacementObjectType))...)
 		}
 	}
 
@@ -1649,7 +1691,32 @@ func loadWorkloadIntoModel(workload *client.Workload, data *WorkloadResourceMode
 		data.Endpoint = types.StringNull()
 	}
 
+	data.Placements = workloadPlacementsValue(workload.Placements)
 	data.Runtime = loadWorkloadRuntimeFromAPI(workload.Runtime)
+}
+
+var workloadPlacementObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	"enclave_id": types.StringType,
+	"enclave":    types.StringType,
+	"region":     types.StringType,
+}}
+
+// workloadPlacementsValue is always a known list, empty for a Workload outside any Enclave, so
+// that `length()` works on it. The platform sends a null region when the Enclave has none.
+func workloadPlacementsValue(placements []client.WorkloadPlacement) types.List {
+	elems := make([]attr.Value, 0, len(placements))
+	for _, p := range placements {
+		region := types.StringNull()
+		if p.Region != "" {
+			region = types.StringValue(p.Region)
+		}
+		elems = append(elems, types.ObjectValueMust(workloadPlacementObjectType.AttrTypes, map[string]attr.Value{
+			"enclave_id": types.StringValue(p.EnclaveID),
+			"enclave":    types.StringValue(p.Enclave),
+			"region":     region,
+		}))
+	}
+	return types.ListValueMust(workloadPlacementObjectType, elems)
 }
 
 func loadWorkloadRuntimeFromAPI(runtime client.WorkloadRuntime) WorkloadRuntimeModel {
