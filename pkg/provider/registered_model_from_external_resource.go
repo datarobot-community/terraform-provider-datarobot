@@ -372,7 +372,10 @@ func (r *RegisteredModelFromExternalResource) ValidateConfig(ctx context.Context
 	// configurations fail at plan instead of at apply. Unknown values count as set,
 	// since dataset IDs usually come from another resource.
 	targetNamePath := path.Root("target").AtName("name")
-	hasTrainingOrHoldoutData := !trainingDataID.IsNull() || !holdoutDataID.IsNull()
+	// DataRobot requires a target name only for catalog IDs, but a version ID
+	// names training or holdout data just the same, so it needs one too.
+	hasTrainingOrHoldoutData := !trainingDataID.IsNull() || !trainingDataVersionID.IsNull() ||
+		!holdoutDataID.IsNull() || !holdoutDataVersionID.IsNull()
 	switch {
 	case !targetName.IsNull():
 		// target.name is set, or will be.
@@ -395,7 +398,7 @@ func (r *RegisteredModelFromExternalResource) ValidateConfig(ctx context.Context
 	}
 	// datasets is checked by its IDs rather than as a block: a block with no IDs
 	// is sent as an empty object, which DataRobot accepts.
-	if hasTrainingOrHoldoutData || !trainingDataVersionID.IsNull() || !holdoutDataVersionID.IsNull() {
+	if hasTrainingOrHoldoutData {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("datasets"),
 			"Datasets not allowed",

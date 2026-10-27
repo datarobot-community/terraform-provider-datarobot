@@ -883,6 +883,22 @@ resource "datarobot_registered_model_from_external" "test" {
 				PlanOnly:    true,
 				ExpectError: planErrorPattern("target.name is required when datasets has training or holdout data"),
 			},
+			// A dataset version ID alone also needs a target name, although DataRobot accepts it without one
+			{
+				Config: `
+resource "datarobot_registered_model_from_external" "test" {
+	name   = "registered model"
+	target = {
+		type = "MCP"
+	}
+	datasets = {
+		training_data_catalog_version_id = "training-dataset-version-id"
+	}
+}
+`,
+				PlanOnly:    true,
+				ExpectError: planErrorPattern("target.name is required when datasets has training or holdout data"),
+			},
 			// A dataset ID from another resource is unknown at plan, and still needs a target name
 			{
 				Config: `
