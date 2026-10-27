@@ -83,6 +83,16 @@ func testAccPreCheck(t *testing.T) {
 	}
 }
 
+// testAccRequireTFAcc skips the test unless TF_ACC is set. resource.Test applies
+// the same gate, but only when it is reached; acceptance tests that call the live
+// API while building their test case must call this first or they fail offline.
+func testAccRequireTFAcc(t *testing.T) {
+	t.Helper()
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Skipping acceptance test: set TF_ACC=1 to run")
+	}
+}
+
 // testAccArtifactBuildPreCheck is required for acceptance tests that trigger artifact image builds.
 // Set DATAROBOT_SKIP_ARTIFACT_BUILD_ACC=1 to skip when the environment has no Image Build Service.
 func testAccArtifactBuildPreCheck(t *testing.T) {
