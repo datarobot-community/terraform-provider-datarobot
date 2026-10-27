@@ -170,7 +170,7 @@ func (r *RegisteredModelResource) Create(ctx context.Context, req resource.Creat
 			registeredModelVersion.RegisteredModelID,
 			&client.UpdateRegisteredModelRequest{
 				Name:        data.Name.ValueString(),
-				Description: data.Description.ValueString(),
+				Description: data.Description.ValueStringPointer(),
 			})
 		if err != nil {
 			if errors.Is(err, &client.NotFoundError{}) {
@@ -306,12 +306,15 @@ func (r *RegisteredModelResource) Update(ctx context.Context, req resource.Updat
 
 	plan.VersionID = state.VersionID
 
+	// The description is always sent, so that removing it from the configuration
+	// clears it: the API accepts an empty description.
+	description := plan.Description.ValueString()
 	traceAPICall("UpdateRegisteredModel")
 	registeredModel, err := r.provider.service.UpdateRegisteredModel(ctx,
 		plan.ID.ValueString(),
 		&client.UpdateRegisteredModelRequest{
 			Name:        plan.Name.ValueString(),
-			Description: plan.Description.ValueString(),
+			Description: &description,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {

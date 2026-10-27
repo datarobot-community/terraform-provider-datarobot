@@ -422,6 +422,70 @@ type RegisteredModelFromLeaderboardResourceModel struct {
 	UseCaseIDs                    []types.String `tfsdk:"use_case_ids"`
 }
 
+type RegisteredModelFromExternalResourceModel struct {
+	ID                   types.String                 `tfsdk:"id"`
+	VersionID            types.String                 `tfsdk:"version_id"`
+	VersionName          types.String                 `tfsdk:"version_name"`
+	Name                 types.String                 `tfsdk:"name"`
+	Description          types.String                 `tfsdk:"description"`
+	ModelID              types.String                 `tfsdk:"model_id"`
+	Target               *ExternalModelTarget         `tfsdk:"target"`
+	ModelDescription     *ExternalModelDescription    `tfsdk:"model_description"`
+	Datasets             *ExternalModelDatasets       `tfsdk:"datasets"`
+	Timeseries           *ExternalModelTimeseries     `tfsdk:"timeseries"`
+	TextGeneration       *ExternalModelTextGeneration `tfsdk:"text_generation"`
+	GeospatialMonitoring *ExternalModelGeospatial     `tfsdk:"geospatial_monitoring"`
+	UseCaseIDs           []types.String               `tfsdk:"use_case_ids"`
+	Tags                 types.Set                    `tfsdk:"tags"`
+}
+
+type ExternalModelTarget struct {
+	Type                          types.String   `tfsdk:"type"`
+	Name                          types.String   `tfsdk:"name"`
+	ClassNames                    []types.String `tfsdk:"class_names"`
+	PredictionThreshold           types.Float64  `tfsdk:"prediction_threshold"`
+	PredictionProbabilitiesColumn types.String   `tfsdk:"prediction_probabilities_column"`
+}
+
+type ExternalModelDescription struct {
+	ModelName            types.String `tfsdk:"model_name"`
+	Description          types.String `tfsdk:"description"`
+	Location             types.String `tfsdk:"location"`
+	BuildEnvironmentType types.String `tfsdk:"build_environment_type"`
+}
+
+type ExternalModelDatasets struct {
+	TrainingDataCatalogID        types.String `tfsdk:"training_data_catalog_id"`
+	TrainingDataCatalogVersionID types.String `tfsdk:"training_data_catalog_version_id"`
+	HoldoutDataCatalogID         types.String `tfsdk:"holdout_data_catalog_id"`
+	HoldoutDataCatalogVersionID  types.String `tfsdk:"holdout_data_catalog_version_id"`
+}
+
+type ExternalModelTimeseries struct {
+	DatetimeColumnName                    types.String  `tfsdk:"datetime_column_name"`
+	DatetimeColumnFormat                  types.String  `tfsdk:"datetime_column_format"`
+	ForecastPointColumnName               types.String  `tfsdk:"forecast_point_column_name"`
+	ForecastDistanceColumnName            types.String  `tfsdk:"forecast_distance_column_name"`
+	ForecastDistancesTimeUnit             types.String  `tfsdk:"forecast_distances_time_unit"`
+	ForecastDistances                     []types.Int64 `tfsdk:"forecast_distances"`
+	SeriesColumnName                      types.String  `tfsdk:"series_column_name"`
+	FeatureDerivationWindowStart          types.Int64   `tfsdk:"feature_derivation_window_start"`
+	FeatureDerivationWindowEnd            types.Int64   `tfsdk:"feature_derivation_window_end"`
+	EffectiveFeatureDerivationWindowStart types.Int64   `tfsdk:"effective_feature_derivation_window_start"`
+	EffectiveFeatureDerivationWindowEnd   types.Int64   `tfsdk:"effective_feature_derivation_window_end"`
+	IsCrossSeries                         types.Bool    `tfsdk:"is_cross_series"`
+	IsNewSeriesSupport                    types.Bool    `tfsdk:"is_new_series_support"`
+	IsTraditionalTimeSeries               types.Bool    `tfsdk:"is_traditional_time_series"`
+}
+
+type ExternalModelTextGeneration struct {
+	Prompt types.String `tfsdk:"prompt"`
+}
+
+type ExternalModelGeospatial struct {
+	PrimaryLocationColumn types.String `tfsdk:"primary_location_column"`
+}
+
 type Tag struct {
 	Name  types.String `tfsdk:"name"`
 	Value types.String `tfsdk:"value"`

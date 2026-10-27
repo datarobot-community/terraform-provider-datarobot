@@ -516,7 +516,7 @@ func TestApplicationFromCustomModel(t *testing.T) {
 	registeredModelDescription := "This is an updated test registered model."
 	registeredModelResp, err := s.UpdateRegisteredModel(ctx, registeredModelVersion.RegisteredModelID, &client.UpdateRegisteredModelRequest{
 		Name:        registeredModelName,
-		Description: registeredModelDescription,
+		Description: &registeredModelDescription,
 	})
 	require.NoError(err)
 	require.Equal(registeredModelVersion.RegisteredModelID, registeredModelResp.ID)
