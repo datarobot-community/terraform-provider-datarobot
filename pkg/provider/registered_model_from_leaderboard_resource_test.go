@@ -11,6 +11,7 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
@@ -31,6 +32,7 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 	resourceName := "datarobot_registered_model_from_leaderboard.test"
 	compareValuesSame := statecheck.CompareValue(compare.ValuesSame())
 	compareValuesDiffer := statecheck.CompareValue(compare.ValuesDiffer())
+	versionIDKept := statecheck.CompareValue(compare.ValuesSame())
 
 	name := "registered_model_from_leaderboard " + nameSalt
 	newName := "new_registered_model_from_leaderboard " + nameSalt
@@ -158,6 +160,10 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 						resourceName,
 						tfjsonpath.New("version_id"),
 					),
+					versionIDKept.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkRegisteredModelFromLeaderboardResourceExists(),
@@ -169,6 +175,32 @@ func TestAccRegisteredModelFromLeaderboardResource(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "model_id", modelID2),
 					resource.TestCheckResourceAttrSet(resourceName, "version_id"),
+				),
+			},
+			// Removing the description clears it in place; the post-apply plan must be empty
+			{
+				Config: registeredModelFromLeaderboardResourceConfig(
+					modelID2,
+					newName,
+					"",
+					nil,
+					nil,
+					&newPredictionThreshold),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					versionIDKept.AddStateValue(
+						resourceName,
+						tfjsonpath.New("version_id"),
+					),
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Also checks that the API returns an empty description
+					checkRegisteredModelFromLeaderboardResourceExists(),
+					resource.TestCheckNoResourceAttr(resourceName, "description"),
 				),
 			},
 			// Delete is tested automatically
@@ -208,6 +240,11 @@ func registeredModelFromLeaderboardResourceConfig(modelID, name, description str
 		useCaseIDsStr = fmt.Sprintf(`use_case_ids = ["${datarobot_use_case.%s.id}"]`, *useCaseResourceName)
 	}
 
+	descriptionStr := ""
+	if description != "" {
+		descriptionStr = fmt.Sprintf(`description = "%s"`, description)
+	}
+
 	predictionThresholdStr := ""
 	if predictionThreshold != nil {
 		predictionThresholdStr = `
@@ -223,13 +260,13 @@ resource "datarobot_use_case" "test_new_registered_model_from_leaderboard" {
 }
 resource "datarobot_registered_model_from_leaderboard" "test" {
 	name = "%s"
-	description = "%s"
+	%s
 	model_id = "%s"
 	%s
 	%s
 	%s
 }
-`, name, description, modelID, versionNameStr, useCaseIDsStr, predictionThresholdStr)
+`, name, descriptionStr, modelID, versionNameStr, useCaseIDsStr, predictionThresholdStr)
 }
 
 func checkRegisteredModelFromLeaderboardResourceExists() resource.TestCheckFunc {

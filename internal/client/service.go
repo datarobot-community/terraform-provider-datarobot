@@ -137,6 +137,7 @@ type Service interface {
 	// Registered Model
 	CreateRegisteredModelFromCustomModelVersion(ctx context.Context, req *CreateRegisteredModelFromCustomModelRequest) (*RegisteredModelVersion, error)
 	CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error)
+	CreateRegisteredModelFromExternal(ctx context.Context, req *CreateRegisteredModelFromExternalRequest) (*RegisteredModelVersion, error)
 	UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error)
 	ListRegisteredModelVersions(ctx context.Context, id string) ([]RegisteredModelVersion, error)
 	GetLatestRegisteredModelVersion(ctx context.Context, id string) (*RegisteredModelVersion, error)
@@ -298,6 +299,7 @@ type Service interface {
 	GetWorkload(ctx context.Context, id string) (*Workload, error)
 	UpdateWorkloadMetadata(ctx context.Context, id string, req *UpdateWorkloadRequest) (*Workload, error)
 	DeleteWorkload(ctx context.Context, id string) error
+	ListWorkloads(ctx context.Context, req *ListWorkloadsRequest) ([]Workload, error)
 	StartWorkloadReplacement(ctx context.Context, workloadID string, req *StartReplacementRequest) (*WorkloadReplacement, error)
 	GetWorkloadReplacement(ctx context.Context, workloadID string) (*WorkloadReplacement, error)
 	UpdateWorkloadSettings(ctx context.Context, workloadID string, req *UpdateWorkloadSettingsRequest) (*WorkloadReplacement, error)
@@ -725,6 +727,10 @@ func (s *ServiceImpl) CreateRegisteredModelFromCustomModelVersion(ctx context.Co
 
 func (s *ServiceImpl) CreateRegisteredModelFromLeaderboard(ctx context.Context, req *CreateRegisteredModelFromLeaderboardRequest) (*RegisteredModelVersion, error) {
 	return Post[RegisteredModelVersion](s.client, ctx, "/modelPackages/fromLeaderboard/", req)
+}
+
+func (s *ServiceImpl) CreateRegisteredModelFromExternal(ctx context.Context, req *CreateRegisteredModelFromExternalRequest) (*RegisteredModelVersion, error) {
+	return Post[RegisteredModelVersion](s.client, ctx, "/modelPackages/fromJSON/", req)
 }
 
 func (s *ServiceImpl) UpdateRegisteredModelVersion(ctx context.Context, registeredModelId string, versionId string, req *UpdateRegisteredModelVersionRequest) (*RegisteredModelVersion, error) {

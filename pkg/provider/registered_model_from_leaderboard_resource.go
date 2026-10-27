@@ -130,7 +130,7 @@ func (r *RegisteredModelFromLeaderboardResource) Create(ctx context.Context, req
 		_, err := r.provider.service.UpdateRegisteredModel(ctx,
 			registeredModelVersion.RegisteredModelID,
 			&client.UpdateRegisteredModelRequest{
-				Description: data.Description.ValueString(),
+				Description: data.Description.ValueStringPointer(),
 			})
 		if err != nil {
 			resp.Diagnostics.AddError("Error adding description to Registered Model", err.Error())
@@ -235,12 +235,15 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 
 	plan.VersionID = state.VersionID
 
+	// The description is always sent, so that removing it from the configuration
+	// clears it: the API accepts an empty description.
+	description := plan.Description.ValueString()
 	traceAPICall("UpdateRegisteredModel")
 	_, err := r.provider.service.UpdateRegisteredModel(ctx,
 		plan.ID.ValueString(),
 		&client.UpdateRegisteredModelRequest{
 			Name:        plan.Name.ValueString(),
-			Description: plan.Description.ValueString(),
+			Description: &description,
 		})
 	if err != nil {
 		if errors.Is(err, &client.NotFoundError{}) {
@@ -282,7 +285,12 @@ func (r *RegisteredModelFromLeaderboardResource) Update(ctx context.Context, req
 			return
 		}
 	}
-	plan.VersionName = types.StringValue(registeredModelVersion.Name)
+	if registeredModelVersion != nil {
+		plan.VersionName = types.StringValue(registeredModelVersion.Name)
+	} else {
+		// Neither a new version nor a version name change: the latest version keeps its name.
+		plan.VersionName = state.VersionName
+	}
 
 	err = waitForRegisteredModelVersionToBeReady(ctx, r.provider.service, plan.ID.ValueString(), plan.VersionID.ValueString())
 	if err != nil {
