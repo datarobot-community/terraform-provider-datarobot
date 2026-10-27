@@ -362,7 +362,8 @@ func artifactSourceStaleRollbackWarning(diags *diag.Diagnostics, absDir string) 
 // (no sync state yet, as in a fresh clone or a CI checkout) whose pinned
 // catalog version the Files API could not find. Without that version's
 // file list the sync cannot tell a file deleted locally from one that was
-// never there, so it only uploads.
+// never there, so it removes nothing from the catalog, and when the catalog
+// moved on since that version it downloads such a file back.
 func artifactSourceUnreadableBaseWarning(diags *diag.Diagnostics, absDir, versionID string) {
 	if diags == nil {
 		return
@@ -374,8 +375,9 @@ func artifactSourceUnreadableBaseWarning(diags *diag.Diagnostics, absDir, versio
 		fmt.Sprintf(
 			"%s had no sync state yet, so this sync compares it with catalog version %s, the one Terraform state points at. "+
 				"The Files API could not find that version (it or its catalog was deleted, or this user cannot read it), "+
-				"so this sync uploads the directory without removing anything from the catalog. "+
-				"Files deleted from the directory before this sync stay in the catalog; later syncs only remove files deleted after it.",
+				"so this sync cannot tell a file deleted from the directory from one that was never in it, and removes nothing from the catalog. "+
+				"Files deleted from the directory before this sync stay in the catalog, and when the catalog has changed since that version they are downloaded back into the directory. "+
+				"Later syncs only remove files deleted after this one.",
 			absDir, versionID),
 	)
 }

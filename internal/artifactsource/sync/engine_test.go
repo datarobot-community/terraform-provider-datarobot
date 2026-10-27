@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,10 +75,12 @@ type fakeFilesAPI struct {
 
 	// allFilesByVersion serves a listing per catalog version, for tests
 	// where BASE and REMOTE are read at different versions; a version with
-	// no entry gets allFiles. allFilesVersions records every version
-	// listed, in call order.
-	allFilesByVersion map[string]map[string]filesapi.FileMeta
-	allFilesVersions  []string
+	// no entry gets allFiles. allFilesErrByVersion fails one version's
+	// listing only. allFilesVersions records every version listed, in call
+	// order.
+	allFilesByVersion    map[string]map[string]filesapi.FileMeta
+	allFilesErrByVersion map[string]error
+	allFilesVersions     []string
 
 	// blobs is the remote file content DownloadFile serves, keyed by
 	// path; a path with no entry (and no downloadErr) is a test bug and
@@ -208,6 +211,9 @@ func (f *fakeFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) 
 	f.allFilesVersions = append(f.allFilesVersions, versionID)
 	if f.allFilesErr != nil {
 		return nil, f.allFilesErr
+	}
+	if err := f.allFilesErrByVersion[versionID]; err != nil {
+		return nil, err
 	}
 	if listing, ok := f.allFilesByVersion[versionID]; ok {
 		return listing, nil
@@ -1356,8 +1362,33 @@ func TestEngine_Plan_UnsyncedDirectoryReadsBaseFromPinnedVersion(t *testing.T) {
 	replan, err := again.Plan(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ver-1"}, files.allFilesVersions, "a recorded BASE is not listed again")
-	assert.Empty(t, again.AdoptedBaseVersion())
+	assert.Equal(t, "ver-1", again.AdoptedBaseVersion(), "a retry before any sync still reports the adopted BASE")
 	assert.Equal(t, actionPaths(plan.Deletes), actionPaths(replan.Deletes))
+}
+
+func TestEngine_Plan_AdoptedBaseMarkerNeedsMatchingVersion(t *testing.T) {
+	t.Parallel()
+
+	// The CLI drops keys it does not know when it saves, but a manifest
+	// that names another version than the marker was rewritten by a sync
+	// either way, so its BASE was not adopted.
+	dir := linkedDir(t, "art-1")
+	manifest, err := wapi.LoadManifest(dir)
+	require.NoError(t, err)
+	manifest.Extra = withAdoptedBaseMarker(map[string]json.RawMessage{"cliKey": json.RawMessage(`true`)}, "ver-0")
+	require.NoError(t, wapi.SaveManifest(dir, manifest))
+
+	files := &fakeFilesAPI{allFiles: listing(map[string]string{"agent.py": "x"})}
+	e, err := New(dir, "art-1", files, &fakeArtifactStore{
+		GetFn: func(context.Context, string) (ArtifactInfo, error) { return draftInfo("cat-1", "ver-1"), nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	_, err = e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, e.AdoptedBaseVersion())
+	assert.Equal(t, map[string]json.RawMessage{"cliKey": json.RawMessage(`true`)}, e.baseExtra, "the marker is dropped, other keys are kept")
 }
 
 func mapKeys[V any](m map[string]V) []string {
@@ -1473,6 +1504,26 @@ func TestEngine_Plan_PinnedVersionGoneFallsBackToEmptyBase(t *testing.T) {
 	manifest, err := wapi.LoadManifest(e.projectDir)
 	require.NoError(t, err)
 	assert.Nil(t, manifest.SyncedVersionID, "nothing was read, so nothing is recorded")
+}
+
+func TestEngine_Plan_PinnedVersionGoneDriftedDownloadsDeletedFile(t *testing.T) {
+	t.Parallel()
+
+	// With no BASE to diff against, a file deleted locally that the moved
+	// catalog still holds reads as a remote addition, as before the fix.
+	files := &fakeFilesAPI{
+		allFilesErrByVersion: map[string]error{"ver-1": fmt.Errorf("response 410 Gone: %w", filesapi.ErrNotFound)},
+		allFilesByVersion: map[string]map[string]filesapi.FileMeta{
+			"ver-3": listing(map[string]string{"agent.py": "same", "gone.py": "deleted locally"}),
+		},
+	}
+
+	e, plan, err := unsyncedPlan(t, map[string]string{"agent.py": "same"}, "ver-3", files)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ver-1", e.UnreadableBaseVersion())
+	assert.Equal(t, []string{"gone.py"}, actionPaths(plan.Downloads))
+	assert.Empty(t, plan.Deletes)
 }
 
 func TestEngine_Plan_BaseReadErrorFailsAndReleasesLock(t *testing.T) {

@@ -1232,30 +1232,42 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 	})
 
-	t.Run("a retry after a failed build syncs nothing and still builds", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		filesAPI := newSyncTestFilesAPI()
-		dir, state := freshCheckout(t, filesAPI)
-		// The failed apply's code already landed: the catalog matches the tree.
-		delete(filesAPI.allFiles, "gone.py")
+	// An empty sync counts as work only over a build that ended without an
+	// image: that is the retry of an apply whose build failed after its code
+	// landed. Over a finished build it stays a no-op, so nothing rebuilds.
+	for _, tc := range []struct {
+		status string
+		builds bool
+	}{
+		{client.ArtifactBuildStatusFailed, true},
+		{client.ArtifactBuildStatusCancelled, true},
+		{client.ArtifactBuildStatusCompleted, false},
+	} {
+		t.Run("an empty sync over a "+tc.status+" build", func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			filesAPI := newSyncTestFilesAPI()
+			dir, state := freshCheckout(t, filesAPI)
+			// The last apply's code already landed: the catalog matches the tree.
+			delete(filesAPI.allFiles, "gone.py")
 
-		mockService.EXPECT().FilesAPI().Return(filesAPI)
+			mockService.EXPECT().FilesAPI().Return(filesAPI)
 
-		failed := artifactWithCodeRef(artifactID, "cat-1", "ver-1")
-		failed.Spec.ContainerGroups[0].Containers[0].Build = &client.ArtifactContainerBuildInfo{Status: client.ArtifactBuildStatusFailed}
+			artifact := artifactWithCodeRef(artifactID, "cat-1", "ver-1")
+			artifact.Spec.ContainerGroups[0].Containers[0].Build = &client.ArtifactContainerBuildInfo{Status: tc.status}
 
-		_, synced, _, err := syncOnceWithDiags(t, mockService, dir, failed, artifactID, state)
-		if err != nil {
-			t.Fatalf("syncArtifactSource() error = %v", err)
-		}
-		if got := filesAPI.uploadCalls() + len(filesAPI.deletedPaths); got != 0 {
-			t.Fatalf("the sync moved %d file(s), want none", got)
-		}
-		if !synced {
-			t.Fatal("an empty sync over a failed build must report work, so the build runs again")
-		}
-	})
+			_, synced, _, err := syncOnceWithDiags(t, mockService, dir, artifact, artifactID, state)
+			if err != nil {
+				t.Fatalf("syncArtifactSource() error = %v", err)
+			}
+			if got := filesAPI.uploadCalls() + len(filesAPI.deletedPaths); got != 0 {
+				t.Fatalf("the sync moved %d file(s), want none", got)
+			}
+			if synced != tc.builds {
+				t.Fatalf("synced = %v over a %s build, want %v", synced, tc.status, tc.builds)
+			}
+		})
+	}
 
 	t.Run("a directory without sync state whose version in state is gone warns and uploads", func(t *testing.T) {
 		ctrl := gomock.NewController(t)

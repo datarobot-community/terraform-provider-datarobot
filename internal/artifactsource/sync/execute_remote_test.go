@@ -139,6 +139,7 @@ func TestEngine_ExecuteRemote_UnsyncedDirectoryDeletesRemovedFile(t *testing.T) 
 	assert.Equal(t, map[string]wapi.FileMeta{"agent.py": {Hash: sameHash, Size: sameSize}}, manifest.Files, "the deleted path leaves the new BASE")
 	require.NotNil(t, manifest.SyncedVersionID)
 	assert.Equal(t, "ver-2", *manifest.SyncedVersionID, "the BASE is recorded, so the next Plan reads it instead of the catalog")
+	assert.NotContains(t, manifest.Extra, adoptedBaseKey, "a completed sync is no longer a first sync")
 }
 
 func TestEngine_ExecuteRemote_ConflictBaseTakesRemoteHash(t *testing.T) {

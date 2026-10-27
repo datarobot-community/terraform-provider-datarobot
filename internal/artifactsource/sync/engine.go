@@ -130,7 +130,8 @@ type Engine struct {
 	// baseRecorded is false for the empty manifest Initialize seeds, true
 	// once a sync (this engine's phase 6 or the CLI's) has written one.
 	baseRecorded bool
-	// adoptedBase is the pinned version adoptPinnedBase read BASE from, and
+	// adoptedBase is the pinned version adoptPinnedBase read BASE from, by
+	// this Plan or by an earlier one that no sync has followed yet, and
 	// unreadableBase the one it could not find; both empty otherwise.
 	adoptedBase    string
 	unreadableBase string
@@ -271,6 +272,8 @@ func (e *Engine) StaleRollbackRestored() bool { return e.staleNote }
 // AdoptedBaseVersion returns the catalog version a never-synced directory
 // took its BASE from (see adoptPinnedBase), empty otherwise. The plan's
 // catalog deletions are then every pinned file missing from the directory.
+// It stays set across Plans until a sync completes, so a retry after a
+// failed apply still reports the first sync's removals.
 func (e *Engine) AdoptedBaseVersion() string { return e.adoptedBase }
 
 // UnreadableBaseVersion returns the catalog version a never-synced

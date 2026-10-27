@@ -11,6 +11,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -107,10 +108,9 @@ func (e *Engine) gather(ctx context.Context) error {
 		return fmt.Errorf("read sync state manifest.json: %w", err)
 	}
 	e.base = baseFromManifest(manifest)
-	e.baseExtra = manifest.Extra
+	e.baseExtra, e.adoptedBase = splitAdoptedBaseMarker(manifest)
 	e.baseRecorded = manifest.SyncedVersionID != nil || len(manifest.Files) > 0
 	e.unreadableBase = ""
-	e.adoptedBase = ""
 
 	// A locked artifact is immutable, so nothing can be pushed into it.
 	// That refuses a sync, but it must not refuse a plan: the caller asks
@@ -327,6 +327,8 @@ func (e *Engine) buildManifests(ctx context.Context) error {
 // The listing is recorded in manifest.json against the pinned version right
 // away, so the DataRobot CLI, which the conflict refusal sends the user to,
 // merges this directory against the same BASE instead of the empty one.
+// The manifest also carries adoptedBaseKey until the next sync rewrites it,
+// so a Plan retried after a failed apply still knows its BASE was adopted.
 //
 // Only a version pinned in config.json counts, never the artifact's own
 // code_ref: `dr artifact code init` pins the catalog but no version, and
@@ -363,7 +365,7 @@ func (e *Engine) adoptPinnedBase(ctx context.Context) error {
 		SyncedAt:        &now,
 		SyncedVersionID: &versionID,
 		Files:           recorded,
-		Extra:           e.baseExtra,
+		Extra:           withAdoptedBaseMarker(e.baseExtra, versionID),
 	}); err != nil {
 		return fmt.Errorf("record base manifest for catalog version %s: %w", ShortVer(versionID), err)
 	}
@@ -371,6 +373,52 @@ func (e *Engine) adoptPinnedBase(ctx context.Context) error {
 	e.adoptedBase = versionID
 
 	return nil
+}
+
+// adoptedBaseKey is the manifest.json key adoptPinnedBase records the
+// pinned version under. It is the provider's alone: the CLI ignores keys it
+// does not know and drops them when it saves, and phase 6 writes baseExtra,
+// from which gather has removed it, so any completed sync clears it.
+const adoptedBaseKey = "providerAdoptedBaseVersionId"
+
+// splitAdoptedBaseMarker returns m's unknown keys without adoptedBaseKey,
+// and the version that key names when it still describes m: a manifest a
+// later sync rewrote names another version, and does not count as adopted.
+func splitAdoptedBaseMarker(m wapi.Manifest) (map[string]json.RawMessage, string) {
+	raw, ok := m.Extra[adoptedBaseKey]
+	if !ok {
+		return m.Extra, ""
+	}
+
+	extra := make(map[string]json.RawMessage, len(m.Extra)-1)
+	for k, v := range m.Extra {
+		if k != adoptedBaseKey {
+			extra[k] = v
+		}
+	}
+	if len(extra) == 0 {
+		extra = nil
+	}
+
+	var versionID string
+	if json.Unmarshal(raw, &versionID) != nil || m.SyncedVersionID == nil || *m.SyncedVersionID != versionID {
+		return extra, ""
+	}
+
+	return extra, versionID
+}
+
+// withAdoptedBaseMarker returns extra plus adoptedBaseKey naming versionID,
+// leaving extra itself untouched.
+func withAdoptedBaseMarker(extra map[string]json.RawMessage, versionID string) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(extra)+1)
+	for k, v := range extra {
+		out[k] = v
+	}
+	raw, _ := json.Marshal(versionID)
+	out[adoptedBaseKey] = raw
+
+	return out
 }
 
 func baseFromManifest(m wapi.Manifest) BaseManifest {
