@@ -154,9 +154,10 @@ func (s *ServiceImpl) DeleteWorkload(ctx context.Context, id string) error {
 	return Delete(s.client, ctx, "/workloads/"+id+"/")
 }
 
-// ListWorkloadsRequest filters GET /workloads/. RepositoryID matches the repository of
-// each workload's current artifact.
+// ListWorkloadsRequest filters GET /workloads/. ArtifactID matches each workload's current
+// artifact, and RepositoryID that artifact's repository.
 type ListWorkloadsRequest struct {
+	ArtifactID   string `url:"artifactId,omitempty"`
 	RepositoryID string `url:"repositoryId,omitempty"`
 }
 

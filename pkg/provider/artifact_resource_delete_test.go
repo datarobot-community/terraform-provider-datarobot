@@ -502,7 +502,7 @@ func TestArtifactRepositoryDeleteInUseNamesWorkloads(t *testing.T) {
 		},
 		{
 			name: "none visible",
-			want: []string{"409 Conflict", "No workload this principal can see", "belong to other users"},
+			want: []string{"409 Conflict", "No workload this principal can see", "may belong to other users", "may have been deleted since"},
 		},
 		{
 			name:    "list fails",
@@ -556,6 +556,47 @@ func TestArtifactRepositoryDeleteOtherErrorListsNoWorkloads(t *testing.T) {
 	r := &ArtifactResource{provider: &Provider{service: mockService}}
 	diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(locked, types.StringValue(repoID)))
 	assertArtifactDeleteError(t, diags, "500 Internal Server Error")
+}
+
+// A draft in a repository the resource did not create is deleted on its own, and the
+// Workload API refuses that with 409 too while a workload runs it. Only once the read
+// after it shows the draft is not locked does the 409 mean a workload.
+func TestArtifactVersionDeleteInUseNamesWorkloads(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		getErr error
+		want   string
+	}{
+		{"draft in use", nil, `Workloads using artifact %s: 6ab2ca493e573ae8037566ee ("qa-app", errored)`},
+		{"read back fails", client.NewGenericError("503 Service Unavailable"), "Delete the workload(s) first."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			repoID := uuid.NewString()
+			draft := artifactFixtureWithStatus(uuid.NewString(), &repoID, "shared", client.ArtifactStatusDraft)
+
+			mockService.EXPECT().DeleteArtifact(gomock.Any(), draft.ID).Return(&client.GenericError{
+				Message:    `response 409 Conflict {"detail":"Cannot delete artifact referenced by 1 workload(s): 6ab2ca493e573ae8037566ee. Delete the workload(s) first."}`,
+				StatusCode: http.StatusConflict,
+			})
+			if tc.getErr == nil {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(draft, nil)
+				mockService.EXPECT().ListWorkloads(gomock.Any(), &client.ListWorkloadsRequest{ArtifactID: draft.ID}).
+					Return([]client.Workload{{ID: "6ab2ca493e573ae8037566ee", Name: "qa-app", Status: client.ProtonStatusErrored}}, nil)
+			} else {
+				mockService.EXPECT().GetArtifact(gomock.Any(), draft.ID).Return(nil, tc.getErr)
+			}
+
+			r := &ArtifactResource{provider: &Provider{service: mockService}}
+			diags := testArtifactApplyDelete(t, r, artifactDeleteTestModel(draft, types.StringValue("")))
+			want := tc.want
+			if strings.Contains(want, "%s") {
+				want = fmt.Sprintf(want, draft.ID)
+			}
+			assertArtifactDeleteError(t, diags, want)
+		})
+	}
 }
 
 func assertArtifactDeleteError(t *testing.T, diags diag.Diagnostics, want string) {
