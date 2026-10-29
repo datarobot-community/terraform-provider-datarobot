@@ -6,6 +6,7 @@ package sync
 // workload.Artifact / cli/internal/drapi/filesapi.
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +23,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
+	"github.com/hashicorp/terraform-plugin-log/tflogtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +111,11 @@ type fakeFilesAPI struct {
 	// Nil serves the ids the tests in this package use for drift, in the
 	// order their names suggest, so a fixture that only needs "the live
 	// version is newer than the last synced one" says nothing.
-	versions []string
+	// listVersionsErr fails ListVersions for the catalogs it names, and
+	// listVersionsCatalogs records every catalog listed, in call order.
+	versions             []string
+	listVersionsErr      map[string]error
+	listVersionsCatalogs []string
 
 	mu                 sync.Mutex
 	downloadPaths      []string
@@ -292,7 +298,12 @@ func (f *fakeFilesAPI) stagedPaths() []string {
 	return out
 }
 
-func (f *fakeFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
+func (f *fakeFilesAPI) ListVersions(_ context.Context, catalogID string, _ int) ([]filesapi.CatalogVersion, error) {
+	f.listVersionsCatalogs = append(f.listVersionsCatalogs, catalogID)
+	if err := f.listVersionsErr[catalogID]; err != nil {
+		return nil, err
+	}
+
 	ids := f.versions
 	if ids == nil {
 		ids = []string{"ver-9", "ver-3", "ver-2", "ver-1"}
@@ -1093,7 +1104,8 @@ func TestEngine_Plan_RebindsArtifactIDFromCaller(t *testing.T) {
 	}))
 
 	var gotID string
-	e, err := New(dir, "art-new", &fakeFilesAPI{}, &fakeArtifactStore{
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-new", files, &fakeArtifactStore{
 		GetFn: func(_ context.Context, artifactID string) (ArtifactInfo, error) {
 			gotID = artifactID
 			return draftInfo("cat-1", "ver-1"), nil
@@ -1109,6 +1121,7 @@ func TestEngine_Plan_RebindsArtifactIDFromCaller(t *testing.T) {
 
 	assert.Equal(t, "art-new", gotID, "the caller's artifact ID must win over the one recorded in .wapi/")
 	assert.Equal(t, "art-new", e.config.ArtifactID)
+	assert.Empty(t, files.listVersionsCatalogs, "an artifact whose code is in the pinned catalog needs no catalog check")
 }
 
 func TestEngine_Plan_ClonedArtifactDiffsAgainstLastSyncedVersion(t *testing.T) {
@@ -1751,15 +1764,8 @@ func TestEngine_Plan_AllowsDirectoryBoundToAGoneArtifact(t *testing.T) {
 	t.Parallel()
 
 	dir := linkedDir(t, "art-old")
-	store := &fakeArtifactStore{
-		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
-			if id == "art-old" {
-				return ArtifactInfo{}, fmt.Errorf("%w: 404", ErrArtifactNotFound)
-			}
-			return draftInfo("", ""), nil
-		},
-	}
-	e, err := New(dir, "art-new", &fakeFilesAPI{}, store)
+	files := &fakeFilesAPI{}
+	e, err := New(dir, "art-new", files, recreatedStore(draftInfo("", "")))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
 
@@ -1767,6 +1773,176 @@ func TestEngine_Plan_AllowsDirectoryBoundToAGoneArtifact(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, plan.IsEmpty())
 	assert.Equal(t, "art-new", e.config.ArtifactID, "the directory follows the re-created resource")
+	assert.Equal(t, "cat-1", e.catalogID, "a catalog that still exists stays bound")
+	assert.Equal(t, []string{"cat-1"}, files.listVersionsCatalogs)
+}
+
+// recreatedStore is what a resource re-created over a directory synced for
+// art-old reads: art-old is gone, and the new artifact reads as current.
+func recreatedStore(current ArtifactInfo) *fakeArtifactStore {
+	return &fakeArtifactStore{
+		GetFn: func(_ context.Context, id string) (ArtifactInfo, error) {
+			if id == "art-old" {
+				return ArtifactInfo{}, fmt.Errorf("%w: 404", ErrArtifactNotFound)
+			}
+			return current, nil
+		},
+	}
+}
+
+func catalogGone(catalogID string) map[string]error {
+	// Like the real client's 410, it matches ErrNotFound as well as ErrGone.
+	return map[string]error{catalogID: fmt.Errorf("response 410 Gone: Requested Files %s was previously deleted: %w %w", catalogID, filesapi.ErrNotFound, filesapi.ErrGone)}
+}
+
+func TestEngine_Plan_RecreatedOverDeletedCatalogStartsOver(t *testing.T) {
+	t.Parallel()
+
+	// linkedDir pins cat-1 with agent.py in BASE, and the tree is unchanged
+	// since: against the pin the plan would be empty and would point the new
+	// artifact at ver-1 of a catalog that no longer exists.
+	dir := linkedDir(t, "art-old")
+	store := recreatedStore(draftInfo("", ""))
+	files := &fakeFilesAPI{listVersionsErr: catalogGone("cat-1"), newCatalogID: "cat-2"}
+	stageResponses(files, "ver-a")
+
+	e, err := New(dir, "art-new", files, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cat-1"}, files.listVersionsCatalogs)
+	assert.Equal(t, []string{"agent.py"}, actionPaths(plan.Uploads), "every file goes to the new catalog")
+	assert.False(t, files.allFilesCalled, "nothing is listed from a deleted catalog")
+
+	require.NoError(t, e.ExecuteLocal(context.Background()))
+	result, err := e.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, files.createCatalogCalls)
+	assert.Equal(t, "cat-2", result.CatalogID)
+	assert.Equal(t, []patchCall{{ArtifactID: "art-new", CatalogID: "cat-2", CatalogVersionID: "ver-a"}}, store.patches)
+
+	cfg, err := wapi.LoadConfig(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "cat-2", ptrOrEmpty(cfg.CatalogID))
+	assert.Equal(t, "ver-a", ptrOrEmpty(cfg.LastSyncedVersionID))
+	assert.Equal(t, "art-new", cfg.ArtifactID)
+
+	manifest, err := wapi.LoadManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "ver-a", ptrOrEmpty(manifest.SyncedVersionID))
+	assert.Equal(t, []string{"agent.py"}, mapKeys(manifest.Files))
+}
+
+func TestEngine_Plan_DeletedCatalogIgnoresBindingThatNamesIt(t *testing.T) {
+	t.Parallel()
+
+	// The caller's record names the deleted catalog too, and the directory
+	// is empty: nothing may point the artifact at that catalog's version.
+	dir := linkedDir(t, "art-old")
+	require.NoError(t, os.Remove(filepath.Join(dir, "agent.py")))
+	store := recreatedStore(draftInfo("", ""))
+	files := &fakeFilesAPI{listVersionsErr: catalogGone("cat-1")}
+
+	e, err := New(dir, "art-new", files, store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+	e.BindCatalog("cat-1", "ver-1")
+
+	plan, err := e.Plan(context.Background())
+	require.NoError(t, err)
+	assert.True(t, plan.IsEmpty(), "%+v", plan)
+	assert.Empty(t, e.catalogID)
+	assert.Empty(t, e.remoteVer)
+	assert.False(t, files.allFilesCalled)
+
+	require.NoError(t, e.ExecuteLocal(context.Background()))
+	_, err = e.ExecuteRemote(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, store.patches)
+}
+
+func TestEngine_Plan_DeletedCatalogRebindsToCallersCatalog(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		artifact ArtifactInfo
+	}{
+		// A locked artifact's clone, which has no code_ref of its own.
+		{name: "artifact without code_ref", artifact: draftInfo("", "")},
+		// A checkout that missed the move to cat-2, or one whose state
+		// directory could not be written after the artifact was patched.
+		{name: "artifact with code in the caller's catalog", artifact: draftInfo("cat-2", "ver-2")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := linkedDir(t, "art-old")
+			files := &fakeFilesAPI{
+				listVersionsErr:   catalogGone("cat-1"),
+				allFilesByVersion: map[string]map[string]filesapi.FileMeta{"ver-2": listing(map[string]string{"agent.py": "x", "extra.py": "y"})},
+			}
+
+			e, err := New(dir, "art-new", files, recreatedStore(tc.artifact))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = e.Close() })
+			e.BindCatalog("cat-2", "ver-2")
+
+			plan, err := e.Plan(context.Background())
+			require.NoError(t, err, "a deleted pin is not a catalog mismatch")
+			assert.Equal(t, "cat-2", e.catalogID, "the sync stays in the catalog the caller knows")
+			assert.Equal(t, "ver-2", e.AdoptedBaseVersion(), "BASE comes from the caller's version, as for a directory with no state")
+			assert.Empty(t, plan.Uploads)
+			assert.Equal(t, []string{"extra.py"}, actionPaths(plan.Deletes))
+		})
+	}
+}
+
+func TestEngine_Plan_PinnedCatalogKeptUnlessGone(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "catalog exists"},
+		{name: "404, possibly a catalog this caller cannot see", err: fmt.Errorf("response 404 Not Found: %w", filesapi.ErrNotFound)},
+		{name: "server error", err: errors.New("response 503 Service Unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := linkedDir(t, "art-old")
+			files := &fakeFilesAPI{}
+			if tc.err != nil {
+				files.listVersionsErr = map[string]error{"cat-1": tc.err}
+			}
+
+			e, err := New(dir, "art-new", files, recreatedStore(draftInfo("", "")))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = e.Close() })
+
+			var logs bytes.Buffer
+			plan, err := e.Plan(tflogtest.RootLogger(context.Background(), &logs))
+			require.NoError(t, err)
+			assert.Equal(t, "cat-1", e.catalogID)
+			assert.True(t, plan.IsEmpty(), "BASE still describes the directory: %+v", plan)
+
+			entries, err := tflogtest.MultilineJSONDecode(&logs)
+			require.NoError(t, err)
+			if tc.err == nil {
+				assert.Empty(t, entries)
+				return
+			}
+			require.Len(t, entries, 1, "a check that does not report the catalog deleted says why the pin was kept")
+			assert.Equal(t, "debug", entries[0]["@level"])
+			assert.Equal(t, "cat-1", entries[0]["catalog_id"])
+			assert.Equal(t, tc.err.Error(), entries[0]["error"])
+		})
+	}
 }
 
 func TestEngine_Plan_OwnerLookupFailureIsReported(t *testing.T) {

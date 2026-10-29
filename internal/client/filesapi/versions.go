@@ -4,6 +4,7 @@
 // - ListVersions takes context.Context.
 // - Pagination uses c.getJSON/c.assertNextOnSameHost instead of drapi.GetJSON/drapi.AssertNextOnSameHost.
 // - Initial URL built via c.endpointURL; CLI uses drapi.EndpointURL with separate error return.
+// - A limit below a page is sent as the page size; the CLI always asks for a full page and trims it.
 package filesapi
 
 import (
@@ -17,7 +18,11 @@ const versionsPageSize = 100
 func (c *httpClient) ListVersions(ctx context.Context, catalogID string, limit int) ([]CatalogVersion, error) {
 	q := url.Values{}
 	q.Set("orderBy", "-created")
-	q.Set("limit", strconv.Itoa(versionsPageSize))
+	pageSize := versionsPageSize
+	if limit > 0 && limit < pageSize {
+		pageSize = limit
+	}
+	q.Set("limit", strconv.Itoa(pageSize))
 
 	// CLI: drapi.EndpointURL("/files/"+catalogID+"/versions/", q)
 	pageURL := c.endpointURL("/files/"+url.PathEscape(catalogID)+"/versions/", q)

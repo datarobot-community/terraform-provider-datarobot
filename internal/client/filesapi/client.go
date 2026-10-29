@@ -9,7 +9,8 @@
 //     httpClientWithTimeout live here; CLI delegates equivalents to drapi.EndpointURL,
 //     drapi.AssertNextOnSameHost, drapi.ErrFromResp, drapi.GetJSON, drapi.DeleteJSON,
 //     and ad-hoc http.Client construction in each call site.
-//   - errFromResp marks a 404 or 410 as ErrNotFound; the CLI's error is untyped.
+//   - errFromResp marks a 404 or 410 as ErrNotFound, and a 410 as ErrGone too;
+//     the CLI's error is untyped.
 package filesapi
 
 import (
@@ -90,8 +91,13 @@ func (c *httpClient) assertNextOnSameHost(rawNextURL string) error {
 // through HTTPTransport.Post report these with the transport's own errors.
 var ErrNotFound = errors.New("files API: not found")
 
+// ErrGone matches, through errors.Is, a 410 from the same requests: the
+// catalog was deleted. A 404 does not match it, because the Files API also
+// answers 404 for a catalog that exists but the caller has no role on.
+var ErrGone = errors.New("files API: gone")
+
 // statusError is a non-2xx response. Only its message is shown; the status
-// code is kept for ErrNotFound to match on.
+// code is kept for ErrNotFound and ErrGone to match on.
 type statusError struct {
 	status int
 	msg    string
@@ -100,7 +106,14 @@ type statusError struct {
 func (e *statusError) Error() string { return e.msg }
 
 func (e *statusError) Is(target error) bool {
-	return target == ErrNotFound && (e.status == http.StatusNotFound || e.status == http.StatusGone)
+	switch target {
+	case ErrNotFound:
+		return e.status == http.StatusNotFound || e.status == http.StatusGone
+	case ErrGone:
+		return e.status == http.StatusGone
+	}
+
+	return false
 }
 
 // CLI: drapi.ErrFromResp(resp, requestURL).

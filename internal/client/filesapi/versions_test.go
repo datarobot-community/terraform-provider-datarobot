@@ -4,11 +4,13 @@
 // - Uses newTestClient from client_test.go instead of CLI's startServer + filesapi.New().
 // - ListVersions calls pass context.Background(); CLI has no context parameter.
 // - Test cases and assertions are otherwise ported from the CLI file.
+// - Provider-only tests at the end cover the page size and the ErrNotFound/ErrGone mapping.
 package filesapi_test
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -166,4 +168,62 @@ func TestListVersions_EmptyResponse(t *testing.T) {
 	got, err := c.ListVersions(context.Background(), "cid-1", 0)
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+// Provider-only: a caller asking for fewer versions than a page gets a page
+// of that size, so a one-version read is one version on the server too.
+func TestListVersions_PageSizeFollowsLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+		want  string
+	}{
+		{name: "one version", limit: 1, want: "1"},
+		{name: "no limit", limit: 0, want: "100"},
+		{name: "more than a page", limit: 500, want: "100"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.URL.Query().Get("limit")
+				w.Header().Set("Content-Type", "application/json")
+				assert.NoError(t, json.NewEncoder(w).Encode(filesapi.CatalogVersionsResp{
+					Data: []filesapi.CatalogVersion{{ID: "v2"}, {ID: "v1"}},
+				}))
+			}))
+
+			_, err := c.ListVersions(context.Background(), "cid-1", tc.limit)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// Provider-only: the sync engine drops a catalog pin on ErrGone only, so a
+// 404, which the Files API also returns for a catalog the caller cannot see,
+// must not match it.
+func TestListVersions_ErrGoneOnlyFor410(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		notFound bool
+		gone     bool
+	}{
+		{http.StatusGone, true, true},
+		{http.StatusNotFound, true, false},
+		{http.StatusForbidden, false, false},
+		{http.StatusInternalServerError, false, false},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"message":"Requested Files cid-1 was previously deleted."}`))
+			}))
+
+			got, err := c.ListVersions(context.Background(), "cid-1", 1)
+			require.Error(t, err)
+			assert.Nil(t, got)
+			assert.Equal(t, tc.notFound, errors.Is(err, filesapi.ErrNotFound))
+			assert.Equal(t, tc.gone, errors.Is(err, filesapi.ErrGone))
+		})
+	}
 }

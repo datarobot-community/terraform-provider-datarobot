@@ -1612,37 +1612,75 @@ func TestSyncArtifactSourceThreeWay(t *testing.T) {
 		}
 	})
 
-	t.Run("a re-created resource over a synced directory is allowed once the old artifact is gone", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockService := mock_client.NewMockService(ctrl)
-		filesAPI := newSyncTestFilesAPI()
-		repoA, repoB := "repo-a", "repo-b"
+	for _, tc := range []struct {
+		name string
+		// catalogDeleted deletes the directory's catalog between the syncs.
+		catalogDeleted bool
+		wantCatalogs   []string
+	}{
+		{
+			name:         "a re-created resource over a synced directory is allowed once the old artifact is gone",
+			wantCatalogs: []string{"cat-new", "cat-new"},
+		},
+		{
+			name:           "a re-created resource over a directory whose catalog was deleted uploads everything to a new catalog",
+			catalogDeleted: true,
+			wantCatalogs:   []string{"cat-new", "cat-recreated"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockService := mock_client.NewMockService(ctrl)
+			filesAPI := newSyncTestFilesAPI()
+			repoA, repoB := "repo-a", "repo-b"
 
-		mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
-		mockService.EXPECT().
-			PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
-				return artifactWithCodeRef(id, catalogID, versionID), nil
-			}).
-			Times(2)
-		mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(nil, &client.NotFoundError{Resource: "artifact"})
+			var patchedCatalogs []string
+			mockService.EXPECT().FilesAPI().Return(filesAPI).Times(2)
+			mockService.EXPECT().
+				PatchArtifactCodeRef(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, id, catalogID, versionID string) (*client.Artifact, error) {
+					patchedCatalogs = append(patchedCatalogs, catalogID)
+					return artifactWithCodeRef(id, catalogID, versionID), nil
+				}).
+				Times(2)
+			mockService.EXPECT().GetArtifact(gomock.Any(), artifactID).Return(nil, &client.NotFoundError{Resource: "artifact"})
 
-		dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
-		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
-			t.Fatalf("first syncArtifactSource() error = %v", err)
-		}
+			dir := writeArtifactSourceTree(t, map[string]string{"main.py": "shared"})
+			if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: artifactID, ArtifactRepositoryID: &repoA}, "", nil); err != nil {
+				t.Fatalf("first syncArtifactSource() error = %v", err)
+			}
+			firstUploads := filesAPI.uploadCalls()
 
-		if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil); err != nil {
-			t.Fatalf("re-created resource over the directory: %v", err)
-		}
-		cfg, err := wapi.LoadConfig(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if cfg.ArtifactID != "artifact-2" {
-			t.Fatalf("config artifactId = %q, want the re-created resource's artifact-2", cfg.ArtifactID)
-		}
-	})
+			wantUploads := 0
+			if tc.catalogDeleted {
+				// Every request against the deleted catalog now answers 410,
+				// and the next catalog the fake creates gets a new ID.
+				filesAPI.goneCatalogID = filesAPI.catalogID
+				filesAPI.catalogID = "cat-recreated"
+				wantUploads = firstUploads
+			}
+
+			if _, _, err := syncOnce(t, mockService, dir, &client.Artifact{ID: "artifact-2", ArtifactRepositoryID: &repoB}, "", nil); err != nil {
+				t.Fatalf("re-created resource over the directory: %v", err)
+			}
+			if got := filesAPI.uploadCalls() - firstUploads; got != wantUploads {
+				t.Fatalf("second sync uploaded %d file(s), want %d", got, wantUploads)
+			}
+			if !slices.Equal(patchedCatalogs, tc.wantCatalogs) {
+				t.Fatalf("code_ref patched to catalogs %v, want %v", patchedCatalogs, tc.wantCatalogs)
+			}
+			cfg, err := wapi.LoadConfig(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := tc.wantCatalogs[1]; cfg.CatalogID == nil || *cfg.CatalogID != want {
+				t.Fatalf("config catalogId = %v, want %s", cfg.CatalogID, want)
+			}
+			if cfg.ArtifactID != "artifact-2" {
+				t.Fatalf("config artifactId = %q, want the re-created resource's artifact-2", cfg.ArtifactID)
+			}
+		})
+	}
 
 	t.Run("locked artifact whose directory already matches it is left alone", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -2259,6 +2297,19 @@ type syncTestFilesAPI struct {
 	// the artifact moved to here, so the engine can order it.
 	newer []string
 	older []string
+
+	// goneCatalogID is a catalog deleted since: every request that names it
+	// answers 410, the way the Files API does.
+	goneCatalogID string
+}
+
+// goneErr is the Files API's answer to a request against goneCatalogID.
+func (m *syncTestFilesAPI) goneErr(catalogID string) error {
+	if catalogID == "" || catalogID != m.goneCatalogID {
+		return nil
+	}
+	// Like the real client's 410, it matches ErrNotFound as well as ErrGone.
+	return fmt.Errorf("response 410 Gone: Requested Files %s was previously deleted: %w %w", catalogID, filesapi.ErrNotFound, filesapi.ErrGone)
 }
 
 // newestVersion declares id as the catalog's newest version.
@@ -2310,9 +2361,12 @@ func (m *syncTestFilesAPI) CreateCatalog(context.Context) (*filesapi.CatalogResp
 	}, nil
 }
 
-func (m *syncTestFilesAPI) CreateStage(context.Context, string) (*filesapi.StageResp, error) {
+func (m *syncTestFilesAPI) CreateStage(_ context.Context, catalogID string) (*filesapi.StageResp, error) {
 	if m.uploadErr != nil {
 		return nil, m.uploadErr
+	}
+	if err := m.goneErr(catalogID); err != nil {
+		return nil, err
 	}
 	return &filesapi.StageResp{CatalogID: m.catalogID, StageID: "stage-1"}, nil
 }
@@ -2353,9 +2407,12 @@ func (m *syncTestFilesAPI) UploadFromZipNew(context.Context, string, int64, io.R
 	}, nil
 }
 
-func (m *syncTestFilesAPI) UploadFromZipExisting(context.Context, string, string, string, int64, io.Reader) (*filesapi.FromFileResp, error) {
+func (m *syncTestFilesAPI) UploadFromZipExisting(_ context.Context, catalogID, _, _ string, _ int64, _ io.Reader) (*filesapi.FromFileResp, error) {
 	if m.uploadErr != nil {
 		return nil, m.uploadErr
+	}
+	if err := m.goneErr(catalogID); err != nil {
+		return nil, err
 	}
 	m.version++
 	return &filesapi.FromFileResp{
@@ -2368,11 +2425,14 @@ func (m *syncTestFilesAPI) PollStatus(context.Context, string) (*filesapi.Status
 	return &filesapi.StatusResp{Status: filesapi.StatusCompleted}, nil
 }
 
-func (m *syncTestFilesAPI) AllFiles(_ context.Context, _, versionID string) (map[string]filesapi.FileMeta, error) {
+func (m *syncTestFilesAPI) AllFiles(_ context.Context, catalogID, versionID string) (map[string]filesapi.FileMeta, error) {
 	m.allFilesCalls++
 	m.allFilesVersions = append(m.allFilesVersions, versionID)
 	if m.allFilesErr != nil {
 		return nil, m.allFilesErr
+	}
+	if err := m.goneErr(catalogID); err != nil {
+		return nil, err
 	}
 	return m.allFiles, nil
 }
@@ -2393,7 +2453,10 @@ func (m *syncTestFilesAPI) DownloadFile(_ context.Context, _, _, path string, w 
 	return "", int64(n), err
 }
 
-func (m *syncTestFilesAPI) DeleteFiles(_ context.Context, _ string, paths []string) (*filesapi.DeleteFilesResp, error) {
+func (m *syncTestFilesAPI) DeleteFiles(_ context.Context, catalogID string, paths []string) (*filesapi.DeleteFilesResp, error) {
+	if err := m.goneErr(catalogID); err != nil {
+		return nil, err
+	}
 	m.deletedPaths = append(m.deletedPaths, paths...)
 	m.version++
 
@@ -2403,7 +2466,10 @@ func (m *syncTestFilesAPI) DeleteFiles(_ context.Context, _ string, paths []stri
 	}, nil
 }
 
-func (m *syncTestFilesAPI) ListVersions(context.Context, string, int) ([]filesapi.CatalogVersion, error) {
+func (m *syncTestFilesAPI) ListVersions(_ context.Context, catalogID string, _ int) ([]filesapi.CatalogVersion, error) {
+	if err := m.goneErr(catalogID); err != nil {
+		return nil, err
+	}
 	out := make([]filesapi.CatalogVersion, 0, len(m.newer)+m.version+len(m.older))
 	for _, id := range m.newer {
 		out = append(out, filesapi.CatalogVersion{ID: id})
