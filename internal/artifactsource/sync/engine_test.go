@@ -6,6 +6,7 @@ package sync
 // workload.Artifact / cli/internal/drapi/filesapi.
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +23,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
+	"github.com/hashicorp/terraform-plugin-log/tflogtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1923,10 +1925,22 @@ func TestEngine_Plan_PinnedCatalogKeptUnlessGone(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = e.Close() })
 
-			plan, err := e.Plan(context.Background())
+			var logs bytes.Buffer
+			plan, err := e.Plan(tflogtest.RootLogger(context.Background(), &logs))
 			require.NoError(t, err)
 			assert.Equal(t, "cat-1", e.catalogID)
 			assert.True(t, plan.IsEmpty(), "BASE still describes the directory: %+v", plan)
+
+			entries, err := tflogtest.MultilineJSONDecode(&logs)
+			require.NoError(t, err)
+			if tc.err == nil {
+				assert.Empty(t, entries)
+				return
+			}
+			require.Len(t, entries, 1, "a check that does not report the catalog deleted says why the pin was kept")
+			assert.Equal(t, "debug", entries[0]["@level"])
+			assert.Equal(t, "cat-1", entries[0]["catalog_id"])
+			assert.Equal(t, tc.err.Error(), entries[0]["error"])
 		})
 	}
 }

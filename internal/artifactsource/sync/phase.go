@@ -19,6 +19,7 @@ import (
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/ignore"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/artifactsource/wapi"
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client/filesapi"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // preflight (phase 0) auto-initializes the sync state directory on the
@@ -131,11 +132,14 @@ func (e *Engine) gather(ctx context.Context) error {
 	// that is the deleted catalog too, in which case the sync creates a new
 	// one. Only a 410 counts, since the Files API also answers 404 for a live
 	// catalog the caller has no role on; any other answer, an error
-	// included, keeps the pin as before. No CLI counterpart: the CLI never
-	// brings a new artifact to a directory that is already linked.
+	// included, keeps the pin as before, and an error is logged at debug
+	// level. No CLI counterpart: the CLI never brings a new artifact to a
+	// directory that is already linked.
 	seedVersionID := e.seedVersionID
 	if pinned := ptrOrEmpty(cfg.CatalogID); pinned != "" && info.CatalogID != pinned {
-		if _, err := e.files.ListVersions(ctx, pinned, 1); errors.Is(err, filesapi.ErrGone) {
+		_, err := e.files.ListVersions(ctx, pinned, 1)
+		switch {
+		case errors.Is(err, filesapi.ErrGone):
 			catalogID, versionID := e.seedCatalogID, e.seedVersionID
 			if catalogID == "" || catalogID == pinned {
 				catalogID, versionID = "", ""
@@ -146,6 +150,12 @@ func (e *Engine) gather(ctx context.Context) error {
 			e.base = BaseManifest{}
 			e.baseRecorded = false
 			e.adoptedBase = ""
+		case err != nil:
+			tflog.Debug(ctx, "Keeping the catalog the source directory is bound to: the Files API did not report it deleted", map[string]interface{}{
+				"catalog_id": pinned,
+				"state_dir":  wapi.Dir(e.projectDir),
+				"error":      err.Error(),
+			})
 		}
 	}
 	e.config = cfg
