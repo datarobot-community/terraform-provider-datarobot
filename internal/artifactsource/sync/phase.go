@@ -101,7 +101,6 @@ func (e *Engine) gather(ctx context.Context) error {
 	// `dr artifact code init` binds one artifact ID for the life of the
 	// directory.
 	cfg.ArtifactID = e.artifactID
-	e.config = cfg
 
 	manifest, err := wapi.LoadManifest(e.projectDir)
 	if err != nil {
@@ -122,6 +121,34 @@ func (e *Engine) gather(ctx context.Context) error {
 	// cannot let a write through. Plan is preview by definition here —
 	// Execute is what returns ErrLockedArtifact once it lands.
 	e.locked = info.Locked
+
+	// A directory can pin a catalog that was deleted since (destroying the
+	// resource keeps its catalog, but a cleanup script, the UI or another
+	// client can delete it), and every sync against that pin fails. So a pin
+	// the artifact's code_ref does not agree with is checked, and a deleted
+	// one is dropped with its BASE: the directory starts over the way
+	// preflight starts one with no state, from what BindCatalog says unless
+	// that is the deleted catalog too, in which case the sync creates a new
+	// one. Only a 410 counts, since the Files API also answers 404 for a live
+	// catalog the caller has no role on; any other answer, an error
+	// included, keeps the pin as before. No CLI counterpart: the CLI never
+	// brings a new artifact to a directory that is already linked.
+	seedVersionID := e.seedVersionID
+	if pinned := ptrOrEmpty(cfg.CatalogID); pinned != "" && info.CatalogID != pinned {
+		if _, err := e.files.ListVersions(ctx, pinned, 1); errors.Is(err, filesapi.ErrGone) {
+			catalogID, versionID := e.seedCatalogID, e.seedVersionID
+			if catalogID == "" || catalogID == pinned {
+				catalogID, versionID = "", ""
+			}
+			cfg.CatalogID = ptrOrNil(catalogID)
+			cfg.LastSyncedVersionID = ptrOrNil(versionID)
+			seedVersionID = versionID
+			e.base = BaseManifest{}
+			e.baseRecorded = false
+			e.adoptedBase = ""
+		}
+	}
+	e.config = cfg
 
 	// BASE describes one catalog, the one config.json pins. An artifact
 	// with no code_ref yet is fine (a draft just cloned from a locked
@@ -156,7 +183,7 @@ func (e *Engine) gather(ctx context.Context) error {
 	// as drifted and REMOTE is fetched rather than copied from a BASE that
 	// predates it.
 	if e.remoteVer == "" {
-		e.remoteVer = e.seedVersionID
+		e.remoteVer = seedVersionID
 	}
 	if e.remoteVer == "" {
 		e.remoteVer = ptrOrEmpty(cfg.LastSyncedVersionID)

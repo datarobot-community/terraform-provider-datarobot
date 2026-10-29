@@ -24,7 +24,8 @@ package sync
 //     a source change on a locked artifact clones to a new artifact ID
 //     against the same directory (see gather in phase.go). What the
 //     directory stays bound to is the catalog; ErrCatalogMismatch guards
-//     that.
+//     that. A pinned catalog that was deleted is dropped, and the sync
+//     starts over as for a directory with no state (see gather).
 //   - UseIgnore lets the resource hand over the ignore matcher it already
 //     resolved, so the walk applies the same patterns plan hashed with even
 //     when the directory could not be given its starter .drignore.
@@ -324,6 +325,14 @@ func ptrOrEmpty(s *string) string {
 	}
 
 	return *s
+}
+
+func ptrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	return &s
 }
 
 // ShortVer truncates a hex version ID to 8 chars for display.
