@@ -1,4 +1,11 @@
-## [Unreleased]
+## [0.14.1] - 2026-11-09
+
+### Fixed
+
+- `datarobot_artifact` no longer fails every apply with `410 Gone ... was previously deleted` (or, for an unchanged directory, with an error updating the artifact's code reference) when the catalog `source.dir` last synced to has since been deleted, for example a resource re-created after its catalog was cleaned up. The sync now starts over as for a directory with no sync state, which used to require removing `.datarobot/workload/` by hand: into the catalog Terraform state points at when that one still exists, otherwise into a new catalog with every file uploaded. Only a catalog the platform reports as deleted is dropped. A catalog this user cannot read still fails the apply as before, and destroying the resource does not delete its catalog, so a re-created resource keeps syncing into a catalog that still exists. An artifact whose own code reference names the deleted catalog cannot be updated, because every update sends that reference and the platform refuses it; replace the resource (`terraform apply -replace=<address>`, or `pulumi up --replace <urn>`), and the new artifact starts a new catalog.
+- `golang.org/x/net` bumped from v0.60.0 to v0.62.0, resolving `govulncheck` advisories GO-2026-6866 and GO-2026-6860 in its `html` package. The provider does not use that package, so its behavior is unchanged; the bump clears module-level CVE scanners. `golang.org/x/crypto` moved from v0.57.0 to v0.58.0 along with it.
+
+## [0.14.0] - 2026-10-28
 
 ### Added
 
@@ -15,7 +22,6 @@
 ### Changed
 
 - Built with Go 1.27.3, fixing a `govulncheck` advisory in Go 1.27.2's `crypto/x509`: certificate verification now refuses intermediate certificates that are known to be compromised, also on systems whose trust store has not been updated.
-- `golang.org/x/net` bumped from v0.60.0 to v0.62.0, resolving `govulncheck` advisories GO-2026-6866 and GO-2026-6860 in its `html` package. The provider does not use that package, so its behavior is unchanged; the bump clears module-level CVE scanners. `golang.org/x/crypto` moved from v0.57.0 to v0.58.0 along with it.
 
 ### Fixed
 
@@ -29,7 +35,6 @@
 - Docs: the `datarobot_workload` page has a "Failed applies" section, and the `datarobot_artifact` page says what a create that fails partway leaves behind, under Terraform and under Pulumi. Neither engine rolls completed resources back: an artifact created before a `datarobot_workload` the platform refuses stays in state, the retry reuses it without another upload or build, and `terraform destroy` removes it.
 - `datarobot_artifact` removes a file deleted from `source.dir` from the catalog when the directory has no sync state yet, as in a fresh clone or a CI checkout (`.datarobot/workload/` is git-ignored); the file used to stay in the catalog and reach the image build, or was downloaded back when the catalog had moved on. **After upgrading, the first apply that syncs such a checkout removes every catalog file that is not in `source.dir`, including files `.drignore` excludes, and names them in a warning, so the checkout must hold every file the image needs.**
 - An apply retried after a failed image build builds again when the sync finds the catalog already matching `source.dir`, instead of recording the source over the failed build.
-- `datarobot_artifact` no longer fails every apply with `410 Gone ... was previously deleted` (or, for an unchanged directory, with an error updating the artifact's code reference) when the catalog `source.dir` last synced to has since been deleted, for example a resource re-created after its catalog was cleaned up. The sync now starts over as for a directory with no sync state, which used to require removing `.datarobot/workload/` by hand: into the catalog Terraform state points at when that one still exists, otherwise into a new catalog with every file uploaded. Only a catalog the platform reports as deleted is dropped. A catalog this user cannot read still fails the apply as before, and destroying the resource does not delete its catalog, so a re-created resource keeps syncing into a catalog that still exists. An artifact whose own code reference names the deleted catalog cannot be updated, because every update sends that reference and the platform refuses it; replace the resource (`terraform apply -replace=<address>`, or `pulumi up --replace <urn>`), and the new artifact starts a new catalog.
 
 ## [0.13.0] - 2026-10-15
 
