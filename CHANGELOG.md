@@ -15,6 +15,7 @@
 ### Changed
 
 - Built with Go 1.27.3, fixing a `govulncheck` advisory in Go 1.27.2's `crypto/x509`: certificate verification now refuses intermediate certificates that are known to be compromised, also on systems whose trust store has not been updated.
+- `golang.org/x/net` bumped from v0.60.0 to v0.62.0, resolving `govulncheck` advisories GO-2026-6866 and GO-2026-6860 in its `html` package. The provider does not use that package, so its behavior is unchanged; the bump clears module-level CVE scanners. `golang.org/x/crypto` moved from v0.57.0 to v0.58.0 along with it.
 
 ### Fixed
 
