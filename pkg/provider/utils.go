@@ -342,6 +342,20 @@ func checkApplicationNameAlreadyExists(err error, name string) string {
 	return checkNameAlreadyExists(err, name, "Application")
 }
 
+// deleteApplicationAfterFailedCreate deletes an application whose create failed after the
+// platform had already made it. Terraform saves no state for a failed create, so the application
+// would otherwise stay on the platform with nothing tracking it. A failed delete becomes a
+// warning that names the application.
+func deleteApplicationAfterFailedCreate(ctx context.Context, service client.Service, id string, diags *diag.Diagnostics) {
+	traceAPICall("DeleteCustomApplication")
+	if err := service.DeleteApplication(ctx, id); err != nil {
+		diags.AddWarning(
+			"Custom Application left behind",
+			fmt.Sprintf("Custom Application %s was created, and deleting it after the failure did not work: %s. Delete it manually.", id, err),
+		)
+	}
+}
+
 func checkNameAlreadyExists(err error, name string, resourceType string) string {
 	errMessage := err.Error()
 	if strings.Contains(errMessage, "already in use") ||

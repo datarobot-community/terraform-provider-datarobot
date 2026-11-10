@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_custom_application` and `datarobot_custom_application_from_environment` no longer leave an application on the platform when a create fails while setting the name or other details, for example when the name is already in use. The create made the application first and set its details afterwards, and a failure in that second step returned with no state, so every retry added one more application under a name the platform chose. The application is now deleted when that step fails. If the delete fails too, a warning names the application to delete manually.
+
 ## [0.14.1] - 2026-11-09
 
 ### Fixed
