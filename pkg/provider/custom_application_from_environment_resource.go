@@ -233,6 +233,7 @@ func (r *CustomApplicationFromEnvironmentResource) Create(ctx context.Context, r
 		if err != nil {
 			errMessage := checkApplicationNameAlreadyExists(err, data.Name.ValueString())
 			resp.Diagnostics.AddError("Error adding details to Custom Application", errMessage)
+			deleteApplicationAfterFailedCreate(ctx, r.provider.service, application.ID, &resp.Diagnostics)
 			return
 		}
 	}

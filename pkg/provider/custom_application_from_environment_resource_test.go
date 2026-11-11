@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -312,5 +313,39 @@ func TestCustomApplicationFromEnvironmentCreateSendsRequiredKeyScopeLevel(t *tes
 				t.Fatalf("request scope level = %+v, want %q", sent, tc.want)
 			}
 		})
+	}
+}
+
+func TestCustomApplicationFromEnvironmentCreateDeletesTheApplicationWhenItsDetailsAreRefused(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	mockService.EXPECT().CreateCustomApplication(gomock.Any(), gomock.Any()).Return(&client.Application{ID: "app-id"}, nil)
+	mockService.EXPECT().UpdateApplication(gomock.Any(), "app-id", gomock.Any()).Return(nil, errors.New("name is already in use"))
+	mockService.EXPECT().DeleteApplication(gomock.Any(), "app-id").Return(nil)
+
+	r := &CustomApplicationFromEnvironmentResource{provider: &Provider{service: mockService}}
+	resp := customApplicationFromEnvironmentSchema(t)
+	plan := tfsdk.Plan{Schema: resp.Schema, Raw: tftypes.NewValue(resp.Schema.Type().TerraformType(ctx), nil)}
+	model := CustomApplicationFromEnvironmentResourceModel{
+		Name:                     types.StringValue("app"),
+		EnvironmentID:            types.StringValue("env-id"),
+		ExternalAccessRecipients: types.ListNull(types.StringType),
+		Resources:                types.ObjectNull(applicationResourcesAttrTypes()),
+	}
+	if diags := plan.Set(ctx, &model); diags.HasError() {
+		t.Fatalf("set plan: %+v", diags)
+	}
+
+	createResp := &fwresource.CreateResponse{State: tfsdk.State{
+		Schema: resp.Schema,
+		Raw:    tftypes.NewValue(resp.Schema.Type().TerraformType(ctx), nil),
+	}}
+	r.Create(ctx, fwresource.CreateRequest{Plan: plan}, createResp)
+
+	if !createResp.Diagnostics.HasError() {
+		t.Fatal("create must fail when the application's details are refused")
 	}
 }

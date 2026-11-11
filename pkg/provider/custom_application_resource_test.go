@@ -2,13 +2,17 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/datarobot-community/terraform-provider-datarobot/internal/client"
+	mock_client "github.com/datarobot-community/terraform-provider-datarobot/mock"
+	"github.com/golang/mock/gomock"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -1110,4 +1114,69 @@ func TestCustomApplicationModifyPlanKeepsResourcesWhenNothingCanChangeThem(t *te
 			t.Fatalf("resources = %s, want the unknown value that create planned", planned.Resources)
 		}
 	})
+}
+
+// customApplicationCreate runs Create for a named application against service.
+func customApplicationCreate(t *testing.T, service client.Service) *fwresource.CreateResponse {
+	t.Helper()
+
+	ctx := context.Background()
+	schemaResp := fwresource.SchemaResponse{}
+	NewCustomApplicationResource().Schema(ctx, fwresource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("schema diagnostics: %+v", schemaResp.Diagnostics)
+	}
+	schemaType := schemaResp.Schema.Type().TerraformType(ctx)
+
+	plan := tfsdk.Plan{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)}
+	model := customApplicationModel(types.StringValue("version-1"), types.ObjectNull(applicationResourcesAttrTypes()))
+	model.Name = types.StringValue("app")
+	if diags := plan.Set(ctx, &model); diags.HasError() {
+		t.Fatalf("set plan: %+v", diags)
+	}
+
+	resp := &fwresource.CreateResponse{State: tfsdk.State{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaType, nil)}}
+	r := &CustomApplicationResource{provider: &Provider{service: service}}
+	r.Create(ctx, fwresource.CreateRequest{Plan: plan}, resp)
+
+	return resp
+}
+
+func TestCustomApplicationCreateDeletesTheApplicationWhenItsDetailsAreRefused(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	mockService.EXPECT().CreateCustomApplication(gomock.Any(), gomock.Any()).Return(&client.Application{ID: "app-id"}, nil)
+	mockService.EXPECT().UpdateApplication(gomock.Any(), "app-id", gomock.Any()).Return(nil, errors.New("name is already in use"))
+	mockService.EXPECT().DeleteApplication(gomock.Any(), "app-id").Return(nil)
+
+	resp := customApplicationCreate(t, mockService)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("create must fail when the application's details are refused")
+	}
+	if warnings := resp.Diagnostics.Warnings(); len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none, because the application was deleted", warnings)
+	}
+}
+
+func TestCustomApplicationCreateNamesTheApplicationItCouldNotDelete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockService := mock_client.NewMockService(ctrl)
+	mockService.EXPECT().CreateCustomApplication(gomock.Any(), gomock.Any()).Return(&client.Application{ID: "app-id"}, nil)
+	mockService.EXPECT().UpdateApplication(gomock.Any(), "app-id", gomock.Any()).Return(nil, errors.New("name is already in use"))
+	mockService.EXPECT().DeleteApplication(gomock.Any(), "app-id").Return(errors.New("delete refused"))
+
+	resp := customApplicationCreate(t, mockService)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("create must fail when the application's details are refused")
+	}
+	warnings := resp.Diagnostics.Warnings()
+	if len(warnings) != 1 || !strings.Contains(warnings[0].Detail(), "app-id") {
+		t.Fatalf("warnings = %+v, want one that names the application left behind", warnings)
+	}
 }
