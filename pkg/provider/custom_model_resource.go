@@ -837,7 +837,7 @@ func (r *CustomModelResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	guardsVersionCreated, err := r.updateGuardConfigurations(ctx, &state, plan)
+	guardsVersionCreated, err := r.updateGuardConfigurations(ctx, &state, plan, localFilesUpdated)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating guard configurations", err.Error())
 		return
@@ -1848,11 +1848,15 @@ func (r *CustomModelResource) updateGuardConfigurations(
 	ctx context.Context,
 	state *CustomModelResourceModel,
 	plan CustomModelResourceModel,
+	localFilesUpdated bool,
 ) (
 	versionCreated bool,
 	err error,
 ) {
-	if reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) &&
+	// File sync removes local files, including the platform-generated moderation_config.yaml.
+	// Reapply inherited guards to regenerate it even when the guard inputs are unchanged.
+	regenerateConfig := localFilesUpdated && len(plan.GuardConfigurations) > 0
+	if !regenerateConfig && reflect.DeepEqual(plan.GuardConfigurations, state.GuardConfigurations) &&
 		reflect.DeepEqual(plan.OverallModerationConfiguration, state.OverallModerationConfiguration) {
 		return
 	}

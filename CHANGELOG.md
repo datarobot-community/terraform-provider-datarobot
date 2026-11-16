@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- `datarobot_custom_model` regenerates `moderation_config.yaml` after a `folder_path` or `files` update when guards are configured. Previously, file sync deleted the generated configuration and unchanged guard inputs skipped regeneration, leaving guard records visible while runtime moderation was disabled.
+
 ## [0.14.2] - 2026-11-12
 
 ### Changed
