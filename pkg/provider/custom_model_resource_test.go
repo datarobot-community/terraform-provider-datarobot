@@ -83,7 +83,7 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 
 	fileName := "requirements.txt"
 	folderPath := "custom_model_without_llm_blueprint"
-	err := os.WriteFile(fileName, []byte(`langchain == 0.2.8`), 0644)
+	err := os.WriteFile(fileName, []byte("langchain==1.4.9\n"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ runtimeParameterDefinitions:
 	}
 	defer os.RemoveAll(folderPath)
 
-	err = os.WriteFile(folderPath+"/"+fileName, []byte(`langchain == 0.2.9`), 0644)
+	err = os.WriteFile(folderPath+"/"+fileName, []byte("langchain==1.4.10\n"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
