@@ -83,7 +83,9 @@ func TestAccCustomModelWithoutLlmBlueprintResource(t *testing.T) {
 
 	fileName := "requirements.txt"
 	folderPath := "custom_model_without_llm_blueprint"
-	err := os.WriteFile(fileName, []byte("langchain==1.4.9\n"), 0644)
+	// Keep both pins on the Python 3.9-compatible 0.3 series: this test also
+	// builds dependencies in the Streamlit environment, not just GenAI.
+	err := os.WriteFile(fileName, []byte("langchain==0.3.29\n"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +124,7 @@ runtimeParameterDefinitions:
 	}
 	defer os.RemoveAll(folderPath)
 
-	err = os.WriteFile(folderPath+"/"+fileName, []byte("langchain==1.4.10\n"), 0644)
+	err = os.WriteFile(folderPath+"/"+fileName, []byte("langchain==0.3.30\n"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
