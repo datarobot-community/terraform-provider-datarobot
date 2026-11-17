@@ -1,1 +1,4 @@
-* @datarobot-community/agent-lifecycle
+*                                           @datarobot-community/agent-lifecycle
+/pkg/provider/custom_model_resource.go      @datarobot-community/agent-lifecycle @datarobot-oss/mmm
+/pkg/provider/custom_model_guards*.go       @datarobot-oss/mmm
+/internal/client/custom_model_service.go    @datarobot-community/agent-lifecycle @datarobot-oss/mmm
